@@ -3,29 +3,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getMockUsers } from "@/data/mock-users";
 import { DistributionQueue } from "@/types/queue";
-import { Plus, Users, Zap, Trash2, Info } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
 const LeadDistribution = () => {
   const brokers = getMockUsers().filter(u => u.role === 'BROKER');
   const { toast } = useToast();
   
-  const [queues, setQueues] = useState<DistributionQueue[]>([
-    {
-      id: "1",
-      name: "Campanha Zona Sul",
-      matchField: "titulo",
-      matchValue: "Lead ZS Santi",
-      participantIds: ["u3"],
-      isActive: true,
-      lastAssignedIndex: 0
-    }
-  ]);
+  const [queues, setQueues] = useState<DistributionQueue[]>([]);
 
   const [newQueue, setNewQueue] = useState<Partial<DistributionQueue>>({
     name: "",
@@ -72,12 +61,16 @@ const LeadDistribution = () => {
           <div className="space-y-2">
             <Label>Participantes</Label>
             <div className="max-h-40 overflow-y-auto border rounded p-2 bg-gray-50">
-              {brokers.map(b => (
-                <div key={b.id} className="flex items-center space-x-2 p-1">
-                  <Checkbox id={b.id} checked={newQueue.participantIds?.includes(b.id)} onCheckedChange={() => handleToggleBroker(b.id)} />
-                  <Label htmlFor={b.id} className="text-sm">{b.name}</Label>
-                </div>
-              ))}
+              {brokers.length === 0 ? (
+                <p className="text-sm text-gray-500 p-2">Nenhum corretor encontrado.</p>
+              ) : (
+                brokers.map(b => (
+                  <div key={b.id} className="flex items-center space-x-2 p-1">
+                    <Checkbox id={b.id} checked={newQueue.participantIds?.includes(b.id)} onCheckedChange={() => handleToggleBroker(b.id)} />
+                    <Label htmlFor={b.id} className="text-sm">{b.name}</Label>
+                  </div>
+                ))
+              )}
             </div>
           </div>
           <Button onClick={handleCreateQueue} className="w-full bg-indigo-600">Criar Fila</Button>
@@ -94,6 +87,11 @@ const LeadDistribution = () => {
             <Button variant="ghost" size="icon" onClick={() => setQueues(queues.filter(item => item.id !== q.id))}><Trash2 className="w-4 h-4 text-red-400" /></Button>
           </Card>
         ))}
+        {queues.length === 0 && (
+          <Card className="p-6 text-center text-gray-400 border-dashed">
+            Nenhuma fila de distribuição ativa. Crie uma nova para começar.
+          </Card>
+        )}
       </div>
     </div>
   );

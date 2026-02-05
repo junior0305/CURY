@@ -43,39 +43,47 @@ const LeadRedistribution = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {leads.map(lead => (
-              <TableRow key={lead.id}>
-                <TableCell>
-                  <div className="font-medium">{lead.name}</div>
-                  <div className="text-xs text-gray-500">{lead.tag}</div>
-                </TableCell>
-                <TableCell className="text-gray-600">
-                  {brokers.find(b => b.id === lead.brokerId)?.name || "Sem Corretor"}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={lead.status === 'ABANDONED' ? 'destructive' : 'secondary'}>
-                    {lead.status === 'ABANDONED' ? 'Abandonado' : 'Parado'}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Select onValueChange={(val) => handleRedistribute(lead.id, val)}>
-                      <SelectTrigger className="w-[180px] h-9">
-                        <SelectValue placeholder="Selecionar Corretor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {brokers.filter(b => b.id !== lead.brokerId).map(broker => (
-                          <SelectItem key={broker.id} value={broker.id}>{broker.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button size="sm" variant="outline" className="h-9">
-                      <RefreshCw className="w-4 h-4" />
-                    </Button>
-                  </div>
+            {leads.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="h-24 text-center text-gray-500">
+                  Nenhum lead pendente de redistribuição.
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              leads.map(lead => (
+                <TableRow key={lead.id}>
+                  <TableCell>
+                    <div className="font-medium">{lead.name}</div>
+                    <div className="text-xs text-gray-500">{lead.tag}</div>
+                  </TableCell>
+                  <TableCell className="text-gray-600">
+                    {brokers.find(b => b.id === lead.brokerId)?.name || "Sem Corretor"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={lead.status === 'ABANDONED' ? 'destructive' : 'secondary'}>
+                      {lead.status === 'ABANDONED' ? 'Abandonado' : 'Parado'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Select onValueChange={(val) => handleRedistribute(lead.id, val)}>
+                        <SelectTrigger className="w-[180px] h-9">
+                          <SelectValue placeholder="Selecionar Corretor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {brokers.filter(b => b.id !== lead.brokerId).map(broker => (
+                            <SelectItem key={broker.id} value={broker.id}>{broker.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button size="sm" variant="outline" className="h-9">
+                        <RefreshCw className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>

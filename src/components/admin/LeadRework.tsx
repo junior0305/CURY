@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,15 +40,23 @@ const LeadRework = () => {
           <Table>
             <TableHeader><TableRow><TableHead>Lead</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader>
             <TableBody>
-              {leads.map(l => (
-                <TableRow key={l.id}>
-                  <TableCell><div className="font-bold">{l.name}</div><div className="text-xs">{l.tag}</div></TableCell>
-                  <TableCell><Badge variant="destructive">Abandonado</Badge></TableCell>
-                  <TableCell className="text-right">
-                    <Button size="sm" variant="outline" onClick={() => setLeads(leads.filter(i => i.id !== l.id))}><RefreshCw className="w-3 h-3 mr-2" /> Retrabalhar</Button>
+              {leads.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="h-24 text-center text-gray-500">
+                    Nenhum lead abandonado para retrabalho.
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                leads.map(l => (
+                  <TableRow key={l.id}>
+                    <TableCell><div className="font-bold">{l.name}</div><div className="text-xs">{l.tag}</div></TableCell>
+                    <TableCell><Badge variant="destructive">Abandonado</Badge></TableCell>
+                    <TableCell className="text-right">
+                      <Button size="sm" variant="outline" onClick={() => setLeads(leads.filter(i => i.id !== l.id))}><RefreshCw className="w-3 h-3 mr-2" /> Retrabalhar</Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

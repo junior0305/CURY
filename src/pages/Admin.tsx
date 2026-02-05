@@ -1,21 +1,37 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Settings, Zap, Globe, RefreshCcw, ShieldCheck, UserCircle } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Users, Settings, Zap, Globe, RefreshCcw, ShieldCheck, UserCircle, Loader2 } from "lucide-react";
 import UserManagement from "@/components/admin/UserManagement";
 import AdminStats from "@/components/admin/AdminStats";
 import LeadDistribution from "@/components/admin/LeadDistribution";
 import IntegrationsManagement from "@/components/admin/IntegrationsManagement";
 import LeadRework from "@/components/admin/LeadRework";
-import { getMockUsers } from "@/data/mock-users";
-import { User } from "@/types/user";
+import { useAuth } from "@/components/AuthProvider";
+import { User, UserRole } from "@/types/user";
 
 const Admin = () => {
-  const allUsers = getMockUsers();
-  const [currentUser, setCurrentUser] = useState<User>(allUsers[0]);
-  const isSuper = currentUser.role === 'SUPERINTENDENT';
+  const { user: authUser, role: userRole, loading: authLoading } = useAuth();
+  const [activeTab, setActiveTab] = useState("users");
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+      </div>
+    );
+  }
+
+  // Construct a minimal User object based on authenticated session data
+  const currentUser: User = {
+    id: authUser?.id || 'unknown',
+    name: authUser?.email || 'Admin User',
+    email: authUser?.email || '',
+    role: (userRole as UserRole) || 'SUPERINTENDENT',
+    managerId: null,
+    leadAssignmentEnabled: false,
+  };
+  
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
       <div className="max-w-7xl mx-auto">
@@ -27,18 +43,15 @@ const Admin = () => {
           <div className="bg-white p-3 rounded-2xl shadow-sm border border-indigo-50 flex items-center gap-3">
             <UserCircle className="w-8 h-8 text-indigo-200" />
             <div className="flex flex-col">
-              <span className="text-[10px] font-bold text-gray-400">SIMULAR LOGIN:</span>
-              <Select value={currentUser.id} onValueChange={(id) => setCurrentUser(allUsers.find(u => u.id === id)!)}>
-                <SelectTrigger className="h-6 border-none p-0 focus:ring-0 text-indigo-600 font-bold"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="u1">Alice (Super)</SelectItem><SelectItem value="u2">Bob (Gerente)</SelectItem></SelectContent>
-              </Select>
+              <span className="text-[10px] font-bold text-gray-400">LOGADO COMO:</span>
+              <span className="text-indigo-600 font-bold">{currentUser.name}</span>
             </div>
           </div>
         </div>
 
         <AdminStats currentUser={currentUser} />
 
-        <Tabs defaultValue="users" className="w-full">
+        <Tabs defaultValue="users" value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid grid-cols-5 h-14 bg-white shadow-lg rounded-2xl p-1 mb-8">
             <TabsTrigger value="users" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl"><Users className="w-4 h-4 mr-2" /> Time</TabsTrigger>
             <TabsTrigger value="leads" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl"><Zap className="w-4 h-4 mr-2" /> Regras</TabsTrigger>
