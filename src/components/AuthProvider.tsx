@@ -22,22 +22,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchProfile = async (userId: string) => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', userId)
         .maybeSingle();
       
-      if (data) setRole(data.role);
+      if (error) throw error;
+      
+      // Se não encontrar perfil, define como BROKER por padrão
+      setRole(data?.role || 'BROKER');
     } catch (err) {
       console.error("Erro ao buscar perfil:", err);
+      setRole('BROKER'); // Fallback de segurança
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    // Verificar sessão atual ao montar
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
@@ -51,12 +54,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
       
-      if (session?.user) {
-        await fetchProfile(session.user.id);
+      if (currentSession?.user) {
+        setLoading(true);
+        await fetchProfile(currentSession.user.id);
       } else {
         setRole(null);
         setLoading(false);
