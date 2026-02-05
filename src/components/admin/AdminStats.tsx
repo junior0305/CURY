@@ -1,37 +1,48 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, Zap, CheckCircle, TrendingUp } from "lucide-react";
 import { getMockUsers } from "@/data/mock-users";
+import { User } from "@/types/user";
 
-const AdminStats = () => {
-  const users = getMockUsers();
-  const totalBrokers = users.filter(u => u.role === 'BROKER').length;
-  const activeBrokers = users.filter(u => u.role === 'BROKER' && u.leadAssignmentEnabled).length;
+interface AdminStatsProps {
+  currentUser: User;
+}
+
+const AdminStats = ({ currentUser }: AdminStatsProps) => {
+  const allUsers = getMockUsers();
+  const isSuper = currentUser.role === 'SUPERINTENDENT';
+
+  // Filtra dados com base no usuário logado
+  const teamBrokers = allUsers.filter(u => 
+    u.role === 'BROKER' && (isSuper || u.managerId === currentUser.id)
+  );
+  
+  const activeInQueue = teamBrokers.filter(u => u.leadAssignmentEnabled).length;
 
   const stats = [
     {
-      title: "Total de Corretores",
-      value: totalBrokers,
+      title: isSuper ? "Total de Corretores" : "Meus Corretores",
+      value: teamBrokers.length,
       icon: Users,
       color: "text-blue-600",
       bg: "bg-blue-50"
     },
     {
       title: "Ativos na Fila",
-      value: activeBrokers,
+      value: activeInQueue,
       icon: Zap,
       color: "text-amber-600",
       bg: "bg-amber-50"
     },
     {
-      title: "Leads Hoje",
-      value: "24",
+      title: "Leads no Período",
+      value: isSuper ? "142" : "38",
       icon: TrendingUp,
       color: "text-indigo-600",
       bg: "bg-indigo-50"
     },
     {
-      title: "Conversão Média",
-      value: "12%",
+      title: "Conversão Team",
+      value: isSuper ? "12%" : "14%",
       icon: CheckCircle,
       color: "text-green-600",
       bg: "bg-green-50"
