@@ -1,16 +1,25 @@
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { supabase } from '@/integrations/supabase/client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/AuthProvider';
-import { ShieldCheck, Info } from 'lucide-react';
+import { ShieldCheck, Info, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const Login = () => {
   const { session, role, loading } = useAuth();
   const navigate = useNavigate();
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Escutar erros de autenticação diretamente do Supabase
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'USER_UPDATED' || event === 'SIGNED_IN') {
+        setAuthError(null);
+      }
+    });
+
     if (!loading && session && role) {
       if (role === 'SUPERINTENDENT' || role === 'MANAGER') {
         navigate('/admin');
@@ -18,6 +27,8 @@ const Login = () => {
         navigate('/'); 
       }
     }
+
+    return () => subscription.unsubscribe();
   }, [session, role, loading, navigate]);
 
   return (
@@ -32,6 +43,14 @@ const Login = () => {
             Área de Acesso Restrito
           </p>
         </div>
+
+        {authError && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Erro</AlertTitle>
+            <AlertDescription>{authError}</AlertDescription>
+          </Alert>
+        )}
 
         <Auth
           supabaseClient={supabase}
@@ -61,20 +80,22 @@ const Login = () => {
                 password_label: 'Defina uma senha',
                 button_label: 'Criar Conta Mestre',
                 loading_button_label: 'Criando...',
-                link_text: 'Não tem conta? Clique aqui para criar',
+                link_text: 'Clique aqui para criar sua conta',
               },
             },
           }}
         />
 
-        <div className="mt-8 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
-          <div className="flex items-center gap-2 mb-2 text-indigo-700 font-semibold text-sm">
-            <Info className="w-4 h-4" />
-            <span>Acesso Mestre:</span>
+        <div className="mt-8 space-y-4">
+          <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+            <div className="flex items-center gap-2 mb-2 text-indigo-700 font-semibold text-sm">
+              <Info className="w-4 h-4" />
+              <span>Dica para o Erro de Confirmação:</span>
+            </div>
+            <p className="text-xs text-indigo-800 leading-relaxed">
+              Se aparecer <b>"Email not confirmed"</b>, delete o usuário no painel do Supabase e crie-o novamente pela aba <b>"Sign Up"</b> acima. Isso forçará a nova configuração sem e-mail de confirmação.
+            </p>
           </div>
-          <p className="text-xs text-indigo-800 leading-relaxed">
-            Para acessar como Superintendente, use a aba <b>"Sign Up"</b> para cadastrar o e-mail <b>alice@crm.com</b> com a senha <b>admin123</b>.
-          </p>
         </div>
       </div>
     </div>
