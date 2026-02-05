@@ -1,9 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Settings, Zap } from "lucide-react";
+import { Users, Settings, Zap, Globe } from "lucide-react";
 import UserManagement from "@/components/admin/UserManagement";
 import AdminStats from "@/components/admin/AdminStats";
 import LeadDistribution from "@/components/admin/LeadDistribution";
+import IntegrationsManagement from "@/components/admin/IntegrationsManagement";
 
 const Admin = () => {
   return (
@@ -22,18 +23,22 @@ const Admin = () => {
         <AdminStats />
 
         <Tabs defaultValue="users" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 h-14 bg-white shadow-lg rounded-2xl p-1.5 border border-indigo-50 mb-8">
+          <TabsList className="grid w-full grid-cols-4 h-14 bg-white shadow-lg rounded-2xl p-1.5 border border-indigo-50 mb-8">
             <TabsTrigger value="users" className="flex items-center gap-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl transition-all font-semibold text-base">
               <Users className="w-5 h-5" />
-              Gestão de Equipe
+              Equipe
             </TabsTrigger>
             <TabsTrigger value="leads" className="flex items-center gap-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl transition-all font-semibold text-base">
               <Zap className="w-5 h-5" />
-              Distribuição de Leads
+              Distribuição
+            </TabsTrigger>
+            <TabsTrigger value="integrations" className="flex items-center gap-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl transition-all font-semibold text-base">
+              <Globe className="w-5 h-5" />
+              Integrações
             </TabsTrigger>
             <TabsTrigger value="settings" className="flex items-center gap-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl transition-all font-semibold text-base">
               <Settings className="w-5 h-5" />
-              Configurações
+              Ajustes
             </TabsTrigger>
           </TabsList>
 
@@ -49,7 +54,13 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="leads" className="mt-0 outline-none">
-            <LeadDistribution />
+            <div className="space-y-6">
+               <LeadDistribution />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="integrations" className="mt-0 outline-none">
+            <IntegrationsManagement />
           </TabsContent>
 
           <TabsContent value="settings" className="mt-0 outline-none">
