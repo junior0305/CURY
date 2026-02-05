@@ -56,10 +56,8 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
     e.preventDefault();
     
     if (userToEdit) {
-      // Logic for Update
       onSave(formData as User);
     } else {
-      // Logic for Creation via Edge Function
       if (!formData.email || !formData.password || !formData.name) {
         toast.error("Preencha todos os campos obrigatórios.");
         return;
@@ -67,11 +65,11 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
 
       setCreating(true);
       try {
-        const names = (formData.name || "").split(" ");
+        const names = (formData.name || "").trim().split(/\s+/);
         const firstName = names[0];
         const lastName = names.slice(1).join(" ");
 
-        const { data, error } = await supabase.functions.invoke('create-user', {
+        const { data, error: invokeError } = await supabase.functions.invoke('create-user', {
           body: {
             email: formData.email,
             password: formData.password,
@@ -82,14 +80,27 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
           }
         });
 
-        if (error) throw error;
-        if (data.error) throw new Error(data.error);
+        // The invoke error might be a network error or a non-2xx response
+        if (invokeError) {
+          // Try to parse the error message from the response if it's a JSON error
+          let errorMessage = "Erro na comunicação com o servidor.";
+          try {
+            const errorContext = await invokeError.context?.json();
+            errorMessage = errorContext?.error || invokeError.message;
+          } catch (e) {
+            errorMessage = invokeError.message;
+          }
+          throw new Error(errorMessage);
+        }
+
+        if (data?.error) throw new Error(data.error);
 
         toast.success("Usuário criado com sucesso!");
-        onSave(data.user as User); // This triggers the parent to refresh list
+        onSave(data.user as User);
         onOpenChange(false);
       } catch (err: any) {
-        toast.error(`Erro ao criar usuário: ${err.message}`);
+        console.error("Creation error:", err);
+        toast.error(`Falha ao criar: ${err.message}`);
       } finally {
         setCreating(false);
       }
@@ -97,7 +108,6 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
   };
 
   const isBroker = formData.role === 'BROKER';
-  const isManagerOrBroker = formData.role === 'MANAGER' || formData.role === 'BROKER';
   const isEditing = !!userToEdit;
   const busy = isSaving || creating;
 
@@ -110,8 +120,8 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
           </SheetTitle>
           <SheetDescription className="text-gray-600">
             {isEditing 
-              ? "Atualize as permissões e configurações do membro do time." 
-              : "Cadastre um novo membro para acessar o sistema."}
+              ? "Atualize as permissões do membro do time." 
+              : "Cadastre um novo membro. A senha deve ter no mínimo 6 caracteres."}
           </SheetDescription>
         </SheetHeader>
 
@@ -166,13 +176,13 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
               <SelectTrigger id="role"><SelectValue placeholder="Selecione a função" /></SelectTrigger>
               <SelectContent>
                 {roles.map(role => (
-                  <SelectItem key={role} value={role}>{role.charAt(0) + role.slice(1).toLowerCase()}</SelectItem>
+                  <SelectItem key={role} value={role}>{role}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {isManagerOrBroker && (
+          {(formData.role === 'MANAGER' || formData.role === 'BROKER') && (
             <div className="space-y-2">
               <Label htmlFor="manager">Gerente Responsável</Label>
               <Select 
