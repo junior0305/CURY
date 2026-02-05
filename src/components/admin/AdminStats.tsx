@@ -1,14 +1,19 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, Zap, CheckCircle, TrendingUp } from "lucide-react";
-import { getMockUsers } from "@/data/mock-users";
+import { Users, Zap, CheckCircle, TrendingUp, Loader2 } from "lucide-react";
 import { User } from "@/types/user";
+import { useQuery } from "@tanstack/react-query";
+import { fetchProfiles } from "@/integrations/supabase/profiles";
 
 interface AdminStatsProps {
   currentUser: User;
 }
 
 const AdminStats = ({ currentUser }: AdminStatsProps) => {
-  const allUsers = getMockUsers();
+  const { data: allUsers = [], isLoading } = useQuery<User[]>({
+    queryKey: ['profiles'],
+    queryFn: fetchProfiles,
+  });
+
   const isSuper = currentUser.role === 'SUPERINTENDENT';
 
   const teamBrokers = allUsers.filter(u => 
@@ -23,6 +28,18 @@ const AdminStats = ({ currentUser }: AdminStatsProps) => {
     { title: "Leads no Período", value: isSuper ? "142" : "38", icon: TrendingUp, color: "text-indigo-600", bg: "bg-indigo-50" },
     { title: "Conversão Team", value: isSuper ? "12%" : "14%", icon: CheckCircle, color: "text-green-600", bg: "bg-green-50" }
   ];
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {[1, 2, 3, 4].map(i => (
+          <Card key={i} className="border-none shadow-sm overflow-hidden p-6 flex items-center justify-center h-24">
+            <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+          </Card>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

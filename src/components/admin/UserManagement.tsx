@@ -1,12 +1,13 @@
 import { useState, useMemo } from "react";
-import { getMockUsers, updateMockUsers } from "@/data/mock-users";
 import { User, UserRole } from "@/types/user";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Edit, CheckCircle, XCircle, Lock } from "lucide-react";
+import { PlusCircle, Edit, CheckCircle, XCircle, Lock, Loader2 } from "lucide-react";
 import UserForm from "./UserForm";
 import { useToast } from "@/components/ui/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { fetchProfiles, updateProfile } from "@/integrations/supabase/profiles";
 
 const roleColors: Record<UserRole, string> = {
   SUPERINTENDENT: "bg-red-500 hover:bg-red-600",
@@ -19,25 +20,48 @@ interface UserManagementProps {
 }
 
 const UserManagement = ({ currentUser }: UserManagementProps) => {
-  const [users, setUsers] = useState(getMockUsers());
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [userToEdit, setUserToEdit] = useState<User | null>(null);
-  const { toast } = useToast();
+
+  const { data: users = [], isLoading, error } = useQuery<User[]>({
+    queryKey: ['profiles'],
+    queryFn: fetchProfiles,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: updateProfile,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['managers'] }); // Managers list might change if role was updated
+      setIsFormOpen(false); // Close form on success
+      toast({ title: "Sucesso", description: `Usuário atualizado.` });
+    },
+    onError: (err) => {
+      console.error("Error updating user:", err);
+      toast({ title: "Erro", description: `Falha ao atualizar usuário: ${err.message}`, variant: "destructive" });
+    }
+  });
 
   const isSuper = currentUser.role === 'SUPERINTENDENT';
 
+  // Filter users based on current user's role (although RLS should handle this, we filter for display consistency)
   const visibleUsers = useMemo(() => {
     if (isSuper) return users;
+    // Managers see themselves and their team
     return users.filter(u => u.id === currentUser.id || u.managerId === currentUser.id);
   }, [users, currentUser, isSuper]);
 
   const handleSaveUser = (user: User) => {
-    updateMockUsers(user);
-    setUsers([...getMockUsers()]);
-    toast({ title: "Sucesso", description: `Usuário ${user.name} atualizado.` });
+    // Note: User creation is handled externally (via Edge Function/Auth Admin API).
+    // This form only handles updates to existing profiles (role, managerId, leadAssignmentEnabled).
+    updateMutation.mutate(user);
   };
 
   const handleEdit = (user: User) => {
+    // Prevent non-Superintendents from editing roles/settings of other Managers
     if (!isSuper && user.id !== currentUser.id && user.role !== 'BROKER') {
       toast({ title: "Acesso Negado", description: "Acesso restrito.", variant: "destructive" });
       return;
@@ -46,12 +70,26 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
     setIsFormOpen(true);
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return <div className="text-red-500 p-4">Erro ao carregar usuários: {error.message}</div>;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <p className="text-gray-600">{isSuper ? "Gerencie todos os membros." : "Gerencie seu time."}</p>
+        {/* Note: User creation is currently handled by the initial setup function or Supabase console. 
+            We keep the button for future integration with a proper signup flow, but for now, it opens the form for editing. */}
         <Button onClick={() => { setUserToEdit(null); setIsFormOpen(true); }} className="bg-indigo-600">
-          <PlusCircle className="w-4 h-4 mr-2" /> Novo Membro
+          <PlusCircle className="w-4 h-4 mr-2" /> Novo Membro (Apenas Edição)
         </Button>
       </div>
 
@@ -76,7 +114,7 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
                   {user.role === 'BROKER' && (user.leadAssignmentEnabled ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto" /> : <XCircle className="w-5 h-5 text-red-500 mx-auto" />)}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="ghost" size="sm" onClick={() => handleEdit(user)}>
+                  <Button variant="ghost" size="sm" onClick={() => handleEdit(user)} disabled={updateMutation.isPending}>
                     {(!isSuper && user.id !== currentUser.id && user.role !== 'BROKER') ? <Lock className="w-4 h-4 text-gray-300" /> : <Edit className="w-4 h-4" />}
                   </Button>
                 </TableCell>
@@ -86,7 +124,13 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
         </Table>
       </div>
 
-      <UserForm isOpen={isFormOpen} onOpenChange={setIsFormOpen} userToEdit={userToEdit} onSave={handleSaveUser} />
+      <UserForm 
+        isOpen={isFormOpen} 
+        onOpenChange={setIsFormOpen} 
+        userToEdit={userToEdit} 
+        onSave={handleSaveUser} 
+        isSaving={updateMutation.isPending}
+      />
     </div>
   );
 };

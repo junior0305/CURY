@@ -1,18 +1,25 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getMockUsers } from "@/data/mock-users";
 import { DistributionQueue } from "@/types/queue";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import { fetchProfiles } from "@/integrations/supabase/profiles";
 
 const LeadDistribution = () => {
-  const brokers = getMockUsers().filter(u => u.role === 'BROKER');
   const { toast } = useToast();
+  
+  const { data: allUsers = [], isLoading } = useQuery({
+    queryKey: ['profiles'],
+    queryFn: fetchProfiles,
+  });
+
+  const brokers = useMemo(() => allUsers.filter(u => u.role === 'BROKER'), [allUsers]);
   
   const [queues, setQueues] = useState<DistributionQueue[]>([]);
 
@@ -41,6 +48,14 @@ const LeadDistribution = () => {
     setNewQueue({ name: "", matchField: "titulo", matchValue: "", participantIds: [], isActive: true });
     toast({ title: "Fila Criada", description: "Regra ativada com sucesso." });
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -73,7 +88,7 @@ const LeadDistribution = () => {
               )}
             </div>
           </div>
-          <Button onClick={handleCreateQueue} className="w-full bg-indigo-600">Criar Fila</Button>
+          <Button onClick={handleCreateQueue} className="w-full bg-indigo-600" disabled={brokers.length === 0}>Criar Fila</Button>
         </CardContent>
       </Card>
 

@@ -1,17 +1,25 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { mockLeads } from "@/data/mock-leads";
-import { getMockUsers } from "@/data/mock-users";
-import { RefreshCw, AlertTriangle } from "lucide-react";
+import { RefreshCw, AlertTriangle, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import { fetchProfiles } from "@/integrations/supabase/profiles";
+import { User } from "@/types/user";
 
 const LeadRedistribution = () => {
   const [leads, setLeads] = useState(mockLeads);
-  const brokers = getMockUsers().filter(u => u.role === 'BROKER');
   const { toast } = useToast();
+
+  const { data: allUsers = [], isLoading } = useQuery<User[]>({
+    queryKey: ['profiles'],
+    queryFn: fetchProfiles,
+  });
+
+  const brokers = useMemo(() => allUsers.filter(u => u.role === 'BROKER'), [allUsers]);
 
   const handleRedistribute = (leadId: string, newBrokerId: string) => {
     setLeads(prev => prev.map(l => 
@@ -24,6 +32,14 @@ const LeadRedistribution = () => {
       description: `Lead enviado para ${brokerName}.`,
     });
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-40">
+        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
