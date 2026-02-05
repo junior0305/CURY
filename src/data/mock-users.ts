@@ -1,7 +1,7 @@
 import { User } from "@/types/user";
 
 // Mock data for initial setup
-const mockUsers: User[] = [
+let mockUsers: User[] = [
   {
     id: "u1",
     name: "Alice Johnson (Superintendent)",
@@ -49,3 +49,14 @@ export const getMockUsers = () => mockUsers;
 export const getUserById = (id: string) => mockUsers.find(u => u.id === id);
 
 export const getManagers = () => mockUsers.filter(u => u.role === 'MANAGER');
+
+export const updateMockUsers = (user: User) => {
+  const index = mockUsers.findIndex(u => u.id === user.id);
+  if (index !== -1) {
+    // Update existing user
+    mockUsers[index] = user;
+  } else {
+    // Add new user
+    mockUsers.push(user);
+  }
+};
