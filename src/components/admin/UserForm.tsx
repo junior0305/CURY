@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,11 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { User, UserRole } from "@/types/user";
-import { Save, Loader2, UserPlus } from "lucide-react";
+import { Save, Loader2, UserPlus, Shield } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchManagers } from "@/integrations/supabase/profiles";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 
 interface UserFormProps {
   isOpen: boolean;
@@ -28,10 +29,23 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
   const [formData, setFormData] = useState<Partial<User & { password?: string }>>({});
   const [creating, setCreating] = useState(false);
   
-  const { data: managers = [], isLoading: isLoadingManagers } = useQuery<User[]>({
+  const { data: allManagers = [], isLoading: isLoadingManagers } = useQuery<User[]>({
     queryKey: ['managers'],
     queryFn: fetchManagers,
   });
+
+  // Filter the managers list based on the role of the user being created/edited
+  const filteredManagers = useMemo(() => {
+    if (formData.role === 'MANAGER') {
+      // Managers report to Superintendents
+      return allManagers.filter(m => m.role === 'SUPERINTENDENT');
+    }
+    if (formData.role === 'BROKER') {
+      // Brokers usually report to Managers, but can report to Superintendents in small teams
+      return allManagers;
+    }
+    return [];
+  }, [allManagers, formData.role]);
 
   useEffect(() => {
     if (userToEdit) {
@@ -80,9 +94,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
           }
         });
 
-        // The invoke error might be a network error or a non-2xx response
         if (invokeError) {
-          // Try to parse the error message from the response if it's a JSON error
           let errorMessage = "Erro na comunicação com o servidor.";
           try {
             const errorContext = await invokeError.context?.json();
@@ -99,7 +111,6 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
         onSave(data.user as User);
         onOpenChange(false);
       } catch (err: any) {
-        console.error("Creation error:", err);
         toast.error(`Falha ao criar: ${err.message}`);
       } finally {
         setCreating(false);
@@ -108,6 +119,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
   };
 
   const isBroker = formData.role === 'BROKER';
+  const needsManager = formData.role === 'MANAGER' || formData.role === 'BROKER';
   const isEditing = !!userToEdit;
   const busy = isSaving || creating;
 
@@ -119,9 +131,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
             {isEditing ? "Editar Usuário" : <><UserPlus className="w-6 h-6" /> Novo Usuário</>}
           </SheetTitle>
           <SheetDescription className="text-gray-600">
-            {isEditing 
-              ? "Atualize as permissões do membro do time." 
-              : "Cadastre um novo membro. A senha deve ter no mínimo 6 caracteres."}
+            Configure as permissões e a hierarquia do membro.
           </SheetDescription>
         </SheetHeader>
 
@@ -139,7 +149,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">Email Corporativo</Label>
             <Input 
               id="email" 
               type="email" 
@@ -153,7 +163,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
 
           {!isEditing && (
             <div className="space-y-2">
-              <Label htmlFor="password">Senha Temporária</Label>
+              <Label htmlFor="password">Senha Inicial</Label>
               <Input 
                 id="password" 
                 type="password" 
@@ -167,10 +177,14 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="role">Função</Label>
+            <Label htmlFor="role">Função no Sistema</Label>
             <Select 
               value={formData.role || "BROKER"} 
-              onValueChange={(value) => handleChange("role", value as UserRole)} 
+              onValueChange={(value) => {
+                handleChange("role", value as UserRole);
+                // Reset manager selection when role changes to ensure validity
+                handleChange("managerId", null);
+              }} 
               disabled={busy}
             >
               <SelectTrigger id="role"><SelectValue placeholder="Selecione a função" /></SelectTrigger>
@@ -182,32 +196,46 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
             </Select>
           </div>
 
-          {(formData.role === 'MANAGER' || formData.role === 'BROKER') && (
+          {needsManager && (
             <div className="space-y-2">
-              <Label htmlFor="manager">Gerente Responsável</Label>
+              <Label htmlFor="manager">Gestor Responsável</Label>
               <Select 
                 value={formData.managerId || "none"} 
                 onValueChange={(value) => handleChange("managerId", value === "none" ? null : value)}
                 disabled={isLoadingManagers || busy}
               >
                 <SelectTrigger id="manager">
-                  <SelectValue placeholder="Nenhum (Superintendente)" />
+                  <SelectValue placeholder="Selecione o gestor" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Nenhum (Superintendente)</SelectItem>
-                  {managers.map(manager => (
-                    <SelectItem key={manager.id} value={manager.id}>{manager.name}</SelectItem>
+                  <SelectItem value="none">
+                    {formData.role === 'MANAGER' ? "Nenhum (Direto ao Topo)" : "Nenhum (Reporta a Superintendente)"}
+                  </SelectItem>
+                  {filteredManagers.map(manager => (
+                    <SelectItem key={manager.id} value={manager.id}>
+                      <div className="flex items-center gap-2">
+                        {manager.name}
+                        <Badge variant="outline" className="text-[9px] font-normal uppercase py-0 h-4">
+                          {manager.role}
+                        </Badge>
+                      </div>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {filteredManagers.length === 0 && !isLoadingManagers && formData.role === 'MANAGER' && (
+                <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-1">
+                  <Shield className="w-3 h-3" /> Nenhum Superintendente encontrado para atrelar este Gerente.
+                </p>
+              )}
             </div>
           )}
 
           {isBroker && (
             <div className="flex items-center justify-between p-4 bg-indigo-50 rounded-xl border border-indigo-200">
               <Label htmlFor="lead-assignment" className="flex flex-col space-y-1">
-                <span className="text-base font-medium">Receber Leads Automaticamente</span>
-                <span className="text-sm text-gray-500">Habilita o sorteio para este corretor.</span>
+                <span className="text-base font-medium">Habilitar Fila de Leads</span>
+                <span className="text-sm text-gray-500">Permite que este corretor receba novos leads.</span>
               </Label>
               <Switch 
                 id="lead-assignment" 

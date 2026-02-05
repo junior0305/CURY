@@ -21,7 +21,7 @@ export const fetchProfiles = async (): Promise<User[]> => {
 
   const { data: profiles, error } = await supabase
     .from('profiles')
-    .select('*, auth_users:id(email)') // Fetch email from auth.users table (aliased by FK)
+    .select('*, auth_users:id(email)')
     .order('role', { ascending: false })
     .order('first_name', { ascending: true });
 
@@ -30,18 +30,18 @@ export const fetchProfiles = async (): Promise<User[]> => {
   return profiles.map(profile => {
     const userEmail = Array.isArray(profile.auth_users) && profile.auth_users.length > 0
       ? profile.auth_users[0].email
-      : authUser.email; // Fallback if join fails or user is fetching self
+      : authUser.email;
 
     return mapProfileToUser(profile, { email: userEmail });
   });
 };
 
-// Fetches all users who have the 'MANAGER' role
+// Fetches all users who can act as managers (SUPERINTENDENT and MANAGER roles)
 export const fetchManagers = async (): Promise<User[]> => {
   const { data: profiles, error } = await supabase
     .from('profiles')
     .select('*, auth_users:id(email)')
-    .eq('role', 'MANAGER');
+    .in('role', ['SUPERINTENDENT', 'MANAGER']); // Fetch both hierarchy levels
 
   if (error) throw error;
 
