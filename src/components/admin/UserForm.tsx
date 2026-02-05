@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -6,9 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { User, UserRole } from "@/types/user";
-import { Save, Loader2 } from "lucide-react";
+import { Save, Loader2, UserPlus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchManagers } from "@/integrations/supabase/profiles";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface UserFormProps {
   isOpen: boolean;
@@ -21,7 +25,8 @@ interface UserFormProps {
 const roles: UserRole[] = ['SUPERINTENDENT', 'MANAGER', 'BROKER'];
 
 const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFormProps) => {
-  const [formData, setFormData] = useState<Partial<User>>({});
+  const [formData, setFormData] = useState<Partial<User & { password?: string }>>({});
+  const [creating, setCreating] = useState(false);
   
   const { data: managers = [], isLoading: isLoadingManagers } = useQuery<User[]>({
     queryKey: ['managers'],
@@ -32,77 +37,132 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
     if (userToEdit) {
       setFormData(userToEdit);
     } else {
-      // When creating a new user (which is currently only possible via the Edge Function/Auth Admin API), 
-      // we still initialize the form fields, but we rely on the ID being present for updates.
       setFormData({
-        id: userToEdit?.id || "", // ID must be present for update
-        name: userToEdit?.name || "",
-        email: userToEdit?.email || "",
-        role: userToEdit?.role || "BROKER",
-        managerId: userToEdit?.managerId || null,
-        leadAssignmentEnabled: userToEdit?.leadAssignmentEnabled || false,
+        name: "",
+        email: "",
+        password: "",
+        role: "BROKER",
+        managerId: null,
+        leadAssignmentEnabled: false,
       });
     }
   }, [userToEdit, isOpen]);
 
-  const handleChange = (field: keyof User, value: any) => {
+  const handleChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // We only allow updates to existing users via this form in the current setup.
-    if (!formData.id) return; 
+    if (userToEdit) {
+      // Logic for Update
+      onSave(formData as User);
+    } else {
+      // Logic for Creation via Edge Function
+      if (!formData.email || !formData.password || !formData.name) {
+        toast.error("Preencha todos os campos obrigatórios.");
+        return;
+      }
 
-    if (formData.name && formData.email && formData.role) {
-      const user: User = {
-        ...formData,
-        id: formData.id,
-        name: formData.name,
-        email: formData.email,
-        role: formData.role as UserRole,
-        managerId: formData.role === 'BROKER' || formData.role === 'MANAGER' ? formData.managerId || null : null,
-        leadAssignmentEnabled: formData.role === 'BROKER' ? !!formData.leadAssignmentEnabled : false,
-      } as User;
-      onSave(user);
-      // Note: Closing the sheet is handled by UserManagement onSuccess callback, 
-      // but since we are only updating, we can close it here optimistically.
-      // However, for better UX, let's let the parent handle closing on success.
+      setCreating(true);
+      try {
+        const names = (formData.name || "").split(" ");
+        const firstName = names[0];
+        const lastName = names.slice(1).join(" ");
+
+        const { data, error } = await supabase.functions.invoke('create-user', {
+          body: {
+            email: formData.email,
+            password: formData.password,
+            firstName,
+            lastName,
+            role: formData.role,
+            managerId: formData.managerId
+          }
+        });
+
+        if (error) throw error;
+        if (data.error) throw new Error(data.error);
+
+        toast.success("Usuário criado com sucesso!");
+        onSave(data.user as User); // This triggers the parent to refresh list
+        onOpenChange(false);
+      } catch (err: any) {
+        toast.error(`Erro ao criar usuário: ${err.message}`);
+      } finally {
+        setCreating(false);
+      }
     }
   };
 
   const isBroker = formData.role === 'BROKER';
   const isManagerOrBroker = formData.role === 'MANAGER' || formData.role === 'BROKER';
   const isEditing = !!userToEdit;
+  const busy = isSaving || creating;
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="sm:max-w-md bg-white p-6">
+      <SheetContent side="right" className="sm:max-w-md bg-white p-6 overflow-y-auto">
         <SheetHeader className="mb-6">
-          <SheetTitle className="text-2xl font-bold text-indigo-700">
-            {isEditing ? "Editar Usuário" : "Novo Usuário"}
+          <SheetTitle className="text-2xl font-bold text-indigo-700 flex items-center gap-2">
+            {isEditing ? "Editar Usuário" : <><UserPlus className="w-6 h-6" /> Novo Usuário</>}
           </SheetTitle>
           <SheetDescription className="text-gray-600">
-            Preencha os dados para {isEditing ? "atualizar" : "criar"} um usuário no sistema.
+            {isEditing 
+              ? "Atualize as permissões e configurações do membro do time." 
+              : "Cadastre um novo membro para acessar o sistema."}
           </SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="name">Nome Completo</Label>
-            {/* Name and Email are read-only here as they are managed by Supabase Auth/Profile creation */}
-            <Input id="name" value={formData.name || ""} readOnly disabled={isEditing} className={isEditing ? "bg-gray-100" : ""} />
+            <Input 
+              id="name" 
+              value={formData.name || ""} 
+              onChange={(e) => handleChange("name", e.target.value)}
+              disabled={isEditing || busy} 
+              placeholder="Ex: João Silva"
+              required
+            />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" value={formData.email || ""} readOnly disabled={isEditing} className={isEditing ? "bg-gray-100" : ""} />
+            <Input 
+              id="email" 
+              type="email" 
+              value={formData.email || ""} 
+              onChange={(e) => handleChange("email", e.target.value)}
+              disabled={isEditing || busy} 
+              placeholder="email@exemplo.com"
+              required
+            />
           </div>
+
+          {!isEditing && (
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha Temporária</Label>
+              <Input 
+                id="password" 
+                type="password" 
+                value={formData.password || ""} 
+                onChange={(e) => handleChange("password", e.target.value)}
+                disabled={busy} 
+                placeholder="Mínimo 6 caracteres"
+                required
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="role">Função</Label>
-            <Select value={formData.role || "BROKER"} onValueChange={(value) => handleChange("role", value as UserRole)} disabled={isSaving}>
+            <Select 
+              value={formData.role || "BROKER"} 
+              onValueChange={(value) => handleChange("role", value as UserRole)} 
+              disabled={busy}
+            >
               <SelectTrigger id="role"><SelectValue placeholder="Selecione a função" /></SelectTrigger>
               <SelectContent>
                 {roles.map(role => (
@@ -118,7 +178,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
               <Select 
                 value={formData.managerId || "none"} 
                 onValueChange={(value) => handleChange("managerId", value === "none" ? null : value)}
-                disabled={isLoadingManagers || isSaving}
+                disabled={isLoadingManagers || busy}
               >
                 <SelectTrigger id="manager">
                   <SelectValue placeholder="Nenhum (Superintendente)" />
@@ -143,20 +203,19 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
                 id="lead-assignment" 
                 checked={!!formData.leadAssignmentEnabled} 
                 onCheckedChange={(checked) => handleChange("leadAssignmentEnabled", checked)} 
-                disabled={isSaving}
+                disabled={busy}
               />
             </div>
           )}
 
-          <Button type="submit" className="w-full bg-indigo-600" disabled={isSaving || !isEditing}>
-            {isSaving ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          <Button type="submit" className="w-full bg-indigo-600 h-12 text-lg font-bold" disabled={busy}>
+            {busy ? (
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
             ) : (
-              <Save className="w-4 h-4 mr-2" />
+              <Save className="w-5 h-5 mr-2" />
             )}
-            {isSaving ? "Salvando..." : (isEditing ? "Salvar Alterações" : "Criar Usuário (Apenas Edição)")}
+            {busy ? "Processando..." : (isEditing ? "Salvar Alterações" : "Criar Usuário")}
           </Button>
-          {!isEditing && <p className="text-xs text-center text-red-500 mt-2">A criação de novos usuários deve ser feita via Supabase Auth Admin API ou Edge Function.</p>}
         </form>
       </SheetContent>
     </Sheet>
