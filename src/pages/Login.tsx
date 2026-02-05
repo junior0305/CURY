@@ -29,7 +29,7 @@ const Login = () => {
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Portal CRM</h1>
           <p className="text-gray-500 text-center mt-2">
-            Acesse sua conta ou cadastre-se para começar.
+            Área de Acesso Restrito
           </p>
         </div>
 
@@ -50,30 +50,30 @@ const Login = () => {
           localization={{
             variables: {
               sign_in: {
-                email_label: 'Seu email',
-                password_label: 'Sua senha',
+                email_label: 'E-mail',
+                password_label: 'Senha',
                 button_label: 'Entrar',
                 loading_button_label: 'Entrando...',
                 link_text: 'Já tem uma conta? Entre',
               },
               sign_up: {
-                email_label: 'Endereço de email',
-                password_label: 'Crie uma senha',
-                button_label: 'Cadastrar novo usuário',
-                loading_button_label: 'Cadastrando...',
-                link_text: 'Não tem conta? Cadastre-se agora',
+                email_label: 'E-mail',
+                password_label: 'Defina uma senha',
+                button_label: 'Criar Conta Mestre',
+                loading_button_label: 'Criando...',
+                link_text: 'Não tem conta? Clique aqui para criar',
               },
             },
           }}
         />
 
-        <div className="mt-8 p-4 bg-amber-50 rounded-xl border border-amber-100">
-          <div className="flex items-center gap-2 mb-2 text-amber-700 font-semibold text-sm">
+        <div className="mt-8 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+          <div className="flex items-center gap-2 mb-2 text-indigo-700 font-semibold text-sm">
             <Info className="w-4 h-4" />
-            <span>Importante:</span>
+            <span>Acesso Mestre:</span>
           </div>
-          <p className="text-xs text-amber-800 leading-relaxed">
-            Como este é um ambiente novo, você deve clicar em <b>"Sign Up"</b> (Cadastre-se) abaixo do botão de login para criar seu primeiro acesso.
+          <p className="text-xs text-indigo-800 leading-relaxed">
+            Para acessar como Superintendente, use a aba <b>"Sign Up"</b> para cadastrar o e-mail <b>alice@crm.com</b> com a senha <b>admin123</b>.
           </p>
         </div>
       </div>
