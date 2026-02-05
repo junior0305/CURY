@@ -1,7 +1,9 @@
 export interface DistributionQueue {
   id: string;
   name: string;
-  tag: string; // A tag que vincula o lead do Make a esta fila
-  participantIds: string[]; // IDs dos corretores que participam desta fila
+  matchValue: string; // O valor que deve vir no 'titulo' ou 'tag' do JSON
+  matchField: 'titulo' | 'tag'; // Onde procurar o valor
+  participantIds: string[];
   isActive: boolean;
+  lastAssignedIndex: number; // Para controle interno de quem foi o último
 }
