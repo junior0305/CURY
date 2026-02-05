@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/AuthProvider';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Info } from 'lucide-react';
 
 const Login = () => {
   const { session, role } = useAuth();
@@ -15,7 +15,7 @@ const Login = () => {
       if (role === 'SUPERINTENDENT' || role === 'MANAGER') {
         navigate('/admin');
       } else {
-        navigate('/'); // Corretores vão para a Home (ou dashboard de corretor)
+        navigate('/'); 
       }
     }
   }, [session, role, navigate]);
@@ -57,6 +57,17 @@ const Login = () => {
             },
           }}
         />
+
+        <div className="mt-8 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+          <div className="flex items-center gap-2 mb-2 text-indigo-700 font-semibold text-sm">
+            <Info className="w-4 h-4" />
+            <span>Credenciais de Teste:</span>
+          </div>
+          <div className="space-y-1 text-xs text-gray-600">
+            <p><b>Super:</b> alice@crm.com / admin123</p>
+            <p><b>Gerente:</b> bob@crm.com / admin123</p>
+          </div>
+        </div>
       </div>
     </div>
   );
