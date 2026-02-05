@@ -2,10 +2,10 @@ import { supabase } from "./client";
 import { User, UserRole } from "@/types/user";
 
 // Helper function to map DB profile to frontend User type
-const mapProfileToUser = (profile: any, authUser: any): User => ({
+const mapProfileToUser = (profile: any): User => ({
   id: profile.id,
-  name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || authUser?.email || 'N/A',
-  email: authUser?.email || 'N/A',
+  name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'N/A',
+  email: profile.email || 'N/A',
   role: profile.role as UserRole,
   managerId: profile.manager_id,
   leadAssignmentEnabled: profile.lead_assignment_enabled,
@@ -13,47 +13,28 @@ const mapProfileToUser = (profile: any, authUser: any): User => ({
 
 // Fetches all profiles visible to the current user (based on RLS)
 export const fetchProfiles = async (): Promise<User[]> => {
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData.user) {
-    throw new Error("User not authenticated.");
-  }
-  const authUser = authData.user;
-
   const { data: profiles, error } = await supabase
     .from('profiles')
-    .select('*, auth_users:id(email)')
+    .select('*')
     .order('role', { ascending: false })
     .order('first_name', { ascending: true });
 
   if (error) throw error;
 
-  return profiles.map(profile => {
-    const userEmail = Array.isArray(profile.auth_users) && profile.auth_users.length > 0
-      ? profile.auth_users[0].email
-      : authUser.email;
-
-    return mapProfileToUser(profile, { email: userEmail });
-  });
+  return profiles.map(profile => mapProfileToUser(profile));
 };
 
 // Fetches all users who can act as managers (SUPERINTENDENT and MANAGER roles)
 export const fetchManagers = async (): Promise<User[]> => {
   const { data: profiles, error } = await supabase
     .from('profiles')
-    .select('*, auth_users:id(email)')
-    .in('role', ['SUPERINTENDENT', 'MANAGER']); // Fetch both hierarchy levels
+    .select('*')
+    .in('role', ['SUPERINTENDENT', 'MANAGER']);
 
   if (error) throw error;
 
-  return profiles.map(profile => {
-    const userEmail = Array.isArray(profile.auth_users) && profile.auth_users.length > 0
-      ? profile.auth_users[0].email
-      : 'N/A';
-
-    return mapProfileToUser(profile, { email: userEmail });
-  });
+  return profiles.map(profile => mapProfileToUser(profile));
 };
-
 
 // Updates an existing profile
 export const updateProfile = async (user: Partial<User>) => {
