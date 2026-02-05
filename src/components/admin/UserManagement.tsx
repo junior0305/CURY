@@ -26,30 +26,20 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
 
   const isSuper = currentUser.role === 'SUPERINTENDENT';
 
-  // Filtra os usuários que podem ser vistos/editados
   const visibleUsers = useMemo(() => {
     if (isSuper) return users;
-    // O Gerente vê apenas ele mesmo e seus corretores
     return users.filter(u => u.id === currentUser.id || u.managerId === currentUser.id);
   }, [users, currentUser, isSuper]);
 
   const handleSaveUser = (user: User) => {
     updateMockUsers(user);
     setUsers([...getMockUsers()]);
-    toast({
-      title: "Sucesso",
-      description: `Usuário ${user.name} atualizado.`,
-    });
+    toast({ title: "Sucesso", description: `Usuário ${user.name} atualizado.` });
   };
 
   const handleEdit = (user: User) => {
-    // Segurança: Gerente não pode editar outro gerente ou superintendente
     if (!isSuper && user.id !== currentUser.id && user.role !== 'BROKER') {
-      toast({
-        title: "Acesso Negado",
-        description: "Você só pode editar corretores da sua equipe.",
-        variant: "destructive"
-      });
+      toast({ title: "Acesso Negado", description: "Acesso restrito.", variant: "destructive" });
       return;
     }
     setUserToEdit(user);
@@ -59,12 +49,9 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <p className="text-gray-600">
-          {isSuper ? "Gerencie todos os membros da organização." : "Gerencie os corretores do seu time."}
-        </p>
+        <p className="text-gray-600">{isSuper ? "Gerencie todos os membros." : "Gerencie seu time."}</p>
         <Button onClick={() => { setUserToEdit(null); setIsFormOpen(true); }} className="bg-indigo-600">
-          <PlusCircle className="w-4 h-4 mr-2" />
-          Novo Membro
+          <PlusCircle className="w-4 h-4 mr-2" /> Novo Membro
         </Button>
       </div>
 
@@ -82,16 +69,11 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
             {visibleUsers.map((user) => (
               <TableRow key={user.id}>
                 <TableCell className="font-medium">
-                  {user.name}
-                  {user.id === currentUser.id && <Badge className="ml-2 bg-gray-100 text-gray-500 border-none">Você</Badge>}
+                  {user.name} {user.id === currentUser.id && <Badge variant="secondary" className="ml-2">Você</Badge>}
                 </TableCell>
-                <TableCell>
-                  <Badge className={`${roleColors[user.role]} text-white border-none`}>{user.role}</Badge>
-                </TableCell>
+                <TableCell><Badge className={`${roleColors[user.role]} text-white border-none`}>{user.role}</Badge></TableCell>
                 <TableCell className="text-center">
-                  {user.role === 'BROKER' && (
-                    user.leadAssignmentEnabled ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto" /> : <XCircle className="w-5 h-5 text-red-500 mx-auto" />
-                  )}
+                  {user.role === 'BROKER' && (user.leadAssignmentEnabled ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto" /> : <XCircle className="w-5 h-5 text-red-500 mx-auto" />)}
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="sm" onClick={() => handleEdit(user)}>
@@ -104,13 +86,7 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
         </Table>
       </div>
 
-      <UserForm 
-        isOpen={isFormOpen} 
-        onOpenChange={setIsFormOpen} 
-        userToEdit={userToEdit} 
-        onSave={handleSaveUser}
-        currentUser={currentUser}
-      />
+      <UserForm isOpen={isFormOpen} onOpenChange={setIsFormOpen} userToEdit={userToEdit} onSave={handleSaveUser} />
     </div>
   );
 };

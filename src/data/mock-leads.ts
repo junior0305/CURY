@@ -22,7 +22,7 @@ export const mockLeads: Lead[] = [
     brokerId: "u4",
     managerId: "u2",
     tag: "Imóveis Prontos",
-    createdAt: new Date(Date.now() - 86400000).toISOString(), // 1 dia atrás
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
     lastInteractionAt: new Date(Date.now() - 86400000).toISOString(),
   },
   {

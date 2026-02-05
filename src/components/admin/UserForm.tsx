@@ -74,42 +74,21 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave }: UserFormProps) =
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="name">Nome Completo</Label>
-            <Input
-              id="name"
-              value={formData.name || ""}
-              onChange={(e) => handleChange("name", e.target.value)}
-              required
-              className="rounded-lg"
-            />
+            <Input id="name" value={formData.name || ""} onChange={(e) => handleChange("name", e.target.value)} required />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={formData.email || ""}
-              onChange={(e) => handleChange("email", e.target.value)}
-              required
-              className="rounded-lg"
-            />
+            <Input id="email" type="email" value={formData.email || ""} onChange={(e) => handleChange("email", e.target.value)} required />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="role">Função</Label>
-            <Select
-              value={formData.role || "BROKER"}
-              onValueChange={(value) => handleChange("role", value as UserRole)}
-              required
-            >
-              <SelectTrigger id="role" className="rounded-lg">
-                <SelectValue placeholder="Selecione a função" />
-              </SelectTrigger>
+            <Select value={formData.role || "BROKER"} onValueChange={(value) => handleChange("role", value as UserRole)}>
+              <SelectTrigger id="role"><SelectValue placeholder="Selecione a função" /></SelectTrigger>
               <SelectContent>
                 {roles.map(role => (
-                  <SelectItem key={role} value={role}>
-                    {role.charAt(0) + role.slice(1).toLowerCase()}
-                  </SelectItem>
+                  <SelectItem key={role} value={role}>{role.charAt(0) + role.slice(1).toLowerCase()}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -118,19 +97,12 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave }: UserFormProps) =
           {isManagerOrBroker && (
             <div className="space-y-2">
               <Label htmlFor="manager">Gerente Responsável</Label>
-              <Select
-                value={formData.managerId || "none"}
-                onValueChange={(value) => handleChange("managerId", value === "none" ? null : value)}
-              >
-                <SelectTrigger id="manager" className="rounded-lg">
-                  <SelectValue placeholder="Nenhum (Superintendente)" />
-                </SelectTrigger>
+              <Select value={formData.managerId || "none"} onValueChange={(value) => handleChange("managerId", value === "none" ? null : value)}>
+                <SelectTrigger id="manager"><SelectValue placeholder="Nenhum (Superintendente)" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Nenhum (Superintendente)</SelectItem>
                   {managers.map(manager => (
-                    <SelectItem key={manager.id} value={manager.id}>
-                      {manager.name}
-                    </SelectItem>
+                    <SelectItem key={manager.id} value={manager.id}>{manager.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -141,22 +113,14 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave }: UserFormProps) =
             <div className="flex items-center justify-between p-4 bg-indigo-50 rounded-xl border border-indigo-200">
               <Label htmlFor="lead-assignment" className="flex flex-col space-y-1">
                 <span className="text-base font-medium">Receber Leads Automaticamente</span>
-                <span className="text-sm text-gray-500">
-                  Define se este corretor entrará na fila de distribuição de leads.
-                </span>
+                <span className="text-sm text-gray-500">Habilita o sorteio para este corretor.</span>
               </Label>
-              <Switch
-                id="lead-assignment"
-                checked={!!formData.leadAssignmentEnabled}
-                onCheckedChange={(checked) => handleChange("leadAssignmentEnabled", checked)}
-                className="data-[state=checked]:bg-indigo-600"
-              />
+              <Switch id="lead-assignment" checked={!!formData.leadAssignmentEnabled} onCheckedChange={(checked) => handleChange("leadAssignmentEnabled", checked)} />
             </div>
           )}
 
-          <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-md transition-all">
-            <Save className="w-4 h-4 mr-2" />
-            Salvar Usuário
+          <Button type="submit" className="w-full bg-indigo-600">
+            <Save className="w-4 h-4 mr-2" /> Salvar Usuário
           </Button>
         </form>
       </SheetContent>
