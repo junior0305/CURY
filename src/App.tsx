@@ -14,22 +14,13 @@ const queryClient = new QueryClient();
 
 const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, role, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
-        <p className="text-gray-600 font-medium">Autenticando acesso...</p>
-      </div>
-    );
-  }
-  
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center">
+      <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+    </div>
+  );
   if (!session) return <Navigate to="/login" />;
-  
-  if (role !== 'SUPERINTENDENT' && role !== 'MANAGER') {
-    return <Navigate to="/" />;
-  }
-
+  if (role !== 'SUPERINTENDENT' && role !== 'MANAGER') return <Navigate to="/" />;
   return <>{children}</>;
 };
 
@@ -43,14 +34,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
-            <Route 
-              path="/admin" 
-              element={
-                <ProtectedAdminRoute>
-                  <Admin />
-                </ProtectedAdminRoute>
-              } 
-            />
+            <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

@@ -11,7 +11,6 @@ const AdminStats = ({ currentUser }: AdminStatsProps) => {
   const allUsers = getMockUsers();
   const isSuper = currentUser.role === 'SUPERINTENDENT';
 
-  // Filtra dados com base no usuário logado
   const teamBrokers = allUsers.filter(u => 
     u.role === 'BROKER' && (isSuper || u.managerId === currentUser.id)
   );
@@ -19,34 +18,10 @@ const AdminStats = ({ currentUser }: AdminStatsProps) => {
   const activeInQueue = teamBrokers.filter(u => u.leadAssignmentEnabled).length;
 
   const stats = [
-    {
-      title: isSuper ? "Total de Corretores" : "Meus Corretores",
-      value: teamBrokers.length,
-      icon: Users,
-      color: "text-blue-600",
-      bg: "bg-blue-50"
-    },
-    {
-      title: "Ativos na Fila",
-      value: activeInQueue,
-      icon: Zap,
-      color: "text-amber-600",
-      bg: "bg-amber-50"
-    },
-    {
-      title: "Leads no Período",
-      value: isSuper ? "142" : "38",
-      icon: TrendingUp,
-      color: "text-indigo-600",
-      bg: "bg-indigo-50"
-    },
-    {
-      title: "Conversão Team",
-      value: isSuper ? "12%" : "14%",
-      icon: CheckCircle,
-      color: "text-green-600",
-      bg: "bg-green-50"
-    }
+    { title: isSuper ? "Total de Corretores" : "Meus Corretores", value: teamBrokers.length, icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
+    { title: "Ativos na Fila", value: activeInQueue, icon: Zap, color: "text-amber-600", bg: "bg-amber-50" },
+    { title: "Leads no Período", value: isSuper ? "142" : "38", icon: TrendingUp, color: "text-indigo-600", bg: "bg-indigo-50" },
+    { title: "Conversão Team", value: isSuper ? "12%" : "14%", icon: CheckCircle, color: "text-green-600", bg: "bg-green-50" }
   ];
 
   return (

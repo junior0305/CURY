@@ -1,3 +1,5 @@
+"use client";
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -33,15 +35,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setSession(currentSession);
     setUser(currentUser);
 
-    // 1. Tenta pegar a role direto dos metadados (rápido/instantâneo)
     const metaRole = currentUser.user_metadata?.role;
     if (metaRole) {
-      console.log("[AuthProvider] Role detectada via metadados:", metaRole);
       setRole(metaRole);
-      setLoading(false); // Já libera o acesso aqui!
     }
 
-    // 2. Busca no banco em segundo plano para confirmar/atualizar
     try {
       const { data } = await supabase
         .from('profiles')
@@ -49,14 +47,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .eq('id', currentUser.id)
         .maybeSingle();
       
-      if (data?.role) {
-        console.log("[AuthProvider] Role confirmada via DB:", data.role);
-        setRole(data.role);
-      } else if (!metaRole) {
-        setRole('BROKER');
-      }
+      if (data?.role) setRole(data.role);
+      else if (!metaRole) setRole('BROKER');
     } catch (e) {
-      console.error("[AuthProvider] Erro silencioso na busca de perfil:", e);
       if (!metaRole) setRole('BROKER');
     } finally {
       setLoading(false);
@@ -64,7 +57,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
-    // Inicialização rápida
     supabase.auth.getSession().then(({ data: { session } }) => {
       handleUserSession(session);
     });
@@ -90,8 +82,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
