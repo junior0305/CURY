@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { User, UserRole } from "@/types/user";
-import { getManagers, getMockUsers } from "@/data/mock-users";
+import { getManagers } from "@/data/mock-users";
 import { Save } from "lucide-react";
 
 interface UserFormProps {
@@ -27,7 +27,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave }: UserFormProps) =
       setFormData(userToEdit);
     } else {
       setFormData({
-        id: Date.now().toString(), // Mock ID generation
+        id: Date.now().toString(),
         name: "",
         email: "",
         role: "BROKER",
@@ -44,7 +44,6 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave }: UserFormProps) =
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.name && formData.email && formData.role) {
-      // Simple validation and type casting for mock save
       const user: User = {
         ...formData,
         id: formData.id || Date.now().toString(),
@@ -120,14 +119,14 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave }: UserFormProps) =
             <div className="space-y-2">
               <Label htmlFor="manager">Gerente Responsável</Label>
               <Select
-                value={formData.managerId || ""}
-                onValueChange={(value) => handleChange("managerId", value || null)}
+                value={formData.managerId || "none"}
+                onValueChange={(value) => handleChange("managerId", value === "none" ? null : value)}
               >
                 <SelectTrigger id="manager" className="rounded-lg">
                   <SelectValue placeholder="Nenhum (Superintendente)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum (Superintendente)</SelectItem>
+                  <SelectItem value="none">Nenhum (Superintendente)</SelectItem>
                   {managers.map(manager => (
                     <SelectItem key={manager.id} value={manager.id}>
                       {manager.name}
