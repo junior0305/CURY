@@ -21,47 +21,57 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (currentUser: User) => {
     try {
-      console.log("[AuthProvider] Buscando perfil para:", userId);
-      const { data, error } = await supabase
+      console.log("[AuthProvider] Iniciando busca de perfil para:", currentUser.id);
+      
+      // Tenta buscar no banco com um limite de tempo (timeout manual)
+      const profilePromise = supabase
         .from('profiles')
         .select('role')
-        .eq('id', userId)
+        .eq('id', currentUser.id)
         .maybeSingle();
+
+      // Fallback imediato: Verificar se a role já está nos metadados do usuário
+      const metadataRole = currentUser.user_metadata?.role;
+      if (metadataRole) {
+        console.log("[AuthProvider] Role encontrada nos metadados:", metadataRole);
+        setRole(metadataRole);
+      }
+
+      const { data, error } = await profilePromise;
       
-      if (error) throw error;
-      
-      if (data) {
-        console.log("[AuthProvider] Role encontrada:", data.role);
+      if (error) {
+        console.warn("[AuthProvider] Erro ao buscar perfil no DB, mantendo metadados:", error.message);
+      } else if (data?.role) {
+        console.log("[AuthProvider] Role confirmada pelo banco de dados:", data.role);
         setRole(data.role);
-      } else {
-        // Se não encontrar perfil, pode ser um delay no trigger. 
-        // Em vez de travar, definimos um role padrão após um tempo.
-        console.warn("[AuthProvider] Perfil não encontrado, aguardando sincronização...");
-        setRole('BROKER'); 
+      } else if (!metadataRole) {
+        console.warn("[AuthProvider] Nenhuma role encontrada em lugar nenhum. Definindo padrão.");
+        setRole('BROKER');
       }
     } catch (err) {
-      console.error("[AuthProvider] Erro ao buscar perfil:", err);
-      setRole('BROKER'); 
+      console.error("[AuthProvider] Erro crítico na busca de perfil:", err);
+      if (!role) setRole('BROKER');
     } finally {
-      setLoading(false);
+      // Pequeno delay para garantir que o React processou a mudança de estado da role
+      setTimeout(() => setLoading(false), 100);
     }
   };
 
   const refreshProfile = async () => {
-    if (user) await fetchProfile(user.id);
+    if (user) await fetchProfile(user);
   };
 
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setSession(session);
-        setUser(session?.user ?? null);
+        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        setSession(initialSession);
+        setUser(initialSession?.user ?? null);
         
-        if (session?.user) {
-          await fetchProfile(session.user.id);
+        if (initialSession?.user) {
+          await fetchProfile(initialSession.user);
         } else {
           setLoading(false);
         }
@@ -74,28 +84,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      console.log("[AuthProvider] Auth State Changed:", event);
+      console.log("[AuthProvider] Evento de Autenticação:", event);
       setSession(currentSession);
-      setUser(currentSession?.user ?? null);
+      const currentUser = currentSession?.user ?? null;
+      setUser(currentUser);
       
-      if (currentSession?.user) {
+      if (currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
         setLoading(true);
-        await fetchProfile(currentSession.user.id);
-      } else {
+        await fetchProfile(currentUser);
+      } else if (event === 'SIGNED_OUT') {
         setRole(null);
+        setLoading(false);
+        navigate('/login');
+      } else {
         setLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const signOut = async () => {
+    setLoading(true);
     await supabase.auth.signOut();
-    setSession(null);
-    setUser(null);
-    setRole(null);
-    navigate('/login');
   };
 
   return (
