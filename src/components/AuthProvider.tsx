@@ -9,7 +9,6 @@ interface AuthContextType {
   role: string | null;
   loading: boolean;
   signOut: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,96 +20,69 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const fetchProfile = async (currentUser: User) => {
+  const handleUserSession = async (currentSession: Session | null) => {
+    if (!currentSession) {
+      setSession(null);
+      setUser(null);
+      setRole(null);
+      setLoading(false);
+      return;
+    }
+
+    const currentUser = currentSession.user;
+    setSession(currentSession);
+    setUser(currentUser);
+
+    // 1. Tenta pegar a role direto dos metadados (rápido/instantâneo)
+    const metaRole = currentUser.user_metadata?.role;
+    if (metaRole) {
+      console.log("[AuthProvider] Role detectada via metadados:", metaRole);
+      setRole(metaRole);
+      setLoading(false); // Já libera o acesso aqui!
+    }
+
+    // 2. Busca no banco em segundo plano para confirmar/atualizar
     try {
-      console.log("[AuthProvider] Iniciando busca de perfil para:", currentUser.id);
-      
-      // Tenta buscar no banco com um limite de tempo (timeout manual)
-      const profilePromise = supabase
+      const { data } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', currentUser.id)
         .maybeSingle();
-
-      // Fallback imediato: Verificar se a role já está nos metadados do usuário
-      const metadataRole = currentUser.user_metadata?.role;
-      if (metadataRole) {
-        console.log("[AuthProvider] Role encontrada nos metadados:", metadataRole);
-        setRole(metadataRole);
-      }
-
-      const { data, error } = await profilePromise;
       
-      if (error) {
-        console.warn("[AuthProvider] Erro ao buscar perfil no DB, mantendo metadados:", error.message);
-      } else if (data?.role) {
-        console.log("[AuthProvider] Role confirmada pelo banco de dados:", data.role);
+      if (data?.role) {
+        console.log("[AuthProvider] Role confirmada via DB:", data.role);
         setRole(data.role);
-      } else if (!metadataRole) {
-        console.warn("[AuthProvider] Nenhuma role encontrada em lugar nenhum. Definindo padrão.");
+      } else if (!metaRole) {
         setRole('BROKER');
       }
-    } catch (err) {
-      console.error("[AuthProvider] Erro crítico na busca de perfil:", err);
-      if (!role) setRole('BROKER');
+    } catch (e) {
+      console.error("[AuthProvider] Erro silencioso na busca de perfil:", e);
+      if (!metaRole) setRole('BROKER');
     } finally {
-      // Pequeno delay para garantir que o React processou a mudança de estado da role
-      setTimeout(() => setLoading(false), 100);
+      setLoading(false);
     }
   };
 
-  const refreshProfile = async () => {
-    if (user) await fetchProfile(user);
-  };
-
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
-        setSession(initialSession);
-        setUser(initialSession?.user ?? null);
-        
-        if (initialSession?.user) {
-          await fetchProfile(initialSession.user);
-        } else {
-          setLoading(false);
-        }
-      } catch (e) {
-        console.error("[AuthProvider] Erro na inicialização:", e);
-        setLoading(false);
-      }
-    };
+    // Inicialização rápida
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      handleUserSession(session);
+    });
 
-    initAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      console.log("[AuthProvider] Evento de Autenticação:", event);
-      setSession(currentSession);
-      const currentUser = currentSession?.user ?? null;
-      setUser(currentUser);
-      
-      if (currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        setLoading(true);
-        await fetchProfile(currentUser);
-      } else if (event === 'SIGNED_OUT') {
-        setRole(null);
-        setLoading(false);
-        navigate('/login');
-      } else {
-        setLoading(false);
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      handleUserSession(session);
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, []);
 
   const signOut = async () => {
-    setLoading(true);
     await supabase.auth.signOut();
+    navigate('/login');
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, role, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ session, user, role, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );
