@@ -9,6 +9,7 @@ interface AuthContextType {
   role: string | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,6 +23,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchProfile = async (userId: string) => {
     try {
+      console.log("[AuthProvider] Buscando perfil para:", userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('role')
@@ -30,24 +32,41 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       if (error) throw error;
       
-      // Se não encontrar perfil, define como BROKER por padrão
-      setRole(data?.role || 'BROKER');
+      if (data) {
+        console.log("[AuthProvider] Role encontrada:", data.role);
+        setRole(data.role);
+      } else {
+        // Se não encontrar perfil, pode ser um delay no trigger. 
+        // Em vez de travar, definimos um role padrão após um tempo.
+        console.warn("[AuthProvider] Perfil não encontrado, aguardando sincronização...");
+        setRole('BROKER'); 
+      }
     } catch (err) {
-      console.error("Erro ao buscar perfil:", err);
-      setRole('BROKER'); // Fallback de segurança
+      console.error("[AuthProvider] Erro ao buscar perfil:", err);
+      setRole('BROKER'); 
     } finally {
       setLoading(false);
     }
   };
 
+  const refreshProfile = async () => {
+    if (user) await fetchProfile(user.id);
+  };
+
   useEffect(() => {
     const initAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        await fetchProfile(session.user.id);
-      } else {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          await fetchProfile(session.user.id);
+        } else {
+          setLoading(false);
+        }
+      } catch (e) {
+        console.error("[AuthProvider] Erro na inicialização:", e);
         setLoading(false);
       }
     };
@@ -55,6 +74,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      console.log("[AuthProvider] Auth State Changed:", event);
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
       
@@ -79,7 +99,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, role, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, role, loading, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

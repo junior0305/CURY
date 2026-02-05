@@ -8,14 +8,21 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
 import Login from "./pages/Login";
+import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
-// Componente para proteger rotas administrativas
 const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, role, loading } = useAuth();
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
+        <p className="text-gray-600 font-medium">Autenticando acesso...</p>
+      </div>
+    );
+  }
   
   if (!session) return <Navigate to="/login" />;
   
