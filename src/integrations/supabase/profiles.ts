@@ -4,25 +4,27 @@ import { User, UserRole, Team } from "@/types/user";
 // Helper function to map DB profile to frontend User type
 const mapProfileToUser = (profile: any): User => ({
   id: profile.id,
-  name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'N/A',
-  email: profile.email || 'N/A', // Use the email from the profiles table
-  role: profile.role as UserRole,
+  name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'Usuário Sem Nome',
+  email: profile.email || 'E-mail não disponível',
+  role: (profile.role as UserRole) || 'BROKER',
   managerId: profile.manager_id,
   teamId: profile.team_id,
-  leadAssignmentEnabled: profile.lead_assignment_enabled,
+  leadAssignmentEnabled: !!profile.lead_assignment_enabled,
 });
 
 // Fetches all profiles visible to the current user (based on RLS)
 export const fetchProfiles = async (): Promise<User[]> => {
   const { data: profiles, error } = await supabase
     .from('profiles')
-    .select('*, email') // Ensure email is selected
-    .order('role', { ascending: false })
-    .order('first_name', { ascending: true });
+    .select('*')
+    .order('role', { ascending: false });
 
-  if (error) throw error;
+  if (error) {
+    console.error("[fetchProfiles] Error:", error);
+    throw error;
+  }
 
-  return profiles.map(profile => mapProfileToUser(profile));
+  return (profiles || []).map(profile => mapProfileToUser(profile));
 };
 
 // Fetches all teams
@@ -34,19 +36,19 @@ export const fetchTeams = async (): Promise<Team[]> => {
 
   if (error) throw error;
 
-  return teams;
+  return teams || [];
 };
 
-// Fetches all users who can act as managers (SUPERINTENDENT and MANAGER roles)
+// Fetches all users who can act as managers
 export const fetchManagers = async (): Promise<User[]> => {
   const { data: profiles, error } = await supabase
     .from('profiles')
-    .select('*, email') // Ensure email is selected
+    .select('*')
     .in('role', ['SUPERINTENDENT', 'MANAGER']);
 
   if (error) throw error;
 
-  return profiles.map(profile => mapProfileToUser(profile));
+  return (profiles || []).map(profile => mapProfileToUser(profile));
 };
 
 // Updates an existing profile
@@ -55,8 +57,8 @@ export const updateProfile = async (user: Partial<User>) => {
 
   const updatePayload = {
     role: role,
-    manager_id: managerId,
-    team_id: teamId,
+    manager_id: managerId === 'none' ? null : managerId,
+    team_id: teamId === 'none' ? null : teamId,
     lead_assignment_enabled: leadAssignmentEnabled,
     updated_at: new Date().toISOString(),
   };
