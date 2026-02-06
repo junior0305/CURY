@@ -6,46 +6,47 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DistributionQueue } from "@/types/queue";
-import { Plus, Trash2, Loader2 } from "lucide-react";
+import { Plus, Trash2, Loader2, Users } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useQuery } from "@tanstack/react-query";
-import { fetchProfiles } from "@/integrations/supabase/profiles";
+import { fetchTeams } from "@/integrations/supabase/profiles";
+import { Team } from "@/types/user";
 
 const LeadDistribution = () => {
   const { toast } = useToast();
   
-  const { data: allUsers = [], isLoading } = useQuery({
-    queryKey: ['profiles'],
-    queryFn: fetchProfiles,
+  // Fetch teams instead of profiles
+  const { data: teams = [], isLoading } = useQuery<Team[]>({
+    queryKey: ['teams'],
+    queryFn: fetchTeams,
   });
 
-  const brokers = useMemo(() => allUsers.filter(u => u.role === 'BROKER'), [allUsers]);
-  
   const [queues, setQueues] = useState<DistributionQueue[]>([]);
 
   const [newQueue, setNewQueue] = useState<Partial<DistributionQueue>>({
     name: "",
     matchField: "titulo",
     matchValue: "",
-    participantIds: [],
+    teamIds: [], // Using teamIds now
     isActive: true
   });
 
-  const handleToggleBroker = (id: string) => {
-    const currentIds = newQueue.participantIds || [];
+  // Handler for toggling team selection
+  const handleToggleTeam = (id: string) => {
+    const currentIds = newQueue.teamIds || [];
     setNewQueue({
       ...newQueue,
-      participantIds: currentIds.includes(id) ? currentIds.filter(bid => bid !== id) : [...currentIds, id]
+      teamIds: currentIds.includes(id) ? currentIds.filter(tid => tid !== id) : [...currentIds, id]
     });
   };
 
   const handleCreateQueue = () => {
-    if (!newQueue.name || !newQueue.matchValue || (newQueue.participantIds?.length || 0) === 0) {
+    if (!newQueue.name || !newQueue.matchValue || (newQueue.teamIds?.length || 0) === 0) {
       toast({ title: "Erro", description: "Campos incompletos.", variant: "destructive" });
       return;
     }
     setQueues([...queues, { ...(newQueue as DistributionQueue), id: Date.now().toString(), lastAssignedIndex: 0 }]);
-    setNewQueue({ name: "", matchField: "titulo", matchValue: "", participantIds: [], isActive: true });
+    setNewQueue({ name: "", matchField: "titulo", matchValue: "", teamIds: [], isActive: true });
     toast({ title: "Fila Criada", description: "Regra ativada com sucesso." });
   };
 
@@ -74,21 +75,28 @@ const LeadDistribution = () => {
             <Input placeholder="Match Value" value={newQueue.matchValue} onChange={e => setNewQueue({...newQueue, matchValue: e.target.value})} />
           </div>
           <div className="space-y-2">
-            <Label>Participantes</Label>
+            <Label>Equipes Participantes</Label>
             <div className="max-h-40 overflow-y-auto border rounded p-2 bg-gray-50">
-              {brokers.length === 0 ? (
-                <p className="text-sm text-gray-500 p-2">Nenhum corretor encontrado.</p>
+              {teams.length === 0 ? (
+                <p className="text-sm text-gray-500 p-2">Nenhuma equipe encontrada.</p>
               ) : (
-                brokers.map(b => (
-                  <div key={b.id} className="flex items-center space-x-2 p-1">
-                    <Checkbox id={b.id} checked={newQueue.participantIds?.includes(b.id)} onCheckedChange={() => handleToggleBroker(b.id)} />
-                    <Label htmlFor={b.id} className="text-sm">{b.name}</Label>
+                teams.map(team => (
+                  <div key={team.id} className="flex items-center space-x-2 p-1 hover:bg-white rounded transition-colors">
+                    <Checkbox 
+                      id={team.id} 
+                      checked={newQueue.teamIds?.includes(team.id)} 
+                      onCheckedChange={() => handleToggleTeam(team.id)} 
+                    />
+                    <Label htmlFor={team.id} className="text-sm flex items-center gap-2">
+                      <Users className="w-4 h-4 text-indigo-500" />
+                      {team.name}
+                    </Label>
                   </div>
                 ))
               )}
             </div>
           </div>
-          <Button onClick={handleCreateQueue} className="w-full bg-indigo-600" disabled={brokers.length === 0}>Criar Fila</Button>
+          <Button onClick={handleCreateQueue} className="w-full bg-indigo-600" disabled={teams.length === 0}>Criar Fila</Button>
         </CardContent>
       </Card>
 
@@ -97,7 +105,7 @@ const LeadDistribution = () => {
           <Card key={q.id} className="border-none shadow-sm flex items-center p-4 justify-between">
             <div>
               <h3 className="font-bold text-gray-900">{q.name}</h3>
-              <p className="text-xs text-gray-500">{q.matchField}: {q.matchValue} | {q.participantIds.length} corretores</p>
+              <p className="text-xs text-gray-500">{q.matchField}: {q.matchValue} | {q.teamIds.length} equipes</p>
             </div>
             <Button variant="ghost" size="icon" onClick={() => setQueues(queues.filter(item => item.id !== q.id))}><Trash2 className="w-4 h-4 text-red-400" /></Button>
           </Card>
