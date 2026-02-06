@@ -95,7 +95,8 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
             firstName,
             lastName,
             role: formData.role,
-            managerId: formData.managerId
+            managerId: formData.managerId,
+            teamId: formData.teamId
           }
         });
 

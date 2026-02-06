@@ -3,7 +3,7 @@ export interface DistributionQueue {
   name: string;
   matchValue: string;
   matchField: 'titulo' | 'tag';
-  participantIds: string[];
+  teamIds: string[]; // IDs das equipes participantes
   isActive: boolean;
   lastAssignedIndex: number;
 }

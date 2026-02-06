@@ -17,26 +17,27 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const { email, password, firstName, lastName, role, managerId } = await req.json()
+    const { email, password, firstName, lastName, role, managerId, teamId } = await req.json()
 
     // 1. Create the user in Auth
     const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { first_name: firstName, last_name: lastName, role }
+      user_metadata: { first_name: firstName, last_name: lastName, role, team_id: teamId }
     })
 
     if (createError) throw createError
 
-    // 2. Update the profile (manager_id and email explicitly)
+    // 2. Update the profile (manager_id, team_id and email explicitly)
     // Small delay for trigger
     await new Promise(resolve => setTimeout(resolve, 800));
 
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .update({ 
+      .update({
         manager_id: managerId === 'none' ? null : managerId,
+        team_id: teamId === 'none' ? null : teamId,
         role: role,
         email: email // Ensure email is saved in the column
       })
