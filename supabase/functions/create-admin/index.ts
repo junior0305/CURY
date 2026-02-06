@@ -18,67 +18,65 @@ serve(async (req) => {
     
     const { email, password, role } = await req.json()
     
-    // 1. Buscar todos os usuários para encontrar o correto de forma segura
+    // 1. Localizar o usuário por e-mail
     const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers()
     if (listError) throw listError
     
     const existingUser = users.find(u => u.email?.toLowerCase() === email.toLowerCase())
-    let userId;
 
+    // 2. SE EXISTIR, DELETAR COMPLETAMENTE (Limpeza total)
     if (existingUser) {
-      console.log(`[create-admin] Atualizando usuário existente: ${email}`);
-      userId = existingUser.id;
+      console.log(`[create-admin] Limpando usuário antigo: ${email}`);
       
-      // Resetar senha e confirmar e-mail agressivamente
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        userId,
-        { 
-          password: password,
-          email_confirm: true,
-          user_metadata: { first_name: 'Junior', last_name: 'Admin', role: role }
-        }
-      )
-      if (updateError) throw updateError
-    } else {
-      console.log(`[create-admin] Criando novo usuário: ${email}`);
-      // Criar novo usuário já confirmado
-      const { data: newData, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email, 
-        password, 
-        email_confirm: true, 
-        user_metadata: { first_name: 'Junior', last_name: 'Admin', role: role }
-      })
-      if (createError) throw createError
-      userId = newData.user.id;
+      // Deletar do Auth (isso deve disparar o cascade no banco se as FKs estiverem corretas)
+      const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(existingUser.id)
+      if (deleteError) console.error("[create-admin] Erro ao deletar do Auth:", deleteError.message)
+      
+      // Garantir que saiu do banco (caso o cascade falhe)
+      await supabaseAdmin.from('profiles').delete().eq('id', existingUser.id)
+      
+      // Pequeno delay para o Supabase processar a exclusão
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    // 2. Sincronização manual do Perfil (Backup do trigger)
-    // Isso garante que mesmo que o trigger SQL falhe, o perfil existirá na tabela pública
+    // 3. CRIAR DO ZERO (Instalação limpa)
+    console.log(`[create-admin] Criando nova conta limpa: ${email}`);
+    const { data: newData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email, 
+      password, 
+      email_confirm: true, 
+      user_metadata: { 
+        first_name: 'Junior', 
+        last_name: 'Admin', 
+        role: role 
+      }
+    })
+    
+    if (createError) throw createError
+
+    // 4. CRIAR PERFIL MANUALMENTE (Para não depender apenas do trigger)
     const { error: profileError } = await supabaseAdmin.from('profiles').upsert({ 
-      id: userId, 
+      id: newData.user.id, 
       role: role, 
-      email: email,
+      email: email, // Se a coluna existir
       first_name: 'Junior',
       last_name: 'Admin',
       updated_at: new Date().toISOString()
     })
     
     if (profileError) {
-      console.error("[create-admin] Erro ao sincronizar perfil:", profileError.message);
-      // Se der erro de 'email column not found', tentamos sem a coluna email (caso o SQL não tenha sido rodado)
-      if (profileError.message.includes('column "email"')) {
-        await supabaseAdmin.from('profiles').upsert({ 
-          id: userId, 
-          role: role, 
-          first_name: 'Junior',
-          last_name: 'Admin'
-        })
-      }
+      // Tentar sem a coluna e-mail caso ela não tenha sido criada no SQL
+      await supabaseAdmin.from('profiles').upsert({ 
+        id: newData.user.id, 
+        role: role, 
+        first_name: 'Junior',
+        last_name: 'Admin'
+      })
     }
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: "Sistema sincronizado! Tente o login agora." 
+      message: "Sistema limpo e recriado com sucesso! Pode logar agora." 
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
   } catch (error) {
