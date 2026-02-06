@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Settings, Zap, Globe, RefreshCcw, ShieldCheck, UserCircle, Loader2 } from "lucide-react";
+import { Users, Settings, Zap, Globe, RefreshCcw, ShieldCheck, UserCircle, Loader2, Group } from "lucide-react";
 import UserManagement from "@/components/admin/UserManagement";
+import TeamManagement from "@/components/admin/TeamManagement";
 import AdminStats from "@/components/admin/AdminStats";
 import LeadDistribution from "@/components/admin/LeadDistribution";
 import IntegrationsManagement from "@/components/admin/IntegrationsManagement";
@@ -29,6 +30,7 @@ const Admin = () => {
     email: authUser?.email || '',
     role: (userRole as UserRole) || 'SUPERINTENDENT',
     managerId: null,
+    teamId: null, // Added teamId initialization
     leadAssignmentEnabled: false,
   };
   
@@ -52,8 +54,9 @@ const Admin = () => {
         <AdminStats currentUser={currentUser} />
 
         <Tabs defaultValue="users" value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-5 h-14 bg-white shadow-lg rounded-2xl p-1 mb-8">
+          <TabsList className="grid grid-cols-6 h-14 bg-white shadow-lg rounded-2xl p-1 mb-8">
             <TabsTrigger value="users" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl"><Users className="w-4 h-4 mr-2" /> Time</TabsTrigger>
+            <TabsTrigger value="teams" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl"><Group className="w-4 h-4 mr-2" /> Equipes</TabsTrigger>
             <TabsTrigger value="leads" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl"><Zap className="w-4 h-4 mr-2" /> Regras</TabsTrigger>
             <TabsTrigger value="rework" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl"><RefreshCcw className="w-4 h-4 mr-2" /> Retrabalho</TabsTrigger>
             <TabsTrigger value="integrations" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl"><Globe className="w-4 h-4 mr-2" /> Webhooks</TabsTrigger>
@@ -61,6 +64,7 @@ const Admin = () => {
           </TabsList>
 
           <TabsContent value="users"><Card className="shadow-xl border-none p-6"><UserManagement currentUser={currentUser} /></Card></TabsContent>
+          <TabsContent value="teams"><Card className="shadow-xl border-none p-6"><TeamManagement /></Card></TabsContent>
           <TabsContent value="leads"><LeadDistribution /></TabsContent>
           <TabsContent value="rework"><LeadRework /></TabsContent>
           <TabsContent value="integrations"><IntegrationsManagement /></TabsContent>
