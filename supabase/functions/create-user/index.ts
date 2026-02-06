@@ -29,8 +29,8 @@ serve(async (req) => {
 
     if (createError) throw createError
 
-    // 2. Update the profile (manager_id, team_id and email explicitly)
-    // Small delay for trigger
+    // 2. Update the profile (manager_id, team_id, role, and email explicitly)
+    // Small delay for trigger (handle_new_user) to run and create the initial profile row
     await new Promise(resolve => setTimeout(resolve, 800));
 
     const { error: profileError } = await supabaseAdmin
@@ -39,11 +39,11 @@ serve(async (req) => {
         manager_id: managerId === 'none' ? null : managerId,
         team_id: teamId === 'none' ? null : teamId,
         role: role,
-        email: email // Ensure email is saved in the column
+        email: email // Explicitly save email in the profiles table
       })
       .eq('id', userData.user.id)
     
-    if (profileError) console.error("Profile update error:", profileError.message);
+    if (profileError) console.error("[create-user] Profile update error:", profileError.message);
 
     return new Response(JSON.stringify({ success: true, user: userData.user }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -51,6 +51,7 @@ serve(async (req) => {
     })
 
   } catch (error) {
+    console.error("[create-user] Error during user creation:", error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400

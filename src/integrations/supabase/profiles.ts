@@ -5,7 +5,7 @@ import { User, UserRole, Team } from "@/types/user";
 const mapProfileToUser = (profile: any): User => ({
   id: profile.id,
   name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'N/A',
-  email: profile.email || 'N/A',
+  email: profile.email || 'N/A', // Use the email from the profiles table
   role: profile.role as UserRole,
   managerId: profile.manager_id,
   teamId: profile.team_id,
@@ -16,7 +16,7 @@ const mapProfileToUser = (profile: any): User => ({
 export const fetchProfiles = async (): Promise<User[]> => {
   const { data: profiles, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select('*, email') // Ensure email is selected
     .order('role', { ascending: false })
     .order('first_name', { ascending: true });
 
@@ -41,7 +41,7 @@ export const fetchTeams = async (): Promise<Team[]> => {
 export const fetchManagers = async (): Promise<User[]> => {
   const { data: profiles, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select('*, email') // Ensure email is selected
     .in('role', ['SUPERINTENDENT', 'MANAGER']);
 
   if (error) throw error;
