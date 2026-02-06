@@ -32,6 +32,11 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
     queryFn: fetchProfiles,
   });
 
+  if (error) {
+    console.error("Error fetching profiles:", error);
+    toast({ title: "Erro de Carregamento", description: "Não foi possível carregar a lista de usuários.", variant: "destructive" });
+  }
+
   const updateMutation = useMutation({
     mutationFn: updateProfile,
     onSuccess: () => {
