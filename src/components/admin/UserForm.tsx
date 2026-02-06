@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { User, UserRole } from "@/types/user";
-import { Save, Loader2, UserPlus, Shield } from "lucide-react";
+import { User, UserRole, Team } from "@/types/user";
+import { Save, Loader2, UserPlus, Shield, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchManagers } from "@/integrations/supabase/profiles";
+import { fetchManagers, fetchTeams } from "@/integrations/supabase/profiles";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +32,11 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
   const { data: allManagers = [], isLoading: isLoadingManagers } = useQuery<User[]>({
     queryKey: ['managers'],
     queryFn: fetchManagers,
+  });
+
+  const { data: teams = [], isLoading: isLoadingTeams } = useQuery<Team[]>({
+    queryKey: ['teams'],
+    queryFn: fetchTeams,
   });
 
   // Filter the managers list based on the role of the user being created/edited
@@ -175,6 +180,30 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
               />
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label htmlFor="team">Equipe</Label>
+            <Select
+              value={formData.teamId || "none"}
+              onValueChange={(value) => handleChange("teamId", value === "none" ? null : value)}
+              disabled={isLoadingTeams || busy}
+            >
+              <SelectTrigger id="team">
+                <SelectValue placeholder="Selecione a equipe" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sem Equipe</SelectItem>
+                {teams.map(team => (
+                  <SelectItem key={team.id} value={team.id}>
+                    <div className="flex items-center gap-2">
+                      <Users className="w-3 h-3 text-indigo-500" />
+                      {team.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="role">Função no Sistema</Label>
