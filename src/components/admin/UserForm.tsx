@@ -62,6 +62,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
         password: "",
         role: "BROKER",
         managerId: null,
+        teamId: null,
         leadAssignmentEnabled: false,
       });
     }
@@ -96,7 +97,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
             lastName,
             role: formData.role,
             managerId: formData.managerId,
-            teamId: formData.teamId
+            teamId: formData.teamId // Pass teamId here
           }
         });
 
@@ -114,7 +115,11 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
         if (data?.error) throw new Error(data.error);
 
         toast.success("Usuário criado com sucesso!");
-        onSave(data.user as User);
+        
+        // Wait a moment before invalidating to ensure DB trigger completes
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        onSave(data.user as User); // This triggers query invalidation in UserManagement
         onOpenChange(false);
       } catch (err: any) {
         toast.error(`Falha ao criar: ${err.message}`);
