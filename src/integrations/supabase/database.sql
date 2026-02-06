@@ -1,22 +1,29 @@
--- Add email column to profiles table
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
+-- Drop the old permissive policy
+DROP POLICY IF EXISTS profiles_select_policy ON public.profiles;
 
--- Update the trigger function to also store the email
-CREATE OR REPLACE FUNCTION public.handle_new_user()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $function$
-BEGIN
-  INSERT INTO public.profiles (id, first_name, last_name, email, role)
-  VALUES (
-    new.id,
-    COALESCE(new.raw_user_meta_data ->> 'first_name', ''),
-    COALESCE(new.raw_user_meta_data ->> 'last_name', ''),
-    new.email,
-    COALESCE(new.raw_user_meta_data ->> 'role', 'BROKER')
-  );
-  RETURN new;
-END;
-$function$;
+-- RLS Policy for profiles table
+-- This policy enforces the hierarchy:
+-- 1. Superintendents can see everyone.
+-- 2. Managers can see themselves and their direct reports (Brokers).
+-- 3. Brokers can only see themselves.
+CREATE POLICY "profiles_select_policy_hierarchy" ON public.profiles
+FOR SELECT TO authenticated USING (
+  -- Rule 1: User can always see their own profile
+  (auth.uid() = id) 
+  
+  OR
+  
+  -- Rule 2: User is a Superintendent (can see everyone)
+  (EXISTS (
+    SELECT 1 FROM profiles 
+    WHERE (profiles.id = auth.uid() AND profiles.role = 'SUPERINTENDENT')
+  ))
+  
+  OR
+  
+  -- Rule 3: User is a Manager and the profile belongs to one of their direct reports (Brokers)
+  (EXISTS (
+    SELECT 1 FROM profiles 
+    WHERE (profiles.id = auth.uid() AND profiles.role = 'MANAGER')
+  ) AND (manager_id = auth.uid()))
+);
