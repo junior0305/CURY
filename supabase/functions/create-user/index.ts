@@ -19,7 +19,7 @@ serve(async (req) => {
 
     const { email, password, firstName, lastName, role, managerId, teamId } = await req.json()
 
-    // 1. Create the user in Auth
+    // 1. Criar o usuário no Auth
     const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -29,21 +29,35 @@ serve(async (req) => {
 
     if (createError) throw createError
 
-    // 2. Update the profile (manager_id, team_id, role, and email explicitly)
-    // Small delay for trigger (handle_new_user) to run and create the initial profile row
-    await new Promise(resolve => setTimeout(resolve, 800));
-
+    // 2. Usar UPSERT em vez de UPDATE para garantir que a linha exista com os dados corretos
+    // Isso evita o problema de "não salvou" caso o trigger demore ou falhe
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .update({
-        manager_id: managerId === 'none' ? null : managerId,
-        team_id: teamId === 'none' ? null : teamId,
+      .upsert({
+        id: userData.user.id,
+        first_name: firstName,
+        last_name: lastName,
+        manager_id: (managerId === 'none' || !managerId) ? null : managerId,
+        team_id: (teamId === 'none' || !teamId) ? null : teamId,
         role: role,
-        email: email // Explicitly save email in the profiles table
+        email: email,
+        updated_at: new Date().toISOString()
       })
-      .eq('id', userData.user.id)
     
-    if (profileError) console.error("[create-user] Profile update error:", profileError.message);
+    if (profileError) {
+      console.error("[create-user] Erro ao gravar perfil:", profileError.message);
+      // Tentativa de fallback sem a coluna email se ela não existir no esquema
+      if (profileError.message.includes('column "email"')) {
+        await supabaseAdmin.from('profiles').upsert({
+          id: userData.user.id,
+          first_name: firstName,
+          last_name: lastName,
+          manager_id: (managerId === 'none' || !managerId) ? null : managerId,
+          team_id: (teamId === 'none' || !teamId) ? null : teamId,
+          role: role
+        })
+      }
+    }
 
     return new Response(JSON.stringify({ success: true, user: userData.user }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -51,7 +65,7 @@ serve(async (req) => {
     })
 
   } catch (error) {
-    console.error("[create-user] Error during user creation:", error.message);
+    console.error("[create-user] Erro Crítico:", error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400

@@ -12,22 +12,16 @@ const mapProfileToUser = (profile: any): User => ({
   leadAssignmentEnabled: !!profile.lead_assignment_enabled,
 });
 
-// Fetches all profiles visible to the current user (based on RLS)
 export const fetchProfiles = async (): Promise<User[]> => {
   const { data: profiles, error } = await supabase
     .from('profiles')
     .select('*')
     .order('role', { ascending: false });
 
-  if (error) {
-    console.error("[fetchProfiles] Error:", error);
-    throw error;
-  }
-
+  if (error) throw error;
   return (profiles || []).map(profile => mapProfileToUser(profile));
 };
 
-// Fetches all teams
 export const fetchTeams = async (): Promise<Team[]> => {
   const { data: teams, error } = await supabase
     .from('teams')
@@ -35,11 +29,9 @@ export const fetchTeams = async (): Promise<Team[]> => {
     .order('name', { ascending: true });
 
   if (error) throw error;
-
   return teams || [];
 };
 
-// Fetches all users who can act as managers
 export const fetchManagers = async (): Promise<User[]> => {
   const { data: profiles, error } = await supabase
     .from('profiles')
@@ -47,18 +39,23 @@ export const fetchManagers = async (): Promise<User[]> => {
     .in('role', ['SUPERINTENDENT', 'MANAGER']);
 
   if (error) throw error;
-
   return (profiles || []).map(profile => mapProfileToUser(profile));
 };
 
-// Updates an existing profile
-export const updateProfile = async (user: Partial<User>) => {
-  const { id, role, managerId, teamId, leadAssignmentEnabled } = user;
+export const updateProfile = async (user: User) => {
+  const { id, name, role, managerId, teamId, leadAssignmentEnabled } = user;
+
+  // Split name back into first and last
+  const names = name.trim().split(/\s+/);
+  const firstName = names[0];
+  const lastName = names.slice(1).join(" ");
 
   const updatePayload = {
+    first_name: firstName,
+    last_name: lastName,
     role: role,
-    manager_id: managerId === 'none' ? null : managerId,
-    team_id: teamId === 'none' ? null : teamId,
+    manager_id: (managerId === 'none' || !managerId) ? null : managerId,
+    team_id: (teamId === 'none' || !teamId) ? null : teamId,
     lead_assignment_enabled: leadAssignmentEnabled,
     updated_at: new Date().toISOString(),
   };

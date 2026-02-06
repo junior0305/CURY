@@ -39,22 +39,15 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
     queryFn: fetchTeams,
   });
 
-  // Filter the managers list based on the role of the user being created/edited
   const filteredManagers = useMemo(() => {
-    if (formData.role === 'MANAGER') {
-      // Managers report to Superintendents
-      return allManagers.filter(m => m.role === 'SUPERINTENDENT');
-    }
-    if (formData.role === 'BROKER') {
-      // Brokers usually report to Managers, but can report to Superintendents in small teams
-      return allManagers;
-    }
+    if (formData.role === 'MANAGER') return allManagers.filter(m => m.role === 'SUPERINTENDENT');
+    if (formData.role === 'BROKER') return allManagers;
     return [];
   }, [allManagers, formData.role]);
 
   useEffect(() => {
     if (userToEdit) {
-      setFormData(userToEdit);
+      setFormData({ ...userToEdit });
     } else {
       setFormData({
         name: "",
@@ -96,30 +89,16 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
             firstName,
             lastName,
             role: formData.role,
-            managerId: formData.managerId,
-            teamId: formData.teamId // Pass teamId here
+            managerId: formData.managerId === "none" ? null : formData.managerId,
+            teamId: formData.teamId === "none" ? null : formData.teamId
           }
         });
 
-        if (invokeError) {
-          let errorMessage = "Erro na comunicação com o servidor.";
-          try {
-            const errorContext = await invokeError.context?.json();
-            errorMessage = errorContext?.error || invokeError.message;
-          } catch (e) {
-            errorMessage = invokeError.message;
-          }
-          throw new Error(errorMessage);
-        }
-
+        if (invokeError) throw new Error(invokeError.message || "Erro no servidor");
         if (data?.error) throw new Error(data.error);
 
         toast.success("Usuário criado com sucesso!");
-        
-        // Wait a moment before invalidating to ensure DB trigger completes
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        onSave(data.user as User); // This triggers query invalidation in UserManagement
+        onSave(data.user as User);
         onOpenChange(false);
       } catch (err: any) {
         toast.error(`Falha ao criar: ${err.message}`);
@@ -138,91 +117,74 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="sm:max-w-md bg-white p-6 overflow-y-auto">
         <SheetHeader className="mb-6">
-          <SheetTitle className="text-2xl font-bold text-indigo-700 flex items-center gap-2">
-            {isEditing ? "Editar Usuário" : <><UserPlus className="w-6 h-6" /> Novo Usuário</>}
+          <SheetTitle className="text-2xl font-bold text-indigo-700">
+            {isEditing ? "Editar Usuário" : "Novo Usuário"}
           </SheetTitle>
-          <SheetDescription className="text-gray-600">
-            Configure as permissões e a hierarquia do membro.
-          </SheetDescription>
+          <SheetDescription>Configure os dados do membro do time.</SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="name">Nome Completo</Label>
+            <Label>Nome Completo</Label>
             <Input 
-              id="name" 
               value={formData.name || ""} 
               onChange={(e) => handleChange("name", e.target.value)}
-              disabled={isEditing || busy} 
-              placeholder="Ex: João Silva"
+              disabled={busy} 
               required
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email">Email Corporativo</Label>
+            <Label>Email Corporativo</Label>
             <Input 
-              id="email" 
               type="email" 
               value={formData.email || ""} 
               onChange={(e) => handleChange("email", e.target.value)}
               disabled={isEditing || busy} 
-              placeholder="email@exemplo.com"
               required
             />
           </div>
 
           {!isEditing && (
             <div className="space-y-2">
-              <Label htmlFor="password">Senha Inicial</Label>
+              <Label>Senha Inicial</Label>
               <Input 
-                id="password" 
                 type="password" 
                 value={formData.password || ""} 
                 onChange={(e) => handleChange("password", e.target.value)}
                 disabled={busy} 
-                placeholder="Mínimo 6 caracteres"
                 required
               />
             </div>
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="team">Equipe</Label>
+            <Label>Equipe</Label>
             <Select
               value={formData.teamId || "none"}
-              onValueChange={(value) => handleChange("teamId", value === "none" ? null : value)}
-              disabled={isLoadingTeams || busy}
+              onValueChange={(value) => handleChange("teamId", value)}
+              disabled={busy}
             >
-              <SelectTrigger id="team">
+              <SelectTrigger>
                 <SelectValue placeholder="Selecione a equipe" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Sem Equipe</SelectItem>
                 {teams.map(team => (
-                  <SelectItem key={team.id} value={team.id}>
-                    <div className="flex items-center gap-2">
-                      <Users className="w-3 h-3 text-indigo-500" />
-                      {team.name}
-                    </div>
-                  </SelectItem>
+                  <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="role">Função no Sistema</Label>
+            <Label>Função</Label>
             <Select 
               value={formData.role || "BROKER"} 
-              onValueChange={(value) => {
-                handleChange("role", value as UserRole);
-                // Reset manager selection when role changes to ensure validity
-                handleChange("managerId", null);
-              }} 
+              onValueChange={(value) => handleChange("role", value as UserRole)} 
               disabled={busy}
             >
-              <SelectTrigger id="role"><SelectValue placeholder="Selecione a função" /></SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {roles.map(role => (
                   <SelectItem key={role} value={role}>{role}</SelectItem>
@@ -233,47 +195,29 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
 
           {needsManager && (
             <div className="space-y-2">
-              <Label htmlFor="manager">Gestor Responsável</Label>
+              <Label>Gestor Responsável</Label>
               <Select 
                 value={formData.managerId || "none"} 
-                onValueChange={(value) => handleChange("managerId", value === "none" ? null : value)}
-                disabled={isLoadingManagers || busy}
+                onValueChange={(value) => handleChange("managerId", value)}
+                disabled={busy}
               >
-                <SelectTrigger id="manager">
-                  <SelectValue placeholder="Selecione o gestor" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecione o gestor" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">
-                    {formData.role === 'MANAGER' ? "Nenhum (Direto ao Topo)" : "Nenhum (Reporta a Superintendente)"}
-                  </SelectItem>
+                  <SelectItem value="none">Nenhum</SelectItem>
                   {filteredManagers.map(manager => (
-                    <SelectItem key={manager.id} value={manager.id}>
-                      <div className="flex items-center gap-2">
-                        {manager.name}
-                        <Badge variant="outline" className="text-[9px] font-normal uppercase py-0 h-4">
-                          {manager.role}
-                        </Badge>
-                      </div>
-                    </SelectItem>
+                    <SelectItem key={manager.id} value={manager.id}>{manager.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {filteredManagers.length === 0 && !isLoadingManagers && formData.role === 'MANAGER' && (
-                <p className="text-[11px] text-amber-600 flex items-center gap-1 mt-1">
-                  <Shield className="w-3 h-3" /> Nenhum Superintendente encontrado para atrelar este Gerente.
-                </p>
-              )}
             </div>
           )}
 
           {isBroker && (
             <div className="flex items-center justify-between p-4 bg-indigo-50 rounded-xl border border-indigo-200">
-              <Label htmlFor="lead-assignment" className="flex flex-col space-y-1">
-                <span className="text-base font-medium">Habilitar Fila de Leads</span>
-                <span className="text-sm text-gray-500">Permite que este corretor receba novos leads.</span>
+              <Label className="flex flex-col space-y-1">
+                <span>Habilitar Fila de Leads</span>
               </Label>
               <Switch 
-                id="lead-assignment" 
                 checked={!!formData.leadAssignmentEnabled} 
                 onCheckedChange={(checked) => handleChange("leadAssignmentEnabled", checked)} 
                 disabled={busy}
@@ -281,13 +225,9 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
             </div>
           )}
 
-          <Button type="submit" className="w-full bg-indigo-600 h-12 text-lg font-bold" disabled={busy}>
-            {busy ? (
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            ) : (
-              <Save className="w-5 h-5 mr-2" />
-            )}
-            {busy ? "Processando..." : (isEditing ? "Salvar Alterações" : "Criar Usuário")}
+          <Button type="submit" className="w-full bg-indigo-600" disabled={busy}>
+            {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            {isEditing ? "Salvar Alterações" : "Criar Usuário"}
           </Button>
         </form>
       </SheetContent>
