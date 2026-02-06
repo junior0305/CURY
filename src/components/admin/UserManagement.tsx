@@ -3,11 +3,12 @@ import { User, UserRole } from "@/types/user";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Edit, CheckCircle, XCircle, Lock, Loader2 } from "lucide-react";
+import { PlusCircle, Edit, CheckCircle, XCircle, Lock, Loader2, Trash2 } from "lucide-react";
 import UserForm from "./UserForm";
 import { useToast } from "@/components/ui/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchProfiles, updateProfile } from "@/integrations/supabase/profiles";
+import { supabase } from "@/integrations/supabase/client";
 
 const roleColors: Record<UserRole, string> = {
   SUPERINTENDENT: "bg-red-500 hover:bg-red-600",
@@ -44,10 +45,31 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
     }
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error: invokeError } = await supabase.functions.invoke('delete-user', {
+        body: { userId }
+      });
+
+      if (invokeError) throw invokeError;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['managers'] });
+      toast({ title: "Sucesso", description: "Usuário excluído permanentemente." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Erro", description: `Falha ao excluir: ${err.message}`, variant: "destructive" });
+    }
+  });
+
   const isSuper = currentUser.role === 'SUPERINTENDENT';
 
   const visibleUsers = useMemo(() => {
     if (isSuper) return users;
+    // Managers see themselves and their direct reports (Brokers)
     return users.filter(u => u.id === currentUser.id || u.managerId === currentUser.id);
   }, [users, currentUser, isSuper]);
 
@@ -55,8 +77,7 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
     if (userToEdit) {
       updateMutation.mutate(user);
     } else {
-      // Creation is handled inside UserForm via Edge Function, 
-      // but it calls this callback on success to refresh the list.
+      // Creation success handled in UserForm, just invalidate queries here
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
       queryClient.invalidateQueries({ queryKey: ['managers'] });
     }
@@ -69,6 +90,21 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
     }
     setUserToEdit(user);
     setIsFormOpen(true);
+  };
+
+  const handleDelete = (user: User) => {
+    if (user.id === currentUser.id) {
+      toast({ title: "Ação Bloqueada", description: "Você não pode excluir sua própria conta.", variant: "destructive" });
+      return;
+    }
+    if (!isSuper && user.role !== 'BROKER') {
+      toast({ title: "Acesso Negado", description: "Somente Superintendentes podem excluir este tipo de usuário.", variant: "destructive" });
+      return;
+    }
+
+    if (window.confirm(`Tem certeza que deseja excluir o usuário ${user.name}? Esta ação é irreversível.`)) {
+      deleteMutation.mutate(user.id);
+    }
   };
 
   const handleNewUser = () => {
@@ -135,16 +171,28 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
                       <span className="text-gray-300">-</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right space-x-1">
                     <Button 
                       variant="ghost" 
                       size="icon" 
                       onClick={() => handleEdit(user)} 
-                      disabled={updateMutation.isPending}
+                      disabled={updateMutation.isPending || deleteMutation.isPending}
                       className="hover:bg-indigo-50 hover:text-indigo-600 rounded-full"
                     >
                       {(!isSuper && user.id !== currentUser.id && user.role !== 'BROKER') ? <Lock className="w-4 h-4 text-gray-300" /> : <Edit className="w-4 h-4" />}
                     </Button>
+                    
+                    {(isSuper || (user.role === 'BROKER' && user.managerId === currentUser.id)) && user.id !== currentUser.id && (
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => handleDelete(user)} 
+                        disabled={deleteMutation.isPending || updateMutation.isPending}
+                        className="hover:bg-red-50 hover:text-red-600 rounded-full"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
@@ -158,7 +206,7 @@ const UserManagement = ({ currentUser }: UserManagementProps) => {
         onOpenChange={setIsFormOpen} 
         userToEdit={userToEdit} 
         onSave={handleSaveUser} 
-        isSaving={updateMutation.isPending}
+        isSaving={updateMutation.isPending || deleteMutation.isPending}
       />
     </div>
   );
