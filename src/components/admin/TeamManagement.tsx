@@ -9,16 +9,29 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchTeams } from "@/integrations/supabase/profiles";
 import { Team } from "@/types/user";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/components/AuthProvider"; // Import useAuth
 
 const TeamManagement = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { signOut } = useAuth(); // Use signOut from AuthContext
   const [newTeamName, setNewTeamName] = useState("");
 
   const { data: teams = [], isLoading } = useQuery<Team[]>({
     queryKey: ['teams'],
     queryFn: fetchTeams,
   });
+
+  const handleSupabaseError = (error: any) => {
+    const errorMessage = error.message || "Ocorreu um erro desconhecido.";
+    
+    if (errorMessage.includes('JWT expired') || errorMessage.includes('Invalid JWT')) {
+      toast({ title: "Sessão Expirada", description: "Sua sessão expirou. Por favor, faça login novamente.", variant: "destructive" });
+      signOut(); // Force logout and redirect
+    } else {
+      toast({ title: "Erro", description: `Falha na operação: ${errorMessage}`, variant: "destructive" });
+    }
+  };
 
   const createTeamMutation = useMutation({
     mutationFn: async (name: string) => {
@@ -35,9 +48,7 @@ const TeamManagement = () => {
       setNewTeamName("");
       toast({ title: "Sucesso", description: "Equipe criada com sucesso." });
     },
-    onError: (error: any) => {
-      toast({ title: "Erro", description: `Falha ao criar equipe: ${error.message}`, variant: "destructive" });
-    }
+    onError: handleSupabaseError
   });
 
   const deleteTeamMutation = useMutation({
@@ -52,9 +63,7 @@ const TeamManagement = () => {
       queryClient.invalidateQueries({ queryKey: ['teams'] });
       toast({ title: "Sucesso", description: "Equipe removida." });
     },
-    onError: (error: any) => {
-      toast({ title: "Erro", description: `Falha ao remover equipe: ${error.message}`, variant: "destructive" });
-    }
+    onError: handleSupabaseError
   });
 
   const handleCreateTeam = (e: React.FormEvent) => {
