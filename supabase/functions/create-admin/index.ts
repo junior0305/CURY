@@ -18,35 +18,63 @@ serve(async (req) => {
     
     const { email, password, role } = await req.json()
     
-    // Check if user already exists
-    const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers()
-    const user = existingUser.users.find(u => u.email === email)
+    // 1. Verificar se o usuário já existe
+    const { data: usersList, error: listError } = await supabaseAdmin.auth.admin.listUsers()
+    if (listError) throw listError
     
-    if (user) {
-      // If user exists, just ensure profile is correct
-      await supabaseAdmin.from('profiles').update({ role }).eq('id', user.id)
-      return new Response(JSON.stringify({ success: true, message: "Admin já existe e foi atualizado." }), { 
+    const existingUser = usersList.users.find(u => u.email === email)
+    
+    if (existingUser) {
+      console.log(`[create-admin] Usuário ${email} já existe. Atualizando senha e metadados...`);
+      
+      // Atualizar senha e metadados do usuário existente
+      const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
+        existingUser.id,
+        { 
+          password: password, 
+          user_metadata: { first_name: 'Junior', last_name: 'Admin', role: role } 
+        }
+      )
+      if (updateAuthError) throw updateAuthError
+
+      // Garantir que o perfil existe
+      await supabaseAdmin.from('profiles').upsert({ 
+        id: existingUser.id, 
+        role: role, 
+        email: email,
+        first_name: 'Junior',
+        last_name: 'Admin'
+      })
+
+      return new Response(JSON.stringify({ success: true, message: "Acesso administrativo restaurado com sucesso." }), { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       })
     }
 
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    // 2. Criar novo usuário se não existir
+    const { data: newData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email, 
       password, 
       email_confirm: true, 
-      user_metadata: { first_name: 'Junior', last_name: 'Admin', role }
+      user_metadata: { first_name: 'Junior', last_name: 'Admin', role: role }
     })
     
-    if (error) throw error
+    if (createError) throw createError
     
-    // Explicit update just in case trigger is slow
-    await supabaseAdmin.from('profiles').update({ role, email }).eq('id', data.user.id)
+    // Criar perfil explicitamente
+    await supabaseAdmin.from('profiles').upsert({ 
+      id: newData.user.id, 
+      role: role, 
+      email: email,
+      first_name: 'Junior',
+      last_name: 'Admin'
+    })
     
-    return new Response(JSON.stringify({ success: true }), { 
+    return new Response(JSON.stringify({ success: true, message: "Admin criado com sucesso." }), { 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     })
   } catch (error) {
-    console.error("[create-admin] Error:", error.message)
+    console.error("[create-admin] Erro crítico:", error.message)
     return new Response(JSON.stringify({ error: error.message }), { 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
       status: 400 
