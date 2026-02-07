@@ -19,44 +19,51 @@ serve(async (req) => {
 
     const { email, password, firstName, lastName, role, managerId, teamId } = await req.json()
 
-    // 1. Criar o usuário no Auth
+    console.log(`[create-user] Iniciando criação para: ${email}`, { role, managerId, teamId });
+
+    // 1. Criar o usuário no Auth com METADADOS COMPLETOS
+    // Isso ajuda se houver um trigger no banco que lê esses metadados
     const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { first_name: firstName, last_name: lastName, role, team_id: teamId }
+      user_metadata: { 
+        first_name: firstName, 
+        last_name: lastName, 
+        role: role,
+        team_id: (teamId === 'none' || !teamId) ? null : teamId,
+        manager_id: (managerId === 'none' || !managerId) ? null : managerId
+      }
     })
 
     if (createError) throw createError
+    const userId = userData.user.id;
 
-    // 2. Usar UPSERT em vez de UPDATE para garantir que a linha exista com os dados corretos
-    // Isso evita o problema de "não salvou" caso o trigger demore ou falhe
-    const { error: profileError } = await supabaseAdmin
+    // 2. Pequeno atraso para permitir que o trigger do banco termine (evita race condition)
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    // 3. Forçar a gravação dos dados corretos na tabela Profiles via UPSERT
+    // Preparamos o objeto de dados sem o email primeiro, pois a coluna pode não existir
+    const profilePayload: any = {
+      id: userId,
+      first_name: firstName,
+      last_name: lastName,
+      role: role,
+      manager_id: (managerId === 'none' || !managerId) ? null : managerId,
+      team_id: (teamId === 'none' || !teamId) ? null : teamId,
+      updated_at: new Date().toISOString()
+    };
+
+    console.log(`[create-user] Aplicando upsert no perfil: ${userId}`, profilePayload);
+
+    // Tentamos salvar. Se falhar por causa de coluna inexistente, o catch tratará.
+    const { error: upsertError } = await supabaseAdmin
       .from('profiles')
-      .upsert({
-        id: userData.user.id,
-        first_name: firstName,
-        last_name: lastName,
-        manager_id: (managerId === 'none' || !managerId) ? null : managerId,
-        team_id: (teamId === 'none' || !teamId) ? null : teamId,
-        role: role,
-        email: email,
-        updated_at: new Date().toISOString()
-      })
-    
-    if (profileError) {
-      console.error("[create-user] Erro ao gravar perfil:", profileError.message);
-      // Tentativa de fallback sem a coluna email se ela não existir no esquema
-      if (profileError.message.includes('column "email"')) {
-        await supabaseAdmin.from('profiles').upsert({
-          id: userData.user.id,
-          first_name: firstName,
-          last_name: lastName,
-          manager_id: (managerId === 'none' || !managerId) ? null : managerId,
-          team_id: (teamId === 'none' || !teamId) ? null : teamId,
-          role: role
-        })
-      }
+      .upsert(profilePayload);
+
+    if (upsertError) {
+      console.error("[create-user] Erro no upsert do perfil:", upsertError.message);
+      throw upsertError;
     }
 
     return new Response(JSON.stringify({ success: true, user: userData.user }), {

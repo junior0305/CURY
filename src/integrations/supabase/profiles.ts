@@ -1,11 +1,11 @@
 import { supabase } from "./client";
 import { User, UserRole, Team } from "@/types/user";
 
-// Helper function to map DB profile to frontend User type
+// Função auxiliar para mapear o perfil do banco para o tipo User do frontend
 const mapProfileToUser = (profile: any): User => ({
   id: profile.id,
   name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'Usuário Sem Nome',
-  email: profile.email || 'E-mail não disponível',
+  email: profile.email || 'E-mail não disponível', // Note: Pode vir nulo se a coluna não existir
   role: (profile.role as UserRole) || 'BROKER',
   managerId: profile.manager_id,
   teamId: profile.team_id,
@@ -45,7 +45,6 @@ export const fetchManagers = async (): Promise<User[]> => {
 export const updateProfile = async (user: User) => {
   const { id, name, role, managerId, teamId, leadAssignmentEnabled } = user;
 
-  // Split name back into first and last
   const names = name.trim().split(/\s+/);
   const firstName = names[0];
   const lastName = names.slice(1).join(" ");
