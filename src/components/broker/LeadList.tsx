@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchLeadsForDashboard } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus } from "@/types/lead";
-import { Loader2, Phone, MessageSquare, Clock, AlertTriangle } from "lucide-react";
+import { Loader2, Phone, MessageSquare, Clock, AlertTriangle, Check } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/components/AuthProvider";
