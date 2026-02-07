@@ -4,12 +4,13 @@ CREATE TABLE public.leads (
   name TEXT NOT NULL,
   email TEXT,
   phone TEXT,
-  status TEXT NOT NULL DEFAULT 'NEW', -- NEW, CONTACTED, NEGOTIATING, CONCLUDED, ABANDONED, EXCLUDED
+  status TEXT NOT NULL DEFAULT 'NEW', -- NEW, IN_PROGRESS, VISIT_SCHEDULED, DOCS_REQUESTED, EXCLUDED, ABANDONED
   broker_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   manager_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   tag TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  last_interaction_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  last_interaction_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  exclusion_reason TEXT -- Novo campo para o motivo da exclusão
 );
 
 -- Habilitar RLS (OBRIGATÓRIO)

@@ -15,8 +15,10 @@ const Login = () => {
     if (!loading && session && role) {
       if (role === 'SUPERINTENDENT' || role === 'MANAGER') {
         navigate('/admin');
+      } else if (role === 'BROKER') {
+        navigate('/dashboard'); 
       } else {
-        navigate('/'); 
+        navigate('/');
       }
     }
   }, [session, role, loading, navigate]);

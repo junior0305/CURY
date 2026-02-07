@@ -1,4 +1,6 @@
-export type LeadStatus = 'NEW' | 'CONTACTED' | 'NEGOTIATING' | 'CONCLUDED' | 'ABANDONED' | 'EXCLUDED';
+export type LeadStatus = 'NEW' | 'IN_PROGRESS' | 'VISIT_SCHEDULED' | 'DOCS_REQUESTED' | 'EXCLUDED' | 'ABANDONED';
+
+export type ExclusionReason = 'WRONG_NUMBER' | 'NO_INTEREST' | 'NO_PROFILE' | 'NO_CONTACT' | null;
 
 export interface Lead {
   id: string;
@@ -11,4 +13,5 @@ export interface Lead {
   tag: string;
   createdAt: string;
   lastInteractionAt: string;
+  exclusionReason: ExclusionReason;
 }

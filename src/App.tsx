@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
 import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,19 @@ const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+const ProtectedBrokerRoute = ({ children }: { children: React.ReactNode }) => {
+  const { session, role, loading } = useAuth();
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center">
+      <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+    </div>
+  );
+  if (!session) return <Navigate to="/login" />;
+  // Se não for SUPERINTENDENT ou MANAGER, deve ser BROKER (ou redirecionado para o dashboard)
+  if (role === 'SUPERINTENDENT' || role === 'MANAGER') return <Navigate to="/admin" />;
+  return <>{children}</>;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -34,6 +48,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/dashboard" element={<ProtectedBrokerRoute><Dashboard /></ProtectedBrokerRoute>} />
             <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
