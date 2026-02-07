@@ -5,7 +5,7 @@ import { User, UserRole, Team } from "@/types/user";
 const mapProfileToUser = (profile: any): User => ({
   id: profile.id,
   name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'Usuário Sem Nome',
-  email: profile.email || 'E-mail não disponível', // Note: Pode vir nulo se a coluna não existir
+  email: profile.email || 'E-mail não disponível',
   role: (profile.role as UserRole) || 'BROKER',
   managerId: profile.manager_id,
   teamId: profile.team_id,
@@ -22,14 +22,26 @@ export const fetchProfiles = async (): Promise<User[]> => {
   return (profiles || []).map(profile => mapProfileToUser(profile));
 };
 
-export const fetchTeams = async (): Promise<Team[]> => {
-  const { data: teams, error } = await supabase
+export const fetchTeams = async (): Promise<(Team & { memberCount?: number })[]> => {
+  // Buscamos as equipes
+  const { data: teams, error: teamsError } = await supabase
     .from('teams')
     .select('*')
     .order('name', { ascending: true });
 
-  if (error) throw error;
-  return teams || [];
+  if (teamsError) throw teamsError;
+
+  // Buscamos a contagem de membros por equipe na tabela profiles
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profiles')
+    .select('team_id');
+
+  if (profilesError) throw profilesError;
+
+  return (teams || []).map(team => ({
+    ...team,
+    memberCount: (profiles || []).filter(p => p.team_id === team.id).length
+  }));
 };
 
 export const fetchManagers = async (): Promise<User[]> => {
