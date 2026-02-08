@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,8 @@ type PodiumEntry = {
   points: number;
   subtitle: string;
 };
+
+type LeaderboardType = "WEEK" | "MONTH";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -29,24 +31,44 @@ function scoreForLead(lead: Lead) {
   return 0;
 }
 
+function getStartOfWeek() {
+  const now = new Date();
+  const day = now.getDay(); // 0 (Sun) to 6 (Sat)
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Mon start
+  const monday = new Date(now.setDate(diff));
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+function getStartOfMonth() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
 export default function LeaderboardPodium({
   leads,
   users,
-  title = "Pódio do Time",
-  subtitle = "Baseado em sinais de avanço no funil (proxy de vendas)",
 }: {
   leads: Lead[];
   users: User[];
   title?: string;
   subtitle?: string;
 }) {
+  const [type, setType] = useState<LeaderboardType>("WEEK");
+
   const top3 = useMemo(() => {
     const brokers = users.filter((u) => u.role === "BROKER");
     const byBroker: Record<string, number> = {};
+    const startDate = type === "WEEK" ? getStartOfWeek() : getStartOfMonth();
 
     for (const lead of leads) {
       if (!lead.brokerId) continue;
-      byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead);
+      
+      // Filter leads by last interaction within the period to measure performance
+      const leadDate = new Date(lead.lastInteractionAt);
+      if (leadDate >= startDate) {
+        byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead);
+      }
     }
 
     const entries: PodiumEntry[] = brokers
@@ -54,14 +76,14 @@ export default function LeaderboardPodium({
         id: b.id,
         name: b.name,
         points: Math.round((byBroker[b.id] ?? 0) * 10) / 10,
-        subtitle: b.leadAssignmentEnabled ? "Ativo na fila" : "Fora da fila",
+        subtitle: b.leadAssignmentEnabled ? "Ativo" : "Off-line",
       }))
       .filter((e) => e.points > 0)
       .sort((a, b) => b.points - a.points)
       .slice(0, 3);
 
     return entries;
-  }, [leads, users]);
+  }, [leads, users, type]);
 
   const slots: Array<{ place: 1 | 2 | 3; entry?: PodiumEntry; height: string; tone: string; ring: string }> = [
     { place: 2, entry: top3[1], height: "h-24", tone: "bg-sky-600", ring: "ring-sky-200" },
@@ -70,28 +92,42 @@ export default function LeaderboardPodium({
   ];
 
   return (
-    <Card className="relative overflow-hidden rounded-3xl border-none bg-white/80 backdrop-blur shadow-[0_22px_60px_-36px_rgba(15,23,42,0.55)] ring-1 ring-indigo-100">
+    <Card className="relative overflow-hidden rounded-3xl border-none bg-white shadow-[0_22px_60px_-36px_rgba(15,23,42,0.55)] ring-1 ring-indigo-100 w-full">
       <div className="absolute -right-14 -top-14 h-40 w-40 rounded-full bg-indigo-600/10" />
       <div className="absolute -left-20 -bottom-20 h-56 w-56 rounded-full bg-sky-600/10" />
 
       <div className="relative p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-amber-500" />
-              <div className="text-sm font-extrabold tracking-tight text-slate-900">{title}</div>
-            </div>
-            <div className="mt-1 text-xs text-slate-500">{subtitle}</div>
+        <div className="flex items-center justify-between gap-4 mb-2">
+          <div className="flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-amber-500" />
+            <div className="text-lg font-black tracking-tight text-slate-900 uppercase">Pódio de Performance</div>
           </div>
 
-          <Badge className="rounded-full bg-slate-900 text-white shadow-sm">
-            <Sparkles className="mr-1 h-3.5 w-3.5" /> Ranking
-          </Badge>
+          <div className="flex bg-slate-100 p-1 rounded-xl">
+            <button 
+              onClick={() => setType("WEEK")}
+              className={cn(
+                "px-3 py-1 text-[10px] font-bold rounded-lg transition-all",
+                type === "WEEK" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              )}
+            >SEMANA</button>
+            <button 
+              onClick={() => setType("MONTH")}
+              className={cn(
+                "px-3 py-1 text-[10px] font-bold rounded-lg transition-all",
+                type === "MONTH" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              )}
+            >MÊS</button>
+          </div>
         </div>
+        
+        <p className="text-xs text-slate-500 font-medium mb-6">
+          {type === "WEEK" ? "Desde segunda-feira" : "Deste o dia 1º"} • Baseado em avanço no funil
+        </p>
 
         {top3.length === 0 ? (
-          <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-white p-5 text-sm text-slate-500">
-            Ainda não há atividade suficiente para gerar o pódio.
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500">
+            A disputa ainda não começou. Avance um lead para aparecer aqui!
           </div>
         ) : (
           <div className="mt-6 grid grid-cols-3 items-end gap-3">

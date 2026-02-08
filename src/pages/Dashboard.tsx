@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { Loader2, PlusCircle, LogOut, Sparkles, BellPlus, LayoutDashboard, Target, Users2, TrendingUp, Calendar, FileText } from "lucide-react";
+import { Loader2, PlusCircle, LogOut, Sparkles, BellPlus, LayoutDashboard, Target, Users2, TrendingUp, Calendar, FileText, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
 import LeadForm from "@/components/broker/LeadForm";
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import TaskForm from "@/components/broker/TaskForm";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
@@ -102,6 +103,18 @@ const Dashboard = () => {
       </header>
 
       <main className="max-w-[1600px] mx-auto p-6">
+        {/* NEW: Competitive Podium Section (Weekly/Monthly) */}
+        <section className="mb-8 flex justify-center">
+          <div className="w-full max-w-4xl">
+            <LeaderboardPodium 
+              leads={leads} 
+              users={profiles} 
+              title="Elite da Semana" 
+              subtitle="Quem está dominando o fechamento nesta semana"
+            />
+          </div>
+        </section>
+
         {/* NEW: Unified Pipeline Stats (Horizontal Bar) */}
         <section className="mb-8">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
