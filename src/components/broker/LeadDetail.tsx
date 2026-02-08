@@ -176,84 +176,106 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
       
       <CardContent className="p-6 flex-1 overflow-y-auto space-y-6">
         
-        {/* 1. Fluxo de Cadência */}
-        <CadenceFlow currentStatus={lead.status} onStatusChange={handleStatusChange} isBusy={isBusy} />
+        {/* 1. Fluxo de Cadência - HIDDEN IF CONCLUDED */}
+        {lead.status !== 'CONCLUDED' && (
+          <CadenceFlow currentStatus={lead.status} onStatusChange={handleStatusChange} isBusy={isBusy} />
+        )}
 
-        <Separator />
+        {lead.status !== 'CONCLUDED' && <Separator />}
 
-        {/* 2. Assistente de IA e Ações */}
-        <AIAssistant lead={lead} isBusy={isBusy} />
+        {/* 2. Assistente de IA e Ações - HIDDEN IF CONCLUDED */}
+        {lead.status !== 'CONCLUDED' && (
+          <AIAssistant lead={lead} isBusy={isBusy} />
+        )}
 
-        <Separator />
+        {lead.status !== 'CONCLUDED' && <Separator />}
 
         {/* 3. Ações de Funil */}
         <div className="space-y-4">
-          <h3 className="text-lg font-bold text-gray-700 uppercase tracking-tighter italic">Funil de Alta Performance</h3>
+          <h3 className="text-lg font-bold text-gray-700 uppercase tracking-tighter italic">
+            {lead.status === 'CONCLUDED' ? 'Controle de Venda Finalizada' : 'Funil de Alta Performance'}
+          </h3>
+          
           <div className="grid grid-cols-2 gap-3">
-            <Button 
-              className="bg-blue-600 hover:bg-blue-700 rounded-xl font-bold" 
-              onClick={() => handleStatusChange('IN_PROGRESS')}
-              disabled={isBusy || lead.status === 'IN_PROGRESS'}
-            >
-              <CheckCircle className="w-4 h-4 mr-2" /> Atendimento
-            </Button>
-            <Button 
-              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold" 
-              onClick={() => handleStatusChange('VISIT_SCHEDULED')}
-              disabled={isBusy || lead.status === 'VISIT_SCHEDULED'}
-            >
-              <Calendar className="w-4 h-4 mr-2" /> Agendar Visita
-            </Button>
-            <Button 
-              className="bg-amber-600 hover:bg-amber-700 rounded-xl font-bold" 
-              onClick={() => handleStatusChange('DOCS_REQUESTED')}
-              disabled={isBusy || lead.status === 'DOCS_REQUESTED'}
-            >
-              <FileText className="w-4 h-4 mr-2" /> Pedir Documentos
-            </Button>
+            {lead.status === 'CONCLUDED' ? (
+              <>
+                {/* RESTRITO: Apenas Documentação ou Abandono */}
+                <Button 
+                  className="bg-amber-600 hover:bg-amber-700 rounded-xl font-bold col-span-1" 
+                  onClick={() => handleStatusChange('DOCS_REQUESTED')}
+                  disabled={isBusy}
+                >
+                  <FileText className="w-4 h-4 mr-2" /> Revisar Documentos
+                </Button>
+                
+                <Dialog open={isExclusionDialogOpen} onOpenChange={setIsExclusionDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="destructive" disabled={isBusy} className="rounded-xl font-bold col-span-1">
+                      <XCircle className="w-4 h-4 mr-2" /> Cancelar Venda
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                      <DialogTitle>Cancelar Venda: {lead.name}</DialogTitle>
+                      <DialogDescription>
+                        A venda será cancelada e o lead irá para o Rework.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="reason">Motivo</Label>
+                        <Select onValueChange={(val) => setSelectedExclusionReason(val as ExclusionReason)}>
+                          <SelectTrigger id="reason">
+                            <SelectValue placeholder="Selecione um motivo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="NO_INTEREST">Desistência do cliente</SelectItem>
+                            <SelectItem value="NO_PROFILE">Crédito Recusado</SelectItem>
+                            <SelectItem value="null">Outro motivo</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <Button onClick={handleAbandon} disabled={!selectedExclusionReason || isBusy} variant="destructive">
+                      Confirmar Cancelamento
+                    </Button>
+                  </DialogContent>
+                </Dialog>
+              </>
+            ) : (
+              <>
+                {/* FUNIL NORMAL */}
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700 rounded-xl font-bold" 
+                  onClick={() => handleStatusChange('IN_PROGRESS')}
+                  disabled={isBusy || lead.status === 'IN_PROGRESS'}
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" /> Atendimento
+                </Button>
+                <Button 
+                  className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold" 
+                  onClick={() => handleStatusChange('VISIT_SCHEDULED')}
+                  disabled={isBusy || lead.status === 'VISIT_SCHEDULED'}
+                >
+                  <Calendar className="w-4 h-4 mr-2" /> Agendar Visita
+                </Button>
+                <Button 
+                  className="bg-amber-600 hover:bg-amber-700 rounded-xl font-bold" 
+                  onClick={() => handleStatusChange('DOCS_REQUESTED')}
+                  disabled={isBusy || lead.status === 'DOCS_REQUESTED'}
+                >
+                  <FileText className="w-4 h-4 mr-2" /> Pedir Documentos
+                </Button>
 
-            <Button 
-              className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-black shadow-indigo-200 shadow-lg border-2 border-indigo-400 animate-in zoom-in duration-300" 
-              onClick={() => handleStatusChange('CONCLUDED' as LeadStatus)}
-              disabled={isBusy || lead.status === 'CONCLUDED'}
-            >
-              <Trophy className="w-4 h-4 mr-2 text-amber-400" /> MARCAR VENDA
-            </Button>
-            
-            <Dialog open={isExclusionDialogOpen} onOpenChange={setIsExclusionDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="destructive" disabled={isBusy}>
-                  <XCircle className="w-4 h-4 mr-2" /> Abandonar Lead
+                <Button 
+                  className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-black shadow-indigo-200 shadow-lg border-2 border-indigo-400" 
+                  onClick={() => handleStatusChange('CONCLUDED')}
+                  disabled={isBusy}
+                >
+                  <Trophy className="w-4 h-4 mr-2 text-amber-400" /> MARCAR VENDA
                 </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>Abandonar Lead: {lead.name}</DialogTitle>
-                  <DialogDescription>
-                    Selecione o motivo do abandono. O lead será movido para a área de Retrabalho.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="reason">Motivo do Abandono</Label>
-                    <Select onValueChange={(val) => setSelectedExclusionReason(val as ExclusionReason)}>
-                      <SelectTrigger id="reason">
-                        <SelectValue placeholder="Selecione um motivo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(exclusionReasons).filter(([key]) => key !== 'null').map(([key, value]) => (
-                          <SelectItem key={key} value={key}>{value}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <Button onClick={handleAbandon} disabled={!selectedExclusionReason || isBusy} variant="destructive">
-                  {isBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <XCircle className="w-4 h-4 mr-2" />}
-                  Confirmar Abandono
-                </Button>
-              </DialogContent>
-            </Dialog>
+              </>
+            )}
           </div>
         </div>
       </CardContent>

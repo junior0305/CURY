@@ -23,9 +23,10 @@ function initials(name: string) {
 }
 
 function scoreForLead(lead: Lead) {
-  if (lead.status === "DOCS_REQUESTED") return 3;
-  if (lead.status === "VISIT_SCHEDULED") return 2;
-  if (lead.status === "IN_PROGRESS") return 1;
+  if (lead.status === "CONCLUDED") return 500; // Peso massivo para venda
+  if (lead.status === "DOCS_REQUESTED") return 50;
+  if (lead.status === "VISIT_SCHEDULED") return 20;
+  if (lead.status === "IN_PROGRESS") return 2;
   if (lead.status === "NEW") return 0.5;
   return 0;
 }
@@ -48,9 +49,11 @@ export default function LeaderboardPodium({
     const brokers = users.filter((u) => u.role === "BROKER");
     const byBroker: Record<string, number> = {};
 
+    console.log(`[Podium] Calculando pontos para ${brokers.length} corretores e ${leads.length} leads totais.`);
+
     for (const lead of leads) {
       if (!lead.brokerId) continue;
-      // Cálculo de pontos universal baseado em avanço de funil
+      // Cálculo de pontos universal baseado na nova matemática de pesos
       byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead);
     }
 
@@ -65,6 +68,7 @@ export default function LeaderboardPodium({
       .sort((a, b) => b.points - a.points)
       .slice(0, 3);
 
+    console.log("[Podium] Top 3 detectado:", entries);
     return entries;
   }, [leads, users]);
 
