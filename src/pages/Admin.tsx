@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Settings, Zap, Globe, RefreshCcw, ShieldCheck, UserCircle, Loader2, Group } from "lucide-react";
+import { Users, Settings, Zap, Globe, RefreshCcw, ShieldCheck, UserCircle, Loader2, Group, LogOut } from "lucide-react";
 import UserManagement from "@/components/admin/UserManagement";
 import TeamManagement from "@/components/admin/TeamManagement";
 import AdminStats from "@/components/admin/AdminStats";
@@ -15,9 +15,10 @@ import { fetchProfiles } from "@/integrations/supabase/profiles";
 import { fetchLeadsForAdmin } from "@/integrations/supabase/leads";
 import type { Lead } from "@/types/lead";
 import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
+import { Button } from "@/components/ui/button";
 
 const Admin = () => {
-  const { user: authUser, role: userRole, loading: authLoading } = useAuth();
+  const { user: authUser, role: userRole, loading: authLoading, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("users");
 
   const { data: profiles = [] } = useQuery<User[]>({
@@ -60,12 +61,22 @@ const Admin = () => {
               <ShieldCheck className="w-4 h-4" /> Nível: <b>{currentUser.role}</b>
             </p>
           </div>
-          <div className="bg-white p-3 rounded-2xl shadow-sm border border-indigo-50 flex items-center gap-3">
-            <UserCircle className="w-8 h-8 text-indigo-200" />
-            <div className="flex flex-col">
-              <span className="text-[10px] font-bold text-gray-400">LOGADO COMO:</span>
-              <span className="text-indigo-600 font-bold">{currentUser.name}</span>
+          <div className="flex items-center gap-4">
+            <div className="bg-white p-3 rounded-2xl shadow-sm border border-indigo-50 flex items-center gap-3">
+              <UserCircle className="w-8 h-8 text-indigo-200" />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-gray-400">LOGADO COMO:</span>
+                <span className="text-indigo-600 font-bold">{currentUser.name}</span>
+              </div>
             </div>
+            <Button 
+              variant="outline" 
+              onClick={signOut}
+              className="rounded-2xl border-rose-100 text-rose-600 hover:bg-rose-50 hover:text-rose-700 h-12 px-6 font-bold shadow-sm transition-all"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sair
+            </Button>
           </div>
         </div>
 

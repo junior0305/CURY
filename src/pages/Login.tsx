@@ -12,13 +12,19 @@ const Login = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Adicionado log para debug de direcionamento
+    console.log("Login check:", { loading, hasSession: !!session, role });
+
     if (!loading && session && role) {
       if (role === 'SUPERINTENDENT' || role === 'MANAGER') {
-        navigate('/admin');
+        console.log("Redirecting to Admin");
+        navigate('/admin', { replace: true });
       } else if (role === 'BROKER') {
-        navigate('/dashboard'); 
+        console.log("Redirecting to Dashboard");
+        navigate('/dashboard', { replace: true }); 
       } else {
-        navigate('/');
+        console.log("Unknown role, redirecting to Home");
+        navigate('/', { replace: true });
       }
     }
   }, [session, role, loading, navigate]);
