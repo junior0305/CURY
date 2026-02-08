@@ -20,7 +20,9 @@ import {
   XCircle as XCircleIcon, 
   Banknote, 
   Rocket, 
-  Save 
+  Save,
+  Plus,
+  Trash2
 } from "lucide-react";
 import UserManagement from "@/components/admin/UserManagement";
 import TeamManagement from "@/components/admin/TeamManagement";
@@ -57,6 +59,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 const DistributionLogs = () => {
   const { data: logs = [], isLoading } = useQuery({
@@ -141,13 +144,54 @@ const EconomyManagement = () => {
   const { data: configs = [], isLoading: loadingConfigs } = useQuery({
     queryKey: ['reward-configs'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('reward_configs').select('*').order('action_type');
+      const { data, error } = await supabase.from('reward_configs').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return data;
     }
   });
 
-  // 2. Fetch Pending Redemptions (Achievements)
+  // 2. NEW: State for adding rules
+  const [isAddingRule, setIsAddingRule] = useState(false);
+  const [newRule, setNewRule] = useState({
+    action_type: 'SALE',
+    label: '',
+    reward_type: 'PIX',
+    amount_value: 0
+  });
+
+  const createRuleMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const { error } = await supabase.from('reward_configs').insert([payload]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reward-configs'] });
+      toast.success("Nova regra de premiação ativa!");
+      setIsAddingRule(false);
+      setNewRule({ action_type: 'SALE', label: '', reward_type: 'PIX', amount_value: 0 });
+    }
+  });
+
+  const toggleRuleMutation = useMutation({
+    mutationFn: async ({ id, active }: { id: string, active: boolean }) => {
+      const { error } = await supabase.from('reward_configs').update({ is_active: active }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reward-configs'] })
+  });
+
+  const deleteRuleMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('reward_configs').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reward-configs'] });
+      toast.success("Regra removida.");
+    }
+  });
+
+  // 3. Fetch Pending Redemptions (Achievements)
   const { data: pending = [], isLoading: loadingPending } = useQuery({
     queryKey: ['pending-achievements'],
     queryFn: async () => {
@@ -259,16 +303,66 @@ const EconomyManagement = () => {
         {/* Lado Esquerdo: Config de Valores e Nova Campanha */}
         <div className="lg:col-span-1 space-y-6">
           <Card className="border-none shadow-xl rounded-3xl p-6 bg-white ring-1 ring-slate-100">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-3 bg-amber-100 text-amber-600 rounded-2xl"><Coins className="h-6 w-6" /></div>
-              <div><h3 className="font-black text-slate-900 uppercase tracking-tighter italic">Valores Base</h3></div>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-amber-100 text-amber-600 rounded-2xl"><Coins className="h-6 w-6" /></div>
+                <div><h3 className="font-black text-slate-900 uppercase tracking-tighter italic">Gatilhos</h3></div>
+              </div>
+              <Button size="icon" variant="outline" className="rounded-full" onClick={() => setIsAddingRule(!isAddingRule)}>
+                <Plus className="h-4 w-4" />
+              </Button>
             </div>
-            <div className="space-y-4">
+
+            {isAddingRule && (
+              <div className="mb-6 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 space-y-3 animate-in slide-in-from-top-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-black uppercase">Ação (Gatilho)</Label>
+                  <Select value={newRule.action_type} onValueChange={(v) => setNewRule({...newRule, action_type: v})}>
+                    <SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SALE">Venda Concluída</SelectItem>
+                      <SelectItem value="VISIT">Visita Agendada</SelectItem>
+                      <SelectItem value="DOCS">Documento Recebido</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-black uppercase">Nome do Prêmio</Label>
+                  <Input placeholder="Ex: Jantar na Lapa" className="h-9 bg-white" value={newRule.label} onChange={e => setNewRule({...newRule, label: e.target.value})} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-black uppercase">Valor (R$)</Label>
+                  <Input type="number" className="h-9 bg-white" value={newRule.amount_value} onChange={e => setNewRule({...newRule, amount_value: parseFloat(e.target.value)})} />
+                </div>
+                <Button className="w-full h-9 bg-indigo-600 text-xs font-bold" onClick={() => createRuleMutation.mutate(newRule)} disabled={!newRule.label}>ATIVAR REGRA</Button>
+              </div>
+            )}
+
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
               {configs.map((c: any) => (
-                <div key={c.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                  <Label className="text-[11px] font-black text-slate-500 uppercase">{c.label}</Label>
-                  <div className="flex gap-2">
-                    <Input type="number" defaultValue={c.amount_value} className="bg-white rounded-xl h-10 font-bold" onBlur={(e) => updateConfigMutation.mutate({ id: c.id, value: parseFloat(e.target.value) })} />
+                <div key={c.id} className={cn("p-4 rounded-2xl border transition-all", c.is_active ? "bg-slate-50 border-slate-100" : "bg-slate-100/50 border-slate-200 opacity-60")}>
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <Badge className="text-[8px] font-black uppercase tracking-tighter mb-1 bg-indigo-100 text-indigo-600 border-none">
+                        {c.action_type === 'SALE' ? 'VENDA' : c.action_type === 'VISIT' ? 'VISITA' : 'DOCS'}
+                      </Badge>
+                      <p className="text-sm font-bold text-slate-800 leading-tight">{c.label}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-rose-400" onClick={() => deleteRuleMutation.mutate(c.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-3">
+                    <p className="text-lg font-black text-slate-900 leading-none">R$ {c.amount_value}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">{c.is_active ? 'Ativo' : 'Pausado'}</span>
+                      <input 
+                        type="checkbox" 
+                        checked={c.is_active} 
+                        onChange={(e) => toggleRuleMutation.mutate({ id: c.id, active: e.target.checked })}
+                        className="accent-indigo-600 h-4 w-4 cursor-pointer"
+                      />
+                    </div>
                   </div>
                 </div>
               ))}

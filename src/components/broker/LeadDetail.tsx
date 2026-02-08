@@ -61,30 +61,40 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
       console.log(`[LeadDetail] Atualizando status para ${status}...`);
       const res = await updateLeadStatus(leadId!, status, reason);
       
-      if (status === 'CONCLUDED' || status === 'VISIT_SCHEDULED') {
-        const actionType = status === 'CONCLUDED' ? 'SALE' : 'VISIT';
-        
-        // Buscar config
-        const { data: config } = await supabase
+      const triggerActionMap: Record<string, string> = {
+        'CONCLUDED': 'SALE',
+        'VISIT_SCHEDULED': 'VISIT',
+        'DOCS_REQUESTED': 'DOCS'
+      };
+
+      const triggerAction = triggerActionMap[status];
+      
+      if (triggerAction) {
+        // Buscar TODAS as configs ativas para este gatilho específico
+        const { data: configs } = await supabase
           .from('reward_configs')
           .select('*')
-          .eq('action_type', actionType)
-          .eq('is_active', true)
-          .maybeSingle();
+          .eq('action_type', triggerAction)
+          .eq('is_active', true);
 
-        if (config) {
-          console.log(`[LeadDetail] Gravando conquista para ${actionType}...`);
-          const { error: achievementError } = await supabase.from('achievements').insert({
-            user_id: (await supabase.auth.getUser()).data.user?.id,
-            lead_id: leadId,
-            action_type: actionType,
+        if (configs && configs.length > 0) {
+          console.log(`[LeadDetail] Disparando ${configs.length} premiações para ${triggerAction}...`);
+          
+          const achievementsToInsert = configs.map(config => ({
+            user_id: lead.brokerId,
+            lead_id: lead.id,
+            action_type: triggerAction,
             reward_label: config.label,
             reward_value: config.amount_value,
             status: 'PENDING'
-          });
+          }));
+
+          const { error: achievementError } = await supabase
+            .from('achievements')
+            .insert(achievementsToInsert);
           
-          if (achievementError) console.error("[LeadDetail] Erro Achievement:", achievementError.message);
-          else console.log("[LeadDetail] Conquista gravada!");
+          if (achievementError) console.error("[LeadDetail] Erro ao gravar conquistas:", achievementError.message);
+          else console.log("[LeadDetail] Conquistas gravadas com sucesso!");
         }
       }
       return res;
