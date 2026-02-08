@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { Loader2, PlusCircle, LogOut, Sparkles, BellPlus, LayoutDashboard, Target, Users2, TrendingUp, Calendar, FileText, Trophy } from "lucide-react";
+import { Loader2, PlusCircle, LogOut, Sparkles, BellPlus, Target, Users2, TrendingUp, Calendar, FileText, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
 import LeadForm from "@/components/broker/LeadForm";
@@ -86,6 +86,19 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const me = profiles.find(p => p.id === user?.id);
+                if (me) setShowKPIsFor({ id: me.id, name: me.name });
+              }}
+              className="rounded-full text-indigo-600 hover:bg-indigo-50 font-bold px-4 hidden sm:flex items-center gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Meu Desempenho
+            </Button>
+
             <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
               <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
               <span className="text-xs font-bold text-slate-700">{userName}</span>
