@@ -1,11 +1,30 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { Loader2, PlusCircle, LogOut, Sparkles, BellPlus, Target, Users2, TrendingUp, Calendar, FileText, BarChart3 } from "lucide-react";
+import {
+  Loader2,
+  PlusCircle,
+  LogOut,
+  Sparkles,
+  BellPlus,
+  Target,
+  Users2,
+  TrendingUp,
+  Calendar,
+  FileText,
+  BarChart3,
+  Flame,
+  Clock,
+  BellRing,
+  LayoutDashboard
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
 import LeadForm from "@/components/broker/LeadForm";
 import LeadList from "@/components/broker/LeadList";
 import LeadDetail from "@/components/broker/LeadDetail";
+import AchievementTicker from "@/components/dashboard/AchievementTicker";
+import CampaignHeroBanner from "@/components/dashboard/CampaignHeroBanner";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { fetchLeadsForDashboard } from "@/integrations/supabase/leads";
 import { fetchProfiles } from "@/integrations/supabase/profiles";
@@ -14,13 +33,12 @@ import type { User } from "@/types/user";
 import { Badge } from "@/components/ui/badge";
 import TaskCenter from "@/components/broker/TaskCenter";
 import TaskForm from "@/components/broker/TaskForm";
-import AchievementTicker from "@/components/dashboard/AchievementTicker";
-import CampaignHeroBanner from "@/components/dashboard/CampaignHeroBanner";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
 import BrokerKPIs from "@/components/dashboard/BrokerKPIs";
+import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { supabase } from "@/integrations/supabase/client";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
@@ -29,23 +47,23 @@ const Dashboard = () => {
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [filter, setFilter] = useState<LeadStatus | "ACTIVE" | "ALL">("ACTIVE");
+  const [viewMode, setViewMode] = useState("leads");
   
-  // New States for Leaderboard and KPIs
+  // States for Leaderboard and KPIs
   const [isMonthly, setIsMonthly] = useState(false);
   const [showKPIsFor, setShowKPIsFor] = useState<{ id: string; name: string } | null>(null);
 
-  const { data: leads = [], refetch: refetchLeads } = useQuery<Lead[]>({
+  // State for Nudge/Internal Notifications
+  const [activeNudge, setActiveNudge] = useState<any | null>(null);
+
+  const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
-    queryFn: async () => {
-      // IMPORTANTE: Para o pódio ser universal, o Broker precisa ver o total de avanços do time
-      // No entanto, o RLS protege os dados sensíveis. O pódio usará estatísticas agregadas.
-      return fetchLeadsForDashboard();
-    }
+    queryFn: fetchLeadsForDashboard,
   });
 
   const { data: profiles = [] } = useQuery<User[]>({
     queryKey: ["profiles"],
-    queryFn: fetchProfiles, // Já busca todos os perfis permitidos
+    queryFn: fetchProfiles,
   });
 
   const userName = useMemo(() => {
@@ -70,6 +88,40 @@ const Dashboard = () => {
     };
   }, [leads]);
 
+  // Monitoramento de Cutucões (Internal Notifications)
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchNudges = async () => {
+      const { data, error } = await supabase
+        .from('internal_notifications')
+        .select('*')
+        .eq('to_id', user.id)
+        .eq('is_read', false)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data) {
+        setActiveNudge(data);
+      }
+    };
+
+    fetchNudges();
+    const interval = setInterval(fetchNudges, 10000); // Checa a cada 10s
+
+    return () => clearInterval(interval);
+  }, [user?.id]);
+
+  const markNudgeRead = async () => {
+    if (!activeNudge) return;
+    await supabase
+      .from('internal_notifications')
+      .update({ is_read: true })
+      .eq('id', activeNudge.id);
+    setActiveNudge(null);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -84,7 +136,32 @@ const Dashboard = () => {
         <AchievementTicker />
       </div>
       
-      {/* Optimized Slim Header */}
+      {/* Pop-up de Cutucão (Nudge Alert) */}
+      <Dialog open={!!activeNudge} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md border-none shadow-[0_0_50px_rgba(245,158,11,0.4)] rounded-[2rem] bg-white">
+          <DialogHeader className="flex flex-col items-center text-center">
+            <div className="h-16 w-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mb-4 animate-bounce">
+              <BellRing className="h-8 w-8" />
+            </div>
+            <DialogTitle className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">
+              Alerta de Gestão!
+            </DialogTitle>
+            <DialogDescription className="text-slate-600 font-medium text-base mt-2">
+              {activeNudge?.message}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-6">
+            <Button 
+              className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-lg shadow-indigo-100 text-sm uppercase tracking-widest"
+              onClick={markNudgeRead}
+            >
+              Entendido, vou atender agora!
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Header */}
       <header className="sticky top-12 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/60 px-4 sm:px-6 py-3">
         <div className="max-w-[1600px] mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -117,6 +194,17 @@ const Dashboard = () => {
               <Badge variant="secondary" className="bg-white text-[9px] font-black uppercase tracking-tighter h-4 px-1 border-slate-300">{role}</Badge>
             </div>
             
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsTaskFormOpen(true)}
+              className="rounded-2xl bg-white/70 backdrop-blur border-slate-200 hover:bg-white h-10 sm:h-11"
+            >
+              <BellPlus className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Nova Tarefa</span>
+              <span className="sm:hidden">Tarefa</span>
+            </Button>
+
             <Sheet open={isLeadFormOpen} onOpenChange={setIsLeadFormOpen}>
               <SheetTrigger asChild>
                 <Button size="sm" className="rounded-full bg-indigo-600 hover:bg-indigo-700 px-4 font-bold shadow-md">
@@ -161,88 +249,52 @@ const Dashboard = () => {
               />
             </section>
 
-            {/* NEW: Unified Pipeline Stats (Horizontal Bar) */}
-            <section className="mb-6 sm:mb-8">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
-                <PipelineStat 
-                  label="Novos" 
-                  count={stats.new} 
-                  active={filter === 'NEW'} 
-                  onClick={() => setFilter('NEW')}
-                  color="sky"
-                  icon={Sparkles}
-                />
-                <PipelineStat 
-                  label="Em Atendimento" 
-                  count={stats.in_progress} 
-                  active={filter === 'IN_PROGRESS'} 
-                  onClick={() => setFilter('IN_PROGRESS')}
-                  color="indigo"
-                  icon={Users2}
-                />
-                <PipelineStat 
-                  label="Visitas" 
-                  count={stats.visits} 
-                  active={filter === 'VISIT_SCHEDULED'} 
-                  onClick={() => setFilter('VISIT_SCHEDULED')}
-                  color="emerald"
-                  icon={Calendar}
-                />
-                <PipelineStat 
-                  label="Documentação" 
-                  count={stats.docs} 
-                  active={filter === 'DOCS_REQUESTED'} 
-                  onClick={() => setFilter('DOCS_REQUESTED')}
-                  color="amber"
-                  icon={FileText}
-                />
-                <PipelineStat 
-                  label="Total Ativos" 
-                  count={stats.activeCount} 
-                  active={filter === 'ACTIVE'} 
-                  onClick={() => setFilter('ACTIVE')}
-                  color="slate"
-                  icon={TrendingUp}
-                />
+            {/* Pipeline Stats */}
+            <section className="mb-8">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <PipelineStat label="Novos" count={stats.new} active={filter === 'NEW'} onClick={() => {setFilter('NEW'); setViewMode('leads');}} color="sky" icon={Sparkles} />
+                <PipelineStat label="Atendimento" count={stats.in_progress} active={filter === 'IN_PROGRESS'} onClick={() => {setFilter('IN_PROGRESS'); setViewMode('leads');}} color="indigo" icon={Users2} />
+                <PipelineStat label="Visitas" count={stats.visits} active={filter === 'VISIT_SCHEDULED'} onClick={() => {setFilter('VISIT_SCHEDULED'); setViewMode('leads');}} color="emerald" icon={Calendar} />
+                <PipelineStat label="Documentos" count={stats.docs} active={filter === 'DOCS_REQUESTED'} onClick={() => {setFilter('DOCS_REQUESTED'); setViewMode('leads');}} color="amber" icon={FileText} />
+                <PipelineStat label="Ativos" count={stats.activeCount} active={filter === 'ACTIVE'} onClick={() => {setFilter('ACTIVE'); setViewMode('leads');}} color="slate" icon={TrendingUp} />
               </div>
             </section>
 
-            {/* Unified Workflow Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[calc(100vh-250px)]">
-              {/* Left: The Action Queue (Leads + Tasks integrated) */}
-              <div className="lg:col-span-4 flex flex-col h-[500px] lg:h-full overflow-hidden">
-                <LeadList
-                  selectedLeadId={selectedLeadId}
-                  onSelectLead={setSelectedLeadId}
-                  currentUserRole={role || "BROKER"}
-                  filter={filter}
-                />
-              </div>
+            <Tabs value={viewMode} onValueChange={setViewMode} className="mt-8">
+              <TabsList className="bg-slate-200/50 p-1 rounded-2xl h-12 shadow-inner ring-1 ring-slate-200 mb-6">
+                <TabsTrigger value="leads" className="rounded-xl px-6 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md font-bold text-xs">
+                  <LayoutDashboard className="w-4 h-4 mr-2" /> Mural de Vendas
+                </TabsTrigger>
+                <TabsTrigger value="performance" className="rounded-xl px-6 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md font-bold text-xs">
+                  <Sparkles className="w-4 h-4 mr-2" /> Performance
+                </TabsTrigger>
+              </TabsList>
 
-              {/* Right: The Workspace (Detail + AI + Cadence) */}
-              <div className="lg:col-span-8 h-full">
-                <LeadDetail 
-                  leadId={selectedLeadId} 
-                  onLeadUpdated={() => setSelectedLeadId(null)} 
-                />
-              </div>
-            </div>
+              <TabsContent value="leads" className="mt-0">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[calc(100vh-250px)]">
+                  <div className="lg:col-span-4 space-y-6">
+                    <TaskCenter leads={leads} onOpenLead={(id) => { setSelectedLeadId(id); setFilter("ALL"); }} />
+                    <LeadList selectedLeadId={selectedLeadId} onSelectLead={setSelectedLeadId} currentUserRole={role || "BROKER"} filter={filter} />
+                  </div>
+                  <div className="lg:col-span-8">
+                    <LeadDetail leadId={selectedLeadId} onLeadUpdated={() => setSelectedLeadId(null)} />
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="performance">
+                <div className="max-w-4xl"><LeaderboardPodium leads={leads} users={profiles} onOpenKPIs={(id, name) => setShowKPIsFor({ id, name })} /></div>
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </main>
 
-      <TaskForm
-        open={isTaskFormOpen}
-        onOpenChange={setIsTaskFormOpen}
-        userId={user?.id || ""}
-        leads={leads}
-        defaultLeadId={selectedLeadId}
-      />
+      <TaskForm open={isTaskFormOpen} onOpenChange={setIsTaskFormOpen} userId={user?.id || ""} leads={leads} defaultLeadId={selectedLeadId} />
     </div>
   );
 };
 
-// Helper component for Pipeline Stats
 const PipelineStat = ({ label, count, active, onClick, color, icon: Icon }: any) => {
   const colors: any = {
     sky: active ? "bg-sky-600 text-white" : "bg-sky-50 text-sky-700 border-sky-100",
@@ -253,20 +305,8 @@ const PipelineStat = ({ label, count, active, onClick, color, icon: Icon }: any)
   };
 
   return (
-    <button 
-      onClick={onClick}
-      className={cn(
-        "flex flex-col p-4 rounded-3xl border transition-all duration-300 text-left relative overflow-hidden group",
-        colors[color],
-        active ? "shadow-lg scale-[1.02] ring-2 ring-offset-2 ring-indigo-500" : "hover:border-slate-300 shadow-sm"
-      )}
-    >
-      <div className={cn(
-        "h-8 w-8 rounded-xl flex items-center justify-center mb-3 transition-transform group-hover:scale-110",
-        active ? "bg-white/20" : "bg-white shadow-sm"
-      )}>
-        <Icon className={cn("h-4 w-4", active ? "text-white" : "")} />
-      </div>
+    <button onClick={onClick} className={cn("flex flex-col p-4 rounded-3xl border transition-all duration-300 text-left relative overflow-hidden group", colors[color], active ? "shadow-lg scale-[1.02] ring-2 ring-offset-2 ring-indigo-500" : "hover:border-slate-300 shadow-sm")}>
+      <div className={cn("h-8 w-8 rounded-xl flex items-center justify-center mb-3 transition-transform group-hover:scale-110", active ? "bg-white/20" : "bg-white shadow-sm")}><Icon className={cn("h-4 w-4", active ? "text-white" : "")} /></div>
       <p className={cn("text-[11px] font-bold uppercase tracking-wider opacity-80", active ? "text-white" : "text-slate-500")}>{label}</p>
       <p className="text-3xl font-black mt-1 tracking-tighter">{count}</p>
       {active && <div className="absolute top-2 right-3 h-1.5 w-1.5 bg-white rounded-full animate-ping" />}

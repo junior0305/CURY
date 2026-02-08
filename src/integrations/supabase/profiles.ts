@@ -93,7 +93,7 @@ export const updateProfile = async (user: User) => {
     first_name: firstName,
     last_name: lastName,
     role: role,
-    phone: phone,
+    phone: phone || null, // Garante que o telefone seja enviado
     manager_id: (managerId === 'none' || !managerId) ? null : managerId,
     team_id: (teamId === 'none' || !teamId) ? null : teamId,
     lead_assignment_enabled: leadAssignmentEnabled,

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { User, UserRole, Team } from "@/types/user";
-import { Save, Loader2, UserPlus, Shield, Users, RefreshCw } from "lucide-react";
+import { Save, Loader2, UserPlus, Shield, Users, RefreshCw, Phone } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchManagers, fetchTeams } from "@/integrations/supabase/profiles";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,7 +53,11 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
 
   useEffect(() => {
     if (userToEdit) {
-      setFormData({ ...userToEdit });
+      console.log("Loading user to edit:", userToEdit);
+      setFormData({ 
+        ...userToEdit,
+        phone: userToEdit.phone || "" 
+      });
     } else {
       setFormData({
         name: "",
@@ -121,7 +125,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
             password: formData.password,
             firstName,
             lastName,
-            phone: formData.phone,
+            phone: formData.phone || null,
             role: formData.role,
             managerId: formData.managerId === "none" ? null : formData.managerId,
             teamId: formData.teamId === "none" ? null : formData.teamId
@@ -184,13 +188,16 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
           </div>
 
           <div className="space-y-2">
-            <Label>Telefone (WhatsApp)</Label>
+            <Label className="flex items-center gap-2 text-indigo-700 font-bold">
+              <Phone className="w-4 h-4" /> Telefone (WhatsApp)
+            </Label>
             <Input 
               type="tel" 
               value={formData.phone || ""} 
               onChange={(e) => handleChange("phone", e.target.value)}
               disabled={busy} 
               placeholder="(00) 00000-0000"
+              className="border-indigo-100 focus:border-indigo-500"
             />
           </div>
 
