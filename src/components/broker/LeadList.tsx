@@ -62,27 +62,27 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: Lea
   });
 
   const processedLeads = useMemo(() => {
-    const now = new Date();
-    const nowTimestamp = now.getTime();
-    const nowHour = now.getHours();
+    const now = Date.now();
     
     // FILTRO DE PRIVACIDADE: Na lista lateral, o corretor SÓ vê o que é dele.
     const myLeadsOnly = leads.filter(l => l.brokerId === session?.user.id);
     
-    // Join tasks into my leads only
+    // Join tasks into my leads only - FILTERING FOR THE MOST URGENT TASK ONLY PER LEAD
     const leadsWithTasks = myLeadsOnly.map(lead => {
-      const leadTasks = tasks.filter(t => t.leadId === lead.id);
-      const nextTask = leadTasks.length > 0 
-        ? leadTasks.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0]
-        : null;
+      // Regra: Apenas uma tarefa atrasada ou pendente visível por vez
+      const leadTasks = tasks
+        .filter(t => t.leadId === lead.id)
+        .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime()); // Mais antiga primeiro
+      
+      const nextTask = leadTasks.length > 0 ? leadTasks[0] : null;
       
       const lastAction = new Date(lead.lastInteractionAt);
       
       // Lógica de cálculo de horas de inatividade ignorando o período das 21h às 08h
       let effectiveNow = new Date(now);
-      if (nowHour >= 21) {
+      if (now >= 21) {
         effectiveNow.setHours(21, 0, 0, 0);
-      } else if (nowHour < 8) {
+      } else if (now < 8) {
         effectiveNow.setDate(effectiveNow.getDate() - 1);
         effectiveNow.setHours(21, 0, 0, 0);
       }
@@ -105,7 +105,7 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: Lea
       if (isStale) priority = 4;
       else if (lead.status === 'NEW') priority = 3;
       else if (nextTask) {
-        const diff = (new Date(nextTask.dueAt).getTime() - nowTimestamp) / 60000;
+        const diff = (new Date(nextTask.dueAt).getTime() - now) / 60000;
         if (diff < 0) priority = 2;
         else if (diff < 15) priority = 2;
         else priority = 1;
@@ -114,11 +114,16 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: Lea
       return { ...lead, nextTask, priority, isStale, hoursSinceLastAction };
     });
 
-    // Filter
+    // Filter by Selected Card (NEW LOGIC: ONLY SHOW IF SELECTED)
     let filtered = leadsWithTasks;
     if (filter === "ACTIVE") {
-      filtered = leadsWithTasks.filter(l => l.status !== "ABANDONED" && l.status !== "EXCLUDED");
-    } else if (filter !== "ALL") {
+      // By default, if nothing specific is selected, we might show nothing or high priority
+      // But based on user request: "Only show the lead that the broker clicks on the specific card"
+      // So if it's "ACTIVE" (initial state), we show only what's really high priority or nothing
+      filtered = leadsWithTasks.filter(l => l.priority >= 2); 
+    } else if (filter === "ALL") {
+      filtered = leadsWithTasks;
+    } else {
       filtered = leadsWithTasks.filter(l => l.status === filter);
     }
 

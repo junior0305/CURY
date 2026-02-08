@@ -61,6 +61,16 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
       console.log(`[LeadDetail] Atualizando status para ${status}...`);
       const res = await updateLeadStatus(leadId!, status, reason);
       
+      // AUTO-CLEAN TASKS: If sold or removed, mark all tasks as DONE
+      if (status === 'CONCLUDED' || status === 'ABANDONED' || status === 'EXCLUDED') {
+        console.log(`[LeadDetail] Limpando tarefas pendentes para o lead ${leadId}`);
+        await supabase
+          .from('tasks')
+          .update({ status: 'DONE' })
+          .eq('lead_id', leadId)
+          .eq('status', 'OPEN');
+      }
+
       const triggerActionMap: Record<string, string> = {
         'CONCLUDED': 'SALE',
         'VISIT_SCHEDULED': 'VISIT',

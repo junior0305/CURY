@@ -15,7 +15,8 @@ import {
   Flame,
   Clock,
   BellRing,
-  LayoutDashboard
+  LayoutDashboard,
+  Trophy
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
@@ -77,14 +78,13 @@ const Dashboard = () => {
   }, [leads, showKPIsFor]);
 
   const stats = useMemo(() => {
-    const active = leads.filter(l => l.status !== 'ABANDONED' && l.status !== 'EXCLUDED');
     return {
       total: leads.length,
       new: leads.filter(l => l.status === 'NEW').length,
       in_progress: leads.filter(l => l.status === 'IN_PROGRESS').length,
       visits: leads.filter(l => l.status === 'VISIT_SCHEDULED').length,
       docs: leads.filter(l => l.status === 'DOCS_REQUESTED').length,
-      activeCount: active.length
+      concluded: leads.filter(l => l.status === 'CONCLUDED').length // NEW: Vendas
     };
   }, [leads]);
 
@@ -250,13 +250,48 @@ const Dashboard = () => {
             </section>
 
             {/* Pipeline Stats */}
-            <section className="mb-8">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <PipelineStat label="Novos" count={stats.new} active={filter === 'NEW'} onClick={() => {setFilter('NEW'); setViewMode('leads');}} color="sky" icon={Sparkles} />
-                <PipelineStat label="Atendimento" count={stats.in_progress} active={filter === 'IN_PROGRESS'} onClick={() => {setFilter('IN_PROGRESS'); setViewMode('leads');}} color="indigo" icon={Users2} />
-                <PipelineStat label="Visitas" count={stats.visits} active={filter === 'VISIT_SCHEDULED'} onClick={() => {setFilter('VISIT_SCHEDULED'); setViewMode('leads');}} color="emerald" icon={Calendar} />
-                <PipelineStat label="Documentos" count={stats.docs} active={filter === 'DOCS_REQUESTED'} onClick={() => {setFilter('DOCS_REQUESTED'); setViewMode('leads');}} color="amber" icon={FileText} />
-                <PipelineStat label="Ativos" count={stats.activeCount} active={filter === 'ACTIVE'} onClick={() => {setFilter('ACTIVE'); setViewMode('leads');}} color="slate" icon={TrendingUp} />
+            <section className="mb-6 sm:mb-8">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
+                <PipelineStat 
+                  label="Novos" 
+                  count={stats.new} 
+                  active={filter === 'NEW'} 
+                  onClick={() => {setFilter('NEW'); setSelectedLeadId(null);}}
+                  color="sky"
+                  icon={Sparkles}
+                />
+                <PipelineStat 
+                  label="Atendimento" 
+                  count={stats.in_progress} 
+                  active={filter === 'IN_PROGRESS'} 
+                  onClick={() => {setFilter('IN_PROGRESS'); setSelectedLeadId(null);}}
+                  color="indigo"
+                  icon={Users2}
+                />
+                <PipelineStat 
+                  label="Visitas" 
+                  count={stats.visits} 
+                  active={filter === 'VISIT_SCHEDULED'} 
+                  onClick={() => {setFilter('VISIT_SCHEDULED'); setSelectedLeadId(null);}}
+                  color="emerald"
+                  icon={Calendar}
+                />
+                <PipelineStat 
+                  label="Documentação" 
+                  count={stats.docs} 
+                  active={filter === 'DOCS_REQUESTED'} 
+                  onClick={() => {setFilter('DOCS_REQUESTED'); setSelectedLeadId(null);}}
+                  color="amber"
+                  icon={FileText}
+                />
+                <PipelineStat 
+                  label="Vendas" 
+                  count={stats.concluded} 
+                  active={filter === 'CONCLUDED'} 
+                  onClick={() => {setFilter('CONCLUDED' as LeadStatus); setSelectedLeadId(null);}}
+                  color="rose"
+                  icon={Trophy}
+                />
               </div>
             </section>
 
