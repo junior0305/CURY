@@ -34,8 +34,8 @@ export const fetchLeadsForAdmin = async (): Promise<Lead[]> => {
 };
 
 export const fetchLeadsForDashboard = async (): Promise<Lead[]> => {
-  // Importante: não filtramos por status aqui.
-  // O dashboard usa filtros de UI (cards do funil) para decidir o que aparece.
+  console.log("[LeadsAPI] Buscando leads para o Dashboard...");
+  // Buscamos absolutamente todos os leads sem filtros de status aqui
   const { data, error } = await supabase
     .from('leads')
     .select('*')
@@ -43,13 +43,11 @@ export const fetchLeadsForDashboard = async (): Promise<Lead[]> => {
 
   if (error) {
     console.error("[fetchLeadsForDashboard] Error:", error);
-    if ((error as any).code === 'PGRST303' || (error as any).message?.includes('JWT')) {
-      window.dispatchEvent(new CustomEvent('supabase-auth-error', { detail: error }));
-    }
     if ((error as any).code === '42P01') return [];
     throw error;
   }
 
+  console.log(`[LeadsAPI] ${data?.length} leads retornados do banco.`);
   return (data || []).map(mapLeadFromDB);
 };
 

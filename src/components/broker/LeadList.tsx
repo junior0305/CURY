@@ -8,6 +8,7 @@ import { Loader2, Phone, MessageSquare, Clock, AlertTriangle, Check, Bell, Zap }
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/AuthProvider";
 
 interface LeadListProps {
   selectedLeadId: string | null;
@@ -37,6 +38,8 @@ const statusColors: Record<LeadStatus, string> = {
 };
 
 const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: LeadListProps) => {
+  const { session } = useAuth();
+  
   const { data: leads = [], isLoading: loadingLeads } = useQuery<Lead[]>({
     queryKey: ['dashboardLeads'],
     queryFn: fetchLeadsForDashboard,
@@ -50,8 +53,11 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: Lea
   const processedLeads = useMemo(() => {
     const now = Date.now();
     
-    // Join tasks into leads
-    const leadsWithTasks = leads.map(lead => {
+    // FILTRO DE PRIVACIDADE: Na lista lateral, o corretor SÓ vê o que é dele.
+    const myLeadsOnly = leads.filter(l => l.brokerId === session?.user.id);
+    
+    // Join tasks into my leads only
+    const leadsWithTasks = myLeadsOnly.map(lead => {
       const leadTasks = tasks.filter(t => t.leadId === lead.id);
       const nextTask = leadTasks.length > 0 
         ? leadTasks.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0]
