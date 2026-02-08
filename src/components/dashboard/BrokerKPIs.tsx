@@ -46,6 +46,12 @@ export default function BrokerKPIs({ leads, onBack, brokerName }: BrokerKPIsProp
       ABANDONED: leads.filter(l => l.status === 'ABANDONED').length,
     };
 
+    // Meta dinâmica baseada em Visitas + Documentos
+    // Vamos definir uma meta padrão de 10 "Avanços Reais" (Visitas ou Documentos) por período
+    const GOAL_TARGET = 10;
+    const actualProgress = byStatus.VISIT_SCHEDULED + byStatus.DOCS_REQUESTED;
+    const goalPercentage = Math.min(Math.round((actualProgress / GOAL_TARGET) * 100), 100);
+
     const conversionRate = total > 0 
       ? ((byStatus.VISIT_SCHEDULED + byStatus.DOCS_REQUESTED) / total * 100).toFixed(1)
       : 0;
@@ -57,24 +63,38 @@ export default function BrokerKPIs({ leads, onBack, brokerName }: BrokerKPIsProp
       { name: "Docs", value: byStatus.DOCS_REQUESTED },
     ];
 
-    return { total, byStatus, conversionRate, funnelData };
+    return { total, byStatus, conversionRate, funnelData, goalPercentage };
   }, [leads]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={onBack} className="rounded-full hover:bg-white shadow-sm">
+          <Button 
+            variant="default" 
+            onClick={onBack} 
+            className="rounded-2xl bg-slate-900 hover:bg-black text-white px-6 font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95"
+          >
             <ChevronLeft className="h-5 w-5" />
+            Voltar ao Mural
           </Button>
+          <div className="h-8 w-px bg-slate-200 mx-2" />
           <div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Meus KPIs</h2>
-            <p className="text-slate-500 text-sm font-medium">Análise de performance: {brokerName}</p>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tight leading-none">Meu Raio-X</h2>
+            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Performance: {brokerName}</p>
           </div>
         </div>
-        <Badge className="bg-indigo-600 text-white px-3 py-1 rounded-full font-bold">
-          Meta: 85% Concluída
-        </Badge>
+        <div className="flex flex-col items-end">
+          <Badge className="bg-indigo-600 text-white px-4 py-1.5 rounded-full font-black text-xs shadow-sm">
+            META: {stats.goalPercentage}%
+          </Badge>
+          <div className="w-32 h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden border border-slate-200">
+            <div 
+              className="h-full bg-indigo-600 transition-all duration-1000 ease-out" 
+              style={{ width: `${stats.goalPercentage}%` }} 
+            />
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
