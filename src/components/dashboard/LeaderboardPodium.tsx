@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Lead } from "@/types/lead";
 import { User } from "@/types/user";
-import { Crown, Sparkles, Trophy } from "lucide-react";
+import { Crown, Sparkles, Trophy, BarChart3, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type PodiumEntry = {
   id: string;
@@ -13,8 +14,6 @@ type PodiumEntry = {
   points: number;
   subtitle: string;
 };
-
-type LeaderboardType = "WEEK" | "MONTH";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -31,44 +30,26 @@ function scoreForLead(lead: Lead) {
   return 0;
 }
 
-function getStartOfWeek() {
-  const now = new Date();
-  const day = now.getDay(); // 0 (Sun) to 6 (Sat)
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Mon start
-  const monday = new Date(now.setDate(diff));
-  monday.setHours(0, 0, 0, 0);
-  return monday;
-}
-
-function getStartOfMonth() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1);
-}
-
 export default function LeaderboardPodium({
   leads,
   users,
+  onOpenKPIs,
+  isMonthly = false,
+  onToggleTimeframe
 }: {
   leads: Lead[];
   users: User[];
-  title?: string;
-  subtitle?: string;
+  onOpenKPIs?: (brokerId: string, brokerName: string) => void;
+  isMonthly?: boolean;
+  onToggleTimeframe?: () => void;
 }) {
-  const [type, setType] = useState<LeaderboardType>("WEEK");
-
   const top3 = useMemo(() => {
     const brokers = users.filter((u) => u.role === "BROKER");
     const byBroker: Record<string, number> = {};
-    const startDate = type === "WEEK" ? getStartOfWeek() : getStartOfMonth();
 
     for (const lead of leads) {
       if (!lead.brokerId) continue;
-      
-      // Filter leads by last interaction within the period to measure performance
-      const leadDate = new Date(lead.lastInteractionAt);
-      if (leadDate >= startDate) {
-        byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead);
-      }
+      byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead);
     }
 
     const entries: PodiumEntry[] = brokers
@@ -76,126 +57,141 @@ export default function LeaderboardPodium({
         id: b.id,
         name: b.name,
         points: Math.round((byBroker[b.id] ?? 0) * 10) / 10,
-        subtitle: b.leadAssignmentEnabled ? "Ativo" : "Off-line",
+        subtitle: b.leadAssignmentEnabled ? "Em Campo" : "Pausa",
       }))
       .filter((e) => e.points > 0)
       .sort((a, b) => b.points - a.points)
       .slice(0, 3);
 
     return entries;
-  }, [leads, users, type]);
+  }, [leads, users]);
 
-  const slots: Array<{ place: 1 | 2 | 3; entry?: PodiumEntry; height: string; tone: string; ring: string }> = [
-    { place: 2, entry: top3[1], height: "h-24", tone: "bg-sky-600", ring: "ring-sky-200" },
-    { place: 1, entry: top3[0], height: "h-32", tone: "bg-indigo-600", ring: "ring-indigo-200" },
-    { place: 3, entry: top3[2], height: "h-20", tone: "bg-emerald-600", ring: "ring-emerald-200" },
+  const slots: Array<{ place: 1 | 2 | 3; entry?: PodiumEntry; height: string; tone: string; ring: string; textTone: string }> = [
+    { place: 2, entry: top3[1], height: "h-20 sm:h-24", tone: "bg-slate-200", ring: "ring-slate-100", textTone: "text-slate-600" },
+    { place: 1, entry: top3[0], height: "h-28 sm:h-32", tone: "bg-indigo-600", ring: "ring-indigo-200", textTone: "text-indigo-600" },
+    { place: 3, entry: top3[2], height: "h-16 sm:h-20", tone: "bg-amber-700/80", ring: "ring-amber-100", textTone: "text-amber-800" },
   ];
 
   return (
-    <Card className="relative overflow-hidden rounded-3xl border-none bg-white shadow-[0_22px_60px_-36px_rgba(15,23,42,0.55)] ring-1 ring-indigo-100 w-full">
-      <div className="absolute -right-14 -top-14 h-40 w-40 rounded-full bg-indigo-600/10" />
-      <div className="absolute -left-20 -bottom-20 h-56 w-56 rounded-full bg-sky-600/10" />
+    <Card className="relative overflow-hidden rounded-[2.5rem] border-none bg-white shadow-[0_30px_100px_-20px_rgba(0,0,0,0.12)] p-6 sm:p-8 animate-in zoom-in-95 duration-700">
+      <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-600/5 blur-3xl" />
+      <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-sky-600/5 blur-3xl" />
 
-      <div className="relative p-5 sm:p-6">
-        <div className="flex items-center justify-between gap-4 mb-2">
-          <div className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-amber-500" />
-            <div className="text-lg font-black tracking-tight text-slate-900 uppercase">Pódio de Performance</div>
-          </div>
-
-          <div className="flex bg-slate-100 p-1 rounded-xl">
-            <button 
-              onClick={() => setType("WEEK")}
-              className={cn(
-                "px-3 py-1 text-[10px] font-bold rounded-lg transition-all",
-                type === "WEEK" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
-              )}
-            >SEMANA</button>
-            <button 
-              onClick={() => setType("MONTH")}
-              className={cn(
-                "px-3 py-1 text-[10px] font-bold rounded-lg transition-all",
-                type === "MONTH" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
-              )}
-            >MÊS</button>
+      <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-amber-500 rounded-2xl text-white shadow-lg shadow-amber-200">
+              <Trophy className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tighter">HALL DA FAMA</h2>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="outline" className="border-indigo-100 bg-indigo-50/50 text-indigo-600 font-bold uppercase text-[10px] tracking-widest rounded-full">
+                  Elite Performance
+                </Badge>
+                <div className="h-1 w-1 rounded-full bg-slate-300" />
+                <button 
+                  onClick={onToggleTimeframe}
+                  className="text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors underline decoration-2 underline-offset-4"
+                >
+                  Ver {isMonthly ? "da Semana" : "do Mês"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-        
-        <p className="text-xs text-slate-500 font-medium mb-6">
-          {type === "WEEK" ? "Desde segunda-feira" : "Deste o dia 1º"} • Baseado em avanço no funil
-        </p>
 
-        {top3.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500">
-            A disputa ainda não começou. Avance um lead para aparecer aqui!
-          </div>
-        ) : (
-          <div className="mt-6 grid grid-cols-3 items-end gap-3">
-            {slots.map((s) => (
-              <div key={s.place} className="flex flex-col items-center">
-                <div className="mb-2 flex items-center gap-2">
-                  <Avatar className={cn("h-10 w-10 ring-2", s.ring)}>
-                    <AvatarFallback className="bg-white text-slate-900 font-bold">
-                      {s.entry ? initials(s.entry.name) : s.place}
-                    </AvatarFallback>
-                  </Avatar>
-                  {s.place === 1 && (
-                    <div className="rounded-full bg-amber-500/15 p-1.5 text-amber-700">
-                      <Crown className="h-4 w-4" />
-                    </div>
-                  )}
-                </div>
+        <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+          <Button 
+            variant={!isMonthly ? "default" : "ghost"} 
+            size="sm" 
+            onClick={() => !isMonthly ? null : onToggleTimeframe?.()}
+            className={cn("rounded-xl text-xs font-bold px-4 transition-all", !isMonthly ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500")}
+          >
+            Semana
+          </Button>
+          <Button 
+            variant={isMonthly ? "default" : "ghost"} 
+            size="sm" 
+            onClick={() => isMonthly ? null : onToggleTimeframe?.()}
+            className={cn("rounded-xl text-xs font-bold px-4 transition-all", isMonthly ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500")}
+          >
+            Mês
+          </Button>
+        </div>
+      </div>
 
-                <div
-                  className={cn(
-                    "w-full rounded-3xl",
-                    "shadow-[0_18px_50px_-36px_rgba(15,23,42,0.75)]",
-                    "ring-1",
-                    s.ring,
-                    "dashboard-float",
-                    "transform-gpu",
-                    "transition-transform duration-300 hover:-translate-y-1",
-                    s.height,
-                    s.tone
-                  )}
-                  style={{ animationDelay: s.place === 1 ? "120ms" : s.place === 2 ? "0ms" : "240ms" }}
-                />
-
-                <div className="mt-3 text-center">
-                  <div className="text-xs font-semibold text-slate-500">{s.place}º lugar</div>
-                  <div className="mt-0.5 text-sm font-extrabold text-slate-900">
-                    {s.entry?.name ?? "—"}
+      {top3.length === 0 ? (
+        <div className="py-12 text-center text-slate-400 font-medium italic bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+          A batalha está apenas começando... Aguardando os primeiros avanços no funil.
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 items-end gap-2 sm:gap-6 max-w-2xl mx-auto">
+          {slots.map((s) => (
+            <div key={s.place} className="flex flex-col items-center group">
+              <div className="relative mb-4 flex flex-col items-center">
+                <Avatar className={cn(
+                  "h-14 w-14 sm:h-20 sm:w-20 ring-4 shadow-xl transition-all duration-500 group-hover:scale-110", 
+                  s.place === 1 ? "ring-indigo-100" : "ring-white"
+                )}>
+                  <AvatarFallback className={cn("text-lg sm:text-2xl font-black", s.place === 1 ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600")}>
+                    {s.entry ? initials(s.entry.name) : s.place}
+                  </AvatarFallback>
+                </Avatar>
+                
+                {s.place === 1 && (
+                  <div className="absolute -top-6 bg-amber-400 p-2 rounded-xl shadow-lg animate-bounce">
+                    <Crown className="h-5 w-5 text-white" />
                   </div>
-                  <div className="mt-1 flex items-center justify-center gap-2">
-                    <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-bold text-white">
-                      {s.entry ? `${s.entry.points} pts` : "0 pts"}
-                    </span>
-                    {s.entry && (
-                      <span className="text-[11px] font-semibold text-slate-500">{s.entry.subtitle}</span>
-                    )}
-                  </div>
+                )}
+                
+                <div className={cn(
+                  "absolute -bottom-2 rounded-full px-3 py-0.5 text-[10px] font-black text-white shadow-md",
+                  s.place === 1 ? "bg-indigo-600" : s.place === 2 ? "bg-slate-500" : "bg-amber-800"
+                )}>
+                  #{s.place}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
 
-        <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {["DOCS_REQUESTED", "VISIT_SCHEDULED", "IN_PROGRESS"].map((k) => (
-            <div
-              key={k}
-              className="rounded-2xl bg-white ring-1 ring-slate-200 p-3 shadow-sm dashboard-tilt"
-            >
-              <div className="text-xs font-semibold text-slate-500">Como pontuamos</div>
-              <div className="mt-1 text-sm font-bold text-slate-900">
-                {k === "DOCS_REQUESTED" && "Documento (3 pts)"}
-                {k === "VISIT_SCHEDULED" && "Visita (2 pts)"}
-                {k === "IN_PROGRESS" && "Atendimento (1 pt)"}
+              <div
+                className={cn(
+                  "w-full rounded-t-[2.5rem] rounded-b-3xl shadow-inner transition-all duration-700 dashboard-float",
+                  s.height,
+                  s.place === 1 ? "bg-indigo-600 shadow-[0_20px_50px_-10px_rgba(79,70,229,0.4)]" : 
+                  s.place === 2 ? "bg-slate-200" : "bg-amber-700/80"
+                )}
+                style={{ animationDelay: `${s.place * 150}ms` }}
+              >
+                <div className="flex h-full items-center justify-center">
+                   <Sparkles className={cn("h-6 w-6 opacity-20 text-white", s.place === 1 ? "animate-pulse" : "hidden")} />
+                </div>
+              </div>
+
+              <div className="mt-4 text-center w-full">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{s.place === 1 ? "O Melhor" : s.place === 2 ? "Vice-Líder" : "No Topo"}</p>
+                <h3 className="mt-1 text-sm sm:text-lg font-black text-slate-900 truncate px-2">{s.entry?.name ?? "—"}</h3>
+                
+                {s.entry && (
+                  <div className="mt-3 flex flex-col items-center gap-2">
+                    <div className="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1 rounded-full text-[11px] font-black shadow-sm">
+                      <TrendingUp className="h-3 w-3 text-emerald-400" />
+                      {s.entry.points} PTS
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => onOpenKPIs?.(s.entry!.id, s.entry!.name)}
+                      className="h-7 text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 rounded-full"
+                    >
+                      <BarChart3 className="h-3 w-3 mr-1" /> Ver KPIs
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
         </div>
-      </div>
+      )}
     </Card>
   );
 }

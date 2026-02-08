@@ -16,6 +16,7 @@ import TaskForm from "@/components/broker/TaskForm";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
+import BrokerKPIs from "@/components/dashboard/BrokerKPIs";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
@@ -24,6 +25,10 @@ const Dashboard = () => {
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [filter, setFilter] = useState<LeadStatus | "ACTIVE" | "ALL">("ACTIVE");
+  
+  // New States for Leaderboard and KPIs
+  const [isMonthly, setIsMonthly] = useState(false);
+  const [showKPIsFor, setShowKPIsFor] = useState<{ id: string; name: string } | null>(null);
 
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
@@ -39,6 +44,11 @@ const Dashboard = () => {
     const email = user?.email ?? "";
     return email.split("@")[0] || "Corretor";
   }, [user?.email]);
+
+  const leadsForKPIs = useMemo(() => {
+    if (!showKPIsFor) return [];
+    return leads.filter(l => l.brokerId === showKPIsFor.id);
+  }, [leads, showKPIsFor]);
 
   const stats = useMemo(() => {
     const active = leads.filter(l => l.status !== 'ABANDONED' && l.status !== 'EXCLUDED');
@@ -103,84 +113,93 @@ const Dashboard = () => {
       </header>
 
       <main className="max-w-[1600px] mx-auto p-6">
-        {/* NEW: Competitive Podium Section (Weekly/Monthly) */}
-        <section className="mb-8 flex justify-center">
-          <div className="w-full max-w-4xl">
-            <LeaderboardPodium 
-              leads={leads} 
-              users={profiles} 
-              title="Elite da Semana" 
-              subtitle="Quem está dominando o fechamento nesta semana"
-            />
-          </div>
-        </section>
+        {showKPIsFor ? (
+          <BrokerKPIs 
+            leads={leadsForKPIs} 
+            brokerName={showKPIsFor.name} 
+            onBack={() => setShowKPIsFor(null)} 
+          />
+        ) : (
+          <>
+            {/* Podium Section */}
+            <section className="mb-10 max-w-4xl mx-auto">
+              <LeaderboardPodium 
+                leads={leads} 
+                users={profiles} 
+                isMonthly={isMonthly}
+                onToggleTimeframe={() => setIsMonthly(!isMonthly)}
+                onOpenKPIs={(id, name) => setShowKPIsFor({ id, name })}
+              />
+            </section>
 
-        {/* NEW: Unified Pipeline Stats (Horizontal Bar) */}
-        <section className="mb-8">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <PipelineStat 
-              label="Novos" 
-              count={stats.new} 
-              active={filter === 'NEW'} 
-              onClick={() => setFilter('NEW')}
-              color="sky"
-              icon={Sparkles}
-            />
-            <PipelineStat 
-              label="Em Atendimento" 
-              count={stats.in_progress} 
-              active={filter === 'IN_PROGRESS'} 
-              onClick={() => setFilter('IN_PROGRESS')}
-              color="indigo"
-              icon={Users2}
-            />
-            <PipelineStat 
-              label="Visitas" 
-              count={stats.visits} 
-              active={filter === 'VISIT_SCHEDULED'} 
-              onClick={() => setFilter('VISIT_SCHEDULED')}
-              color="emerald"
-              icon={Calendar}
-            />
-            <PipelineStat 
-              label="Documentação" 
-              count={stats.docs} 
-              active={filter === 'DOCS_REQUESTED'} 
-              onClick={() => setFilter('DOCS_REQUESTED')}
-              color="amber"
-              icon={FileText}
-            />
-            <PipelineStat 
-              label="Total Ativos" 
-              count={stats.activeCount} 
-              active={filter === 'ACTIVE'} 
-              onClick={() => setFilter('ACTIVE')}
-              color="slate"
-              icon={TrendingUp}
-            />
-          </div>
-        </section>
+            {/* NEW: Unified Pipeline Stats (Horizontal Bar) */}
+            <section className="mb-8">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <PipelineStat 
+                  label="Novos" 
+                  count={stats.new} 
+                  active={filter === 'NEW'} 
+                  onClick={() => setFilter('NEW')}
+                  color="sky"
+                  icon={Sparkles}
+                />
+                <PipelineStat 
+                  label="Em Atendimento" 
+                  count={stats.in_progress} 
+                  active={filter === 'IN_PROGRESS'} 
+                  onClick={() => setFilter('IN_PROGRESS')}
+                  color="indigo"
+                  icon={Users2}
+                />
+                <PipelineStat 
+                  label="Visitas" 
+                  count={stats.visits} 
+                  active={filter === 'VISIT_SCHEDULED'} 
+                  onClick={() => setFilter('VISIT_SCHEDULED')}
+                  color="emerald"
+                  icon={Calendar}
+                />
+                <PipelineStat 
+                  label="Documentação" 
+                  count={stats.docs} 
+                  active={filter === 'DOCS_REQUESTED'} 
+                  onClick={() => setFilter('DOCS_REQUESTED')}
+                  color="amber"
+                  icon={FileText}
+                />
+                <PipelineStat 
+                  label="Total Ativos" 
+                  count={stats.activeCount} 
+                  active={filter === 'ACTIVE'} 
+                  onClick={() => setFilter('ACTIVE')}
+                  color="slate"
+                  icon={TrendingUp}
+                />
+              </div>
+            </section>
 
-        {/* Unified Workflow Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-220px)]">
-          {/* Left: The Action Queue (Leads + Tasks integrated) */}
-          <div className="lg:col-span-4 flex flex-col h-full overflow-hidden">
-            <LeadList
-              selectedLeadId={selectedLeadId}
-              onSelectLead={setSelectedLeadId}
-              currentUserRole={role || "BROKER"}
-              filter={filter}
-            />
-          </div>
+            {/* Unified Workflow Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-220px)]">
+              {/* Left: The Action Queue (Leads + Tasks integrated) */}
+              <div className="lg:col-span-4 flex flex-col h-full overflow-hidden">
+                <LeadList
+                  selectedLeadId={selectedLeadId}
+                  onSelectLead={setSelectedLeadId}
+                  currentUserRole={role || "BROKER"}
+                  filter={filter}
+                />
+              </div>
 
-          {/* Right: The Workspace (Detail + AI + Cadence) */}
-          <div className="lg:col-span-8 h-full">
-            <LeadDetail 
-              leadId={selectedLeadId} 
-              onLeadUpdated={() => setSelectedLeadId(null)} 
-            />
-          </div>
-        </div>
+              {/* Right: The Workspace (Detail + AI + Cadence) */}
+              <div className="lg:col-span-8 h-full">
+                <LeadDetail 
+                  leadId={selectedLeadId} 
+                  onLeadUpdated={() => setSelectedLeadId(null)} 
+                />
+              </div>
+            </div>
+          </>
+        )}
       </main>
 
       <TaskForm
