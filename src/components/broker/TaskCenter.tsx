@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { AlarmClock, CheckCircle2, Clock, History, Link2, RefreshCw } from "lucide-react";
+import { AlarmClock, CheckCircle2, Clock, History, Link2, RefreshCw, AlertCircle } from "lucide-react";
 
 function minutesDiff(dueAtIso: string, now: number) {
   return Math.round((new Date(dueAtIso).getTime() - now) / 60000);
@@ -147,22 +147,15 @@ export default function TaskCenter({
                   key={t.id}
                   className={cn(
                     "rounded-2xl bg-white/80 backdrop-blur ring-1 ring-slate-200 p-3 shadow-sm",
-                    "dashboard-tilt",
-                    isSoon && "ring-2 ring-amber-400",
-                    isOverdue && "ring-2 ring-rose-500"
+                    "dashboard-tilt transition-all duration-500",
+                    isSoon && "ring-2 ring-amber-400 bg-amber-50 shadow-[0_0_20px_rgba(245,158,11,0.2)]",
+                    isOverdue && "ring-2 ring-rose-500 bg-rose-50 shadow-[0_0_20px_rgba(225,29,72,0.2)] animate-pulse"
                   )}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <div
-                          className={cn(
-                            "h-2.5 w-2.5 rounded-full",
-                            toneMeta.dot,
-                            isSoon && "animate-pulse",
-                            isOverdue && "animate-pulse"
-                          )}
-                        />
+                        {isOverdue && <AlertCircle className="h-3.5 w-3.5 text-rose-600 shrink-0" />}
                         <div className="font-semibold text-slate-900 truncate">{t.title}</div>
                       </div>
 

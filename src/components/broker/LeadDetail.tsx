@@ -10,11 +10,12 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import CadenceFlow from "./CadenceFlow";
 import AIAssistant from "./AIAssistant";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import TaskForm from "./TaskForm";
 
 interface LeadDetailProps {
   leadId: string | null;
@@ -30,7 +31,7 @@ const statusLabels: Record<LeadStatus, string> = {
   ABANDONED: "ABANDONADO",
 };
 
-const exclusionReasons: Record<ExclusionReason, string> = {
+const exclusionReasons: Record<string, string> = {
   WRONG_NUMBER: "Número errado / Inexistente",
   NO_INTEREST: "Sem interesse no momento",
   NO_PROFILE: "Sem perfil de compra",
@@ -42,6 +43,10 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
   const queryClient = useQueryClient();
   const [isExclusionDialogOpen, setIsExclusionDialogOpen] = useState(false);
   const [selectedExclusionReason, setSelectedExclusionReason] = useState<ExclusionReason | null>(null);
+  
+  // States for mandatory next step
+  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
+  const [pendingStatusUpdate, setPendingStatusUpdate] = useState<LeadStatus | null>(null);
 
   const { data: leads = [], isLoading } = useQuery<Lead[]>({
     queryKey: ['dashboardLeads'],
@@ -57,8 +62,15 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] });
       queryClient.invalidateQueries({ queryKey: ['adminLeads'] });
-      toast.success("Status do lead atualizado.");
-      onLeadUpdated();
+      toast.success("Ação registrada! Agora defina o próximo contato.");
+      
+      // AFTER status update, force opening TaskForm for mandatory follow-up
+      if (pendingStatusUpdate !== 'ABANDONED' && pendingStatusUpdate !== 'EXCLUDED') {
+        setIsTaskFormOpen(true);
+      } else {
+        onLeadUpdated();
+      }
+      setPendingStatusUpdate(null);
     },
     onError: (err: any) => {
       toast.error(`Falha ao atualizar status: ${err.message}`);
@@ -86,9 +98,7 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
   }
 
   const handleStatusChange = (status: LeadStatus) => {
-    // Se o corretor está movendo para EXCLUDED, ele está desqualificando o lead permanentemente.
-    // Se ele está movendo para ABANDONED, ele está enviando para Retrabalho.
-    // Vamos assumir que a ação de "Excluir Lead" no frontend significa enviar para Retrabalho (ABANDONED).
+    setPendingStatusUpdate(status);
     if (status === 'ABANDONED') {
       setIsExclusionDialogOpen(true);
       return;
@@ -101,7 +111,7 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
       toast.error("Selecione o motivo do abandono.");
       return;
     }
-    // Mudar para ABANDONED para que apareça na aba de Retrabalho
+    setPendingStatusUpdate('ABANDONED');
     updateStatusMutation.mutate({ status: 'ABANDONED', reason: selectedExclusionReason });
     setIsExclusionDialogOpen(false);
   };
@@ -109,8 +119,19 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
   const isBusy = updateStatusMutation.isPending;
 
   return (
-    <Card className="shadow-xl border-none h-[80vh] flex flex-col">
-      <CardHeader className="p-4 border-b bg-white rounded-t-2xl">
+    <Card className="shadow-xl border-none h-[80vh] flex flex-col rounded-3xl overflow-hidden bg-white ring-1 ring-slate-200">
+      <TaskForm 
+        open={isTaskFormOpen} 
+        onOpenChange={(open) => {
+          setIsTaskFormOpen(open);
+          if (!open) onLeadUpdated(); // Finalize view once task is handled (or dismissed)
+        }}
+        userId={lead.brokerId || ''}
+        leads={leads}
+        defaultLeadId={lead.id}
+      />
+      
+      <CardHeader className="p-6 border-b bg-white">
         <CardTitle className="text-2xl font-bold text-gray-900">{lead.name}</CardTitle>
         <div className="flex items-center gap-4 text-sm text-gray-500">
           <p className="flex items-center gap-1"><Phone className="w-4 h-4" /> {lead.phone}</p>

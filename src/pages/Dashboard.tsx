@@ -17,6 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import TaskCenter from "@/components/broker/TaskCenter";
 import TaskForm from "@/components/broker/TaskForm";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Zap, Flame, Calendar, Clock, Target, AlertCircle } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
@@ -27,7 +29,7 @@ const Dashboard = () => {
   const [filter, setFilter] = useState<FunnelFilter>("ACTIVE");
   const [viewMode, setViewMode] = useState("leads");
 
-  const { data: leads = [] } = useQuery<Lead[]>({
+  const { data: leads = [], refetch: refetchLeads } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
     queryFn: fetchLeadsForDashboard,
   });
@@ -42,6 +44,20 @@ const Dashboard = () => {
     return email.split("@")[0] || "Corretor";
   }, [user?.email]);
 
+  // Mission Logic: Grouping leads by "Intent and Urgency" instead of just status
+  const missions = useMemo(() => {
+    const now = Date.now();
+    return {
+      urgent: leads.filter(l => {
+        const isNew = l.status === 'NEW';
+        const hoursSinceCreated = (now - new Date(l.createdAt).getTime()) / (1000 * 60 * 60);
+        return isNew || (l.status === 'IN_PROGRESS' && hoursSinceCreated > 24);
+      }),
+      pipeline: leads.filter(l => l.status === 'VISIT_SCHEDULED' || l.status === 'DOCS_REQUESTED'),
+      regular: leads.filter(l => l.status === 'IN_PROGRESS'),
+    };
+  }, [leads]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -51,7 +67,7 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
       {/* Top chrome */}
       <header className="sticky top-0 z-30 bg-white/70 backdrop-blur border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4">
@@ -127,50 +143,65 @@ const Dashboard = () => {
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-8 py-6 sm:py-8">
         <div className="relative">
-          <div className="pointer-events-none absolute -top-10 right-0 h-52 w-52 rounded-full bg-indigo-600/10 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-12 left-0 h-52 w-52 rounded-full bg-sky-600/10 blur-2xl" />
-
-          <section className="relative">
-            <div className="flex items-end justify-between gap-4 flex-wrap">
-              <div>
-                <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 flex items-center gap-3">
-                  Funil de Conversão
-                  <Badge className="bg-indigo-100 text-indigo-700 border-none rounded-full px-3 py-1 font-bold">
-                    {leads.length} total
-                  </Badge>
-                </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Filtre por etapa para focar nas ações de hoje.
-                </p>
+          <section className="relative mb-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-200">
+                <Target className="h-6 w-6" />
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={filter === "ALL" ? "default" : "outline"}
-                  onClick={() => setFilter("ALL")}
-                  className="rounded-xl h-9 text-xs font-bold shadow-sm transition-all active:scale-95"
-                >
-                  Ver Tudo
-                </Button>
-                <Button
-                  variant={filter === "ACTIVE" ? "default" : "outline"}
-                  onClick={() => setFilter("ACTIVE")}
-                  className="rounded-xl h-9 text-xs font-bold shadow-sm transition-all active:scale-95"
-                >
-                  Ativos
-                </Button>
+              <div>
+                <h2 className="text-3xl font-black tracking-tight">Painel de Missões</h2>
+                <p className="text-slate-500 font-medium text-sm">Pare de "olhar leads" e comece a "executar vendas".</p>
               </div>
             </div>
 
-            <div className="mt-6">
-              <FunnelStageCards
-                leads={leads}
-                value={filter}
-                onChange={(v) => {
-                  setFilter(v);
-                  setSelectedLeadId(null);
-                  setViewMode("leads");
-                }}
-              />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Mission 1: Speed to Lead */}
+              <Card className="relative overflow-hidden rounded-3xl border-none bg-white shadow-[0_20px_50px_-20px_rgba(225,29,72,0.3)] ring-1 ring-rose-100 transition-all hover:scale-[1.02]">
+                <div className="absolute top-0 right-0 p-4">
+                  <Flame className="h-6 w-6 text-rose-500 animate-pulse" />
+                </div>
+                <div className="p-6">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 bg-rose-50 px-2 py-1 rounded-full">Urgente</span>
+                  <h3 className="text-xl font-extrabold mt-3">Fogo no Funil</h3>
+                  <p className="text-sm text-slate-500 mt-1">Leads novos ou sem resposta.</p>
+                  <div className="mt-6 flex items-end justify-between">
+                    <span className="text-4xl font-black text-slate-900">{missions.urgent.length}</span>
+                    <Button variant="ghost" size="sm" className="text-rose-600 hover:bg-rose-50 font-bold" onClick={() => {setFilter('NEW'); setViewMode('leads');}}>Resolver Agora</Button>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Mission 2: Money in the Pipeline */}
+              <Card className="relative overflow-hidden rounded-3xl border-none bg-white shadow-[0_20px_50px_-20px_rgba(79,70,229,0.3)] ring-1 ring-indigo-100 transition-all hover:scale-[1.02]">
+                <div className="absolute top-0 right-0 p-4">
+                  <Zap className="h-6 w-6 text-indigo-500" />
+                </div>
+                <div className="p-6">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 bg-indigo-50 px-2 py-1 rounded-full">Pipeline</span>
+                  <h3 className="text-xl font-extrabold mt-3">Dinheiro na Mesa</h3>
+                  <p className="text-sm text-slate-500 mt-1">Visitas e Documentação.</p>
+                  <div className="mt-6 flex items-end justify-between">
+                    <span className="text-4xl font-black text-slate-900">{missions.pipeline.length}</span>
+                    <Button variant="ghost" size="sm" className="text-indigo-600 hover:bg-indigo-50 font-bold" onClick={() => {setFilter('VISIT_SCHEDULED'); setViewMode('leads');}}>Fechar Venda</Button>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Mission 3: Follow-up Control */}
+              <Card className="relative overflow-hidden rounded-3xl border-none bg-white shadow-[0_20px_50px_-20px_rgba(16,185,129,0.3)] ring-1 ring-emerald-100 transition-all hover:scale-[1.02]">
+                <div className="absolute top-0 right-0 p-4">
+                  <Calendar className="h-6 w-6 text-emerald-500" />
+                </div>
+                <div className="p-6">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 bg-emerald-50 px-2 py-1 rounded-full">Rotina</span>
+                  <h3 className="text-xl font-extrabold mt-3">Controle de Fluxo</h3>
+                  <p className="text-sm text-slate-500 mt-1">Manter a cadência ativa.</p>
+                  <div className="mt-6 flex items-end justify-between">
+                    <span className="text-4xl font-black text-slate-900">{missions.regular.length}</span>
+                    <Button variant="ghost" size="sm" className="text-emerald-600 hover:bg-emerald-50 font-bold" onClick={() => {setFilter('IN_PROGRESS'); setViewMode('leads');}}>Dar Feedback</Button>
+                  </div>
+                </div>
+              </Card>
             </div>
           </section>
 
