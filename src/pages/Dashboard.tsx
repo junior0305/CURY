@@ -79,9 +79,12 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
-      <AchievementTicker />
+      <div className="sticky top-0 z-50">
+        <AchievementTicker />
+      </div>
+      
       {/* Optimized Slim Header */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/60 px-6 py-3">
+      <header className="sticky top-12 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/60 px-4 sm:px-6 py-3">
         <div className="max-w-[1600px] mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
             <div className="h-9 w-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-indigo-200 shadow-lg">
@@ -154,8 +157,8 @@ const Dashboard = () => {
             </section>
 
             {/* NEW: Unified Pipeline Stats (Horizontal Bar) */}
-            <section className="mb-8">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <section className="mb-6 sm:mb-8">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
                 <PipelineStat 
                   label="Novos" 
                   count={stats.new} 
@@ -200,9 +203,9 @@ const Dashboard = () => {
             </section>
 
             {/* Unified Workflow Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-220px)]">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[calc(100vh-250px)]">
               {/* Left: The Action Queue (Leads + Tasks integrated) */}
-              <div className="lg:col-span-4 flex flex-col h-full overflow-hidden">
+              <div className="lg:col-span-4 flex flex-col h-[500px] lg:h-full overflow-hidden">
                 <LeadList
                   selectedLeadId={selectedLeadId}
                   onSelectLead={setSelectedLeadId}

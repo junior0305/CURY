@@ -1,14 +1,13 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Rocket, Trophy, Target, ArrowRight } from "lucide-react";
+import { Trophy, Target, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function AchievementTicker() {
   const { data: achievements = [] } = useQuery({
     queryKey: ["public-achievements"],
     queryFn: async () => {
-      // IMPORTANTE: Buscamos conquistas que foram APROVADAS pelo Admin para o mural da fama
       const { data, error } = await supabase
         .from("achievements")
         .select(`
@@ -19,45 +18,51 @@ export default function AchievementTicker() {
           status,
           profiles (first_name, last_name)
         `)
-        .eq('status', 'APPROVED') // Apenas o que o Admin deu OK
+        .eq('status', 'APPROVED')
         .order("created_at", { ascending: false })
-        .limit(15);
+        .limit(5);
       if (error) throw error;
       return data;
     },
-    refetchInterval: 5000, // Atualiza mais rápido (5s) para dar sensação de tempo real
+    refetchInterval: 5000,
   });
 
-  if (achievements.length === 0) return (
-    <div className="bg-slate-900 h-10 flex items-center border-y border-slate-800 text-slate-500 text-[10px] uppercase font-bold px-4 gap-2">
-      <Trophy className="h-3 w-3" />
-      Aguardando os próximos campeões de venda...
-    </div>
-  );
-
   return (
-    <div className="relative overflow-hidden bg-slate-900 h-10 flex items-center border-y border-slate-800 shadow-2xl">
-      <div className="absolute left-0 top-0 bottom-0 px-4 bg-indigo-600 text-white flex items-center gap-2 z-10 font-black text-[10px] tracking-widest uppercase italic">
-        <Rocket className="h-3.5 w-3.5 animate-bounce" />
-        Wall of Fame
+    <div className="relative overflow-hidden bg-[#0F172A] h-12 flex items-center border-b border-indigo-500/30 shadow-[0_4px_20px_rgba(79,70,229,0.4)] z-50">
+      <div className="absolute left-0 top-0 bottom-0 px-3 sm:px-6 bg-indigo-600 text-white flex items-center gap-2 z-20 font-black text-[10px] sm:text-xs tracking-tighter uppercase italic skew-x-[-12deg] -ml-2">
+        <div className="skew-x-[12deg] flex items-center gap-2">
+          <Trophy className="h-4 w-4 text-amber-300 animate-pulse" />
+          <span className="hidden sm:inline">Wall of Fame</span>
+          <span className="sm:hidden">LÍDERES</span>
+        </div>
       </div>
       
-      <div className="flex animate-marquee whitespace-nowrap gap-12 items-center pl-[140px]">
-        {achievements.map((ach: any) => (
-          <div key={ach.id} className="flex items-center gap-3 group cursor-default">
-            <div className="flex items-center gap-2">
-              <span className="text-white font-black text-xs uppercase tracking-tighter">
-                {ach.profiles?.first_name || "Corretor"}
-              </span>
-              <span className="text-slate-400 font-medium text-[11px]">acaba de ganhar</span>
-              <span className="bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-md border border-indigo-500/30 text-[11px] font-bold">
-                {ach.reward_label}
-              </span>
-            </div>
-            <div className="h-1 w-1 rounded-full bg-slate-700" />
-          </div>
-        ))}
-        {/* Duplicate for seamless loop if needed, but for now simple list */}
+      <div className="flex w-full overflow-hidden">
+        <div className="flex animate-marquee whitespace-nowrap gap-8 sm:gap-16 items-center pl-32">
+          {achievements.length === 0 ? (
+            <span className="text-indigo-300/50 font-bold text-[10px] sm:text-xs uppercase tracking-widest animate-pulse">
+              Aguardando o próximo fechamento de elite...
+            </span>
+          ) : (
+            // Duplicate the list to ensure a smooth continuous loop
+            [...achievements, ...achievements].map((ach: any, idx) => (
+              <div key={`${ach.id}-${idx}`} className="flex items-center gap-3 py-1 px-3 bg-white/5 rounded-full border border-white/10">
+                <div className="flex items-center gap-2">
+                  <span className="text-white font-black text-xs sm:text-sm uppercase tracking-tighter">
+                    {ach.profiles?.first_name || "Corretor"}
+                  </span>
+                  <span className="text-indigo-400 font-black text-[10px] sm:text-xs tracking-widest uppercase">
+                    GANHOU:
+                  </span>
+                  <span className="bg-indigo-500 text-white px-2 py-0.5 rounded-lg text-[10px] sm:text-xs font-black shadow-[0_0_15px_rgba(99,102,241,0.5)]">
+                    {ach.reward_label}
+                  </span>
+                </div>
+                <div className="h-1 w-1 rounded-full bg-indigo-500/50" />
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

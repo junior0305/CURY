@@ -21,6 +21,7 @@ const statusLabels: Record<LeadStatus, string> = {
   IN_PROGRESS: "EM ATENDIMENTO",
   VISIT_SCHEDULED: "VISITA AGENDADA",
   DOCS_REQUESTED: "DOCUMENTO SOLICITADO",
+  CONCLUDED: "VENDA CONCLUÍDA",
   EXCLUDED: "EXCLUÍDO",
   ABANDONED: "ABANDONADO",
 };
@@ -30,6 +31,7 @@ const statusColors: Record<LeadStatus, string> = {
   IN_PROGRESS: "bg-blue-600",
   VISIT_SCHEDULED: "bg-emerald-600",
   DOCS_REQUESTED: "bg-amber-600",
+  CONCLUDED: "bg-indigo-600",
   EXCLUDED: "bg-slate-500",
   ABANDONED: "bg-rose-600",
 };
@@ -91,13 +93,13 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: Lea
   }
 
   return (
-    <Card className="h-full flex flex-col rounded-[2.5rem] bg-white border border-slate-200/60 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.1)] overflow-hidden">
-      <CardHeader className="p-6 border-b border-slate-100 shrink-0">
+    <Card className="h-full flex flex-col rounded-3xl sm:rounded-[2.5rem] bg-white border border-slate-200/60 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.1)] overflow-hidden">
+      <CardHeader className="p-4 sm:p-6 border-b border-slate-100 shrink-0">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-xl font-black text-slate-900 tracking-tight">Fila de Ação</CardTitle>
+          <CardTitle className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">Fila de Ação</CardTitle>
           <Badge className="rounded-full bg-indigo-600 text-white font-bold">{processedLeads.length}</Badge>
         </div>
-        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Sugerido por ordem de urgência</p>
+        <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ordem de urgência</p>
       </CardHeader>
       
       <CardContent className="p-0 flex-1 overflow-y-auto bg-slate-50/30">
