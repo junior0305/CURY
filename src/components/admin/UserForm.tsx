@@ -39,9 +39,20 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
     queryFn: fetchTeams,
   });
 
+  // Filter the managers list based on the role of the user being created/edited
   const filteredManagers = useMemo(() => {
-    if (formData.role === 'MANAGER') return allManagers.filter(m => m.role === 'SUPERINTENDENT');
-    if (formData.role === 'BROKER') return allManagers;
+    console.log("Filtering managers for role:", formData.role, "Total managers available:", allManagers.length);
+    if (formData.role === 'MANAGER') {
+      // Managers report to Superintendents
+      const supers = allManagers.filter(m => m.role === 'SUPERINTENDENT');
+      console.log("Found Superintendents for Manager:", supers.length);
+      return supers;
+    }
+    if (formData.role === 'BROKER') {
+      // Brokers usually report to Managers, but can report to Superintendents
+      console.log("Returning all managers for Broker");
+      return allManagers;
+    }
     return [];
   }, [allManagers, formData.role]);
 
@@ -181,7 +192,12 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
             <Label>Função</Label>
             <Select 
               value={formData.role || "BROKER"} 
-              onValueChange={(value) => handleChange("role", value as UserRole)} 
+              onValueChange={(value) => {
+                const newRole = value as UserRole;
+                console.log("Changing role to:", newRole);
+                handleChange("role", newRole);
+                // We keep the managerId if it's still valid, or reset if not
+              }} 
               disabled={busy}
             >
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -198,17 +214,27 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
               <Label>Gestor Responsável</Label>
               <Select 
                 value={formData.managerId || "none"} 
-                onValueChange={(value) => handleChange("managerId", value)}
-                disabled={busy}
+                onValueChange={(value) => {
+                  console.log("Selecting managerId:", value);
+                  handleChange("managerId", value);
+                }}
+                disabled={busy || isLoadingManagers}
               >
                 <SelectTrigger><SelectValue placeholder="Selecione o gestor" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Nenhum</SelectItem>
+                  <SelectItem value="none">Nenhum (Direto)</SelectItem>
                   {filteredManagers.map(manager => (
-                    <SelectItem key={manager.id} value={manager.id}>{manager.name}</SelectItem>
+                    <SelectItem key={manager.id} value={manager.id}>
+                      {manager.name} ({manager.role === 'SUPERINTENDENT' ? 'Super' : 'Gerente'})
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-[10px] text-slate-400">
+                {filteredManagers.length === 0 
+                  ? "Nenhum gestor compatível encontrado." 
+                  : `${filteredManagers.length} gestores disponíveis.`}
+              </p>
             </div>
           )}
 

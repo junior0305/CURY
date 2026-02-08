@@ -64,6 +64,8 @@ export const fetchManagers = async (): Promise<User[]> => {
     }
     throw error;
   }
+
+  console.log("Managers fetched from DB:", profiles?.length);
   return (profiles || []).map(profile => mapProfileToUser(profile));
 };
 
