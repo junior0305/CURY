@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { Loader2, PlusCircle, LogOut, Sparkles } from "lucide-react";
+import { Loader2, PlusCircle, LogOut, Sparkles, BellPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
 import LeadForm from "@/components/broker/LeadForm";
@@ -14,11 +14,14 @@ import { fetchProfiles } from "@/integrations/supabase/profiles";
 import type { Lead } from "@/types/lead";
 import type { User } from "@/types/user";
 import { Badge } from "@/components/ui/badge";
+import TaskCenter from "@/components/broker/TaskCenter";
+import TaskForm from "@/components/broker/TaskForm";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
 
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
+  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FunnelFilter>("ACTIVE");
 
@@ -69,7 +72,18 @@ const Dashboard = () => {
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3">
-              <Sheet open={isFormOpen} onOpenChange={setIsFormOpen}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsTaskFormOpen(true)}
+                className="rounded-2xl bg-white/70 backdrop-blur border-slate-200 hover:bg-white"
+              >
+                <BellPlus className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Nova Tarefa</span>
+                <span className="sm:hidden">Tarefa</span>
+              </Button>
+
+              <Sheet open={isLeadFormOpen} onOpenChange={setIsLeadFormOpen}>
                 <SheetTrigger asChild>
                   <Button className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100">
                     <PlusCircle className="w-4 h-4 mr-2" />
@@ -78,7 +92,7 @@ const Dashboard = () => {
                   </Button>
                 </SheetTrigger>
                 <LeadForm
-                  onOpenChange={setIsFormOpen}
+                  onOpenChange={setIsLeadFormOpen}
                   brokerId={user?.id || ""}
                   managerId={(user as any)?.user_metadata?.manager_id || null}
                 />
@@ -102,6 +116,14 @@ const Dashboard = () => {
         </div>
       </header>
 
+      <TaskForm
+        open={isTaskFormOpen}
+        onOpenChange={setIsTaskFormOpen}
+        userId={user?.id || ""}
+        leads={leads}
+        defaultLeadId={selectedLeadId}
+      />
+
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-8 py-6 sm:py-8">
         <div className="relative">
@@ -111,9 +133,7 @@ const Dashboard = () => {
           <section className="relative">
             <div className="flex items-end justify-between gap-4 flex-wrap">
               <div>
-                <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
-                  Funil em cards
-                </h2>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">Funil em cards</h2>
                 <p className="mt-1 text-sm text-slate-600">
                   Visual rápido das etapas — clique para filtrar a lista.
                 </p>
@@ -128,11 +148,25 @@ const Dashboard = () => {
             </div>
 
             <div className="mt-4">
-              <FunnelStageCards leads={leads} value={filter} onChange={(v) => {
-                setFilter(v);
-                setSelectedLeadId(null);
-              }} />
+              <FunnelStageCards
+                leads={leads}
+                value={filter}
+                onChange={(v) => {
+                  setFilter(v);
+                  setSelectedLeadId(null);
+                }}
+              />
             </div>
+          </section>
+
+          <section className="relative mt-6">
+            <TaskCenter
+              leads={leads}
+              onOpenLead={(id) => {
+                setSelectedLeadId(id);
+                setFilter("ALL");
+              }}
+            />
           </section>
 
           <section className="relative mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
