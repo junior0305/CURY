@@ -58,22 +58,27 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ status, reason }: { status: LeadStatus, reason?: ExclusionReason }) => {
+      console.log(`Updating lead status to ${status} for lead ${leadId}`);
       const res = await updateLeadStatus(leadId!, status, reason);
       
       // Lógica de Ganho de Prêmio se for Venda ou Visita
       if (status === 'CONCLUDED' || status === 'VISIT_SCHEDULED') {
         const actionType = status === 'CONCLUDED' ? 'SALE' : 'VISIT';
+        console.log(`Checking reward config for ${actionType}...`);
         
         // Buscar config do prêmio no banco
-        const { data: config } = await supabase
+        const { data: config, error: configError } = await supabase
           .from('reward_configs')
           .select('*')
           .eq('action_type', actionType)
           .eq('is_active', true)
           .maybeSingle();
 
+        if (configError) console.error("Error fetching config:", configError);
+
         if (config) {
-          await supabase.from('achievements').insert({
+          console.log(`Inserting achievement for user ${lead.brokerId}...`);
+          const { error: achievementError } = await supabase.from('achievements').insert({
             user_id: lead.brokerId,
             lead_id: lead.id,
             action_type: actionType,
@@ -81,19 +86,29 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
             reward_value: config.amount_value,
             status: 'PENDING'
           });
+          
+          if (achievementError) console.error("Error inserting achievement:", achievementError);
+          else console.log("Achievement inserted successfully!");
+        } else {
+          console.warn(`No active reward config found for ${actionType}`);
         }
       }
       return res;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] });
       queryClient.invalidateQueries({ queryKey: ['adminLeads'] });
-      toast.success("Ação registrada! Agora defina o próximo contato.");
+      queryClient.invalidateQueries({ queryKey: ['my-achievements'] });
+      queryClient.invalidateQueries({ queryKey: ['public-achievements'] });
       
-      // AFTER status update, force opening TaskForm for mandatory follow-up
-      if (pendingStatusUpdate !== 'ABANDONED' && pendingStatusUpdate !== 'EXCLUDED') {
+      const { status } = variables;
+      
+      // EXCEPTION: If status is CONCLUDED, ABANDONED or EXCLUDED, do NOT force mandatory task
+      if (status !== 'CONCLUDED' && status !== 'ABANDONED' && status !== 'EXCLUDED') {
+        toast.success("Ação registrada! Agora defina o próximo contato.");
         setIsTaskFormOpen(true);
       } else {
+        toast.success(status === 'CONCLUDED' ? "🔥 VENDA CONCLUÍDA! Parabéns!" : "Lead atualizado.");
         onLeadUpdated();
       }
       setPendingStatusUpdate(null);
