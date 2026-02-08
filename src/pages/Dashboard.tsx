@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { Loader2, PlusCircle, LogOut, Sparkles, BellPlus } from "lucide-react";
+import { Loader2, PlusCircle, LogOut, Sparkles, BellPlus, LayoutDashboard, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
 import LeadForm from "@/components/broker/LeadForm";
@@ -16,6 +16,7 @@ import type { User } from "@/types/user";
 import { Badge } from "@/components/ui/badge";
 import TaskCenter from "@/components/broker/TaskCenter";
 import TaskForm from "@/components/broker/TaskForm";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
@@ -24,6 +25,7 @@ const Dashboard = () => {
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FunnelFilter>("ACTIVE");
+  const [viewMode, setViewMode] = useState("leads");
 
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
@@ -76,7 +78,7 @@ const Dashboard = () => {
                 type="button"
                 variant="outline"
                 onClick={() => setIsTaskFormOpen(true)}
-                className="rounded-2xl bg-white/70 backdrop-blur border-slate-200 hover:bg-white"
+                className="rounded-2xl bg-white/70 backdrop-blur border-slate-200 hover:bg-white h-10 sm:h-11"
               >
                 <BellPlus className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Nova Tarefa</span>
@@ -85,7 +87,7 @@ const Dashboard = () => {
 
               <Sheet open={isLeadFormOpen} onOpenChange={setIsLeadFormOpen}>
                 <SheetTrigger asChild>
-                  <Button className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100">
+                  <Button className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100 h-10 sm:h-11">
                     <PlusCircle className="w-4 h-4 mr-2" />
                     <span className="hidden sm:inline">Novo Lead</span>
                     <span className="sm:hidden">Lead</span>
@@ -98,18 +100,16 @@ const Dashboard = () => {
                 />
               </Sheet>
 
-              <Badge className="hidden sm:inline-flex rounded-full bg-indigo-600 text-white">
-                {role || "BROKER"}
-              </Badge>
+              <div className="h-8 w-px bg-slate-200 mx-1 hidden sm:block" />
 
               <Button
                 variant="ghost"
-                className="rounded-2xl hover:bg-rose-50 hover:text-rose-700"
+                className="rounded-2xl hover:bg-rose-50 hover:text-rose-700 h-10 sm:h-11"
                 onClick={signOut}
                 title="Sair"
               >
                 <LogOut className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">Sair</span>
+                <span className="hidden sm:inline text-xs font-bold uppercase tracking-wider">Sair</span>
               </Button>
             </div>
           </div>
@@ -133,59 +133,91 @@ const Dashboard = () => {
           <section className="relative">
             <div className="flex items-end justify-between gap-4 flex-wrap">
               <div>
-                <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">Funil em cards</h2>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 flex items-center gap-3">
+                  Funil de Conversão
+                  <Badge className="bg-indigo-100 text-indigo-700 border-none rounded-full px-3 py-1 font-bold">
+                    {leads.length} total
+                  </Badge>
+                </h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Visual rápido das etapas — clique para filtrar a lista.
+                  Filtre por etapa para focar nas ações de hoje.
                 </p>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => setFilter((prev) => (prev === "ALL" ? "ACTIVE" : "ALL"))}
-                className="rounded-2xl bg-white/70 backdrop-blur border-slate-200 hover:bg-white"
-              >
-                {filter === "ALL" ? "Mostrar Ativos" : "Mostrar Tudo"}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={filter === "ALL" ? "default" : "outline"}
+                  onClick={() => setFilter("ALL")}
+                  className="rounded-xl h-9 text-xs font-bold shadow-sm transition-all active:scale-95"
+                >
+                  Ver Tudo
+                </Button>
+                <Button
+                  variant={filter === "ACTIVE" ? "default" : "outline"}
+                  onClick={() => setFilter("ACTIVE")}
+                  className="rounded-xl h-9 text-xs font-bold shadow-sm transition-all active:scale-95"
+                >
+                  Ativos
+                </Button>
+              </div>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-6">
               <FunnelStageCards
                 leads={leads}
                 value={filter}
                 onChange={(v) => {
                   setFilter(v);
                   setSelectedLeadId(null);
+                  setViewMode("leads");
                 }}
               />
             </div>
           </section>
 
-          <section className="relative mt-6">
-            <TaskCenter
-              leads={leads}
-              onOpenLead={(id) => {
-                setSelectedLeadId(id);
-                setFilter("ALL");
-              }}
-            />
-          </section>
-
-          <section className="relative mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-4">
-              <LeadList
-                selectedLeadId={selectedLeadId}
-                onSelectLead={setSelectedLeadId}
-                currentUserRole={role || "BROKER"}
-                filter={filter}
-              />
+          <Tabs value={viewMode} onValueChange={setViewMode} className="mt-8">
+            <div className="flex items-center justify-between mb-4">
+              <TabsList className="bg-slate-200/50 p-1 rounded-2xl h-12 shadow-inner ring-1 ring-slate-200">
+                <TabsTrigger value="leads" className="rounded-xl px-6 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md font-bold text-xs transition-all">
+                  <LayoutDashboard className="w-4 h-4 mr-2" />
+                  Mural de Vendas
+                </TabsTrigger>
+                <TabsTrigger value="performance" className="rounded-xl px-6 data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-md font-bold text-xs transition-all">
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Performance
+                </TabsTrigger>
+              </TabsList>
             </div>
 
-            <div className="lg:col-span-8 space-y-6">
-              <LeadDetail leadId={selectedLeadId} onLeadUpdated={() => setSelectedLeadId(null)} />
+            <TabsContent value="leads" className="mt-0 outline-none">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-4 space-y-6">
+                  <TaskCenter
+                    leads={leads}
+                    onOpenLead={(id) => {
+                      setSelectedLeadId(id);
+                      setFilter("ALL");
+                    }}
+                  />
+                  <LeadList
+                    selectedLeadId={selectedLeadId}
+                    onSelectLead={setSelectedLeadId}
+                    currentUserRole={role || "BROKER"}
+                    filter={filter}
+                  />
+                </div>
 
-              {/* Podium (mainly useful for managers/superintendents; brokers may see limited data by RLS) */}
-              <LeaderboardPodium leads={leads} users={profiles} />
-            </div>
-          </section>
+                <div className="lg:col-span-8">
+                  <LeadDetail leadId={selectedLeadId} onLeadUpdated={() => setSelectedLeadId(null)} />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="performance" className="mt-0 outline-none">
+              <div className="max-w-4xl">
+                <LeaderboardPodium leads={leads} users={profiles} />
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
     </div>

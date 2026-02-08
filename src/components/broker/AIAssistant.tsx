@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Lead } from "@/types/lead";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Zap, RefreshCw, MessageSquare } from "lucide-react";
+import { Send, Zap, RefreshCw, Sparkles, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface AIAssistantProps {
   lead: Lead;
@@ -15,16 +17,32 @@ interface AIAssistantProps {
 const AIAssistant = ({ lead, isBusy }: AIAssistantProps) => {
   const [generatedMessage, setGeneratedMessage] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [approachInfo, setApproachInfo] = useState<{ approach: string; reason: string } | null>(null);
 
-  const generateMessage = () => {
+  const generateMessage = async () => {
     setIsGenerating(true);
-    // Simulação de chamada de IA
-    setTimeout(() => {
-      const message = `Olá ${lead.name}! Vi que você demonstrou interesse em um imóvel na região de ${lead.tag}. Em vez daquela conversa monótona, que tal eu te enviar um vídeo rápido de 30 segundos com as 3 melhores opções que se encaixam no seu perfil? Posso te enviar agora?`;
-      setGeneratedMessage(message);
+    setApproachInfo(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-smart-suggestions', {
+        body: { 
+          leadId: lead.id,
+          brokerId: lead.brokerId,
+        }
+      });
+
+      if (error) throw error;
+
+      setGeneratedMessage(data.message);
+      setApproachInfo({ approach: data.approach, reason: data.reason });
+      toast.success("IA gerou uma nova estratégia!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao chamar a IA. Usando template padrão.");
+      // Fallback
+      setGeneratedMessage(`Olá ${lead.name}! Tenho uma novidade sobre o imóvel ${lead.tag}. Consegue falar 1 minuto?`);
+    } finally {
       setIsGenerating(false);
-      toast.info("Mensagem de IA gerada!");
-    }, 1500);
+    }
   };
 
   const handleSendWhatsApp = () => {
@@ -34,32 +52,46 @@ const AIAssistant = ({ lead, isBusy }: AIAssistantProps) => {
     }
     
     const encodedMessage = encodeURIComponent(generatedMessage);
-    // Remove caracteres não numéricos do telefone para garantir o formato correto
     const phoneNumber = lead.phone.replace(/\D/g, ''); 
-    
-    // Abre o WhatsApp Web/App com a mensagem pronta
     const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`;
     window.open(whatsappUrl, '_blank');
     
-    // O corretor deve registrar a ação no CadenceFlow após o envio
-    toast.success("WhatsApp aberto! Não se esqueça de registrar a ação no Fluxo de Cadência.");
+    toast.success("WhatsApp aberto!");
   };
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-bold text-gray-700 flex items-center gap-2">
-        <Zap className="w-5 h-5 text-amber-500" /> Assistente de Abordagem IA
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-bold text-gray-700 flex items-center gap-2">
+          <Zap className="w-5 h-5 text-amber-500" /> Estratégia de Conversão IA
+        </h3>
+        {approachInfo && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1.5 cursor-help bg-indigo-50 px-2 py-1 rounded-full text-[11px] font-bold text-indigo-600 ring-1 ring-indigo-100">
+                  <Sparkles className="w-3 h-3" />
+                  {approachInfo.approach}
+                  <HelpCircle className="w-3 h-3 text-indigo-300" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[250px] bg-slate-900 text-white border-none p-3 rounded-xl shadow-2xl">
+                <p className="text-xs leading-relaxed">{approachInfo.reason}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
       
-      <Card className="border-amber-200 bg-amber-50 shadow-inner">
+      <Card className="border-amber-200 bg-amber-50/50 shadow-inner overflow-hidden rounded-2xl">
         <CardContent className="p-4 space-y-3">
           <Textarea 
-            placeholder="Clique em 'Gerar Mensagem' para uma abordagem de alto impacto..."
+            placeholder="A IA vai sugerir uma abordagem baseada no momento do lead..."
             value={generatedMessage}
             onChange={(e) => setGeneratedMessage(e.target.value)}
             rows={4}
             disabled={isBusy || isGenerating}
-            className="bg-white border-amber-300"
+            className="bg-white border-amber-200 rounded-xl resize-none focus:ring-amber-500 shadow-sm"
           />
           
           <div className="flex gap-3">
@@ -67,18 +99,18 @@ const AIAssistant = ({ lead, isBusy }: AIAssistantProps) => {
               onClick={generateMessage} 
               disabled={isBusy || isGenerating}
               variant="outline"
-              className="flex-1 border-amber-600 text-amber-600 hover:bg-amber-100"
+              className="flex-1 rounded-xl border-amber-600 text-amber-600 hover:bg-amber-100 h-11 font-bold"
             >
               {isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-              Gerar Mensagem
+              {generatedMessage ? "Trocar Estratégia" : "Sugerir Abordagem"}
             </Button>
             
             <Button 
               onClick={handleSendWhatsApp} 
               disabled={isBusy || isGenerating || !generatedMessage}
-              className="flex-1 bg-green-600 hover:bg-green-700"
+              className="flex-1 bg-green-600 hover:bg-green-700 rounded-xl h-11 font-bold shadow-lg shadow-green-100"
             >
-              <Send className="w-4 h-4 mr-2" /> Enviar via WhatsApp
+              <Send className="w-4 h-4 mr-2" /> Abrir WhatsApp
             </Button>
           </div>
         </CardContent>
