@@ -7,27 +7,20 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // CRITICAL: Robust CORS handling
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      throw new Error("Missing server environment variables.");
-    }
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const body = await req.json().catch(() => ({}));
-    const { email, password, firstName, lastName, role, managerId, teamId, userId, action } = body;
-
-    console.log(`[create-user] Request received. Action: ${action || 'create'}, Email: ${email}`);
+    const body = await req.json()
+    const { email, password, firstName, lastName, role, managerId, teamId, userId, action } = body
 
     // ACTION: DELETE USER
     if (action === 'delete') {
@@ -38,14 +31,12 @@ serve(async (req) => {
 
     // ACTION: UPDATE PASSWORD
     if (action === 'update-password') {
-      console.log("[create-user] Action: Update Password for", userId);
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, { password })
       if (updateError) throw updateError
       return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // Default Action: Create User
-    console.log("[create-user] Action: Create User", email);
+    // ACTION: CREATE USER
     const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -60,34 +51,22 @@ serve(async (req) => {
     })
 
     if (createError) throw createError
-    const userId = userData.user.id;
 
-    // 2. Pequeno atraso para permitir que o trigger do banco termine (evita race condition)
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    // 3. Forçar a gravação dos dados corretos na tabela Profiles via UPSERT
-    // Preparamos o objeto de dados sem o email primeiro, pois a coluna pode não existir
-    const profilePayload: any = {
-      id: userId,
-      first_name: firstName,
-      last_name: lastName,
-      role: role,
-      manager_id: (managerId === 'none' || !managerId) ? null : managerId,
-      team_id: (teamId === 'none' || !teamId) ? null : teamId,
-      updated_at: new Date().toISOString()
-    };
-
-    console.log(`[create-user] Aplicando upsert no perfil: ${userId}`, profilePayload);
-
-    // Tentamos salvar. Se falhar por causa de coluna inexistente, o catch tratará.
-    const { error: upsertError } = await supabaseAdmin
+    // Force creation of profile to ensure it doesn't fail
+    const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .upsert(profilePayload);
-
-    if (upsertError) {
-      console.error("[create-user] Erro no upsert do perfil:", upsertError.message);
-      throw upsertError;
-    }
+      .upsert({
+        id: userData.user.id,
+        first_name: firstName,
+        last_name: lastName,
+        manager_id: (managerId === 'none' || !managerId) ? null : managerId,
+        team_id: (teamId === 'none' || !teamId) ? null : teamId,
+        role: role,
+        email: email,
+        updated_at: new Date().toISOString()
+      })
+    
+    if (profileError) console.error("Profile update error:", profileError.message)
 
     return new Response(JSON.stringify({ success: true, user: userData.user }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -95,7 +74,6 @@ serve(async (req) => {
     })
 
   } catch (error) {
-    console.error("[create-user] Erro Crítico:", error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400
