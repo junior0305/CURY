@@ -9,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, RefreshCw, FileSpreadsheet, Loader2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchLeadsForAdmin, updateLeadBroker } from "@/integrations/supabase/leads";
+import { fetchLeadsForAdmin } from "@/integrations/supabase/leads";
 import { Lead } from "@/types/lead";
 import { DistributionQueue } from "@/types/queue";
+import { supabase } from "@/integrations/supabase/client";
 
 // Mock temporário para filas ativas, pois ainda não temos a tabela de filas
 const mockActiveQueues: DistributionQueue[] = [
@@ -30,39 +31,24 @@ const LeadRework = () => {
     queryFn: fetchLeadsForAdmin,
   });
 
-  // Filtra leads abandonados ou parados (simulação de leads parados)
+  // Filtra leads abandonados
   const leadsForRework = useMemo(() => {
-    // Por enquanto, focamos apenas em ABANDONED, pois a lógica de 'parado' é complexa
     return allLeads.filter(l => l.status === 'ABANDONED');
   }, [allLeads]);
 
   // 2. Mutação para Redistribuição
   const reworkMutation = useMutation({
     mutationFn: async ({ leadId, queueId }: { leadId: string, queueId: string }) => {
-      // Simulação: Encontrar o próximo corretor na fila (qId)
-      // Na implementação real, isso seria feito por uma Edge Function
+      // Na implementação real, a Edge Function faria a lógica de distribuição.
+      // Por enquanto, vamos apenas atualizar o status para NEW e remover o brokerId para re-entrada na fila.
       
-      // Por enquanto, vamos apenas atualizar o status para NEW e atribuir a um broker mockado
-      // Para evitar erros de FK, usaremos um ID de broker mockado ou o ID do SUPERINTENDENT (se disponível)
-      // Como não temos a lógica de fila aqui, vamos apenas atualizar o status para NEW
-      
-      // NOTE: updateLeadBroker espera um brokerId, mas estamos usando queueId. 
-      // Para evitar quebrar a função, vamos passar um ID temporário e focar na atualização do status.
-      // Em um sistema real, a Edge Function faria a atribuição.
-      
-      // Usando um ID de broker fictício para passar na função, já que a lógica de fila é complexa para o frontend
-      const tempBrokerId = '00000000-0000-0000-0000-000000000000'; 
-      
-      // Se a tabela leads tiver RLS configurado corretamente, esta chamada pode falhar se não for SUPERINTENDENT
-      // Vamos simular a ação de 'rework' que colocaria o lead na fila.
-      
-      // Para o MVP, vamos apenas atualizar o status para NEW e remover o brokerId
       const { error } = await supabase
         .from('leads')
         .update({ 
           broker_id: null, // Remove o corretor atual
           status: 'NEW', // Volta para o status inicial
-          last_interaction_at: new Date().toISOString()
+          last_interaction_at: new Date().toISOString(),
+          exclusion_reason: null, // Limpa o motivo do abandono
         })
         .eq('id', leadId);
 
@@ -71,6 +57,7 @@ const LeadRework = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['adminLeads'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] }); // Invalida o dashboard para o lead reaparecer
       const queueName = mockActiveQueues.find(q => q.id === data.queueId)?.name;
       toast({ title: "Retrabalho Concluído", description: `Lead enviado para a fila: ${queueName}.` });
     },

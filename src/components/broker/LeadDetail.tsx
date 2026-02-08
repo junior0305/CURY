@@ -86,19 +86,23 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
   }
 
   const handleStatusChange = (status: LeadStatus) => {
-    if (status === 'EXCLUDED') {
+    // Se o corretor está movendo para EXCLUDED, ele está desqualificando o lead permanentemente.
+    // Se ele está movendo para ABANDONED, ele está enviando para Retrabalho.
+    // Vamos assumir que a ação de "Excluir Lead" no frontend significa enviar para Retrabalho (ABANDONED).
+    if (status === 'ABANDONED') {
       setIsExclusionDialogOpen(true);
       return;
     }
     updateStatusMutation.mutate({ status });
   };
 
-  const handleExclude = () => {
+  const handleAbandon = () => {
     if (!selectedExclusionReason) {
-      toast.error("Selecione o motivo da exclusão.");
+      toast.error("Selecione o motivo do abandono.");
       return;
     }
-    updateStatusMutation.mutate({ status: 'EXCLUDED', reason: selectedExclusionReason });
+    // Mudar para ABANDONED para que apareça na aba de Retrabalho
+    updateStatusMutation.mutate({ status: 'ABANDONED', reason: selectedExclusionReason });
     setIsExclusionDialogOpen(false);
   };
 
@@ -155,19 +159,19 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
             <Dialog open={isExclusionDialogOpen} onOpenChange={setIsExclusionDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="destructive" disabled={isBusy}>
-                  <XCircle className="w-4 h-4 mr-2" /> Excluir Lead
+                  <XCircle className="w-4 h-4 mr-2" /> Abandonar Lead
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                  <DialogTitle>Excluir Lead: {lead.name}</DialogTitle>
+                  <DialogTitle>Abandonar Lead: {lead.name}</DialogTitle>
                   <DialogDescription>
-                    Selecione o motivo da exclusão. O lead será movido para a área de Retrabalho.
+                    Selecione o motivo do abandono. O lead será movido para a área de Retrabalho.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="space-y-2">
-                    <Label htmlFor="reason">Motivo da Exclusão</Label>
+                    <Label htmlFor="reason">Motivo do Abandono</Label>
                     <Select onValueChange={(val) => setSelectedExclusionReason(val as ExclusionReason)}>
                       <SelectTrigger id="reason">
                         <SelectValue placeholder="Selecione um motivo" />
@@ -180,9 +184,9 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
                     </Select>
                   </div>
                 </div>
-                <Button onClick={handleExclude} disabled={!selectedExclusionReason || isBusy} variant="destructive">
+                <Button onClick={handleAbandon} disabled={!selectedExclusionReason || isBusy} variant="destructive">
                   {isBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <XCircle className="w-4 h-4 mr-2" />}
-                  Confirmar Exclusão
+                  Confirmar Abandono
                 </Button>
               </DialogContent>
             </Dialog>
