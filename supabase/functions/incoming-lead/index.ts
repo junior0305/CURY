@@ -35,39 +35,34 @@ serve(async (req) => {
     console.log(`[incoming-lead] Novo lead recebido: ${name} (${phone}) - Tag: ${tag}`);
 
     // 2. Lógica de Distribuição (Round Robin Simples)
-    // Buscamos corretores que estão com a fila habilitada
-    // Usamos um bloco try/catch interno para o caso da coluna não existir no momento exato da chamada
     let eligibleBrokers = [];
+    let logStatus = 'NO_BROKER_AVAILABLE';
+    let assignedBrokerName = 'Nenhum';
+
     try {
       const { data, error: brokerError } = await supabaseAdmin
         .from('profiles')
-        .select('id, manager_id')
+        .select('id, first_name, last_name, manager_id')
         .eq('role', 'BROKER')
         .eq('lead_assignment_enabled', true);
       
       if (brokerError) throw brokerError;
       eligibleBrokers = data || [];
     } catch (e) {
-      console.warn("[incoming-lead] Falha ao filtrar por lead_assignment_enabled, buscando todos os corretores como fallback:", e.message);
-      const { data } = await supabaseAdmin
-        .from('profiles')
-        .select('id, manager_id')
-        .eq('role', 'BROKER');
-      eligibleBrokers = data || [];
+      console.warn("[incoming-lead] Falha ao filtrar corretores:", e.message);
     }
 
     let assignedBrokerId = null;
     let assignedManagerId = null;
 
     if (eligibleBrokers && eligibleBrokers.length > 0) {
-      // Para o MVP, pegamos um corretor aleatório ou o com menos leads hoje
-      // Em uma versão avançada, usaríamos uma tabela de controle de fila
       const randomIndex = Math.floor(Math.random() * eligibleBrokers.length);
-      assignedBrokerId = eligibleBrokers[randomIndex].id;
-      assignedManagerId = eligibleBrokers[randomIndex].manager_id;
-      console.log(`[incoming-lead] Lead atribuído ao corretor: ${assignedBrokerId}`);
-    } else {
-      console.log(`[incoming-lead] Nenhum corretor disponível. Lead ficará sem atribuição.`);
+      const broker = eligibleBrokers[randomIndex];
+      assignedBrokerId = broker.id;
+      assignedManagerId = broker.manager_id;
+      assignedBrokerName = `${broker.first_name} ${broker.last_name}`;
+      logStatus = 'SUCCESS';
+      console.log(`[incoming-lead] Lead atribuído ao corretor: ${assignedBrokerName}`);
     }
 
     // 3. Salvar o Lead no Banco
@@ -88,6 +83,15 @@ serve(async (req) => {
       .single();
 
     if (insertError) throw insertError;
+
+    // 4. REGISTRAR LOG DE DISTRIBUIÇÃO
+    await supabaseAdmin.from('distribution_logs').insert({
+      lead_name: name,
+      lead_phone: phone,
+      queue_name: tag || 'Geral',
+      assigned_to_name: assignedBrokerName,
+      status: logStatus
+    });
 
     return new Response(JSON.stringify({ 
       success: true, 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Settings, Zap, Globe, RefreshCcw, ShieldCheck, UserCircle, Loader2, Group, LogOut } from "lucide-react";
+import { Users, Settings, Zap, Globe, RefreshCcw, ShieldCheck, UserCircle, Loader2, Group, History, CheckCircle, AlertCircle } from "lucide-react";
 import UserManagement from "@/components/admin/UserManagement";
 import TeamManagement from "@/components/admin/TeamManagement";
 import AdminStats from "@/components/admin/AdminStats";
@@ -16,6 +16,7 @@ import { fetchLeadsForAdmin } from "@/integrations/supabase/leads";
 import type { Lead } from "@/types/lead";
 import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
 import { Button } from "@/components/ui/button";
+import { CheckCircle, AlertCircle, Badge } from "lucide-react";
 
 const Admin = () => {
   const { user: authUser, role: userRole, loading: authLoading, signOut } = useAuth();
@@ -92,25 +93,14 @@ const Admin = () => {
         </div>
 
         <Tabs defaultValue="users" value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-6 h-14 bg-white shadow-lg rounded-2xl p-1 mb-8">
-            <TabsTrigger value="users" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl">
-              <Users className="w-4 h-4 mr-2" /> Time
-            </TabsTrigger>
-            <TabsTrigger value="teams" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl">
-              <Group className="w-4 h-4 mr-2" /> Equipes
-            </TabsTrigger>
-            <TabsTrigger value="leads" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl">
-              <Zap className="w-4 h-4 mr-2" /> Regras
-            </TabsTrigger>
-            <TabsTrigger value="rework" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl">
-              <RefreshCcw className="w-4 h-4 mr-2" /> Retrabalho
-            </TabsTrigger>
-            <TabsTrigger value="integrations" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl">
-              <Globe className="w-4 h-4 mr-2" /> Webhooks
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl">
-              <Settings className="w-4 h-4 mr-2" /> Ajustes
-            </TabsTrigger>
+          <TabsList className="grid grid-cols-7 h-14 bg-white shadow-lg rounded-2xl p-1 mb-8">
+            <TabsTrigger value="users" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><Users className="w-4 h-4 mr-2" /> Time</TabsTrigger>
+            <TabsTrigger value="teams" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><Group className="w-4 h-4 mr-2" /> Equipes</TabsTrigger>
+            <TabsTrigger value="leads" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><Zap className="w-4 h-4 mr-2" /> Regras</TabsTrigger>
+            <TabsTrigger value="logs" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><History className="w-4 h-4 mr-2" /> Logs</TabsTrigger>
+            <TabsTrigger value="rework" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><RefreshCcw className="w-4 h-4 mr-2" /> Retrabalho</TabsTrigger>
+            <TabsTrigger value="integrations" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><Globe className="w-4 h-4 mr-2" /> Webhooks</TabsTrigger>
+            <TabsTrigger value="settings" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><Settings className="w-4 h-4 mr-2" /> Ajustes</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users">
@@ -126,6 +116,9 @@ const Admin = () => {
           <TabsContent value="leads">
             <LeadDistribution />
           </TabsContent>
+          <TabsContent value="logs">
+            <DistributionLogs />
+          </TabsContent>
           <TabsContent value="rework">
             <LeadRework />
           </TabsContent>
@@ -138,6 +131,82 @@ const Admin = () => {
         </Tabs>
       </div>
     </div>
+  );
+};
+
+const DistributionLogs = () => {
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey: ['distribution-logs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('distribution_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 10000 // Atualiza a cada 10 segundos
+  });
+
+  return (
+    <Card className="shadow-xl border-none p-6 bg-white rounded-3xl">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">Histórico de Entrada (Make)</h2>
+          <p className="text-sm text-slate-500">Acompanhe quem recebeu cada lead em tempo real.</p>
+        </div>
+        {isLoading && <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />}
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-100">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 border-b border-slate-100">
+            <tr>
+              <th className="px-4 py-3 text-left font-bold text-slate-700">Data/Hora</th>
+              <th className="px-4 py-3 text-left font-bold text-slate-700">Lead</th>
+              <th className="px-4 py-3 text-left font-bold text-slate-700">Regra (Tag)</th>
+              <th className="px-4 py-3 text-left font-bold text-slate-700">Corretor Destino</th>
+              <th className="px-4 py-3 text-left font-bold text-slate-700">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {logs.length === 0 && !isLoading ? (
+              <tr><td colSpan={5} className="py-10 text-center text-slate-400 italic">Nenhum lead recebido ainda via integração externa.</td></tr>
+            ) : (
+              logs.map((log: any) => (
+                <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-3 text-slate-500 text-xs">
+                    {new Date(log.created_at).toLocaleString('pt-BR')}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="font-bold text-slate-900">{log.lead_name}</div>
+                    <div className="text-[10px] text-slate-400">{log.lead_phone}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant="outline" className="bg-slate-100 border-none font-bold text-[10px] uppercase">{log.queue_name}</Badge>
+                  </td>
+                  <td className="px-4 py-3 font-medium text-indigo-600">
+                    {log.assigned_to_name}
+                  </td>
+                  <td className="px-4 py-3">
+                    {log.status === 'SUCCESS' ? (
+                      <span className="flex items-center text-xs text-green-600 font-bold">
+                        <CheckCircle className="w-3 h-3 mr-1" /> OK
+                      </span>
+                    ) : (
+                      <span className="flex items-center text-xs text-rose-600 font-bold">
+                        <AlertCircle className="w-3 h-3 mr-1" /> FALHOU
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 };
 
