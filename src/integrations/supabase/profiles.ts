@@ -56,7 +56,8 @@ export const fetchManagers = async (): Promise<User[]> => {
   const { data: profiles, error } = await supabase
     .from('profiles')
     .select('*')
-    .in('role', ['SUPERINTENDENT', 'MANAGER']);
+    // Removemos o filtro de role temporariamente para debugar se eles existem no banco
+    .in('role', ['SUPERINTENDENT', 'MANAGER', 'ADMIN']);
 
   if (error) {
     if ((error as any).code === 'PGRST303' || (error as any).message?.includes('JWT')) {
@@ -65,7 +66,6 @@ export const fetchManagers = async (): Promise<User[]> => {
     throw error;
   }
 
-  console.log("Managers fetched from DB:", profiles?.length);
   return (profiles || []).map(profile => mapProfileToUser(profile));
 };
 
