@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
@@ -198,40 +198,117 @@ const EconomyManagement = () => {
     }
   };
 
+  // NEW: Campaign Management logic
+  const { data: campaigns = [] } = useQuery({
+    queryKey: ['active-campaigns'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('active_campaigns').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  const [newCampaign, setNewCampaign] = useState({
+    title: "",
+    target_action: "VISIT",
+    target_count: 10,
+    reward_amount: 150,
+    ends_at: ""
+  });
+
+  const createCampaignMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const { error } = await supabase.from('active_campaigns').insert([payload]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['active-campaigns'] });
+      queryClient.invalidateQueries({ queryKey: ['active-campaign'] });
+      toast.success("Novo desafio publicado para o time!");
+      setNewCampaign({ title: "", target_action: "VISIT", target_count: 10, reward_amount: 150, ends_at: "" });
+    }
+  });
+
+  const stats = useMemo(() => {
+    // Calculando totais para o controle de caixa
+    return {
+      totalPaid: 0, // Placeholder
+      totalPending: pending.reduce((acc: number, curr: any) => acc + Number(curr.reward_value), 0)
+    };
+  }, [pending]);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
+      {/* 3. Dashboard de Caixa (NOVO) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="p-6 rounded-3xl border-none shadow-lg bg-white">
+          <p className="text-[10px] font-black text-slate-400 uppercase">Total Pendente</p>
+          <p className="text-3xl font-black text-rose-600">R$ {stats.totalPending.toFixed(2)}</p>
+        </Card>
+        <Card className="p-6 rounded-3xl border-none shadow-lg bg-slate-900">
+          <p className="text-[10px] font-black text-indigo-300 uppercase">Campanha Ativa</p>
+          <p className="text-xl font-bold text-white truncate">{campaigns.find(c => c.is_active)?.title || "Nenhuma"}</p>
+        </Card>
+        <Card className="p-6 rounded-3xl border-none shadow-lg bg-emerald-600">
+          <p className="text-[10px] font-black text-emerald-100 uppercase">Fator de Urgência</p>
+          <p className="text-3xl font-black text-white">MÁXIMO</p>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Box 1: Configuração de Valores */}
-        <Card className="lg:col-span-1 border-none shadow-xl rounded-3xl p-6 bg-white ring-1 ring-slate-100">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-amber-100 text-amber-600 rounded-2xl"><Coins className="h-6 w-6" /></div>
-            <div>
-              <h3 className="font-black text-slate-900 uppercase tracking-tighter italic">Banco de Prêmios</h3>
-              <p className="text-[10px] text-slate-400 font-bold uppercase">Controle de Saída de Caixa</p>
+        {/* Lado Esquerdo: Config de Valores e Nova Campanha */}
+        <div className="lg:col-span-1 space-y-6">
+          <Card className="border-none shadow-xl rounded-3xl p-6 bg-white ring-1 ring-slate-100">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-amber-100 text-amber-600 rounded-2xl"><Coins className="h-6 w-6" /></div>
+              <div><h3 className="font-black text-slate-900 uppercase tracking-tighter italic">Valores Base</h3></div>
             </div>
-          </div>
-          <div className="space-y-4">
-            {configs.map((c: any) => (
-              <div key={c.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                <Label className="text-[11px] font-black text-slate-500 uppercase">{c.label}</Label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">R$</span>
-                    <Input 
-                      type="number" 
-                      defaultValue={c.amount_value} 
-                      className="pl-9 bg-white rounded-xl h-10 font-bold"
-                      onBlur={(e) => updateConfigMutation.mutate({ id: c.id, value: parseFloat(e.target.value) })}
-                    />
+            <div className="space-y-4">
+              {configs.map((c: any) => (
+                <div key={c.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+                  <Label className="text-[11px] font-black text-slate-500 uppercase">{c.label}</Label>
+                  <div className="flex gap-2">
+                    <Input type="number" defaultValue={c.amount_value} className="bg-white rounded-xl h-10 font-bold" onBlur={(e) => updateConfigMutation.mutate({ id: c.id, value: parseFloat(e.target.value) })} />
                   </div>
-                  <Button size="icon" variant="ghost" className="h-10 w-10 text-emerald-600 hover:bg-emerald-50 rounded-xl">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="border-none shadow-xl rounded-3xl p-6 bg-indigo-600 text-white">
+            <h3 className="font-black uppercase tracking-tighter italic mb-4 flex items-center gap-2">
+              <Rocket className="h-5 w-5" /> Lançar Desafio
+            </h3>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black text-indigo-200">Título do Anúncio</Label>
+                <Input value={newCampaign.title} onChange={(e) => setNewCampaign({...newCampaign, title: e.target.value})} placeholder="Ex: SEMANA TURBO" className="bg-white/10 border-white/20 text-white placeholder:text-white/30 h-10 rounded-xl" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black text-indigo-200">Ação</Label>
+                  <Select value={newCampaign.target_action} onValueChange={(v) => setNewCampaign({...newCampaign, target_action: v})}>
+                    <SelectTrigger className="bg-white/10 border-white/20 text-white h-10 rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="VISIT">Visitas</SelectItem><SelectItem value="SALE">Vendas</SelectItem><SelectItem value="DOCS">Documentos</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black text-indigo-200">Meta (Qtde)</Label>
+                  <Input type="number" value={newCampaign.target_count} onChange={(e) => setNewCampaign({...newCampaign, target_count: parseInt(e.target.value)})} className="bg-white/10 border-white/20 text-white h-10 rounded-xl" />
                 </div>
               </div>
-            ))}
-          </div>
-        </Card>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black text-indigo-200">Prêmio Extra (R$)</Label>
+                <Input type="number" value={newCampaign.reward_amount} onChange={(e) => setNewCampaign({...newCampaign, reward_amount: parseFloat(e.target.value)})} className="bg-white/10 border-white/20 text-white h-10 rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black text-indigo-200">Expira em</Label>
+                <Input type="date" value={newCampaign.ends_at} onChange={(e) => setNewCampaign({...newCampaign, ends_at: e.target.value})} className="bg-white/10 border-white/20 text-white h-10 rounded-xl" />
+              </div>
+              <Button onClick={() => createCampaignMutation.mutate(newCampaign)} disabled={!newCampaign.title || !newCampaign.ends_at} className="w-full bg-white text-indigo-600 hover:bg-indigo-50 font-black rounded-xl">PUBLICAR DESAFIO</Button>
+            </div>
+          </Card>
+        </div>
 
         {/* Box 2: Aprovações Pendentes */}
         <Card className="lg:col-span-2 border-none shadow-xl rounded-3xl p-6 bg-white ring-1 ring-slate-100 overflow-hidden">

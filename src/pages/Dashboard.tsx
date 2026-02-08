@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import TaskCenter from "@/components/broker/TaskCenter";
 import TaskForm from "@/components/broker/TaskForm";
 import AchievementTicker from "@/components/dashboard/AchievementTicker";
+import CampaignHeroBanner from "@/components/dashboard/CampaignHeroBanner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -146,6 +147,9 @@ const Dashboard = () => {
           />
         ) : (
           <>
+            {/* Campaign Hero Section */}
+            <CampaignHeroBanner leads={leads} users={profiles} />
+
             {/* Podium Section */}
             <section className="mb-10 max-w-4xl mx-auto">
               <LeaderboardPodium 
