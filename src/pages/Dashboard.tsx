@@ -139,8 +139,9 @@ const Dashboard = () => {
       <main className="max-w-[1600px] mx-auto p-6">
         {showKPIsFor ? (
           <BrokerKPIs 
-            leads={leadsForKPIs} 
+            leads={leads.filter(l => l.brokerId === showKPIsFor.id)} 
             brokerName={showKPIsFor.name} 
+            brokerId={showKPIsFor.id}
             onBack={() => setShowKPIsFor(null)} 
           />
         ) : (

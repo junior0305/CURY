@@ -36,24 +36,23 @@ interface BrokerKPIsProps {
   leads: Lead[];
   onBack: () => void;
   brokerName: string;
+  brokerId: string; // Adicionado ID para buscar prêmios específicos
 }
 
 const COLORS = ["#4f46e5", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444"];
 
-export default function BrokerKPIs({ leads, onBack, brokerName }: BrokerKPIsProps) {
+export default function BrokerKPIs({ leads, onBack, brokerName, brokerId }: BrokerKPIsProps) {
   const queryClient = useQueryClient();
 
-  // 1. Buscar conquistas reais deste corretor - AGORA COM FILTRO DE USER_ID
+  // 1. Buscar conquistas REAIS do corretor selecionado (seja o logado ou do pódio)
   const { data: myAchievements = [], isLoading: loadingAch } = useQuery({
-    queryKey: ['my-achievements'],
+    queryKey: ['achievements', brokerId],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
-      
+      console.log(`[BrokerKPIs] Buscando prêmios para o ID: ${brokerId}`);
       const { data, error } = await supabase
         .from('achievements')
         .select('*')
-        .eq('user_id', user.id) // FILTRO CRITICAL: Garante que só veja os seus
+        .eq('user_id', brokerId)
         .order('created_at', { ascending: false });
       
       if (error) throw error;

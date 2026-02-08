@@ -45,18 +45,18 @@ export default function LeaderboardPodium({
   onToggleTimeframe?: () => void;
 }) {
   const top3 = useMemo(() => {
-    // IMPORTANTE: Aqui garantimos que o pódio considere TODOS os corretores da base
+    // IMPORTANTE: Ranking UNIVERSAL e ABSOLUTO
     const brokers = users.filter((u) => u.role === "BROKER");
     const byBroker: Record<string, number> = {};
 
-    console.log(`[Podium] Calculando pontos para ${brokers.length} corretores e ${leads.length} leads totais.`);
+    console.log(`[Podium] Rankeando ${brokers.length} corretores...`);
 
     for (const lead of leads) {
       if (!lead.brokerId) continue;
-      // Cálculo de pontos universal baseado na nova matemática de pesos
       byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead);
     }
 
+    // Gerar lista de ranking real, sem favorecer ninguém
     const entries: PodiumEntry[] = brokers
       .map((b) => ({
         id: b.id,
@@ -65,11 +65,10 @@ export default function LeaderboardPodium({
         subtitle: b.leadAssignmentEnabled ? "Em Campo" : "Pausa",
       }))
       .filter((e) => e.points > 0)
-      .sort((a, b) => b.points - a.points)
-      .slice(0, 3);
+      .sort((a, b) => b.points - a.points); // Ordenação absoluta por pontos
 
-    console.log("[Podium] Top 3 detectado:", entries);
-    return entries;
+    console.log("[Podium] Top 3 Real detectado:", entries.slice(0, 3));
+    return entries.slice(0, 3);
   }, [leads, users]);
 
   const slots: Array<{ place: 1 | 2 | 3; entry?: PodiumEntry; height: string; tone: string; ring: string; textTone: string }> = [
