@@ -53,20 +53,32 @@ export const fetchTeams = async (): Promise<(Team & { memberCount?: number })[]>
 };
 
 export const fetchManagers = async (): Promise<User[]> => {
+  console.log("Starting fetchManagers query...");
   const { data: profiles, error } = await supabase
     .from('profiles')
-    .select('*')
-    // Removemos o filtro de role temporariamente para debugar se eles existem no banco
-    .in('role', ['SUPERINTENDENT', 'MANAGER', 'ADMIN']);
+    .select('*');
 
   if (error) {
+    console.error("fetchManagers Database Error:", error);
     if ((error as any).code === 'PGRST303' || (error as any).message?.includes('JWT')) {
       window.dispatchEvent(new CustomEvent('supabase-auth-error', { detail: error }));
     }
     throw error;
   }
 
-  return (profiles || []).map(profile => mapProfileToUser(profile));
+  console.log("Profiles raw from DB:", profiles);
+
+  // Mapeamos e depois filtramos manualmente para garantir que nada seja perdido por causa de case-sensitive no banco
+  const allUsers = (profiles || []).map(profile => mapProfileToUser(profile));
+  
+  const managers = allUsers.filter(u => 
+    u.role === 'SUPERINTENDENT' || 
+    u.role === 'MANAGER' || 
+    u.role === 'ADMIN'
+  );
+
+  console.log("Managers filtered in frontend:", managers.length, managers);
+  return managers;
 };
 
 export const updateProfile = async (user: User) => {

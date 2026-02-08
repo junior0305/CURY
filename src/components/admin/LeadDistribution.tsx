@@ -135,6 +135,7 @@ const LeadDistribution = () => {
   };
 
   const handleEditQueue = (q: DistributionQueue) => {
+    console.log("Editing queue:", q);
     setEditingQueueId(q.id);
     setNewQueue({
       name: q.name,
@@ -143,8 +144,12 @@ const LeadDistribution = () => {
       brokerIds: (q as any).brokerIds || [],
       isActive: q.isActive
     });
-    // Rola para o topo do form se necessário
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // Forçar o scroll para o formulário para o usuário ver que abriu
+    const formElement = document.querySelector('form');
+    if (formElement) {
+      formElement.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   const isLoading = isLoadingTeams || isLoadingProfiles || isLoadingQueues;
@@ -251,9 +256,23 @@ const LeadDistribution = () => {
                   <p className="text-xs text-gray-500 uppercase font-semibold">Se {q.matchField} contém: <span className="text-indigo-600">"{q.matchValue}"</span></p>
                 </div>
               </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button variant="ghost" size="icon" onClick={() => handleEditQueue(q)} className="hover:bg-indigo-50 hover:text-indigo-600"><Edit className="w-4 h-4" /></Button>
-                <Button variant="ghost" size="icon" onClick={() => deleteQueueMutation.mutate(q.id)} className="hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-4 h-4" /></Button>
+              <div className="flex items-center gap-1">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => handleEditQueue(q)} 
+                  className="hover:bg-indigo-50 hover:text-indigo-600"
+                >
+                  <Edit className="w-4 h-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => deleteQueueMutation.mutate(q.id)} 
+                  className="hover:bg-rose-50 hover:text-rose-600"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
               </div>
             </div>
             <div className="px-4 pb-4 flex flex-wrap gap-1.5">
