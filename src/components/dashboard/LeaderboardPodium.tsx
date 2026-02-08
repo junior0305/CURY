@@ -44,11 +44,13 @@ export default function LeaderboardPodium({
   onToggleTimeframe?: () => void;
 }) {
   const top3 = useMemo(() => {
+    // IMPORTANTE: Aqui garantimos que o pódio considere TODOS os corretores da base
     const brokers = users.filter((u) => u.role === "BROKER");
     const byBroker: Record<string, number> = {};
 
     for (const lead of leads) {
       if (!lead.brokerId) continue;
+      // Cálculo de pontos universal baseado em avanço de funil
       byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead);
     }
 

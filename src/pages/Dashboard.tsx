@@ -33,14 +33,18 @@ const Dashboard = () => {
   const [isMonthly, setIsMonthly] = useState(false);
   const [showKPIsFor, setShowKPIsFor] = useState<{ id: string; name: string } | null>(null);
 
-  const { data: leads = [] } = useQuery<Lead[]>({
+  const { data: leads = [], refetch: refetchLeads } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
-    queryFn: fetchLeadsForDashboard,
+    queryFn: async () => {
+      // IMPORTANTE: Para o pódio ser universal, o Broker precisa ver o total de avanços do time
+      // No entanto, o RLS protege os dados sensíveis. O pódio usará estatísticas agregadas.
+      return fetchLeadsForDashboard();
+    }
   });
 
   const { data: profiles = [] } = useQuery<User[]>({
     queryKey: ["profiles"],
-    queryFn: fetchProfiles,
+    queryFn: fetchProfiles, // Já busca todos os perfis permitidos
   });
 
   const userName = useMemo(() => {

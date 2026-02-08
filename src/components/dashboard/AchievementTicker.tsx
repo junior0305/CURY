@@ -8,6 +8,7 @@ export default function AchievementTicker() {
   const { data: achievements = [] } = useQuery({
     queryKey: ["public-achievements"],
     queryFn: async () => {
+      // IMPORTANTE: Buscamos conquistas que foram APROVADAS pelo Admin para o mural da fama
       const { data, error } = await supabase
         .from("achievements")
         .select(`
@@ -15,17 +16,24 @@ export default function AchievementTicker() {
           reward_label,
           action_type,
           created_at,
+          status,
           profiles (first_name, last_name)
         `)
+        .eq('status', 'APPROVED') // Apenas o que o Admin deu OK
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(15);
       if (error) throw error;
       return data;
     },
-    refetchInterval: 15000,
+    refetchInterval: 5000, // Atualiza mais rápido (5s) para dar sensação de tempo real
   });
 
-  if (achievements.length === 0) return null;
+  if (achievements.length === 0) return (
+    <div className="bg-slate-900 h-10 flex items-center border-y border-slate-800 text-slate-500 text-[10px] uppercase font-bold px-4 gap-2">
+      <Trophy className="h-3 w-3" />
+      Aguardando os próximos campeões de venda...
+    </div>
+  );
 
   return (
     <div className="relative overflow-hidden bg-slate-900 h-10 flex items-center border-y border-slate-800 shadow-2xl">
