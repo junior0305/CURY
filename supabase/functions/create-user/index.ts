@@ -7,17 +7,27 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
+  // CRITICAL: Robust CORS handling
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    const supabaseAdmin = createClient(supabaseUrl!, serviceRoleKey!, {
+    if (!supabaseUrl || !serviceRoleKey) {
+      throw new Error("Missing server environment variables.");
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const { email, password, firstName, lastName, role, managerId, teamId, userId, action } = await req.json()
+    const body = await req.json().catch(() => ({}));
+    const { email, password, firstName, lastName, role, managerId, teamId, userId, action } = body;
+
+    console.log(`[create-user] Request received. Action: ${action || 'create'}, Email: ${email}`);
 
     // ACTION: DELETE USER
     if (action === 'delete') {

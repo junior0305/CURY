@@ -107,18 +107,25 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
           teamId: formData.teamId === "none" ? null : formData.teamId
         };
 
-        console.log("Attempting to call Edge Function via fetch...");
+        console.log("Attempting to call Edge Function via direct fetch...");
 
-        // Usando fetch direto como alternativa ao invoke para maior controle e debug
-        const session = (await supabase.auth.getSession()).data.session;
+        const sessionResponse = await supabase.auth.getSession();
+        const session = sessionResponse.data.session;
+        
+        // Use the anon key for the apikey header if available, otherwise use hardcoded project key
+        const apiKey = (supabase as any).supabaseKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjbW92eXRiY2dodnZ1a2FzenliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMTM1MzksImV4cCI6MjA4NTg4OTUzOX0.Iwcm9SHz8OT3xicgB_iMCqz1HHZg1SGJQnG8Xok8K0E";
+
         const response = await fetch(CREATE_USER_FUNCTION_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session?.access_token || ''}`,
-            'apikey': (supabase as any).supabaseKey
+            'apikey': apiKey
           },
           body: JSON.stringify(payload)
+        }).catch(err => {
+          console.error("Fetch technical failure:", err);
+          throw new Error("Não foi possível alcançar o servidor. Verifique sua internet ou bloqueadores de anúncios.");
         });
 
         if (!response.ok) {
