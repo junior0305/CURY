@@ -36,13 +36,25 @@ serve(async (req) => {
 
     // 2. Lógica de Distribuição (Round Robin Simples)
     // Buscamos corretores que estão com a fila habilitada
-    const { data: eligibleBrokers, error: brokerError } = await supabaseAdmin
-      .from('profiles')
-      .select('id, manager_id')
-      .eq('role', 'BROKER')
-      .eq('lead_assignment_enabled', true);
-
-    if (brokerError) throw brokerError;
+    // Usamos um bloco try/catch interno para o caso da coluna não existir no momento exato da chamada
+    let eligibleBrokers = [];
+    try {
+      const { data, error: brokerError } = await supabaseAdmin
+        .from('profiles')
+        .select('id, manager_id')
+        .eq('role', 'BROKER')
+        .eq('lead_assignment_enabled', true);
+      
+      if (brokerError) throw brokerError;
+      eligibleBrokers = data || [];
+    } catch (e) {
+      console.warn("[incoming-lead] Falha ao filtrar por lead_assignment_enabled, buscando todos os corretores como fallback:", e.message);
+      const { data } = await supabaseAdmin
+        .from('profiles')
+        .select('id, manager_id')
+        .eq('role', 'BROKER');
+      eligibleBrokers = data || [];
+    }
 
     let assignedBrokerId = null;
     let assignedManagerId = null;
