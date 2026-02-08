@@ -1,0 +1,1 @@
+SELECT a.*, p.first_name FROM public.achievements a JOIN public.profiles p ON a.user_id = p.id;

@@ -58,39 +58,33 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ status, reason }: { status: LeadStatus, reason?: ExclusionReason }) => {
-      console.log(`Updating lead status to ${status} for lead ${leadId}`);
+      console.log(`[LeadDetail] Atualizando status para ${status}...`);
       const res = await updateLeadStatus(leadId!, status, reason);
       
-      // Lógica de Ganho de Prêmio se for Venda ou Visita
       if (status === 'CONCLUDED' || status === 'VISIT_SCHEDULED') {
         const actionType = status === 'CONCLUDED' ? 'SALE' : 'VISIT';
-        console.log(`Checking reward config for ${actionType}...`);
         
-        // Buscar config do prêmio no banco
-        const { data: config, error: configError } = await supabase
+        // Buscar config
+        const { data: config } = await supabase
           .from('reward_configs')
           .select('*')
           .eq('action_type', actionType)
           .eq('is_active', true)
           .maybeSingle();
 
-        if (configError) console.error("Error fetching config:", configError);
-
         if (config) {
-          console.log(`Inserting achievement for user ${lead.brokerId}...`);
+          console.log(`[LeadDetail] Gravando conquista para ${actionType}...`);
           const { error: achievementError } = await supabase.from('achievements').insert({
-            user_id: lead.brokerId,
-            lead_id: lead.id,
+            user_id: (await supabase.auth.getUser()).data.user?.id,
+            lead_id: leadId,
             action_type: actionType,
             reward_label: config.label,
             reward_value: config.amount_value,
             status: 'PENDING'
           });
           
-          if (achievementError) console.error("Error inserting achievement:", achievementError);
-          else console.log("Achievement inserted successfully!");
-        } else {
-          console.warn(`No active reward config found for ${actionType}`);
+          if (achievementError) console.error("[LeadDetail] Erro Achievement:", achievementError.message);
+          else console.log("[LeadDetail] Conquista gravada!");
         }
       }
       return res;

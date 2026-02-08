@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 interface BrokerKPIsProps {
@@ -41,19 +41,31 @@ interface BrokerKPIsProps {
 const COLORS = ["#4f46e5", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444"];
 
 export default function BrokerKPIs({ leads, onBack, brokerName }: BrokerKPIsProps) {
-  // 1. Buscar conquistas reais deste corretor
-  const { data: myAchievements = [] } = useQuery({
+  const queryClient = useQueryClient();
+
+  // 1. Buscar conquistas reais deste corretor de forma ultra-robusta
+  const { data: myAchievements = [], isLoading: loadingAch } = useQuery({
     queryKey: ['my-achievements'],
     queryFn: async () => {
+      console.log("[BrokerKPIs] Buscando conquistas...");
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
+      if (!user) {
+        console.warn("[BrokerKPIs] Usuário não encontrado no Auth");
+        return [];
+      }
+      
       const { data, error } = await supabase
         .from('achievements')
         .select('*')
-        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data;
+      
+      if (error) {
+        console.error("[BrokerKPIs] Erro Supabase:", error.message);
+        throw error;
+      }
+      
+      console.log("[BrokerKPIs] Conquistas carregadas:", data?.length);
+      return data || [];
     }
   });
 

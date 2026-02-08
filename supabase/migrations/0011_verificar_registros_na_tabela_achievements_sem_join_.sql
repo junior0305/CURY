@@ -1,0 +1,1 @@
+SELECT * FROM public.achievements LIMIT 10;
