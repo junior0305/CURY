@@ -22,50 +22,45 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const handleUserSession = async (currentSession: Session | null) => {
-    if (!currentSession) {
-      setSession(null);
-      setUser(null);
-      setRole(null);
-      setLoading(false);
-      return;
-    }
-
-    const currentUser = currentSession.user;
-    setSession(currentSession);
-    setUser(currentUser);
-
-    const metaRole = currentUser.user_metadata?.role;
-    if (metaRole) {
-      setRole(metaRole);
-    }
-
+  const fetchUserRole = async (userId: string) => {
     try {
       const { data } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', currentUser.id)
+        .eq('id', userId)
         .maybeSingle();
       
       if (data?.role) setRole(data.role);
-      else if (!metaRole) setRole('BROKER');
+      else setRole('BROKER');
     } catch (e) {
-      if (!metaRole) setRole('BROKER');
-    } finally {
-      setLoading(false);
+      setRole('BROKER');
     }
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      handleUserSession(session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      if (session) {
+        fetchUserRole(session.user.id);
+      } else {
+        setRole(null);
+        setLoading(false);
+      }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      handleUserSession(session);
-    });
+    const handleAuthError = (e: any) => {
+      console.warn("Auth error detected, signing out...", e.detail);
+      supabase.auth.signOut().then(() => {
+        window.location.href = '/login';
+      });
+    };
 
-    return () => subscription.unsubscribe();
+    window.addEventListener('supabase-auth-error', handleAuthError);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('supabase-auth-error', handleAuthError);
+    };
   }, []);
 
   const signOut = async () => {

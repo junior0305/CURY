@@ -20,7 +20,12 @@ export async function fetchOpenTasks(): Promise<Task[]> {
     .eq("status", "OPEN")
     .order("due_at", { ascending: true });
 
-  if (error) throw error;
+  if (error) {
+    if ((error as any).code === 'PGRST303' || (error as any).message?.includes('JWT')) {
+      window.dispatchEvent(new CustomEvent('supabase-auth-error', { detail: error }));
+    }
+    throw error;
+  }
   return (data || []).map(mapTaskFromDB);
 }
 

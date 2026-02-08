@@ -23,6 +23,9 @@ export const fetchLeadsForAdmin = async (): Promise<Lead[]> => {
 
   if (error) {
     console.error("[fetchLeadsForAdmin] Error:", error);
+    if ((error as any).code === 'PGRST303' || (error as any).message?.includes('JWT')) {
+      window.dispatchEvent(new CustomEvent('supabase-auth-error', { detail: error }));
+    }
     if ((error as any).code === '42P01') return [];
     throw error;
   }
@@ -40,6 +43,9 @@ export const fetchLeadsForDashboard = async (): Promise<Lead[]> => {
 
   if (error) {
     console.error("[fetchLeadsForDashboard] Error:", error);
+    if ((error as any).code === 'PGRST303' || (error as any).message?.includes('JWT')) {
+      window.dispatchEvent(new CustomEvent('supabase-auth-error', { detail: error }));
+    }
     if ((error as any).code === '42P01') return [];
     throw error;
   }

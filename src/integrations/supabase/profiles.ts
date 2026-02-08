@@ -18,20 +18,28 @@ export const fetchProfiles = async (): Promise<User[]> => {
     .select('*')
     .order('role', { ascending: false });
 
-  if (error) throw error;
+  if (error) {
+    if ((error as any).code === 'PGRST303' || (error as any).message?.includes('JWT')) {
+      window.dispatchEvent(new CustomEvent('supabase-auth-error', { detail: error }));
+    }
+    throw error;
+  }
   return (profiles || []).map(profile => mapProfileToUser(profile));
 };
 
 export const fetchTeams = async (): Promise<(Team & { memberCount?: number })[]> => {
-  // Buscamos as equipes
   const { data: teams, error: teamsError } = await supabase
     .from('teams')
     .select('*')
     .order('name', { ascending: true });
 
-  if (teamsError) throw teamsError;
+  if (teamsError) {
+    if ((teamsError as any).code === 'PGRST303' || (teamsError as any).message?.includes('JWT')) {
+      window.dispatchEvent(new CustomEvent('supabase-auth-error', { detail: teamsError }));
+    }
+    throw teamsError;
+  }
 
-  // Buscamos a contagem de membros por equipe na tabela profiles
   const { data: profiles, error: profilesError } = await supabase
     .from('profiles')
     .select('team_id');
@@ -50,7 +58,12 @@ export const fetchManagers = async (): Promise<User[]> => {
     .select('*')
     .in('role', ['SUPERINTENDENT', 'MANAGER']);
 
-  if (error) throw error;
+  if (error) {
+    if ((error as any).code === 'PGRST303' || (error as any).message?.includes('JWT')) {
+      window.dispatchEvent(new CustomEvent('supabase-auth-error', { detail: error }));
+    }
+    throw error;
+  }
   return (profiles || []).map(profile => mapProfileToUser(profile));
 };
 
