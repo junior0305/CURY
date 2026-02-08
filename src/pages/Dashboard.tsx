@@ -78,15 +78,20 @@ const Dashboard = () => {
   }, [leads, showKPIsFor]);
 
   const stats = useMemo(() => {
+    // FILTRO DE PRIVACIDADE PARA OS CARDS: O corretor SÓ deve ver a contagem dos seus próprios leads
+    // Exceto se for Superintendent ou Admin (que vêem o total do time)
+    const isPowerUser = role === 'SUPERINTENDENT' || role === 'ADMIN';
+    const displayLeads = isPowerUser ? leads : leads.filter(l => l.brokerId === user?.id);
+
     return {
-      total: leads.length,
-      new: leads.filter(l => l.status === 'NEW').length,
-      in_progress: leads.filter(l => l.status === 'IN_PROGRESS').length,
-      visits: leads.filter(l => l.status === 'VISIT_SCHEDULED').length,
-      docs: leads.filter(l => l.status === 'DOCS_REQUESTED').length,
-      concluded: leads.filter(l => l.status === 'CONCLUDED').length // NEW: Vendas
+      total: displayLeads.length,
+      new: displayLeads.filter(l => l.status === 'NEW').length,
+      in_progress: displayLeads.filter(l => l.status === 'IN_PROGRESS').length,
+      visits: displayLeads.filter(l => l.status === 'VISIT_SCHEDULED').length,
+      docs: displayLeads.filter(l => l.status === 'DOCS_REQUESTED').length,
+      concluded: displayLeads.filter(l => l.status === 'CONCLUDED').length
     };
-  }, [leads]);
+  }, [leads, user?.id, role]);
 
   // Monitoramento de Cutucões (Internal Notifications)
   useEffect(() => {
