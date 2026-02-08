@@ -4,7 +4,18 @@ import { fetchLeadsForDashboard } from "@/integrations/supabase/leads";
 import { fetchOpenTasks } from "@/integrations/supabase/tasks";
 import { Lead, LeadStatus } from "@/types/lead";
 import { Task } from "@/types/task";
-import { Loader2, Phone, MessageSquare, Clock, AlertTriangle, Check, Bell, Zap } from "lucide-react";
+import { 
+  Loader2, 
+  Phone, 
+  MessageSquare, 
+  Clock, 
+  AlertTriangle, 
+  Check, 
+  Bell, 
+  Zap, 
+  AlertCircle,
+  Hourglass 
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -63,16 +74,20 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: Lea
         ? leadTasks.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0]
         : null;
       
-      let priority = 0; // 0: low, 1: today, 2: overdue/now, 3: ultra (new)
-      if (lead.status === 'NEW') priority = 3;
-      if (nextTask) {
+      const hoursSinceLastAction = (now - new Date(lead.lastInteractionAt).getTime()) / 3600000;
+      const isStale = hoursSinceLastAction > 4 && lead.status !== 'CONCLUDED';
+
+      let priority = 0; // 0: low, 1: today, 2: overdue/now, 3: ultra (new), 4: STALE ALERT
+      if (isStale) priority = 4;
+      else if (lead.status === 'NEW') priority = 3;
+      else if (nextTask) {
         const diff = (new Date(nextTask.dueAt).getTime() - now) / 60000;
         if (diff < 0) priority = 2;
         else if (diff < 15) priority = 2;
         else priority = 1;
       }
 
-      return { ...lead, nextTask, priority };
+      return { ...lead, nextTask, priority, isStale, hoursSinceLastAction };
     });
 
     // Filter
@@ -121,7 +136,8 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: Lea
               className={cn(
                 "group relative p-5 border-b border-slate-100 cursor-pointer transition-all duration-300",
                 selectedLeadId === lead.id ? "bg-white shadow-[0_10px_30px_-10px_rgba(0,0,0,0.1)] z-10" : "hover:bg-indigo-50/30",
-                lead.priority >= 2 && "bg-rose-50/20"
+                lead.priority >= 2 && "bg-rose-50/20",
+                lead.isStale && "ring-2 ring-inset ring-amber-500 bg-amber-50/30"
               )}
               onClick={() => onSelectLead(lead.id)}
             >
@@ -131,12 +147,22 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: Lea
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <h4 className="font-bold text-slate-900 truncate text-[15px]">{lead.name}</h4>
+                    {lead.isStale && (
+                      <Badge className="bg-amber-500 text-white animate-pulse text-[9px] font-black uppercase">
+                        <Hourglass className="w-2 h-2 mr-1" /> Esfriando
+                      </Badge>
+                    )}
                     <Badge className={cn("text-[9px] font-black tracking-tighter h-4 px-1.5 rounded-full", statusColors[lead.status], "text-white border-none")}>
                       {statusLabels[lead.status]}
                     </Badge>
                   </div>
 
-                  {lead.nextTask ? (
+                  {lead.isStale ? (
+                    <div className="flex items-center gap-1.5 text-[11px] font-black mt-2 py-1 px-2 rounded-lg w-fit bg-amber-100 text-amber-700">
+                      <AlertCircle className="w-3 h-3" />
+                      ALERTA: {Math.floor(lead.hoursSinceLastAction)}h sem atendimento!
+                    </div>
+                  ) : lead.nextTask ? (
                     <div className={cn(
                       "flex items-center gap-1.5 text-[11px] font-bold mt-2 py-1 px-2 rounded-lg w-fit",
                       lead.priority >= 2 ? "bg-rose-600 text-white animate-pulse" : "bg-indigo-100 text-indigo-700"

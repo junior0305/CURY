@@ -21,6 +21,9 @@ import {
   Banknote, 
   Rocket, 
   Save,
+  Hourglass,
+  SendHorizontal,
+  RefreshCcw,
   Plus,
   Trash2
 } from "lucide-react";
@@ -474,9 +477,21 @@ const EconomyManagement = () => {
 const Admin = () => {
   const { user: authUser, role: userRole, loading: authLoading, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("users");
+  
+  const currentUser: User = {
+    id: authUser?.id || "unknown",
+    name: authUser?.email || "Admin User",
+    email: authUser?.email || "",
+    role: (userRole as UserRole) || "SUPERINTENDENT",
+    managerId: null,
+    teamId: null,
+    leadAssignmentEnabled: false,
+  };
+
   const [isRescueOpen, setIsRescueOpen] = useState(false);
   const [rescueBrokerId, setRescueBrokerId] = useState<string>("");
   const [isRescuing, setIsRescuing] = useState(false);
+  const [selectedStaleLeadId, setSelectedStaleLeadId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: profiles = [] } = useQuery<User[]>({
@@ -488,6 +503,31 @@ const Admin = () => {
     queryKey: ["adminLeads"],
     queryFn: fetchLeadsForAdmin,
   });
+
+  // NEW: Stale Leads Detection for Managers
+  const staleLeads = useMemo(() => {
+    const now = Date.now();
+    return leads.filter(l => {
+      const hours = (now - new Date(l.lastInteractionAt).getTime()) / 3600000;
+      const isMyTeam = currentUser.role === 'SUPERINTENDENT' || l.managerId === currentUser.id;
+      return isMyTeam && hours > 4 && l.status !== 'CONCLUDED' && l.status !== 'EXCLUDED';
+    });
+  }, [leads, currentUser]);
+
+  const nudgeCorretor = async (brokerId: string, leadName: string) => {
+    try {
+      const { error } = await supabase.from('internal_notifications').insert({
+        from_id: currentUser.id,
+        to_id: brokerId,
+        message: `🚨 GESTÃO: O lead "${leadName}" está parado há mais de 4h. Por favor, atenda agora ou ele será resgatado!`,
+        type: 'STALE_LEAD_ALERT'
+      });
+      if (error) throw error;
+      toast.success("Cutucão enviado ao corretor!");
+    } catch (e: any) {
+      toast.error("Erro ao notificar: " + e.message);
+    }
+  };
 
   // Query specifically for failed distribution logs to show the alert
   const { data: failedLogs = [] } = useQuery({
@@ -568,16 +608,6 @@ const Admin = () => {
       </div>
     );
   }
-
-  const currentUser: User = {
-    id: authUser?.id || "unknown",
-    name: authUser?.email || "Admin User",
-    email: authUser?.email || "",
-    role: (userRole as UserRole) || "SUPERINTENDENT",
-    managerId: null,
-    teamId: null,
-    leadAssignmentEnabled: false,
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
@@ -716,6 +746,77 @@ const Admin = () => {
           <TabsContent value="leads"><LeadDistribution /></TabsContent>
           <TabsContent value="logs"><DistributionLogs /></TabsContent>
           <TabsContent value="rework"><LeadRework /></TabsContent>
+          
+          {/* Nova Seção: Radar de Leads Parados */}
+          {(currentUser.role === 'SUPERINTENDENT' || currentUser.role === 'MANAGER') && (
+            <div className="mt-12 space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                    <Hourglass className="h-6 w-6 text-amber-500 animate-spin-slow" />
+                    Radar de Leads Parados
+                  </h2>
+                  <p className="text-sm text-slate-500 font-medium">Intervenção rápida para evitar perda de faturamento.</p>
+                </div>
+                <Badge className="bg-amber-100 text-amber-700 font-black px-4 py-1 rounded-full border-none">
+                  {staleLeads.length} EM RISCO
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {staleLeads.length === 0 ? (
+                  <Card className="col-span-full p-10 text-center text-slate-400 border-dashed border-2 bg-transparent shadow-none rounded-3xl">
+                    <CheckCircle className="h-10 w-10 mx-auto mb-2 text-emerald-400 opacity-50" />
+                    <p className="font-bold">Parabéns! Todo o time está com os leads em dia.</p>
+                  </Card>
+                ) : (
+                  staleLeads.map(l => {
+                    const broker = profiles.find(p => p.id === l.brokerId);
+                    const hours = Math.floor((Date.now() - new Date(l.lastInteractionAt).getTime()) / 3600000);
+                    return (
+                      <Card key={l.id} className="p-5 border-none shadow-xl rounded-[2rem] bg-white ring-1 ring-amber-100 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-4">
+                          <div className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-full animate-pulse uppercase tracking-tighter">
+                            Há {hours}h
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-4">
+                          <div>
+                            <h4 className="font-black text-slate-900 text-lg leading-none">{l.name}</h4>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Dono: {broker?.name || 'Sem Dono'}</p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 pt-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="rounded-xl text-[10px] font-black uppercase tracking-tighter border-amber-200 text-amber-700 hover:bg-amber-50"
+                              onClick={() => nudgeCorretor(l.brokerId!, l.name)}
+                            >
+                              <SendHorizontal className="h-3 w-3 mr-1" /> Cutucar
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              className="rounded-xl text-[10px] font-black uppercase tracking-tighter bg-rose-600 hover:bg-rose-700 shadow-md"
+                              onClick={() => {
+                                setSelectedStaleLeadId(l.id);
+                                setRescueBrokerId("");
+                                setIsRescueOpen(true);
+                              }}
+                            >
+                              <RefreshCcw className="h-3 w-3 mr-1" /> Resgatar
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
           <TabsContent value="integrations"><IntegrationsManagement /></TabsContent>
           <TabsContent value="settings"><Card className="p-10 text-center text-gray-400">Configurações globais em breve.</Card></TabsContent>
         </Tabs>
