@@ -1,3 +1,5 @@
+"use client";
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLeadsForDashboard, updateLeadStatus } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
@@ -10,7 +12,9 @@ import CadenceFlow from "./CadenceFlow";
 import AIAssistant from "./AIAssistant";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface LeadDetailProps {
   leadId: string | null;
@@ -47,12 +51,13 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
   const lead = leads.find(l => l.id === leadId);
 
   const updateStatusMutation = useMutation({
-    mutationFn: ({ status, reason }: { status: LeadStatus, reason?: ExclusionReason }) => 
-      updateLeadStatus(leadId!, status, reason),
+    mutationFn: async ({ status, reason }: { status: LeadStatus, reason?: ExclusionReason }) => {
+      return updateLeadStatus(leadId!, status, reason);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] });
-      queryClient.invalidateQueries({ queryKey: ['adminLeads'] }); // Para atualizar a aba Retrabalho
-      toast.success(`Status do lead atualizado para ${statusLabels[lead!.status]}.`);
+      queryClient.invalidateQueries({ queryKey: ['adminLeads'] });
+      toast.success("Status do lead atualizado.");
       onLeadUpdated();
     },
     onError: (err: any) => {
