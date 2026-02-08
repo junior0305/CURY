@@ -6,6 +6,7 @@ const mapProfileToUser = (profile: any): User => ({
   id: profile.id,
   name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.email || 'Usuário Sem Nome',
   email: profile.email || 'E-mail não disponível',
+  phone: profile.phone || '',
   role: (profile.role as UserRole) || 'BROKER',
   managerId: profile.manager_id,
   teamId: profile.team_id,
@@ -82,7 +83,7 @@ export const fetchManagers = async (): Promise<User[]> => {
 };
 
 export const updateProfile = async (user: User) => {
-  const { id, name, role, managerId, teamId, leadAssignmentEnabled } = user;
+  const { id, name, role, managerId, teamId, leadAssignmentEnabled, phone } = user;
 
   const names = name.trim().split(/\s+/);
   const firstName = names[0];
@@ -92,6 +93,7 @@ export const updateProfile = async (user: User) => {
     first_name: firstName,
     last_name: lastName,
     role: role,
+    phone: phone,
     manager_id: (managerId === 'none' || !managerId) ? null : managerId,
     team_id: (teamId === 'none' || !teamId) ? null : teamId,
     lead_assignment_enabled: leadAssignmentEnabled,

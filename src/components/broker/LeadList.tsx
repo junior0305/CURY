@@ -62,7 +62,9 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: Lea
   });
 
   const processedLeads = useMemo(() => {
-    const now = Date.now();
+    const now = new Date();
+    const nowTimestamp = now.getTime();
+    const nowHour = now.getHours();
     
     // FILTRO DE PRIVACIDADE: Na lista lateral, o corretor SÓ vê o que é dele.
     const myLeadsOnly = leads.filter(l => l.brokerId === session?.user.id);
@@ -74,14 +76,36 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: Lea
         ? leadTasks.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0]
         : null;
       
-      const hoursSinceLastAction = (now - new Date(lead.lastInteractionAt).getTime()) / 3600000;
-      const isStale = hoursSinceLastAction > 4 && lead.status !== 'CONCLUDED';
+      const lastAction = new Date(lead.lastInteractionAt);
+      
+      // Lógica de cálculo de horas de inatividade ignorando o período das 21h às 08h
+      let effectiveNow = new Date(now);
+      if (nowHour >= 21) {
+        effectiveNow.setHours(21, 0, 0, 0);
+      } else if (nowHour < 8) {
+        effectiveNow.setDate(effectiveNow.getDate() - 1);
+        effectiveNow.setHours(21, 0, 0, 0);
+      }
+
+      let effectiveStart = new Date(lastAction);
+      const startHour = lastAction.getHours();
+      if (startHour >= 21) {
+        effectiveStart.setDate(effectiveStart.getDate() + 1);
+        effectiveStart.setHours(8, 0, 0, 0);
+      } else if (startHour < 8) {
+        effectiveStart.setHours(8, 0, 0, 0);
+      }
+
+      const diffMs = effectiveNow.getTime() - effectiveStart.getTime();
+      const hoursSinceLastAction = Math.max(0, Math.floor(diffMs / 3600000));
+      
+      const isStale = hoursSinceLastAction >= 4 && lead.status !== 'CONCLUDED' && lead.status !== 'EXCLUDED';
 
       let priority = 0; // 0: low, 1: today, 2: overdue/now, 3: ultra (new), 4: STALE ALERT
       if (isStale) priority = 4;
       else if (lead.status === 'NEW') priority = 3;
       else if (nextTask) {
-        const diff = (new Date(nextTask.dueAt).getTime() - now) / 60000;
+        const diff = (new Date(nextTask.dueAt).getTime() - nowTimestamp) / 60000;
         if (diff < 0) priority = 2;
         else if (diff < 15) priority = 2;
         else priority = 1;

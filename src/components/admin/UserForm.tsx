@@ -58,6 +58,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
       setFormData({
         name: "",
         email: "",
+        phone: "",
         password: "",
         role: "BROKER",
         managerId: null,
@@ -120,6 +121,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
             password: formData.password,
             firstName,
             lastName,
+            phone: formData.phone,
             role: formData.role,
             managerId: formData.managerId === "none" ? null : formData.managerId,
             teamId: formData.teamId === "none" ? null : formData.teamId
@@ -178,6 +180,17 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
               disabled={isEditing || busy} 
               placeholder="email@exemplo.com"
               required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Telefone (WhatsApp)</Label>
+            <Input 
+              type="tel" 
+              value={formData.phone || ""} 
+              onChange={(e) => handleChange("phone", e.target.value)}
+              disabled={busy} 
+              placeholder="(00) 00000-0000"
             />
           </div>
 

@@ -504,26 +504,74 @@ const Admin = () => {
     queryFn: fetchLeadsForAdmin,
   });
 
+  // Lógica de cálculo de horas de inatividade ignorando o período das 21h às 08h
+  const getStaleHours = (lastActionIso: string) => {
+    const lastAction = new Date(lastActionIso);
+    const now = new Date();
+    
+    // Se agora for entre 21h e 08h, usamos 21h do dia atual (ou anterior) como "agora" para o cálculo
+    let effectiveNow = new Date(now);
+    const nowHour = now.getHours();
+    
+    if (nowHour >= 21) {
+      effectiveNow.setHours(21, 0, 0, 0);
+    } else if (nowHour < 8) {
+      effectiveNow.setDate(effectiveNow.getDate() - 1);
+      effectiveNow.setHours(21, 0, 0, 0);
+    }
+
+    // Se a última ação foi após as 21h, consideramos que o relógio só começa a contar às 08h
+    let effectiveStart = new Date(lastAction);
+    const startHour = lastAction.getHours();
+    if (startHour >= 21) {
+      effectiveStart.setDate(effectiveStart.getDate() + 1);
+      effectiveStart.setHours(8, 0, 0, 0);
+    } else if (startHour < 8) {
+      effectiveStart.setHours(8, 0, 0, 0);
+    }
+
+    // Cálculo simples em horas. Nota: Uma implementação ultra-precisa exigiria loop pelos dias, 
+    // mas para o radar de 4h, essa lógica de "congelamento" noturno atende bem.
+    const diffMs = effectiveNow.getTime() - effectiveStart.getTime();
+    const hours = Math.floor(diffMs / 3600000);
+    return hours > 0 ? hours : 0;
+  };
+
   // NEW: Stale Leads Detection for Managers
   const staleLeads = useMemo(() => {
-    const now = Date.now();
     return leads.filter(l => {
-      const hours = (now - new Date(l.lastInteractionAt).getTime()) / 3600000;
+      const hours = getStaleHours(l.lastInteractionAt);
       const isMyTeam = currentUser.role === 'SUPERINTENDENT' || l.managerId === currentUser.id;
-      return isMyTeam && hours > 4 && l.status !== 'CONCLUDED' && l.status !== 'EXCLUDED';
+      return isMyTeam && hours >= 4 && l.status !== 'CONCLUDED' && l.status !== 'EXCLUDED';
     });
   }, [leads, currentUser]);
 
-  const nudgeCorretor = async (brokerId: string, leadName: string) => {
+  const nudgeCorretor = async (brokerId: string, leadName: string, leadPhone: string) => {
     try {
-      const { error } = await supabase.from('internal_notifications').insert({
+      const broker = profiles.find(p => p.id === brokerId);
+      const hours = getStaleHours(leads.find(l => l.name === leadName)?.lastInteractionAt || new Date().toISOString());
+      
+      // 1. Notificação Interna
+      await supabase.from('internal_notifications').insert({
         from_id: currentUser.id,
         to_id: brokerId,
-        message: `🚨 GESTÃO: O lead "${leadName}" está parado há mais de 4h. Por favor, atenda agora ou ele será resgatado!`,
+        message: `🚨 GESTÃO: O lead "${leadName}" está parado há ${hours}h. Atenda agora!`,
         type: 'STALE_LEAD_ALERT'
       });
-      if (error) throw error;
-      toast.success("Cutucão enviado ao corretor!");
+
+      // 2. Notificação via WhatsApp (se o corretor tiver telefone cadastrado)
+      if (broker?.phone) {
+        const cleanPhone = broker.phone.replace(/\D/g, '');
+        const message = encodeURIComponent(
+          `🚨 *ALERTA DE GESTÃO - CRM*\n\n` +
+          `Olá ${broker.name.split(' ')[0]}, seu cliente *${leadName}* (${leadPhone}) está há *${hours} horas* sem contato.\n\n` +
+          `Por favor, atualize a ferramenta agora para não perder o lead! 📈`
+        );
+        window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
+        toast.success("Notificações enviadas (Interna + WhatsApp)!");
+      } else {
+        toast.warning("Cutucão enviado apenas no CRM (Corretor sem telefone cadastrado).");
+      }
     } catch (e: any) {
       toast.error("Erro ao notificar: " + e.message);
     }
@@ -772,7 +820,7 @@ const Admin = () => {
                 ) : (
                   staleLeads.map(l => {
                     const broker = profiles.find(p => p.id === l.brokerId);
-                    const hours = Math.floor((Date.now() - new Date(l.lastInteractionAt).getTime()) / 3600000);
+                    const hours = getStaleHours(l.lastInteractionAt);
                     return (
                       <Card key={l.id} className="p-5 border-none shadow-xl rounded-[2rem] bg-white ring-1 ring-amber-100 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-4">
@@ -792,7 +840,7 @@ const Admin = () => {
                               size="sm" 
                               variant="outline" 
                               className="rounded-xl text-[10px] font-black uppercase tracking-tighter border-amber-200 text-amber-700 hover:bg-amber-50"
-                              onClick={() => nudgeCorretor(l.brokerId!, l.name)}
+                              onClick={() => nudgeCorretor(l.brokerId!, l.name, l.phone)}
                             >
                               <SendHorizontal className="h-3 w-3 mr-1" /> Cutucar
                             </Button>

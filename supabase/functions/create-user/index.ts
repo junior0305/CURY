@@ -20,7 +20,7 @@ serve(async (req) => {
     })
 
     const body = await req.json()
-    const { email, password, firstName, lastName, role, managerId, teamId, userId, action } = body
+    const { email, password, firstName, lastName, role, managerId, teamId, userId, action, phone } = body
 
     // ACTION: DELETE USER
     if (action === 'delete') {
@@ -45,6 +45,7 @@ serve(async (req) => {
         first_name: firstName, 
         last_name: lastName, 
         role: role,
+        phone: phone, // Passando telefone para o metadata
         team_id: (teamId === 'none' || !teamId) ? null : teamId,
         manager_id: (managerId === 'none' || !managerId) ? null : managerId
       }
@@ -63,6 +64,7 @@ serve(async (req) => {
         team_id: (teamId === 'none' || !teamId) ? null : teamId,
         role: role,
         email: email,
+        phone: phone, // Salvando telefone no perfil
         updated_at: new Date().toISOString()
       })
     
