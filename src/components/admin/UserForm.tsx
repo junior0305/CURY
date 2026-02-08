@@ -107,40 +107,27 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
           teamId: formData.teamId === "none" ? null : formData.teamId
         };
 
-        console.log("Attempting to call Edge Function via direct fetch...");
+        console.log("Switching back to standard Supabase client invocation...");
 
-        const sessionResponse = await supabase.auth.getSession();
-        const session = sessionResponse.data.session;
-        
-        // Use the anon key for the apikey header if available, otherwise use hardcoded project key
-        const apiKey = (supabase as any).supabaseKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjbW92eXRiY2dodnZ1a2FzenliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzMTM1MzksImV4cCI6MjA4NTg4OTUzOX0.Iwcm9SHz8OT3xicgB_iMCqz1HHZg1SGJQnG8Xok8K0E";
-
-        const response = await fetch(CREATE_USER_FUNCTION_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token || ''}`,
-            'apikey': apiKey
-          },
-          body: JSON.stringify(payload)
-        }).catch(err => {
-          console.error("Fetch technical failure:", err);
-          throw new Error("Não foi possível alcançar o servidor. Verifique sua internet ou bloqueadores de anúncios.");
+        // Revertendo para o método oficial da biblioteca Supabase, que é mais seguro para CORS
+        const { data, error: invokeError } = await supabase.functions.invoke('create-user', {
+          body: payload
         });
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `Erro HTTP: ${response.status}`);
+        if (invokeError) {
+          console.error("Standard Invoke Error:", invokeError);
+          // Se o erro for do tipo 'Failed to fetch' ou similar no invokeError
+          throw new Error(invokeError.message || "Erro de conexão com o servidor de funções.");
         }
 
-        const data = await response.json();
+        if (data?.error) throw new Error(data.error);
 
         toast.success("Usuário criado com sucesso!");
         onSave(data.user as User);
         onOpenChange(false);
       } catch (err: any) {
-        console.error("Critical User Creation Error:", err);
-        toast.error(`Falha na conexão: ${err.message}`);
+        console.error("Final Attempt Error:", err);
+        toast.error(`Erro: ${err.message}`);
       } finally {
         setCreating(false);
       }
