@@ -1,5 +1,5 @@
 import { supabase } from "./client";
-import { Lead, ExclusionReason } from "@/types/lead";
+import { Lead, ExclusionReason, LeadStatus } from "@/types/lead";
 
 const mapLeadFromDB = (l: any): Lead => ({
   id: l.id,
@@ -16,39 +16,45 @@ const mapLeadFromDB = (l: any): Lead => ({
 });
 
 export const fetchLeadsForAdmin = async (): Promise<Lead[]> => {
-  // Esta função é usada no painel Admin (Rework) e se beneficia do RLS
   const { data, error } = await supabase
     .from('leads')
     .select('*')
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error("Error fetching leads:", error);
-    return []; // Retornar vazio se a tabela ainda não existir
+    console.error("[fetchLeadsForAdmin] Error:", error);
+    if ((error as any).code === '42P01') return [];
+    throw error;
   }
-  
+
   return (data || []).map(mapLeadFromDB);
 };
 
 export const fetchLeadsForDashboard = async (): Promise<Lead[]> => {
-  // Esta função será usada pelo Broker/Manager/Superintendent no Dashboard
-  // O RLS garante que cada usuário veja apenas os leads permitidos.
+  // Importante: não filtramos por status aqui.
+  // O dashboard usa filtros de UI (cards do funil) para decidir o que aparece.
   const { data, error } = await supabase
     .from('leads')
     .select('*')
-    .not('status', 'eq', 'EXCLUDED') // Leads excluídos não aparecem no dashboard ativo
-    .not('status', 'eq', 'ABANDONED') // Leads abandonados não aparecem no dashboard ativo
-    .order('last_interaction_at', { ascending: true }); // Prioriza leads mais antigos
+    .order('last_interaction_at', { ascending: true });
 
   if (error) {
-    console.error("Error fetching dashboard leads:", error);
+    console.error("[fetchLeadsForDashboard] Error:", error);
+    if ((error as any).code === '42P01') return [];
     throw error;
   }
-  
+
   return (data || []).map(mapLeadFromDB);
 };
 
-export const createManualLead = async (leadData: { name: string, email: string, phone: string, tag: string, brokerId: string, managerId: string | null }) => {
+export const createManualLead = async (leadData: {
+  name: string;
+  email: string;
+  phone: string;
+  tag: string;
+  brokerId: string;
+  managerId: string | null;
+}) => {
   const { data, error } = await supabase
     .from('leads')
     .insert({
@@ -71,19 +77,23 @@ export const createManualLead = async (leadData: { name: string, email: string, 
 export const updateLeadBroker = async (leadId: string, brokerId: string) => {
   const { error } = await supabase
     .from('leads')
-    .update({ 
+    .update({
       broker_id: brokerId,
       status: 'NEW',
-      last_interaction_at: new Date().toISOString()
+      last_interaction_at: new Date().toISOString(),
     })
     .eq('id', leadId);
 
   if (error) throw error;
 };
 
-export const updateLeadStatus = async (leadId: string, status: LeadStatus, exclusionReason: ExclusionReason = null) => {
+export const updateLeadStatus = async (
+  leadId: string,
+  status: LeadStatus,
+  exclusionReason: ExclusionReason = null
+) => {
   const payload: any = {
-    status: status,
+    status,
     last_interaction_at: new Date().toISOString(),
   };
 

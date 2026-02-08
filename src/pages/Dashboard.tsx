@@ -1,16 +1,41 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { Loader2, UserCircle, PlusCircle, LogOut } from "lucide-react";
+import { Loader2, PlusCircle, LogOut, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetTrigger, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetTrigger } from "@/components/ui/sheet";
 import LeadForm from "@/components/broker/LeadForm";
 import LeadList from "@/components/broker/LeadList";
 import LeadDetail from "@/components/broker/LeadDetail";
+import FunnelStageCards, { FunnelFilter } from "@/components/dashboard/FunnelStageCards";
+import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
+import { useQuery } from "@tanstack/react-query";
+import { fetchLeadsForDashboard } from "@/integrations/supabase/leads";
+import { fetchProfiles } from "@/integrations/supabase/profiles";
+import type { Lead } from "@/types/lead";
+import type { User } from "@/types/user";
+import { Badge } from "@/components/ui/badge";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
+
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FunnelFilter>("ACTIVE");
+
+  const { data: leads = [] } = useQuery<Lead[]>({
+    queryKey: ["dashboardLeads"],
+    queryFn: fetchLeadsForDashboard,
+  });
+
+  const { data: profiles = [] } = useQuery<User[]>({
+    queryKey: ["profiles"],
+    queryFn: fetchProfiles,
+  });
+
+  const userName = useMemo(() => {
+    const email = user?.email ?? "";
+    return email.split("@")[0] || "Corretor";
+  }, [user?.email]);
 
   if (loading) {
     return (
@@ -20,54 +45,113 @@ const Dashboard = () => {
     );
   }
 
-  const userName = user?.email || 'Corretor';
-
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-md p-4 border-b border-indigo-100">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-extrabold text-indigo-600">CRM Guia</h1>
-          <div className="flex items-center gap-4">
-            <Sheet open={isFormOpen} onOpenChange={setIsFormOpen}>
-              <SheetTrigger asChild>
-                <Button className="bg-green-600 hover:bg-green-700 shadow-lg shadow-green-100">
-                  <PlusCircle className="w-4 h-4 mr-2" /> Novo Lead Manual
-                </Button>
-              </SheetTrigger>
-              <LeadForm onOpenChange={setIsFormOpen} brokerId={user?.id || ''} managerId={user?.user_metadata?.manager_id || null} />
-            </Sheet>
-            
-            <div className="flex items-center gap-2 text-gray-600">
-              <UserCircle className="w-6 h-6 text-indigo-400" />
-              <span className="font-medium text-sm hidden sm:inline">{userName}</span>
+    <div className="min-h-screen bg-slate-50">
+      {/* Top chrome */}
+      <header className="sticky top-0 z-30 bg-white/70 backdrop-blur border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-indigo-600 text-white shadow-sm dashboard-tilt">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 truncate">
+                    Dashboard
+                    <span className="text-indigo-600"> CRM</span>
+                  </h1>
+                  <p className="text-xs sm:text-sm text-slate-500 truncate">
+                    Olá, <span className="font-semibold text-slate-700">{userName}</span> — foco no próximo passo.
+                  </p>
+                </div>
+              </div>
             </div>
-            <Button variant="ghost" size="icon" onClick={signOut} title="Sair">
-              <LogOut className="w-5 h-5 text-gray-400 hover:text-red-500" />
-            </Button>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Sheet open={isFormOpen} onOpenChange={setIsFormOpen}>
+                <SheetTrigger asChild>
+                  <Button className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100">
+                    <PlusCircle className="w-4 h-4 mr-2" />
+                    <span className="hidden sm:inline">Novo Lead</span>
+                    <span className="sm:hidden">Lead</span>
+                  </Button>
+                </SheetTrigger>
+                <LeadForm
+                  onOpenChange={setIsFormOpen}
+                  brokerId={user?.id || ""}
+                  managerId={(user as any)?.user_metadata?.manager_id || null}
+                />
+              </Sheet>
+
+              <Badge className="hidden sm:inline-flex rounded-full bg-indigo-600 text-white">
+                {role || "BROKER"}
+              </Badge>
+
+              <Button
+                variant="ghost"
+                className="rounded-2xl hover:bg-rose-50 hover:text-rose-700"
+                onClick={signOut}
+                title="Sair"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Sair</span>
+              </Button>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 p-4 sm:p-8 max-w-7xl mx-auto w-full">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Coluna 1: Lista de Leads (O que fazer agora) */}
-          <div className="lg:col-span-1">
-            <LeadList 
-              selectedLeadId={selectedLeadId} 
-              onSelectLead={setSelectedLeadId} 
-              currentUserRole={role || 'BROKER'}
-            />
-          </div>
+      {/* Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-8 py-6 sm:py-8">
+        <div className="relative">
+          <div className="pointer-events-none absolute -top-10 right-0 h-52 w-52 rounded-full bg-indigo-600/10 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-12 left-0 h-52 w-52 rounded-full bg-sky-600/10 blur-2xl" />
 
-          {/* Coluna 2: Detalhe do Lead e Fluxo de Cadência */}
-          <div className="lg:col-span-2">
-            <LeadDetail 
-              leadId={selectedLeadId} 
-              onLeadUpdated={() => setSelectedLeadId(null)} // Fecha o detalhe após atualização
-            />
-          </div>
+          <section className="relative">
+            <div className="flex items-end justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
+                  Funil em cards
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Visual rápido das etapas — clique para filtrar a lista.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setFilter((prev) => (prev === "ALL" ? "ACTIVE" : "ALL"))}
+                className="rounded-2xl bg-white/70 backdrop-blur border-slate-200 hover:bg-white"
+              >
+                {filter === "ALL" ? "Mostrar Ativos" : "Mostrar Tudo"}
+              </Button>
+            </div>
+
+            <div className="mt-4">
+              <FunnelStageCards leads={leads} value={filter} onChange={(v) => {
+                setFilter(v);
+                setSelectedLeadId(null);
+              }} />
+            </div>
+          </section>
+
+          <section className="relative mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-4">
+              <LeadList
+                selectedLeadId={selectedLeadId}
+                onSelectLead={setSelectedLeadId}
+                currentUserRole={role || "BROKER"}
+                filter={filter}
+              />
+            </div>
+
+            <div className="lg:col-span-8 space-y-6">
+              <LeadDetail leadId={selectedLeadId} onLeadUpdated={() => setSelectedLeadId(null)} />
+
+              {/* Podium (mainly useful for managers/superintendents; brokers may see limited data by RLS) */}
+              <LeaderboardPodium leads={leads} users={profiles} />
+            </div>
+          </section>
         </div>
       </main>
     </div>

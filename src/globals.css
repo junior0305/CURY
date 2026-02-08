@@ -99,3 +99,30 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  /* Subtle 3D hover + motion utilities for dashboard */
+  .dashboard-tilt {
+    transform-style: preserve-3d;
+  }
+
+  .dashboard-tilt:hover {
+    transform: perspective(900px) rotateX(1.2deg) rotateY(-1.2deg);
+  }
+
+  @keyframes dashboard-float {
+    0% {
+      transform: translate3d(0, 0, 0);
+    }
+    50% {
+      transform: translate3d(0, -6px, 0);
+    }
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  .dashboard-float {
+    animation: dashboard-float 6s ease-in-out infinite;
+  }
+}
