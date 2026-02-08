@@ -1,17 +1,19 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchLeadsForDashboard } from "@/integrations/supabase/leads";
+import { fetchOpenTasks } from "@/integrations/supabase/tasks";
 import { Lead, LeadStatus } from "@/types/lead";
-import { Loader2, Phone, MessageSquare, Clock, AlertTriangle, Check } from "lucide-react";
+import { Task } from "@/types/task";
+import { Loader2, Phone, MessageSquare, Clock, AlertTriangle, Check, Bell, Zap } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { FunnelFilter } from "@/components/dashboard/FunnelStageCards";
+import { cn } from "@/lib/utils";
 
 interface LeadListProps {
   selectedLeadId: string | null;
   onSelectLead: (id: string) => void;
   currentUserRole: string;
-  filter: FunnelFilter;
+  filter: LeadStatus | "ACTIVE" | "ALL";
 }
 
 const statusLabels: Record<LeadStatus, string> = {
@@ -32,96 +34,134 @@ const statusColors: Record<LeadStatus, string> = {
   ABANDONED: "bg-rose-600",
 };
 
-const filterLabel: Record<FunnelFilter, string> = {
-  ACTIVE: "ATIVOS",
-  ALL: "TODOS",
-  NEW: "NOVOS",
-  IN_PROGRESS: "ATENDIMENTO",
-  VISIT_SCHEDULED: "VISITA",
-  DOCS_REQUESTED: "DOCUMENTO",
-  EXCLUDED: "EXCLUÍDOS",
-  ABANDONED: "EXCLUÍDOS",
-};
-
 const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: LeadListProps) => {
-  const { data: leads = [], isLoading, error } = useQuery<Lead[]>({
+  const { data: leads = [], isLoading: loadingLeads } = useQuery<Lead[]>({
     queryKey: ['dashboardLeads'],
     queryFn: fetchLeadsForDashboard,
   });
 
-  const filtered = useMemo(() => {
-    if (filter === "ALL") return leads;
-    if (filter === "ACTIVE") return leads.filter((l) => l.status !== "ABANDONED");
-    return leads.filter((l) => l.status === filter);
-  }, [filter, leads]);
+  const { data: tasks = [] } = useQuery<Task[]>({
+    queryKey: ['tasks'],
+    queryFn: fetchOpenTasks,
+  });
 
-  if (isLoading) {
+  const processedLeads = useMemo(() => {
+    const now = Date.now();
+    
+    // Join tasks into leads
+    const leadsWithTasks = leads.map(lead => {
+      const leadTasks = tasks.filter(t => t.leadId === lead.id);
+      const nextTask = leadTasks.length > 0 
+        ? leadTasks.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0]
+        : null;
+      
+      let priority = 0; // 0: low, 1: today, 2: overdue/now, 3: ultra (new)
+      if (lead.status === 'NEW') priority = 3;
+      if (nextTask) {
+        const diff = (new Date(nextTask.dueAt).getTime() - now) / 60000;
+        if (diff < 0) priority = 2;
+        else if (diff < 15) priority = 2;
+        else priority = 1;
+      }
+
+      return { ...lead, nextTask, priority };
+    });
+
+    // Filter
+    let filtered = leadsWithTasks;
+    if (filter === "ACTIVE") {
+      filtered = leadsWithTasks.filter(l => l.status !== "ABANDONED" && l.status !== "EXCLUDED");
+    } else if (filter !== "ALL") {
+      filtered = leadsWithTasks.filter(l => l.status === filter);
+    }
+
+    // Sort: Priority DESC, then oldest interaction ASC
+    return filtered.sort((a, b) => {
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      return new Date(a.lastInteractionAt).getTime() - new Date(b.lastInteractionAt).getTime();
+    });
+  }, [leads, tasks, filter]);
+
+  if (loadingLeads) {
     return (
-      <Card className="shadow-[0_22px_60px_-40px_rgba(15,23,42,0.45)] border-none h-[72vh] flex items-center justify-center rounded-3xl">
+      <Card className="border-none h-full flex items-center justify-center bg-transparent shadow-none">
         <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
       </Card>
     );
   }
 
-  if (error) {
-    return (
-      <Card className="shadow-[0_22px_60px_-40px_rgba(15,23,42,0.45)] border-none p-6 h-[72vh] flex items-center justify-center text-rose-600 rounded-3xl">
-        <AlertTriangle className="w-5 h-5 mr-2" /> Erro ao carregar leads.
-      </Card>
-    );
-  }
-
   return (
-    <Card className="shadow-[0_22px_60px_-40px_rgba(15,23,42,0.45)] border-none h-[72vh] flex flex-col rounded-3xl bg-white/80 backdrop-blur ring-1 ring-slate-200 dashboard-tilt">
-      <CardHeader className="p-5 border-b border-slate-100 bg-white/70 rounded-t-3xl">
-        <CardTitle className="text-lg font-extrabold text-slate-900 flex items-center justify-between">
-          <span>
-            Leads <span className="text-indigo-600">{filterLabel[filter]}</span>
-          </span>
-          <div className="flex items-center gap-2">
-            <Badge className="rounded-full bg-slate-900 text-white text-[11px]">{currentUserRole}</Badge>
-            <Badge className="rounded-full bg-indigo-600 text-white text-[11px]">{filtered.length}</Badge>
-          </div>
-        </CardTitle>
-        <p className="text-sm text-slate-500">Clique em um lead para abrir o plano de ação.</p>
+    <Card className="h-full flex flex-col rounded-[2.5rem] bg-white border border-slate-200/60 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.1)] overflow-hidden">
+      <CardHeader className="p-6 border-b border-slate-100 shrink-0">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-xl font-black text-slate-900 tracking-tight">Fila de Ação</CardTitle>
+          <Badge className="rounded-full bg-indigo-600 text-white font-bold">{processedLeads.length}</Badge>
+        </div>
+        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Sugerido por ordem de urgência</p>
       </CardHeader>
-      <CardContent className="p-0 flex-1 overflow-y-auto">
-        {filtered.length === 0 ? (
-          <div className="p-10 text-center text-slate-500">
-            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-700">
-              <Check className="w-7 h-7" />
-            </div>
-            <p className="font-semibold">Nada por aqui.</p>
-            <p className="text-sm">Troque o filtro do funil ou crie um lead manual.</p>
+      
+      <CardContent className="p-0 flex-1 overflow-y-auto bg-slate-50/30">
+        {processedLeads.length === 0 ? (
+          <div className="p-12 text-center text-slate-400">
+            <Check className="w-10 h-10 mx-auto mb-4 text-emerald-400 opacity-50" />
+            <p className="font-bold text-slate-600 italic">Tudo limpo por aqui!</p>
           </div>
         ) : (
-          filtered.map((lead) => (
+          processedLeads.map((lead) => (
             <div
               key={lead.id}
-              className={`flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 cursor-pointer transition-all ${
-                selectedLeadId === lead.id
-                  ? 'bg-indigo-50 border-indigo-100'
-                  : 'hover:bg-slate-50'
-              }`}
+              className={cn(
+                "group relative p-5 border-b border-slate-100 cursor-pointer transition-all duration-300",
+                selectedLeadId === lead.id ? "bg-white shadow-[0_10px_30px_-10px_rgba(0,0,0,0.1)] z-10" : "hover:bg-indigo-50/30",
+                lead.priority >= 2 && "bg-rose-50/20"
+              )}
               onClick={() => onSelectLead(lead.id)}
             >
-              <div className="min-w-0">
-                <p className="font-semibold text-slate-900 truncate">{lead.name}</p>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <Badge className={`text-[11px] font-bold ${statusColors[lead.status]} text-white rounded-full`}>
-                    {lead.status === 'ABANDONED' ? 'EXCLUÍDO' : statusLabels[lead.status]}
-                  </Badge>
-                  <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> {new Date(lead.lastInteractionAt).toLocaleDateString()}
+              {selectedLeadId === lead.id && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-600 rounded-r-full" />}
+              
+              <div className="flex justify-between items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h4 className="font-bold text-slate-900 truncate text-[15px]">{lead.name}</h4>
+                    <Badge className={cn("text-[9px] font-black tracking-tighter h-4 px-1.5 rounded-full", statusColors[lead.status], "text-white border-none")}>
+                      {statusLabels[lead.status]}
+                    </Badge>
+                  </div>
+
+                  {lead.nextTask ? (
+                    <div className={cn(
+                      "flex items-center gap-1.5 text-[11px] font-bold mt-2 py-1 px-2 rounded-lg w-fit",
+                      lead.priority >= 2 ? "bg-rose-600 text-white animate-pulse" : "bg-indigo-100 text-indigo-700"
+                    )}>
+                      <Bell className="w-3 h-3" />
+                      PROX: {lead.nextTask.title} • {new Date(lead.nextTask.dueAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    </div>
+                  ) : lead.status === 'NEW' ? (
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold mt-2 py-1 px-2 rounded-lg w-fit bg-sky-600 text-white">
+                      <Zap className="w-3 h-3" />
+                      NOVO: Inicie a cadência agora!
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold mt-2 py-1 px-2 rounded-lg w-fit bg-slate-200 text-slate-500 italic">
+                      <AlertTriangle className="w-3 h-3" />
+                      Sem tarefa agendada!
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2 shrink-0 items-end">
+                  <div className="flex gap-1">
+                    <div className="grid h-8 w-8 place-items-center rounded-xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                      <MessageSquare className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                      <Phone className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <span className="text-[9px] font-black text-slate-400 flex items-center gap-1">
+                    <Clock className="w-2.5 h-2.5" /> 
+                    {Math.round((Date.now() - new Date(lead.lastInteractionAt).getTime()) / 3600000)}h parado
                   </span>
-                </div>
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <div className="grid h-9 w-9 place-items-center rounded-2xl bg-indigo-600/10 text-indigo-700">
-                  <Phone className="w-4 h-4" />
-                </div>
-                <div className="grid h-9 w-9 place-items-center rounded-2xl bg-emerald-600/10 text-emerald-700">
-                  <MessageSquare className="w-4 h-4" />
                 </div>
               </div>
             </div>
