@@ -33,6 +33,10 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 const DistributionLogs = () => {
   const { data: logs = [], isLoading } = useQuery({
@@ -113,6 +117,9 @@ const DistributionLogs = () => {
 const Admin = () => {
   const { user: authUser, role: userRole, loading: authLoading, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("users");
+  const [isRescueOpen, setIsRescueOpen] = useState(false);
+  const [rescueBrokerId, setRescueBrokerId] = useState<string>("");
+  const [isRescuing, setIsRescuing] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: profiles = [] } = useQuery<User[]>({
@@ -133,13 +140,69 @@ const Admin = () => {
         .from('distribution_logs')
         .select('*')
         .eq('status', 'NO_BROKER_AVAILABLE')
-        .order('created_at', { ascending: false })
-        .limit(5);
+        .order('created_at', { ascending: false });
       if (error) throw error;
       return data;
     },
-    refetchInterval: 15000 // Check every 15 seconds
+    refetchInterval: 15000 
   });
+
+  const handleRescueLeads = async () => {
+    if (!rescueBrokerId) {
+      toast.error("Selecione um corretor para receber os leads.");
+      return;
+    }
+
+    setIsRescuing(true);
+    try {
+      const selectedBroker = profiles.find(p => p.id === rescueBrokerId);
+      if (!selectedBroker) throw new Error("Corretor não encontrado.");
+
+      // 1. Get all leads that were not assigned (those in failed logs)
+      const phoneNumbers = failedLogs.map(log => log.lead_phone).filter(Boolean);
+      
+      if (phoneNumbers.length === 0) {
+        toast.info("Nenhum lead com telefone encontrado para resgate.");
+        setIsRescueOpen(false);
+        return;
+      }
+
+      // 2. Update the leads table to assign these leads to the selected broker
+      const { error: updateError } = await supabase
+        .from('leads')
+        .update({ 
+          broker_id: selectedBroker.id,
+          manager_id: selectedBroker.managerId,
+          status: 'NEW',
+          last_interaction_at: new Date().toISOString()
+        })
+        .in('phone', phoneNumbers)
+        .is('broker_id', null);
+
+      if (updateError) throw updateError;
+
+      // 3. Update the logs to mark them as RESCUED
+      const { error: logError } = await supabase
+        .from('distribution_logs')
+        .update({ 
+          status: 'SUCCESS', 
+          assigned_to_name: `${selectedBroker.name} (Resgatado)` 
+        })
+        .in('lead_phone', phoneNumbers)
+        .eq('status', 'NO_BROKER_AVAILABLE');
+
+      if (logError) console.error("Erro ao atualizar logs:", logError);
+
+      toast.success(`${failedLogs.length} leads resgatados e enviados para ${selectedBroker.name}!`);
+      queryClient.invalidateQueries({ queryKey: ['failed-distribution-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['distribution-logs'] });
+      setIsRescueOpen(false);
+    } catch (err: any) {
+      toast.error(`Falha no resgate: ${err.message}`);
+    } finally {
+      setIsRescuing(false);
+    }
+  };
 
   if (authLoading) {
     return (
@@ -164,25 +227,81 @@ const Admin = () => {
       <div className="max-w-7xl mx-auto">
         {/* Urgent Alert for unassigned leads */}
         {failedLogs.length > 0 && (
-          <Alert variant="destructive" className="mb-6 border-2 border-rose-500 bg-rose-50 animate-pulse rounded-2xl shadow-lg">
-            <AlertCircle className="h-5 w-5" />
-            <div className="ml-3">
-              <AlertTitle className="font-black text-rose-800 uppercase tracking-wider flex items-center gap-2">
-                Atenção: Leads sem Corretor!
-              </AlertTitle>
-              <AlertDescription className="text-rose-700 font-medium">
-                Existem {failedLogs.length} leads recentes que chegaram via Make mas **não foram distribuídos** porque não havia nenhum corretor com a fila ativa.
-                <Button 
-                  variant="link" 
-                  className="p-0 h-auto text-rose-900 font-bold underline ml-2 decoration-2"
-                  onClick={() => setActiveTab("users")}
-                >
-                  Ativar corretores agora →
-                </Button>
-              </AlertDescription>
+          <Alert variant="destructive" className="mb-6 border-2 border-rose-500 bg-rose-50 animate-pulse rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 p-6">
+            <div className="flex items-center">
+              <AlertCircle className="h-8 w-8 text-rose-600 shrink-0" />
+              <div className="ml-4">
+                <AlertTitle className="font-black text-rose-800 uppercase tracking-wider text-lg">
+                  Leads em Perigo!
+                </AlertTitle>
+                <AlertDescription className="text-rose-700 font-medium">
+                  {failedLogs.length} leads chegaram e estão sem dono. Resgate-os agora para não perder a venda.
+                </AlertDescription>
+              </div>
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button 
+                className="bg-rose-600 hover:bg-rose-700 text-white font-black px-6 py-2 rounded-xl shadow-md transition-all active:scale-95 flex-1 sm:flex-none"
+                onClick={() => setIsRescueOpen(true)}
+              >
+                <RefreshCcw className="w-4 h-4 mr-2" />
+                Resgatar Leads
+              </Button>
+              <Button 
+                variant="outline"
+                className="border-rose-200 text-rose-600 font-bold px-4 py-2 rounded-xl flex-1 sm:flex-none"
+                onClick={() => setActiveTab("users")}
+              >
+                Ativar Fila
+              </Button>
             </div>
           </Alert>
         )}
+
+        {/* Rescue Modal */}
+        <Dialog open={isRescueOpen} onOpenChange={setIsRescueOpen}>
+          <DialogContent className="sm:max-w-md rounded-3xl border-none shadow-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-black text-slate-900">Resgate de Leads</DialogTitle>
+              <DialogDescription className="text-slate-500 font-medium">
+                Escolha o corretor que vai assumir esses {failedLogs.length} leads agora.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-6 space-y-4">
+              <div className="space-y-2">
+                <Label className="font-bold text-slate-700">Destinar leads para:</Label>
+                <Select onValueChange={setRescueBrokerId} value={rescueBrokerId}>
+                  <SelectTrigger className="h-12 rounded-xl border-slate-200 focus:ring-indigo-500">
+                    <SelectValue placeholder="Selecione o corretor sortudo" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-none shadow-xl">
+                    {profiles.filter(p => p.role === 'BROKER').map(broker => (
+                      <SelectItem key={broker.id} value={broker.id} className="focus:bg-indigo-50 rounded-lg">
+                        {broker.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
+                <p className="text-xs text-indigo-700 font-medium leading-relaxed">
+                  * Ao resgatar, os leads aparecerão instantaneamente no dashboard do corretor escolhido como "NOVOS".
+                </p>
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="ghost" onClick={() => setIsRescueOpen(false)} className="rounded-xl font-bold">Cancelar</Button>
+              <Button 
+                onClick={handleRescueLeads} 
+                disabled={isRescuing || !rescueBrokerId}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 rounded-xl shadow-lg shadow-indigo-100"
+              >
+                {isRescuing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
+                Confirmar Resgate
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
