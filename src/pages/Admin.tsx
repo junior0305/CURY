@@ -173,13 +173,28 @@ const EconomyManagement = () => {
   });
 
   const handleAchievementStatus = async (id: string, newStatus: string) => {
-    const { error } = await supabase.from('achievements').update({ status: newStatus }).eq('id', id);
-    if (error) {
-      toast.error(error.message);
-    } else {
-      queryClient.invalidateQueries({ queryKey: ['pending-achievements'] });
-      queryClient.invalidateQueries({ queryKey: ['public-achievements'] });
-      toast.success(newStatus === 'APPROVED' ? "Prêmio aprovado e publicado!" : "Solicitação cancelada.");
+    try {
+      console.log(`[Economy] Alterando status da conquista ${id} para ${newStatus}`);
+      const { error } = await supabase
+        .from('achievements')
+        .update({ status: newStatus })
+        .eq('id', id);
+
+      if (error) {
+        console.error("[Economy] Erro ao atualizar status:", error);
+        throw error;
+      }
+
+      toast.success(newStatus === 'APPROVED' ? "Prêmio aprovado e publicado!" : "Solicitação recusada.");
+      
+      // Invalidação forçada de múltiplas queries para limpar a tela
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['pending-achievements'] }),
+        queryClient.invalidateQueries({ queryKey: ['public-achievements'] }),
+        queryClient.invalidateQueries({ queryKey: ['my-achievements'] })
+      ]);
+    } catch (err: any) {
+      toast.error(`Erro ao processar: ${err.message}`);
     }
   };
 

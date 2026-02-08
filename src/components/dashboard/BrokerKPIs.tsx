@@ -43,28 +43,20 @@ const COLORS = ["#4f46e5", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444"];
 export default function BrokerKPIs({ leads, onBack, brokerName }: BrokerKPIsProps) {
   const queryClient = useQueryClient();
 
-  // 1. Buscar conquistas reais deste corretor de forma ultra-robusta
+  // 1. Buscar conquistas reais deste corretor - AGORA COM FILTRO DE USER_ID
   const { data: myAchievements = [], isLoading: loadingAch } = useQuery({
     queryKey: ['my-achievements'],
     queryFn: async () => {
-      console.log("[BrokerKPIs] Buscando conquistas...");
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.warn("[BrokerKPIs] Usuário não encontrado no Auth");
-        return [];
-      }
+      if (!user) return [];
       
       const { data, error } = await supabase
         .from('achievements')
         .select('*')
+        .eq('user_id', user.id) // FILTRO CRITICAL: Garante que só veja os seus
         .order('created_at', { ascending: false });
       
-      if (error) {
-        console.error("[BrokerKPIs] Erro Supabase:", error.message);
-        throw error;
-      }
-      
-      console.log("[BrokerKPIs] Conquistas carregadas:", data?.length);
+      if (error) throw error;
       return data || [];
     }
   });
