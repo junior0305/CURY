@@ -1,4 +1,4 @@
-export type LeadStatus = 'NEW' | 'IN_PROGRESS' | 'VISIT_SCHEDULED' | 'DOCS_REQUESTED' | 'EXCLUDED' | 'ABANDONED';
+export type LeadStatus = 'NEW' | 'IN_PROGRESS' | 'VISIT_SCHEDULED' | 'DOCS_REQUESTED' | 'CONCLUDED' | 'EXCLUDED' | 'ABANDONED';
 
 export type ExclusionReason = 'WRONG_NUMBER' | 'NO_INTEREST' | 'NO_PROFILE' | 'NO_CONTACT' | null;
 

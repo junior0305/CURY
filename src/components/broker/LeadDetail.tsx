@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLeadsForDashboard, updateLeadStatus } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, AlertTriangle, Phone, MessageSquare, Calendar, FileText, XCircle, CheckCircle, Send, Zap } from "lucide-react";
+import { Loader2, AlertTriangle, Phone, MessageSquare, Calendar, FileText, XCircle, CheckCircle, Send, Zap, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
@@ -27,6 +27,7 @@ const statusLabels: Record<LeadStatus, string> = {
   IN_PROGRESS: "EM ATENDIMENTO",
   VISIT_SCHEDULED: "VISITA AGENDADA",
   DOCS_REQUESTED: "DOCUMENTO SOLICITADO",
+  CONCLUDED: "VENDA CONCLUÍDA",
   EXCLUDED: "EXCLUÍDO",
   ABANDONED: "ABANDONADO",
 };
@@ -57,7 +58,32 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ status, reason }: { status: LeadStatus, reason?: ExclusionReason }) => {
-      return updateLeadStatus(leadId!, status, reason);
+      const res = await updateLeadStatus(leadId!, status, reason);
+      
+      // Lógica de Ganho de Prêmio se for Venda ou Visita
+      if (status === 'CONCLUDED' || status === 'VISIT_SCHEDULED') {
+        const actionType = status === 'CONCLUDED' ? 'SALE' : 'VISIT';
+        
+        // Buscar config do prêmio no banco
+        const { data: config } = await supabase
+          .from('reward_configs')
+          .select('*')
+          .eq('action_type', actionType)
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (config) {
+          await supabase.from('achievements').insert({
+            user_id: lead.brokerId,
+            lead_id: lead.id,
+            action_type: actionType,
+            reward_label: config.label,
+            reward_value: config.amount_value,
+            status: 'PENDING'
+          });
+        }
+      }
+      return res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] });
@@ -153,28 +179,36 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
 
         {/* 3. Ações de Funil */}
         <div className="space-y-4">
-          <h3 className="text-lg font-bold text-gray-700">Ações de Funil</h3>
+          <h3 className="text-lg font-bold text-gray-700 uppercase tracking-tighter italic">Funil de Alta Performance</h3>
           <div className="grid grid-cols-2 gap-3">
             <Button 
-              className="bg-blue-600 hover:bg-blue-700" 
+              className="bg-blue-600 hover:bg-blue-700 rounded-xl font-bold" 
               onClick={() => handleStatusChange('IN_PROGRESS')}
               disabled={isBusy || lead.status === 'IN_PROGRESS'}
             >
-              <CheckCircle className="w-4 h-4 mr-2" /> Mover para Atendimento
+              <CheckCircle className="w-4 h-4 mr-2" /> Atendimento
             </Button>
             <Button 
-              className="bg-green-600 hover:bg-green-700" 
+              className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold" 
               onClick={() => handleStatusChange('VISIT_SCHEDULED')}
               disabled={isBusy || lead.status === 'VISIT_SCHEDULED'}
             >
               <Calendar className="w-4 h-4 mr-2" /> Agendar Visita
             </Button>
             <Button 
-              className="bg-amber-600 hover:bg-amber-700" 
+              className="bg-amber-600 hover:bg-amber-700 rounded-xl font-bold" 
               onClick={() => handleStatusChange('DOCS_REQUESTED')}
               disabled={isBusy || lead.status === 'DOCS_REQUESTED'}
             >
               <FileText className="w-4 h-4 mr-2" /> Pedir Documentos
+            </Button>
+
+            <Button 
+              className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-black shadow-indigo-200 shadow-lg border-2 border-indigo-400 animate-in zoom-in duration-300" 
+              onClick={() => handleStatusChange('CONCLUDED' as LeadStatus)}
+              disabled={isBusy || lead.status === 'CONCLUDED'}
+            >
+              <Trophy className="w-4 h-4 mr-2 text-amber-400" /> MARCAR VENDA
             </Button>
             
             <Dialog open={isExclusionDialogOpen} onOpenChange={setIsExclusionDialogOpen}>

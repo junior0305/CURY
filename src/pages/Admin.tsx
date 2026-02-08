@@ -6,7 +6,7 @@ import {
   Settings, 
   Zap, 
   Globe, 
-  RefreshCcw, 
+  RefreshCw, 
   ShieldCheck, 
   UserCircle, 
   Loader2, 
@@ -14,7 +14,13 @@ import {
   History, 
   CheckCircle, 
   AlertCircle,
-  LogOut
+  LogOut,
+  Coins, 
+  CheckCircle2, 
+  XCircle as XCircleIcon, 
+  Banknote, 
+  Rocket, 
+  Save 
 } from "lucide-react";
 import UserManagement from "@/components/admin/UserManagement";
 import TeamManagement from "@/components/admin/TeamManagement";
@@ -24,7 +30,7 @@ import IntegrationsManagement from "@/components/admin/IntegrationsManagement";
 import LeadRework from "@/components/admin/LeadRework";
 import { useAuth } from "@/components/AuthProvider";
 import { User, UserRole } from "@/types/user";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchProfiles } from "@/integrations/supabase/profiles";
 import { fetchLeadsForAdmin } from "@/integrations/supabase/leads";
 import type { Lead } from "@/types/lead";
@@ -32,11 +38,25 @@ import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription, 
+  DialogFooter 
+} from "@/components/ui/dialog";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 
 const DistributionLogs = () => {
   const { data: logs = [], isLoading } = useQuery({
@@ -111,6 +131,157 @@ const DistributionLogs = () => {
         </table>
       </div>
     </Card>
+  );
+};
+
+const EconomyManagement = () => {
+  const queryClient = useQueryClient();
+  
+  // 1. Fetch Configs
+  const { data: configs = [], isLoading: loadingConfigs } = useQuery({
+    queryKey: ['reward-configs'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('reward_configs').select('*').order('action_type');
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  // 2. Fetch Pending Redemptions (Achievements)
+  const { data: pending = [], isLoading: loadingPending } = useQuery({
+    queryKey: ['pending-achievements'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('achievements')
+        .select('*, profiles(first_name, last_name)')
+        .eq('status', 'PENDING')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    }
+  });
+
+  const updateConfigMutation = useMutation({
+    mutationFn: async ({ id, value }: { id: string, value: number }) => {
+      const { error } = await supabase.from('reward_configs').update({ amount_value: value }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reward-configs'] });
+      toast.success("Valor do prêmio atualizado!");
+    }
+  });
+
+  const handleAchievementStatus = async (id: string, newStatus: string) => {
+    const { error } = await supabase.from('achievements').update({ status: newStatus }).eq('id', id);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['pending-achievements'] });
+      queryClient.invalidateQueries({ queryKey: ['public-achievements'] });
+      toast.success(newStatus === 'APPROVED' ? "Prêmio aprovado e publicado!" : "Solicitação cancelada.");
+    }
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Box 1: Configuração de Valores */}
+        <Card className="lg:col-span-1 border-none shadow-xl rounded-3xl p-6 bg-white ring-1 ring-slate-100">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-3 bg-amber-100 text-amber-600 rounded-2xl"><Coins className="h-6 w-6" /></div>
+            <div>
+              <h3 className="font-black text-slate-900 uppercase tracking-tighter italic">Banco de Prêmios</h3>
+              <p className="text-[10px] text-slate-400 font-bold uppercase">Controle de Saída de Caixa</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {configs.map((c: any) => (
+              <div key={c.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+                <Label className="text-[11px] font-black text-slate-500 uppercase">{c.label}</Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">R$</span>
+                    <Input 
+                      type="number" 
+                      defaultValue={c.amount_value} 
+                      className="pl-9 bg-white rounded-xl h-10 font-bold"
+                      onBlur={(e) => updateConfigMutation.mutate({ id: c.id, value: parseFloat(e.target.value) })}
+                    />
+                  </div>
+                  <Button size="icon" variant="ghost" className="h-10 w-10 text-emerald-600 hover:bg-emerald-50 rounded-xl">
+                    <Save className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Box 2: Aprovações Pendentes */}
+        <Card className="lg:col-span-2 border-none shadow-xl rounded-3xl p-6 bg-white ring-1 ring-slate-100 overflow-hidden">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl"><Banknote className="h-6 w-6" /></div>
+              <div>
+                <h3 className="font-black text-slate-900 uppercase tracking-tighter italic">Pedidos de Resgate</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase">Aguardando Validação Financeira</p>
+              </div>
+            </div>
+            <Badge className="bg-rose-500 text-white animate-pulse">{pending.length} Pendentes</Badge>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-slate-400 text-[10px] uppercase font-black border-b border-slate-50">
+                  <th className="pb-3 text-left">Corretor</th>
+                  <th className="pb-3 text-left">Conquista</th>
+                  <th className="pb-3 text-left">Valor Est.</th>
+                  <th className="pb-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {pending.length === 0 ? (
+                  <tr><td colSpan={4} className="py-10 text-center text-slate-300 italic">Nenhum prêmio pendente de aprovação.</td></tr>
+                ) : (
+                  pending.map((p: any) => (
+                    <tr key={p.id} className="group hover:bg-slate-50/50 transition-colors">
+                      <td className="py-4 font-bold text-slate-900">{p.profiles?.first_name}</td>
+                      <td className="py-4">
+                        <Badge variant="outline" className="bg-indigo-50 border-none text-indigo-600 font-bold text-[10px]">
+                          {p.reward_label}
+                        </Badge>
+                      </td>
+                      <td className="py-4 font-black text-slate-700">R$ {p.reward_value}</td>
+                      <td className="py-4 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button 
+                            size="sm" 
+                            className="bg-emerald-600 hover:bg-emerald-700 h-8 rounded-lg font-bold text-[11px]"
+                            onClick={() => handleAchievementStatus(p.id, 'APPROVED')}
+                          >
+                            <CheckCircle2 className="h-3 w-3 mr-1" /> Aprovar
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="text-rose-500 hover:bg-rose-50 h-8 rounded-lg font-bold text-[11px]"
+                            onClick={() => handleAchievementStatus(p.id, 'CANCELLED')}
+                          >
+                            <XCircleIcon className="h-3 w-3 mr-1" /> Recusar
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+    </div>
   );
 };
 
@@ -244,10 +415,10 @@ const Admin = () => {
                 className="bg-rose-600 hover:bg-rose-700 text-white font-black px-6 py-2 rounded-xl shadow-md transition-all active:scale-95 flex-1 sm:flex-none"
                 onClick={() => setIsRescueOpen(true)}
               >
-                <RefreshCcw className="w-4 h-4 mr-2" />
+                <RefreshCw className="w-4 h-4 mr-2" />
                 Resgatar Leads
               </Button>
-              <Button 
+              <Button
                 variant="outline"
                 className="border-rose-200 text-rose-600 font-bold px-4 py-2 rounded-xl flex-1 sm:flex-none"
                 onClick={() => setActiveTab("users")}
@@ -263,11 +434,11 @@ const Admin = () => {
           <DialogContent className="sm:max-w-md rounded-3xl border-none shadow-2xl">
             <DialogHeader>
               <DialogTitle className="text-2xl font-black text-slate-900">Resgate de Leads</DialogTitle>
-              <DialogDescription className="text-slate-500 font-medium">
+              <DialogDescription className="text-slate-500 font-medium text-left">
                 Escolha o corretor que vai assumir esses {failedLogs.length} leads agora.
               </DialogDescription>
             </DialogHeader>
-            <div className="py-6 space-y-4">
+            <div className="py-6 space-y-4 text-left">
               <div className="space-y-2">
                 <Label className="font-bold text-slate-700">Destinar leads para:</Label>
                 <Select onValueChange={setRescueBrokerId} value={rescueBrokerId}>
@@ -291,12 +462,12 @@ const Admin = () => {
             </div>
             <DialogFooter className="gap-2 sm:gap-0">
               <Button variant="ghost" onClick={() => setIsRescueOpen(false)} className="rounded-xl font-bold">Cancelar</Button>
-              <Button 
-                onClick={handleRescueLeads} 
+              <Button
+                onClick={handleRescueLeads}
                 disabled={isRescuing || !rescueBrokerId}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 rounded-xl shadow-lg shadow-indigo-100"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 rounded-xl shadow-lg shadow-indigo-100 h-11"
               >
-                {isRescuing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
+                {isRescuing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
                 Confirmar Resgate
               </Button>
             </DialogFooter>
@@ -337,24 +508,25 @@ const Admin = () => {
           <LeaderboardPodium
             leads={leads}
             users={profiles}
-            title="Pódio de Performance"
-            subtitle="Ranking do time (proxy baseado em avanço no funil)"
+            isMonthly={false}
           />
         </div>
 
         <Tabs defaultValue="users" value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-7 h-14 bg-white shadow-lg rounded-2xl p-1 mb-8">
-            <TabsTrigger value="users" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><Users className="w-4 h-4 mr-2" /> Time</TabsTrigger>
-            <TabsTrigger value="teams" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><Group className="w-4 h-4 mr-2" /> Equipes</TabsTrigger>
-            <TabsTrigger value="leads" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><Zap className="w-4 h-4 mr-2" /> Regras</TabsTrigger>
-            <TabsTrigger value="logs" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><History className="w-4 h-4 mr-2" /> Logs</TabsTrigger>
-            <TabsTrigger value="rework" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><RefreshCcw className="w-4 h-4 mr-2" /> Retrabalho</TabsTrigger>
-            <TabsTrigger value="integrations" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><Globe className="w-4 h-4 mr-2" /> Webhooks</TabsTrigger>
-            <TabsTrigger value="settings" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-xs sm:text-sm"><Settings className="w-4 h-4 mr-2" /> Ajustes</TabsTrigger>
+          <TabsList className="grid grid-cols-8 h-14 bg-white shadow-lg rounded-2xl p-1 mb-8">
+            <TabsTrigger value="users" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><Users className="w-3.5 h-3.5 mr-1" /> Time</TabsTrigger>
+            <TabsTrigger value="teams" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><Group className="w-3.5 h-3.5 mr-1" /> Equipes</TabsTrigger>
+            <TabsTrigger value="economy" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><Coins className="w-3.5 h-3.5 mr-1" /> Economia</TabsTrigger>
+            <TabsTrigger value="leads" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><Zap className="w-3.5 h-3.5 mr-1" /> Regras</TabsTrigger>
+            <TabsTrigger value="logs" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><History className="w-3.5 h-3.5 mr-1" /> Logs</TabsTrigger>
+            <TabsTrigger value="rework" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><RefreshCw className="w-3.5 h-3.5 mr-1" /> Rework</TabsTrigger>
+            <TabsTrigger value="integrations" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><Globe className="w-3.5 h-3.5 mr-1" /> Webhooks</TabsTrigger>
+            <TabsTrigger value="settings" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><Settings className="w-3.5 h-3.5 mr-1" /> Ajustes</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users"><Card className="shadow-xl border-none p-6"><UserManagement currentUser={currentUser} /></Card></TabsContent>
           <TabsContent value="teams"><Card className="shadow-xl border-none p-6"><TeamManagement /></Card></TabsContent>
+          <TabsContent value="economy"><EconomyManagement /></TabsContent>
           <TabsContent value="leads"><LeadDistribution /></TabsContent>
           <TabsContent value="logs"><DistributionLogs /></TabsContent>
           <TabsContent value="rework"><LeadRework /></TabsContent>

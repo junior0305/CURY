@@ -12,7 +12,10 @@ import { fetchProfiles } from "@/integrations/supabase/profiles";
 import type { Lead, LeadStatus } from "@/types/lead";
 import type { User } from "@/types/user";
 import { Badge } from "@/components/ui/badge";
+import TaskCenter from "@/components/broker/TaskCenter";
 import TaskForm from "@/components/broker/TaskForm";
+import AchievementTicker from "@/components/dashboard/AchievementTicker";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
@@ -72,6 +75,7 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
+      <AchievementTicker />
       {/* Optimized Slim Header */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/60 px-6 py-3">
         <div className="max-w-[1600px] mx-auto flex justify-between items-center">
