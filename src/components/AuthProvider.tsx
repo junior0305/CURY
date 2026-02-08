@@ -24,26 +24,55 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchUserRole = async (userId: string) => {
     try {
-      const { data } = await supabase
+      console.log("Fetching role for user:", userId);
+      const { data, error } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', userId)
         .maybeSingle();
       
-      if (data?.role) setRole(data.role);
-      else setRole('BROKER');
+      if (error) throw error;
+
+      if (data?.role) {
+        console.log("Role found:", data.role);
+        setRole(data.role);
+      } else {
+        console.log("No role found in DB, defaulting to BROKER");
+        setRole('BROKER');
+      }
     } catch (e) {
+      console.error("Error fetching role:", e);
       setRole('BROKER');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      setUser(session?.user ?? null);
       if (session) {
         fetchUserRole(session.user.id);
       } else {
+        setLoading(false);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Auth event:", event);
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        if (session) {
+          setLoading(true);
+          fetchUserRole(session.user.id);
+        }
+      } else if (event === 'SIGNED_OUT') {
         setRole(null);
+        setUser(null);
         setLoading(false);
       }
     });
@@ -64,8 +93,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const signOut = async () => {
+    setLoading(true);
     await supabase.auth.signOut();
-    navigate('/login');
+    setSession(null);
+    setUser(null);
+    setRole(null);
+    setLoading(false);
+    navigate('/login', { replace: true });
   };
 
   return (
