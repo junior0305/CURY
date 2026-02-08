@@ -17,12 +17,23 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    const { email, password, firstName, lastName, role, managerId, teamId } = await req.json()
+    const { email, password, firstName, lastName, role, managerId, teamId, userId, action } = await req.json()
 
-    console.log(`[create-user] Iniciando criação para: ${email}`, { role, managerId, teamId });
+    // ACTION: DELETE USER
+    if (action === 'delete') {
+      const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
+      if (deleteError) throw deleteError
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
 
-    // 1. Criar o usuário no Auth com METADADOS COMPLETOS
-    // Isso ajuda se houver um trigger no banco que lê esses metadados
+    // ACTION: UPDATE PASSWORD
+    if (action === 'update-password') {
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, { password })
+      if (updateError) throw updateError
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+
+    // ACTION: CREATE USER (Existing logic)
     const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,

@@ -86,10 +86,15 @@ export const updateProfile = async (user: User) => {
     updated_at: new Date().toISOString(),
   };
 
+  console.log("Updating profile with payload:", updatePayload);
+
   const { error } = await supabase
     .from('profiles')
     .update(updatePayload)
     .eq('id', id);
 
-  if (error) throw error;
+  if (error) {
+    console.error("Profile update error:", error);
+    throw error;
+  }
 };

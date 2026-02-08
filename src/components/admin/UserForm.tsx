@@ -28,6 +28,7 @@ const roles: UserRole[] = ['SUPERINTENDENT', 'MANAGER', 'BROKER'];
 const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFormProps) => {
   const [formData, setFormData] = useState<Partial<User & { password?: string }>>({});
   const [creating, setCreating] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
   
   const { data: allManagers = [], isLoading: isLoadingManagers } = useQuery<User[]>({
     queryKey: ['managers'],
@@ -119,6 +120,32 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!userToEdit || !formData.password) {
+      toast.error("Digite a nova senha no campo de senha.");
+      return;
+    }
+
+    setResettingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
+          action: 'update-password',
+          userId: userToEdit.id,
+          password: formData.password
+        }
+      });
+
+      if (error) throw error;
+      toast.success("Senha alterada com sucesso!");
+      setFormData(prev => ({ ...prev, password: "" }));
+    } catch (err: any) {
+      toast.error(`Erro ao alterar senha: ${err.message}`);
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
   const isBroker = formData.role === 'BROKER';
   const needsManager = formData.role === 'MANAGER' || formData.role === 'BROKER';
   const isEditing = !!userToEdit;
@@ -166,6 +193,31 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
                 disabled={busy} 
                 required
               />
+            </div>
+          )}
+
+          {isEditing && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+              <Label className="text-amber-800 font-bold">Alterar Senha do Usuário</Label>
+              <div className="flex gap-2">
+                <Input 
+                  type="password" 
+                  placeholder="Nova senha" 
+                  value={formData.password || ""} 
+                  onChange={(e) => handleChange("password", e.target.value)}
+                  className="bg-white"
+                />
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={handleResetPassword}
+                  disabled={resettingPassword}
+                  className="border-amber-600 text-amber-600 hover:bg-amber-100"
+                >
+                  {resettingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : "Alterar"}
+                </Button>
+              </div>
+              <p className="text-[10px] text-amber-600 italic">Isso mudará a senha instantaneamente sem enviar e-mail.</p>
             </div>
           )}
 
@@ -240,8 +292,9 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
 
           {isBroker && (
             <div className="flex items-center justify-between p-4 bg-indigo-50 rounded-xl border border-indigo-200">
-              <Label className="flex flex-col space-y-1">
-                <span>Habilitar Fila de Leads</span>
+              <Label className="flex flex-col space-y-1 cursor-pointer">
+                <span className="font-bold text-indigo-900">Habilitar Fila de Leads</span>
+                <span className="text-[11px] text-indigo-600">Ative para este corretor receber leads do Facebook/Make</span>
               </Label>
               <Switch 
                 checked={!!formData.leadAssignmentEnabled} 
@@ -251,7 +304,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
             </div>
           )}
 
-          <Button type="submit" className="w-full bg-indigo-600" disabled={busy}>
+          <Button type="submit" className="w-full bg-indigo-600 h-12 text-lg font-bold" disabled={busy}>
             {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             {isEditing ? "Salvar Alterações" : "Criar Usuário"}
           </Button>
