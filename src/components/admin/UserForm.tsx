@@ -15,6 +15,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 
+// Hardcoded function URL to bypass potential resolution issues
+const CREATE_USER_FUNCTION_URL = "https://jcmovytbcghvvukaszyb.supabase.co/functions/v1/create-user";
+
 interface UserFormProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -94,36 +97,43 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
         const firstName = names[0];
         const lastName = names.slice(1).join(" ");
 
-        console.log("Invoking create-user Edge Function with payload:", {
+        const payload = {
           email: formData.email,
+          password: formData.password,
+          firstName,
+          lastName,
           role: formData.role,
-          managerId: formData.managerId,
-          teamId: formData.teamId
+          managerId: formData.managerId === "none" ? null : formData.managerId,
+          teamId: formData.teamId === "none" ? null : formData.teamId
+        };
+
+        console.log("Attempting to call Edge Function via fetch...");
+
+        // Usando fetch direto como alternativa ao invoke para maior controle e debug
+        const session = (await supabase.auth.getSession()).data.session;
+        const response = await fetch(CREATE_USER_FUNCTION_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token || ''}`,
+            'apikey': (supabase as any).supabaseKey
+          },
+          body: JSON.stringify(payload)
         });
 
-        const { data, error: invokeError } = await supabase.functions.invoke('create-user', {
-          body: {
-            email: formData.email,
-            password: formData.password,
-            firstName,
-            lastName,
-            role: formData.role,
-            managerId: formData.managerId === "none" ? null : formData.managerId,
-            teamId: formData.teamId === "none" ? null : formData.teamId
-          }
-        });
-
-        if (invokeError) {
-          console.error("Edge Function Invoke Error:", invokeError);
-          throw new Error(invokeError.message || "Erro de conexão com o servidor de funções.");
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Erro HTTP: ${response.status}`);
         }
-        if (data?.error) throw new Error(data.error);
+
+        const data = await response.json();
 
         toast.success("Usuário criado com sucesso!");
         onSave(data.user as User);
         onOpenChange(false);
       } catch (err: any) {
-        toast.error(`Falha ao criar: ${err.message}`);
+        console.error("Critical User Creation Error:", err);
+        toast.error(`Falha na conexão: ${err.message}`);
       } finally {
         setCreating(false);
       }
