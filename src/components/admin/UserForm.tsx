@@ -94,6 +94,13 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
         const firstName = names[0];
         const lastName = names.slice(1).join(" ");
 
+        console.log("Invoking create-user Edge Function with payload:", {
+          email: formData.email,
+          role: formData.role,
+          managerId: formData.managerId,
+          teamId: formData.teamId
+        });
+
         const { data, error: invokeError } = await supabase.functions.invoke('create-user', {
           body: {
             email: formData.email,
@@ -106,7 +113,10 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
           }
         });
 
-        if (invokeError) throw new Error(invokeError.message || "Erro no servidor");
+        if (invokeError) {
+          console.error("Edge Function Invoke Error:", invokeError);
+          throw new Error(invokeError.message || "Erro de conexão com o servidor de funções.");
+        }
         if (data?.error) throw new Error(data.error);
 
         toast.success("Usuário criado com sucesso!");

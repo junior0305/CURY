@@ -28,12 +28,14 @@ serve(async (req) => {
 
     // ACTION: UPDATE PASSWORD
     if (action === 'update-password') {
+      console.log("[create-user] Action: Update Password for", userId);
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, { password })
       if (updateError) throw updateError
       return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // ACTION: CREATE USER (Existing logic)
+    // Default Action: Create User
+    console.log("[create-user] Action: Create User", email);
     const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
