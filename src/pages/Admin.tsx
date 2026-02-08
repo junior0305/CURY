@@ -24,7 +24,7 @@ import IntegrationsManagement from "@/components/admin/IntegrationsManagement";
 import LeadRework from "@/components/admin/LeadRework";
 import { useAuth } from "@/components/AuthProvider";
 import { User, UserRole } from "@/types/user";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchProfiles } from "@/integrations/supabase/profiles";
 import { fetchLeadsForAdmin } from "@/integrations/supabase/leads";
 import type { Lead } from "@/types/lead";
@@ -32,6 +32,7 @@ import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const DistributionLogs = () => {
   const { data: logs = [], isLoading } = useQuery({
@@ -112,6 +113,7 @@ const DistributionLogs = () => {
 const Admin = () => {
   const { user: authUser, role: userRole, loading: authLoading, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("users");
+  const queryClient = useQueryClient();
 
   const { data: profiles = [] } = useQuery<User[]>({
     queryKey: ["profiles"],
@@ -121,6 +123,22 @@ const Admin = () => {
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ["adminLeads"],
     queryFn: fetchLeadsForAdmin,
+  });
+
+  // Query specifically for failed distribution logs to show the alert
+  const { data: failedLogs = [] } = useQuery({
+    queryKey: ['failed-distribution-logs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('distribution_logs')
+        .select('*')
+        .eq('status', 'NO_BROKER_AVAILABLE')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 15000 // Check every 15 seconds
   });
 
   if (authLoading) {
@@ -144,6 +162,28 @@ const Admin = () => {
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
       <div className="max-w-7xl mx-auto">
+        {/* Urgent Alert for unassigned leads */}
+        {failedLogs.length > 0 && (
+          <Alert variant="destructive" className="mb-6 border-2 border-rose-500 bg-rose-50 animate-pulse rounded-2xl shadow-lg">
+            <AlertCircle className="h-5 w-5" />
+            <div className="ml-3">
+              <AlertTitle className="font-black text-rose-800 uppercase tracking-wider flex items-center gap-2">
+                Atenção: Leads sem Corretor!
+              </AlertTitle>
+              <AlertDescription className="text-rose-700 font-medium">
+                Existem {failedLogs.length} leads recentes que chegaram via Make mas **não foram distribuídos** porque não havia nenhum corretor com a fila ativa.
+                <Button 
+                  variant="link" 
+                  className="p-0 h-auto text-rose-900 font-bold underline ml-2 decoration-2"
+                  onClick={() => setActiveTab("users")}
+                >
+                  Ativar corretores agora →
+                </Button>
+              </AlertDescription>
+            </div>
+          </Alert>
+        )}
+
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-4xl font-extrabold text-gray-900">
