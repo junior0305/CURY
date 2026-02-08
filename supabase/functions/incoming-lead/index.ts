@@ -14,9 +14,19 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
-    // 1. Receber o corpo da requisição (JSON do Make)
-    const body = await req.json();
-    const { name, phone, email, tag, notes, source } = body;
+    // 1. Receber o corpo de forma segura
+    const rawBody = await req.text();
+    let body;
+    try {
+      body = JSON.parse(rawBody);
+    } catch (e) {
+      console.error("[incoming-lead] JSON Inválido recebido:", rawBody);
+      throw new Error("O formato do JSON enviado pelo Make está inválido. Verifique vírgulas e aspas.");
+    }
+
+    // Extração flexível (aceita sua estrutura antiga ou a nova)
+    const data = body.data?.attributes || body;
+    const { name, phone, email, tag, notes, source, renda } = data;
 
     if (!name || !phone) {
       throw new Error("Nome e Telefone são obrigatórios.");
@@ -52,14 +62,15 @@ serve(async (req) => {
     const { data: newLead, error: insertError } = await supabaseAdmin
       .from('leads')
       .insert({
-        name,
-        phone,
+        name: name || "Lead Sem Nome",
+        phone: phone || "000000000",
         email: email || null,
         tag: tag || source || 'Web',
         broker_id: assignedBrokerId,
         manager_id: assignedManagerId,
         status: 'NEW',
-        last_interaction_at: new Date().toISOString()
+        last_interaction_at: new Date().toISOString(),
+        notes: notes || (renda ? `Renda: ${renda}` : null)
       })
       .select()
       .single();
