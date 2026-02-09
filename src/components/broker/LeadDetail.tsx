@@ -294,6 +294,43 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
                 >
                   <Trophy className="w-4 h-4 mr-2 text-amber-400" /> MARCAR VENDA
                 </Button>
+
+                {/* ADICIONADO: Botão de Abandono (Excluir/Perdido) para o Funil Normal */}
+                <Dialog open={isExclusionDialogOpen} onOpenChange={setIsExclusionDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="destructive" disabled={isBusy} className="rounded-xl font-bold col-span-2">
+                      <XCircle className="w-4 h-4 mr-2" /> Perder Lead / Excluir
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px] rounded-3xl border-none shadow-2xl">
+                    <DialogHeader>
+                      <DialogTitle className="text-2xl font-black text-slate-900">Perder Lead: {lead.name}</DialogTitle>
+                      <DialogDescription className="text-slate-500 font-medium">
+                        Ao marcar como perdido, este lead sairá da sua lista e irá para o Rework da gestão.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="reason" className="font-bold text-slate-700">Motivo da Perda</Label>
+                        <Select onValueChange={(val) => setSelectedExclusionReason(val as ExclusionReason)}>
+                          <SelectTrigger id="reason" className="rounded-xl h-12">
+                            <SelectValue placeholder="Selecione um motivo" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl border-none shadow-xl">
+                            <SelectItem value="WRONG_NUMBER">Número Errado</SelectItem>
+                            <SelectItem value="NO_INTEREST">Sem Interesse</SelectItem>
+                            <SelectItem value="NO_PROFILE">Sem Perfil</SelectItem>
+                            <SelectItem value="NO_CONTACT">Sem Contato</SelectItem>
+                            <SelectItem value="null">Outro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <Button onClick={handleAbandon} disabled={!selectedExclusionReason || isBusy} variant="destructive" className="w-full h-12 rounded-xl font-black">
+                      Confirmar Perda do Lead
+                    </Button>
+                  </DialogContent>
+                </Dialog>
               </>
             )}
           </div>
