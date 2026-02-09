@@ -65,7 +65,12 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: Lea
     const now = Date.now();
     
     // FILTRO DE PRIVACIDADE: Na lista lateral, o corretor SÓ vê o que é dele.
-    const myLeadsOnly = leads.filter(l => l.brokerId === session?.user.id);
+    // E GARANTIMOS que leads perdidos/abandonados sumam da lista.
+    const myLeadsOnly = leads.filter(l => 
+      l.brokerId === session?.user.id && 
+      l.status !== 'ABANDONED' && 
+      l.status !== 'EXCLUDED'
+    );
     
     // Join tasks into my leads only - FILTERING FOR THE MOST URGENT TASK ONLY PER LEAD
     const leadsWithTasks = myLeadsOnly.map(lead => {

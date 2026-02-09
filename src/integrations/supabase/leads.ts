@@ -35,10 +35,12 @@ export const fetchLeadsForAdmin = async (): Promise<Lead[]> => {
 
 export const fetchLeadsForDashboard = async (): Promise<Lead[]> => {
   console.log("[LeadsAPI] Buscando leads para o Dashboard...");
-  // Buscamos absolutamente todos os leads sem filtros de status aqui
+  // FILTRO CRÍTICO: No Dashboard só aparecem leads que NÃO foram abandonados ou excluídos.
+  // Leads abandonados/excluídos só aparecem no Painel Admin (Rework).
   const { data, error } = await supabase
     .from('leads')
     .select('*')
+    .not('status', 'in', '("ABANDONED","EXCLUDED")')
     .order('last_interaction_at', { ascending: true });
 
   if (error) {
