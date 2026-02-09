@@ -25,7 +25,9 @@ import {
   SendHorizontal,
   RefreshCcw,
   Plus,
-  Trash2
+  Trash2,
+  Users2,
+  Target
 } from "lucide-react";
 import UserManagement from "@/components/admin/UserManagement";
 import TeamManagement from "@/components/admin/TeamManagement";
@@ -537,14 +539,63 @@ const Admin = () => {
     return hours > 0 ? hours : 0;
   };
 
-  // NEW: Stale Leads Detection for Managers
-  const staleLeads = useMemo(() => {
-    return leads.filter(l => {
+  // NEW: Stale Leads Detection for Managers and Superintendents
+  const staleLeadsStats = useMemo(() => {
+    const now = Date.now();
+    const staleList = leads.filter(l => {
       const hours = getStaleHours(l.lastInteractionAt);
-      const isMyTeam = currentUser.role === 'SUPERINTENDENT' || l.managerId === currentUser.id;
-      return isMyTeam && hours >= 4 && l.status !== 'CONCLUDED' && l.status !== 'EXCLUDED';
+      return hours >= 4 && l.status !== 'CONCLUDED' && l.status !== 'EXCLUDED';
     });
-  }, [leads, currentUser]);
+
+    // Agrupar por gerente para o Superintendente ver
+    const byManager: Record<string, { id: string, name: string, count: number, phone: string, leads: Lead[] }> = {};
+    
+    staleList.forEach(l => {
+      const managerId = l.managerId || 'unassigned';
+      const manager = profiles.find(p => p.id === managerId);
+      const managerName = manager ? manager.name : 'Sem Gestor';
+      const managerPhone = manager?.phone || '';
+
+      if (!byManager[managerId]) {
+        byManager[managerId] = { id: managerId, name: managerName, count: 0, phone: managerPhone, leads: [] };
+      }
+      byManager[managerId].count++;
+      byManager[managerId].leads.push(l);
+    });
+
+    return {
+      total: staleList.length,
+      byManager: Object.values(byManager).sort((a, b) => b.count - a.count)
+    };
+  }, [leads, profiles]);
+
+  const nudgeGerente = async (managerId: string, managerName: string, managerPhone: string, staleCount: number) => {
+    try {
+      // 1. Notificação Interna para o Gerente
+      await supabase.from('internal_notifications').insert({
+        from_id: currentUser.id,
+        to_id: managerId,
+        message: `⚠️ URGENTE: Sua equipe possui ${staleCount} leads parados há mais de 4h. Por favor, mobilize o time imediatamente!`,
+        type: 'STALE_LEAD_ALERT'
+      });
+
+      // 2. WhatsApp para o Gerente
+      if (managerPhone) {
+        const cleanPhone = managerPhone.replace(/\D/g, '');
+        const message = encodeURIComponent(
+          `🚨 *ALERTA DE SUPERINTENDÊNCIA*\n\n` +
+          `Olá ${managerName.split(' ')[0]}, identifiquei *${staleCount} leads parados* há mais de 4 horas na sua equipe.\n\n` +
+          `Por favor, realize a cobrança imediata dos corretores para evitar a perda dessas oportunidades! 📈`
+        );
+        window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
+        toast.success(`Alerta enviado para o Gerente ${managerName}!`);
+      } else {
+        toast.warning("Alerta enviado apenas no CRM (Gerente sem telefone cadastrado).");
+      }
+    } catch (e: any) {
+      toast.error("Erro ao notificar gerente: " + e.message);
+    }
+  };
 
   const nudgeCorretor = async (brokerId: string, leadName: string, leadPhone: string) => {
     try {
@@ -797,70 +848,110 @@ const Admin = () => {
           
           {/* Nova Seção: Radar de Leads Parados */}
           {(currentUser.role === 'SUPERINTENDENT' || currentUser.role === 'MANAGER') && (
-            <div className="mt-12 space-y-6">
+            <div className="mt-12 space-y-8">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
                     <Hourglass className="h-6 w-6 text-amber-500 animate-spin-slow" />
                     Radar de Leads Parados
                   </h2>
-                  <p className="text-sm text-slate-500 font-medium">Intervenção rápida para evitar perda de faturamento.</p>
+                  <p className="text-sm text-slate-500 font-medium">Gestão de velocidade e faturamento.</p>
                 </div>
                 <Badge className="bg-amber-100 text-amber-700 font-black px-4 py-1 rounded-full border-none">
-                  {staleLeads.length} EM RISCO
+                  {staleLeadsStats.total} EM RISCO
                 </Badge>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {staleLeads.length === 0 ? (
-                  <Card className="col-span-full p-10 text-center text-slate-400 border-dashed border-2 bg-transparent shadow-none rounded-3xl">
-                    <CheckCircle className="h-10 w-10 mx-auto mb-2 text-emerald-400 opacity-50" />
-                    <p className="font-bold">Parabéns! Todo o time está com os leads em dia.</p>
-                  </Card>
-                ) : (
-                  staleLeads.map(l => {
-                    const broker = profiles.find(p => p.id === l.brokerId);
-                    const hours = getStaleHours(l.lastInteractionAt);
-                    return (
-                      <Card key={l.id} className="p-5 border-none shadow-xl rounded-[2rem] bg-white ring-1 ring-amber-100 relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 p-4">
-                          <div className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-full animate-pulse uppercase tracking-tighter">
-                            Há {hours}h
-                          </div>
+              {/* Visão de Superintendente: Por Equipe/Gerente */}
+              {currentUser.role === 'SUPERINTENDENT' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+                  {staleLeadsStats.byManager.map((m, idx) => (
+                    <Card key={idx} className="p-5 border-none shadow-lg rounded-3xl bg-slate-900 text-white relative overflow-hidden group">
+                      <div className="absolute -right-4 -top-4 opacity-10 group-hover:scale-110 transition-transform">
+                        <Users2 className="h-20 w-20" />
+                      </div>
+                      <div className="relative z-10 space-y-4">
+                        <div>
+                          <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Equipe de:</p>
+                          <h4 className="text-lg font-bold truncate">{m.name}</h4>
                         </div>
-                        
-                        <div className="space-y-4">
+                        <div className="flex items-end justify-between">
                           <div>
-                            <h4 className="font-black text-slate-900 text-lg leading-none">{l.name}</h4>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Dono: {broker?.name || 'Sem Dono'}</p>
+                            <p className="text-3xl font-black text-rose-500">{m.count}</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">Leads Parados</p>
                           </div>
-
-                          <div className="grid grid-cols-2 gap-2 pt-2">
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="rounded-xl text-[10px] font-black uppercase tracking-tighter border-amber-200 text-amber-700 hover:bg-amber-50"
-                              onClick={() => nudgeCorretor(l.brokerId!, l.name, l.phone)}
-                            >
-                              <SendHorizontal className="h-3 w-3 mr-1" /> Cutucar
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              className="rounded-xl text-[10px] font-black uppercase tracking-tighter bg-rose-600 hover:bg-rose-700 shadow-md"
-                              onClick={() => {
-                                setSelectedStaleLeadId(l.id);
-                                setRescueBrokerId("");
-                                setIsRescueOpen(true);
-                              }}
-                            >
-                              <RefreshCcw className="h-3 w-3 mr-1" /> Resgatar
-                            </Button>
-                          </div>
+                          <Button 
+                            size="sm" 
+                            className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-bold text-[10px] h-8"
+                            onClick={() => nudgeGerente(m.id, m.name, m.phone, m.count)}
+                          >
+                            Cobrar Gerente
+                          </Button>
                         </div>
-                      </Card>
-                    );
-                  })
-                )}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              {/* Visão Detalhada: Cards de Leads (Existente) */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Target className="h-4 w-4" /> Detalhamento de Leads em Risco
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {staleLeadsStats.total === 0 ? (
+                    <Card className="col-span-full p-10 text-center text-slate-400 border-dashed border-2 bg-transparent shadow-none rounded-3xl">
+                      <CheckCircle className="h-10 w-10 mx-auto mb-2 text-emerald-400 opacity-50" />
+                      <p className="font-bold">Parabéns! Todo o time está com os leads em dia.</p>
+                    </Card>
+                  ) : (
+                    staleLeadsStats.byManager.map((manager) => {
+                      const staleCount = manager.count;
+                      const broker = profiles.find(p => p.id === manager.id);
+                      const hours = getStaleHours(leads.find(l => l.name === broker?.name)?.lastInteractionAt || new Date().toISOString());
+                      
+                      return (
+                        <Card key={manager.id} className="p-5 border-none shadow-xl rounded-[2rem] bg-white ring-1 ring-amber-100 relative overflow-hidden group">
+                          <div className="absolute top-0 right-0 p-4">
+                            <div className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-full animate-pulse uppercase tracking-tighter">
+                              {staleCount} leads
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-4">
+                            <div>
+                              <h4 className="font-black text-slate-900 text-lg leading-none">{manager.name}</h4>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Gerente: {broker?.name || 'Sem Dono'}</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 pt-2">
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="rounded-xl text-[10px] font-black uppercase tracking-tighter border-amber-200 text-amber-700 hover:bg-amber-50"
+                                onClick={() => nudgeGerente(manager.id, manager.name, manager.phone, staleCount)}
+                              >
+                                <SendHorizontal className="h-3 w-3 mr-1" /> Cutucar
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                className="rounded-xl text-[10px] font-black uppercase tracking-tighter bg-rose-600 hover:bg-rose-700 shadow-md"
+                                onClick={() => {
+                                  setSelectedStaleLeadId(manager.id);
+                                  setRescueBrokerId("");
+                                  setIsRescueOpen(true);
+                                }}
+                              >
+                                <RefreshCcw className="h-3 w-3 mr-1" /> Resgatar
+                              </Button>
+                            </div>
+                          </div>
+                        </Card>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
           )}
