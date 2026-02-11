@@ -102,12 +102,13 @@ serve(async (req) => {
 
     if (insertError) throw insertError;
 
-    // 7. Registrar Log de Sucesso
+    // 7. Registrar Log de Sucesso (USANDO NOMES DE COLUNAS CORRETOS)
     await supabase.from('distribution_logs').insert({
       lead_name: name,
       lead_phone: phone,
       assigned_to_id: chosenBroker.id,
-      assigned_to_name: `${chosenBroker.first_name} ${chosenBroker.last_name}`,
+      assigned_to_name: `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() || 'Corretor',
+      queue_name: origin || 'Make/Webhook',
       status: 'SUCCESS'
     });
 

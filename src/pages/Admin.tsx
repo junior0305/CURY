@@ -662,17 +662,20 @@ const Admin = () => {
       const selectedBroker = profiles.find(p => p.id === rescueBrokerId);
       if (!selectedBroker) throw new Error("Corretor não encontrado.");
 
-      // 1. Get all leads that were not assigned (those in failed logs)
+      // 1. Pegar todos os telefones dos logs que falharam (leads sem dono)
       const phoneNumbers = failedLogs.map(log => log.lead_phone).filter(Boolean);
       
       if (phoneNumbers.length === 0) {
-        toast.info("Nenhum lead com telefone encontrado para resgate.");
+        toast.info("Nenhum lead com telefone encontrado para resgate nos logs.");
         setIsRescueOpen(false);
         return;
       }
 
-      // 2. Update the leads table to assign these leads to the selected broker
-      const { error: updateError } = await supabase
+      console.log(`[AdminRescue] Tentando resgatar leads com telefones:`, phoneNumbers);
+
+      // 2. Atualizar a tabela de leads para atribuir ao corretor escolhido
+      // O filtro principal deve ser leads onde broker_id é nulo e o telefone bate com os logs
+      const { data: updatedLeads, error: updateError } = await supabase
         .from('leads')
         .update({ 
           broker_id: selectedBroker.id,
@@ -681,15 +684,19 @@ const Admin = () => {
           last_interaction_at: new Date().toISOString()
         })
         .in('phone', phoneNumbers)
-        .is('broker_id', null);
+        .is('broker_id', null)
+        .select();
 
       if (updateError) throw updateError;
+      
+      console.log(`[AdminRescue] Leads atualizados com sucesso:`, updatedLeads);
 
-      // 3. Update the logs to mark them as RESCUED
+      // 3. Atualizar os logs de distribuição para marcar como SUCESSO e mostrar o novo dono
       const { error: logError } = await supabase
         .from('distribution_logs')
         .update({ 
           status: 'SUCCESS', 
+          assigned_to_id: selectedBroker.id,
           assigned_to_name: `${selectedBroker.name} (Resgatado)` 
         })
         .in('lead_phone', phoneNumbers)
@@ -697,11 +704,16 @@ const Admin = () => {
 
       if (logError) console.error("Erro ao atualizar logs:", logError);
 
-      toast.success(`${failedLogs.length} leads resgatados e enviados para ${selectedBroker.name}!`);
+      toast.success(`${updatedLeads?.length || 0} leads resgatados com sucesso!`);
+      
+      // Forçar atualização das listas
       queryClient.invalidateQueries({ queryKey: ['failed-distribution-logs'] });
       queryClient.invalidateQueries({ queryKey: ['distribution-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['adminLeads'] });
+      
       setIsRescueOpen(false);
     } catch (err: any) {
+      console.error("[AdminRescue] Erro crítico no resgate:", err);
       toast.error(`Falha no resgate: ${err.message}`);
     } finally {
       setIsRescuing(false);
