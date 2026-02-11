@@ -241,7 +241,9 @@ const EconomyManagement = () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['pending-achievements'] }),
         queryClient.invalidateQueries({ queryKey: ['public-achievements'] }),
-        queryClient.invalidateQueries({ queryKey: ['my-achievements'] })
+        queryClient.invalidateQueries({ queryKey: ['my-achievements'] }),
+        queryClient.invalidateQueries({ queryKey: ['adminLeads'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] })
       ]);
     } catch (err: any) {
       toast.error(`Erro ao processar: ${err.message}`);

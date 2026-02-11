@@ -33,12 +33,41 @@ export function AchievementTicker() {
 
   useEffect(() => {
     // Lógica para detectar novo achievement 'APPROVED' (Venda)
-    const handleNewSale = (payload: any) => {
-      if (payload.new.status === 'APPROVED' && payload.new.type === 'SALE') {
-        playSound('SALE');
-      }
+    const channel = supabase
+      .channel('achievements-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'achievements',
+          filter: 'status=eq.APPROVED'
+        },
+        (payload) => {
+          console.log("[AchievementTicker] Nova venda detectada via Realtime!", payload);
+          // O som de venda (sale.mp3) agora é disparado aqui
+          playSound('SALE');
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'achievements'
+        },
+        (payload) => {
+          if (payload.new.status === 'APPROVED' && payload.old.status !== 'APPROVED') {
+            console.log("[AchievementTicker] Venda aprovada agora!", payload.new);
+            playSound('SALE');
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
-    // ... subscribe logic ...
   }, [playSound]);
 
   const getMessage = (ach: any) => {
