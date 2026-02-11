@@ -12,8 +12,20 @@ serve(async (req) => {
   }
 
   try {
-    // CORREÇÃO: Lê o body APENAS UMA VEZ
-    const payload = await req.json();
+    // CORREÇÃO FINAL: Garante que o corpo seja lido apenas UMA VEZ
+    const bodyText = await req.text();
+    let payload;
+    
+    try {
+      payload = JSON.parse(bodyText);
+    } catch (e) {
+      console.error("[incoming-lead] Erro ao parsear JSON:", bodyText);
+      return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     console.log("[incoming-lead] Payload recebido:", JSON.stringify(payload));
 
     // Suporte para estruturas aninhadas como as do Facebook/Make (data.attributes)
