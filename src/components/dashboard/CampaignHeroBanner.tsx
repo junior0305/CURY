@@ -24,6 +24,16 @@ export default function CampaignHeroBanner({ leads, users }: { leads: any[], use
     refetchInterval: 30000,
   });
 
+  // 1.5 Buscar Histórico de Funil (para garantir contagem cumulativa)
+  const { data: history = [] } = useQuery({
+    queryKey: ["campaign-funnel-history"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('funnel_history').select('*');
+      if (error) throw error;
+      return data;
+    }
+  });
+
   // 2. Calcular progresso dos corretores para esta campanha
   const leaderboard = useMemo(() => {
     if (!campaign) return [];
@@ -38,7 +48,23 @@ export default function CampaignHeroBanner({ leads, users }: { leads: any[], use
     const targetStatus = actionMap[campaign.target_action];
     
     return brokers.map(broker => {
-      const count = leads.filter(l => l.brokerId === broker.id && l.status === targetStatus).length;
+      // NOVA LÓGICA: Contar leads únicos que atingiram o status no histórico
+      // OU que estão atualmente nesse status (backup)
+      
+      const historyCount = history.filter(h => 
+        h.broker_id === broker.id && 
+        h.stage === targetStatus &&
+        // Opcional: Filtrar pela data da campanha se necessário
+        // (Assume-se que a campanha conta "tudo" por enquanto ou implementamos filtro de data)
+        (campaign.created_at ? new Date(h.created_at) >= new Date(campaign.created_at) : true)
+      ).length;
+
+      // Fallback para contagem atual se histórico estiver vazio (retrocompatibilidade)
+      const currentStatusCount = leads.filter(l => l.brokerId === broker.id && l.status === targetStatus).length;
+      
+      // Usa o maior valor (Histórico vs Atual) para garantir que ninguém perca pontos
+      const count = Math.max(historyCount, currentStatusCount);
+
       return {
         name: broker.name.split(' ')[0],
         count,
@@ -48,7 +74,7 @@ export default function CampaignHeroBanner({ leads, users }: { leads: any[], use
     .filter(b => b.count > 0) // Apenas quem já deu o primeiro passo
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
-  }, [campaign, leads, users]);
+  }, [campaign, leads, users, history]);
 
   if (!campaign) return null;
 
