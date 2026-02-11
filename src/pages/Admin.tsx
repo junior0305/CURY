@@ -669,23 +669,46 @@ const Admin = () => {
       
       console.log(`[AdminRescue] Tentando resgatar leads. Nomes:`, leadNames, "Logs:", logIds);
 
-      // 2. Atualizar a tabela de leads
-      // Usamos uma estratégia mais agressiva de busca
-      const { data: updatedLeads, error: updateError } = await supabase
-        .from('leads')
-        .update({ 
-          broker_id: selectedBroker.id,
-          manager_id: selectedBroker.managerId,
-          status: 'NEW',
-          last_interaction_at: new Date().toISOString()
-        })
-        .or(`phone.in.(${phoneNumbers.map(p => `"${p}"`).join(',')}),name.in.(${leadNames.map(n => `"${n}"`).join(',')})`)
-        .is('broker_id', null)
-        .select();
-
-      if (updateError) throw updateError;
+      // PASSO INTERMEDIÁRIO: Buscar os IDs dos leads antes de tentar atualizar
+      // Isso evita problemas com a sintaxe complexa do .or() com strings
+      let leadIdsToUpdate: string[] = [];
       
-      const count = updatedLeads?.length || 0;
+      if (phoneNumbers.length > 0 || leadNames.length > 0) {
+        let query = supabase.from('leads').select('id, name, phone').is('broker_id', null);
+        
+        // Construir filtro OR manualmente para ser mais seguro
+        const conditions = [];
+        if (phoneNumbers.length > 0) conditions.push(`phone.in.(${phoneNumbers.map(p => `"${p}"`).join(',')})`);
+        if (leadNames.length > 0) conditions.push(`name.in.(${leadNames.map(n => `"${n}"`).join(',')})`);
+        
+        if (conditions.length > 0) {
+          const { data: foundLeads, error: searchError } = await query.or(conditions.join(','));
+          if (!searchError && foundLeads) {
+            console.log("[AdminRescue] Leads encontrados para atualização:", foundLeads);
+            leadIdsToUpdate = foundLeads.map(l => l.id);
+          } else {
+             console.warn("[AdminRescue] Erro ou nenhum lead encontrado na busca prévia:", searchError);
+          }
+        }
+      }
+
+      let count = 0;
+      if (leadIdsToUpdate.length > 0) {
+         // 2. Atualizar a tabela de leads usando os IDs encontrados
+        const { data: updatedLeads, error: updateError } = await supabase
+          .from('leads')
+          .update({ 
+            broker_id: selectedBroker.id,
+            manager_id: selectedBroker.managerId,
+            status: 'NEW',
+            last_interaction_at: new Date().toISOString()
+          })
+          .in('id', leadIdsToUpdate)
+          .select();
+
+        if (updateError) throw updateError;
+        count = updatedLeads?.length || 0;
+      }
 
       // 3. Atualizar os logs de distribuição (REMOVIDO assigned_to_id QUE NÃO EXISTE NO SCHEMA)
       const { error: logUpdateError } = await supabase
