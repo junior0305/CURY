@@ -1,4 +1,3 @@
-
 import { useEffect, useRef } from 'react';
 
 // URLs de sons (usando assets públicos estáveis ou placeholders)
@@ -27,12 +26,22 @@ export function useAudioArena() {
 
   const playSound = (soundKey: keyof typeof SOUNDS) => {
     const isMuted = localStorage.getItem('crm_audio_muted') === 'true';
+    console.log(`[AudioArena] Tentando tocar: ${soundKey} (Mudo: ${isMuted})`);
+    
     if (isMuted) return;
 
     const audio = audioRefs.current[soundKey];
     if (audio) {
       audio.currentTime = 0;
-      audio.play().catch(err => console.warn('[AudioArena] Erro ao reproduzir som:', err));
+      audio.volume = 0.5; // Garantir volume audível
+      audio.play()
+        .then(() => console.log(`[AudioArena] Reproduzindo ${soundKey} com sucesso`))
+        .catch(err => {
+          console.warn('[AudioArena] Erro ao reproduzir som:', err);
+          console.warn('[AudioArena] Dica: O navegador pode bloquear som sem interação prévia.');
+        });
+    } else {
+      console.error(`[AudioArena] Objeto de áudio não encontrado para: ${soundKey}`);
     }
   };
 

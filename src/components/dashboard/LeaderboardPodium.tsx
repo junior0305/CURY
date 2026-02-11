@@ -71,13 +71,17 @@ export function LeaderboardPodium({ leads, users, isMonthly, onToggleTimeframe, 
 
   useEffect(() => {
     const currentRankIds = top3.map(b => b.id);
+    console.log("[Podium] Verificando ultrapassagem...", { 
+      atual: currentRankIds, 
+      anterior: prevRankings.current 
+    });
     
     // Se não for a primeira carga e a ordem mudou (especialmente no top 3)
     if (prevRankings.current.length > 0) {
-      const topChanged = currentRankIds[0] !== prevRankings.current[0] || 
-                         currentRankIds[1] !== prevRankings.current[1];
+      const topChanged = JSON.stringify(currentRankIds) !== JSON.stringify(prevRankings.current);
       
       if (topChanged) {
+        console.log("[Podium] ULTRAPASSAGEM DETECTADA! Disparando áudio...");
         playSound('OVERTAKE');
       }
     }
