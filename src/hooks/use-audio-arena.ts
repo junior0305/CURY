@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 
 // Nomes dos arquivos que devem estar na pasta /public
 const SOUND_FILES = {
-  SALE: 'sale.mp3',
-  OVERTAKE: 'overtake.mp3',
+  SALE: 'sale.mp3',      
+  OVERTAKE: 'overtake.mp3', 
+  NEW_LEAD: 'new_lead.mp3', // Novo som para entrada de lead
+  NOTIFICATION: 'notification.mp3',
 };
 
 export function useAudioArena() {

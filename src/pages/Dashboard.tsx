@@ -42,6 +42,7 @@ import { useAudioArena } from "@/hooks/use-audio-arena";
 import { Volume2, VolumeX } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "react-hot-toast";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
@@ -102,6 +103,38 @@ const Dashboard = () => {
       concluded: displayLeads.filter(l => l.status === 'CONCLUDED').length
     };
   }, [leads, user?.id, role]);
+
+  // Monitoramento de Novos Leads para disparar áudio
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel('new-leads-audio')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'leads',
+          filter: `broker_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log("[Dashboard] NOVO LEAD RECEBIDO! Disparando som...", payload.new);
+          playSound('NEW_LEAD');
+          
+          // Opcional: Toast para reforçar visualmente
+          toast.info(`🚀 Novo Lead: ${payload.new.name}`, {
+            description: "Atenda o mais rápido possível para garantir a conversão!",
+            duration: 5000,
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, playSound]);
 
   // Monitoramento de Cutucões (Internal Notifications)
   useEffect(() => {
