@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Trophy, Target, ArrowRight, Banknote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAudioArena } from "@/hooks/use-audio-arena";
+import { useEffect } from "react";
 
 export function AchievementTicker() {
   const { playSound } = useAudioArena();
@@ -93,3 +94,5 @@ export function AchievementTicker() {
     </div>
   );
 }
+
+export default AchievementTicker;
