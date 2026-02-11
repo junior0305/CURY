@@ -32,25 +32,15 @@ function scoreForLead(lead: Lead) {
   return 0;
 }
 
-export function LeaderboardPodium({ brokers }: { brokers: BrokerRank[] }) {
+export function LeaderboardPodium({ leads, users, isMonthly, onToggleTimeframe, onOpenKPIs }: { 
+  leads: Lead[]; 
+  users: User[];
+  isMonthly?: boolean;
+  onToggleTimeframe?: () => void;
+  onOpenKPIs?: (id: string, name: string) => void;
+}) {
   const { playSound } = useAudioArena();
   const prevRankings = useRef<string[]>([]);
-
-  useEffect(() => {
-    const currentRankIds = brokers.map(b => b.id);
-    
-    // Se não for a primeira carga e a ordem mudou (especialmente no top 3)
-    if (prevRankings.current.length > 0) {
-      const topChanged = currentRankIds[0] !== prevRankings.current[0] || 
-                         currentRankIds[1] !== prevRankings.current[1];
-      
-      if (topChanged) {
-        playSound('OVERTAKE');
-      }
-    }
-    
-    prevRankings.current = currentRankIds;
-  }, [brokers, playSound]);
 
   const top3 = useMemo(() => {
     // IMPORTANTE: Ranking UNIVERSAL e ABSOLUTO
@@ -78,6 +68,22 @@ export function LeaderboardPodium({ brokers }: { brokers: BrokerRank[] }) {
     console.log("[Podium] Top 3 Real detectado:", entries.slice(0, 3));
     return entries.slice(0, 3);
   }, [leads, users]);
+
+  useEffect(() => {
+    const currentRankIds = top3.map(b => b.id);
+    
+    // Se não for a primeira carga e a ordem mudou (especialmente no top 3)
+    if (prevRankings.current.length > 0) {
+      const topChanged = currentRankIds[0] !== prevRankings.current[0] || 
+                         currentRankIds[1] !== prevRankings.current[1];
+      
+      if (topChanged) {
+        playSound('OVERTAKE');
+      }
+    }
+    
+    prevRankings.current = currentRankIds;
+  }, [top3, playSound]);
 
   const slots: Array<{ place: 1 | 2 | 3; entry?: PodiumEntry; height: string; tone: string; ring: string; textTone: string }> = [
     { place: 2, entry: top3[1], height: "h-20 sm:h-24", tone: "bg-slate-200", ring: "ring-slate-100", textTone: "text-slate-600" },
@@ -208,3 +214,5 @@ export function LeaderboardPodium({ brokers }: { brokers: BrokerRank[] }) {
     </Card>
   );
 }
+
+export default LeaderboardPodium;
