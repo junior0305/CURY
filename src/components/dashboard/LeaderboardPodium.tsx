@@ -8,6 +8,8 @@ import { User } from "@/types/user";
 import { Crown, Sparkles, Trophy, BarChart3, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAudioArena } from "@/hooks/use-audio-arena";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 
 type PodiumEntry = {
   id: string;
@@ -23,13 +25,23 @@ function initials(name: string) {
   return (first + last).toUpperCase();
 }
 
-function scoreForLead(lead: Lead) {
-  if (lead.status === "CONCLUDED") return 500; // Peso massivo para venda
-  if (lead.status === "DOCS_REQUESTED") return 50;
-  if (lead.status === "VISIT_SCHEDULED") return 20;
-  if (lead.status === "IN_PROGRESS") return 2;
-  if (lead.status === "NEW") return 0.5;
-  return 0;
+function scoreForLead(lead: Lead, history: any[] = []) {
+  // Agora calculamos os pontos baseados no HISTÓRICO de etapas atingidas, 
+  // não apenas no status ATUAL.
+  const leadHistory = history.filter(h => h.lead_id === lead.id);
+  const stagesReached = new Set(leadHistory.map(h => h.stage));
+  
+  // Adiciona o status atual também, para garantir que o tempo real funcione
+  stagesReached.add(lead.status);
+
+  let totalPoints = 0;
+  
+  if (stagesReached.has("CONCLUDED")) totalPoints += 500;
+  if (stagesReached.has("DOCS_REQUESTED")) totalPoints += 50;
+  if (stagesReached.has("VISIT_SCHEDULED")) totalPoints += 20;
+  if (stagesReached.has("IN_PROGRESS")) totalPoints += 2;
+  
+  return totalPoints || 0.5; // 0.5 para leads novos
 }
 
 export function LeaderboardPodium({ leads, users, isMonthly, onToggleTimeframe, onOpenKPIs }: { 
@@ -39,6 +51,15 @@ export function LeaderboardPodium({ leads, users, isMonthly, onToggleTimeframe, 
   onToggleTimeframe?: () => void;
   onOpenKPIs?: (id: string, name: string) => void;
 }) {
+  const { data: history = [] } = useQuery({
+    queryKey: ['funnel-history'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('funnel_history').select('*');
+      if (error) throw error;
+      return data;
+    }
+  });
+
   const { playSound } = useAudioArena();
   const prevRankings = useRef<string[]>([]);
 
@@ -51,7 +72,7 @@ export function LeaderboardPodium({ leads, users, isMonthly, onToggleTimeframe, 
 
     for (const lead of leads) {
       if (!lead.brokerId) continue;
-      byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead);
+      byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead, history);
     }
 
     // Gerar lista de ranking real, sem favorecer ninguém
@@ -67,7 +88,7 @@ export function LeaderboardPodium({ leads, users, isMonthly, onToggleTimeframe, 
 
     console.log("[Podium] Top 3 Real detectado:", entries.slice(0, 3));
     return entries.slice(0, 3);
-  }, [leads, users]);
+  }, [leads, users, history]);
 
   useEffect(() => {
     const currentRankIds = top3.map(b => b.id);
