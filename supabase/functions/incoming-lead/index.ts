@@ -12,10 +12,19 @@ serve(async (req) => {
   }
 
   try {
+    // CORREÇÃO: Lê o body APENAS UMA VEZ
     const payload = await req.json();
-    console.log("[incoming-lead] Payload recebido:", payload);
+    console.log("[incoming-lead] Payload recebido:", JSON.stringify(payload));
 
     const { name, phone, email, origin, message, tag } = payload;
+    
+    if (!phone) {
+      return new Response(JSON.stringify({ error: 'Phone is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     const nowIso = new Date().toISOString(); // Hora exata da entrada
 
     // 1. Receber o corpo de forma segura
