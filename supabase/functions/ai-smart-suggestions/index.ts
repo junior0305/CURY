@@ -32,39 +32,103 @@ serve(async (req) => {
       .eq('id', brokerId)
       .single();
 
-    // 3. AI Magic (Simulated logic based on real-world real estate conversion patterns)
-    // In a production environment, you would call OpenAI/Anthropic here.
+    // 3. AI Magic (Refined for Contextual Pipeline Stages)
+    // Lógica contextual baseada no Status e no Tempo Parado (Stale Time)
     
     let approach = "";
     let message = "";
     let reason = "";
 
     const name = lead.name.split(' ')[0];
-    const tag = lead.tag || 'imóvel';
+    const tag = lead.tag || 'este imóvel'; // Fallback para tag vazia
+    
+    // Cálculo simples de tempo parado (diferença entre agora e última interação)
+    const lastInteraction = new Date(lead.last_interaction_at || lead.created_at).getTime();
+    const now = new Date().getTime();
+    const hoursStale = (now - lastInteraction) / (1000 * 60 * 60);
 
-    if (lead.status === 'NEW') {
-      approach = "Abordagem de Quebra de Padrão";
-      message = `Oi ${name}! Notei que você buscou informações sobre ${tag}. ` +
-                `Em vez de te mandar um PDF gigante, eu gravei um vídeo de 15 segundos ` +
-                `mostrando o detalhe que ninguém vê nesse projeto. Posso te mandar?`;
-      reason = "Leads novos respondem 4x mais a perguntas fechadas que oferecem exclusividade imediata.";
-    } else if (lead.status === 'IN_PROGRESS') {
-      approach = "Follow-up de Micro-Compromisso";
-      message = `${name}, ainda estou com aquela unidade separada pra você. ` +
-                `Consegue ouvir um áudio de 20 segundos onde te explico por que essa é a ` +
-                `melhor condição de fluxo de pagamento do mês?`;
-      reason = "Mudar o canal para áudio humaniza o atendimento e aumenta a percepção de valor.";
-    } else if (lead.status === 'VISIT_SCHEDULED') {
-      approach = "Garantia de Comparecimento";
-      message = `${name}, tudo pronto para nossa visita! ` +
-                `Dica de quem conhece a região: o sol da tarde bate direto na varanda desse apto. ` +
-                `Te espero às 17h para você ver isso ao vivo. Alguma dúvida no caminho?`;
-      reason = "Dar uma 'dica de insider' reforça sua autoridade e gera desejo pela experiência da visita.";
-    } else {
-      approach = "Retomada de Valor";
-      message = `${name}, acabei de ver uma atualização na documentação deste projeto que muda tudo para quem quer investir. ` +
-                `Podemos falar 2 minutos sobre como isso acelera sua aprovação?`;
-      reason = "Leads parados precisam de um fato novo ou urgência real para reativar.";
+    // Estratégias Contextuais Profundas
+    switch (lead.status) {
+      case 'NEW':
+        if (hoursStale < 1) {
+          approach = "Impacto Imediato (Speed-to-Lead)";
+          message = `Olá ${name}! ⚡️ Acabei de receber seu interesse no ${tag}. ` +
+                    `Estou na frente do computador agora separando as plantas. ` +
+                    `Prefere que eu te mande o Book Completo ou um vídeo rápido do decorado?`;
+          reason = "Nos primeiros minutos, o lead está com o celular na mão. Ofereça opções binárias (A ou B) para forçar uma micro-conversão.";
+        } else {
+          approach = "Resgate de Atenção";
+          message = `Oi ${name}, tentei te ligar mais cedo sobre o ${tag}. ` +
+                    `Muitas pessoas perdem essa oportunidade por acharem que a entrada é alta. ` +
+                    `Fiz uma simulação surpreendente aqui. Posso te mandar o valor da parcela?`;
+          reason = "Se o lead esfriou, use a curiosidade financeira para reativar o interesse racional.";
+        }
+        break;
+
+      case 'IN_PROGRESS': // Em Atendimento
+        if (hoursStale > 48) {
+          approach = "Quebra de Silêncio (Ghosting)";
+          message = `${name}, sinceramente: o que te impediu de avançarmos no ${tag}? ` +
+                    `1) Não gostou da localização? ` +
+                    `2) O valor ficou acima? ` +
+                    `3) Ainda está pensando? ` +
+                    `Me responde com o número, prometo que ajuda a gente a não perder tempo!`;
+          reason = "Para leads que sumiram, a técnica de 'última tentativa' com múltipla escolha reduz a barreira cognitiva de resposta.";
+        } else {
+          approach = "Aprofundamento de Necessidade";
+          message = `${name}, pensando no que você me falou... ` +
+                    `Você prioriza mais a localização ou o tamanho da varanda? ` +
+                    `Tenho uma unidade específica no ${tag} que atende exatamente um desses pontos.`;
+          reason = "Em atendimento ativo, faça perguntas consultivas para qualificar o lead e tirá-lo do automático.";
+        }
+        break;
+
+      case 'VISIT_SCHEDULED':
+        if (hoursStale < 24) {
+          approach = "Ancoragem de Expectativa";
+          message = `Tudo confirmado, ${name}! ✅ ` +
+                    `Separei um material exclusivo para te entregar na nossa visita. ` +
+                    `Ah, e consegui a chave daquela unidade com a vista livre. Você vai gostar!`;
+          reason = "Crie um 'compromisso psicológico' oferecendo algo que ele só ganha se aparecer (o material ou a vista exclusiva).";
+        } else {
+          approach = "Confirmação Simples";
+          message = `Oi ${name}, passando só para deixar meu contato fácil para nossa visita amanhã. ` +
+                    `Se precisar de localização ou referência, é só chamar aqui. Até lá!`;
+          reason = "Não pergunte 'se' ele vai. Assuma que ele vai e apenas se coloque à disposição. Isso reduz cancelamentos.";
+        }
+        break;
+
+      case 'DOCS_REQUESTED':
+        if (hoursStale > 24) {
+          approach = "Urgência de Escassez";
+          message = `${name}, meu gerente acabou de me avisar que a tabela vai virar na segunda-feira. 🚨 ` +
+                    `Precisamos do seu RG e Comp. de Residência ainda hoje para travar o valor antigo. ` +
+                    `Consegue me mandar foto agora?`;
+          reason = "Na etapa de documentos, o medo da perda (FOMO) é o gatilho mais forte. Use prazos externos (tabela, unidade reservada) para acelerar.";
+        } else {
+          approach = "Facilitação Burocrática";
+          message = `${name}, vi que falta só o RG. ` +
+                    `Não precisa escanear não, tá? Uma foto legível do celular mesmo já serve. ` +
+                    `Manda aqui que eu cuido do resto da burocracia pra você.`;
+          reason = "Remova a fricção. O cliente muitas vezes trava por achar que precisa de algo formal. Simplifique.";
+        }
+        break;
+      
+      case 'CONCLUDED':
+        approach = "Pós-Venda e Indicação (Referral)";
+        message = `Parabéns de novo pela conquista, ${name}! 🥂 ` +
+                  `Foi um prazer fazer parte disso. ` +
+                  `Você tem algum amigo ou familiar que também está buscando? ` +
+                  `Tenho uma condição especial para indicações suas.`;
+        reason = "O melhor momento para pedir indicação é na euforia da compra. Transforme clientes em promotores.";
+        break;
+
+      default:
+        approach = "Reativação Genérica";
+        message = `Olá ${name}, faz tempo que não nos falamos sobre o ${tag}. ` +
+                  `O mercado mudou bastante nas últimas semanas. ` +
+                  `Ainda faz sentido pra você investir em imóveis ou posso encerrar seu atendimento por enquanto?`;
+        reason = "A técnica do 'Takeaway' (tirar a oferta da mesa) muitas vezes faz o cliente responder para não perder a oportunidade.";
     }
 
     return new Response(JSON.stringify({ 
