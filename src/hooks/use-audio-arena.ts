@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 
-// URLs de sons (usando arquivos diretos e estáveis)
-const SOUNDS = {
-  SALE: 'https://www.soundjay.com/misc/sounds/cash-register-05.mp3', 
-  OVERTAKE: 'https://www.soundjay.com/transportation/sounds/race-car-drive-by-1.mp3', 
-  NOTIFICATION: 'https://www.soundjay.com/buttons/sounds/button-20.mp3', 
+// Nomes dos arquivos que devem estar na pasta /public
+const SOUND_FILES = {
+  SALE: '/sale.mp3',      // Caixa registradora
+  OVERTAKE: '/overtake.mp3', // Carro de corrida
+  NOTIFICATION: '/notification.mp3',
 };
 
 export function useAudioArena() {
@@ -12,18 +12,16 @@ export function useAudioArena() {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    console.log("[AudioArena] Inicializando e pré-carregando sons...");
+    console.log("[AudioArena] Inicializando com arquivos locais da pasta /public...");
     
     const loadSounds = () => {
-      Object.entries(SOUNDS).forEach(([key, url]) => {
+      Object.entries(SOUND_FILES).forEach(([key, url]) => {
         const audio = new Audio(url);
         audio.preload = 'auto';
-        // Forçar carregamento
         audio.load();
         audioRefs.current[key] = audio;
       });
       setIsLoaded(true);
-      console.log("[AudioArena] Sons pré-carregados");
     };
 
     loadSounds();
@@ -33,41 +31,25 @@ export function useAudioArena() {
     };
   }, []);
 
-  const playSound = (soundKey: keyof typeof SOUNDS) => {
+  const playSound = (soundKey: keyof typeof SOUND_FILES) => {
     const isMuted = localStorage.getItem('crm_audio_muted') === 'true';
-    console.log(`[AudioArena] Solicitação para tocar: ${soundKey} | Mudo: ${isMuted} | Carregado: ${isLoaded}`);
-    
     if (isMuted) return;
 
     const audio = audioRefs.current[soundKey];
     if (audio) {
-      // Resetar para o início caso já esteja tocando
       audio.currentTime = 0;
-      audio.volume = 0.8; 
+      audio.volume = 0.9; 
       
-      const playPromise = audio.play();
-
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            console.log(`[AudioArena] EXECUTANDO AGORA: ${soundKey}`);
-          })
-          .catch(error => {
-            console.error(`[AudioArena] BLOQUEIO DO NAVEGADOR:`, error.message);
-            console.warn("[AudioArena] IMPORTANTE: Você precisa clicar uma vez na página para o som funcionar.");
-            
-            // Tentativa de tocar ao primeiro clique do usuário se falhar por falta de interação
-            const retryOnInteraction = () => {
-              audio.play().then(() => {
-                console.log(`[AudioArena] Reproduzido após interação: ${soundKey}`);
-                window.removeEventListener('click', retryOnInteraction);
-              });
-            };
-            window.addEventListener('click', retryOnInteraction, { once: true });
-          });
-      }
-    } else {
-      console.error(`[AudioArena] Erro: Áudio '${soundKey}' não encontrado no cache.`);
+      audio.play().catch(error => {
+        console.warn(`[AudioArena] Bloqueio de interação: o som tocará no próximo clique.`, error.message);
+        
+        const retryOnInteraction = () => {
+          audio.play().then(() => {
+            window.removeEventListener('click', retryOnInteraction);
+          }).catch(() => {});
+        };
+        window.addEventListener('click', retryOnInteraction, { once: true });
+      });
     }
   };
 
