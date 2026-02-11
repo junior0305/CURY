@@ -88,7 +88,7 @@ const Dashboard = () => {
     return leads.filter(l => l.brokerId === showKPIsFor.id);
   }, [leads, showKPIsFor]);
 
-  // Query para buscar o histórico de funil para os contadores
+  // Query para buscar o histórico de funil (Mantido apenas para uso futuro ou componentes filhos)
   const { data: history = [] } = useQuery({
     queryKey: ['funnel-history-dashboard'],
     queryFn: async () => {
@@ -99,31 +99,23 @@ const Dashboard = () => {
   });
 
   const stats = useMemo(() => {
-    // Busca no histórico quais leads ATINGIRAM cada etapa pelo menos uma vez
-    const getCountForStage = (stage: string) => {
-      const uniqueLeadsInStage = new Set(
-        history
-          .filter(h => h.stage === stage)
-          .map(h => h.lead_id)
-      );
-      
-      // Filtra apenas leads que pertencem ao contexto atual (se for broker, só os dele)
-      const relevantLeads = role === 'BROKER' 
-        ? leads.filter(l => l.brokerId === user?.id)
-        : leads;
-      
-      return relevantLeads.filter(l => uniqueLeadsInStage.has(l.id) || l.status === stage).length;
-    };
+    // FILTRO DE PRIVACIDADE PARA OS CARDS: O corretor SÓ deve ver a contagem dos seus próprios leads
+    // Exceto se for Superintendent ou Admin (que vêem o total do time)
+    const isPowerUser = role === 'SUPERINTENDENT' || role === 'ADMIN';
+    const displayLeads = isPowerUser ? leads : leads.filter(l => l.brokerId === user?.id);
 
+    // VOLTANDO PARA A LÓGICA DE "ESTADO ATUAL" (SNAPSHOT)
+    // Os cards devem mostrar onde o lead está AGORA, não por onde ele passou.
+    // A gamificação (Pódio/Banner) continua usando o histórico cumulativo.
     return {
-      total: role === 'BROKER' ? leads.filter(l => l.brokerId === user?.id).length : leads.length,
-      new: getCountForStage('NEW'),
-      in_progress: getCountForStage('IN_PROGRESS'),
-      visits: getCountForStage('VISIT_SCHEDULED'),
-      docs: getCountForStage('DOCS_REQUESTED'),
-      concluded: getCountForStage('CONCLUDED')
+      total: displayLeads.length,
+      new: displayLeads.filter(l => l.status === 'NEW').length,
+      in_progress: displayLeads.filter(l => l.status === 'IN_PROGRESS').length,
+      visits: displayLeads.filter(l => l.status === 'VISIT_SCHEDULED').length,
+      docs: displayLeads.filter(l => l.status === 'DOCS_REQUESTED').length,
+      concluded: displayLeads.filter(l => l.status === 'CONCLUDED').length
     };
-  }, [leads, history, user?.id, role]);
+  }, [leads, user?.id, role]);
 
   // Monitoramento de Novos Leads para disparar áudio
   useEffect(() => {
