@@ -4,11 +4,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { Trophy, Target, ArrowRight, Banknote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAudioArena } from "@/hooks/use-audio-arena";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
 export function AchievementTicker() {
+  const { user } = useAuth();
   const { playSound } = useAudioArena();
-  const { data: achievements = [] } = useQuery({
+  const [playedIds, setPlayedIds] = useState<Set<string>>(new Set());
+
+  const { data: achievements = [], refetch } = useQuery({
     queryKey: ["public-achievements"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -31,36 +35,53 @@ export function AchievementTicker() {
     refetchInterval: 5000,
   });
 
+  // 1. Sincronizar sons não ouvidos ao carregar ou atualizar
   useEffect(() => {
-    // Lógica para detectar novo achievement 'APPROVED' (Venda)
-    const channel = supabase
-      .channel('achievements-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'achievements',
-          filter: 'status=eq.APPROVED'
-        },
-        (payload) => {
-          console.log("[AchievementTicker] Nova venda detectada via Realtime!", payload);
-          // O som de venda (sale.mp3) agora é disparado aqui
+    if (!user?.id || achievements.length === 0) return;
+
+    const syncPendingSounds = async () => {
+      // Buscar quais desses achievements o usuário já "ouviu" (estão na tabela de lidos)
+      const achievementIds = achievements.map((a: any) => a.id);
+      
+      const { data: readIds } = await supabase
+        .from('audio_notifications_read')
+        .select('achievement_id')
+        .eq('user_id', user.id)
+        .in('achievement_id', achievementIds);
+
+      const alreadyHeard = new Set(readIds?.map(r => r.achievement_id) || []);
+      
+      // Tocar o som para o mais recente que ainda não foi ouvido
+      const pendingToPlay = achievements.find((a: any) => !alreadyHeard.has(a.id) && !playedIds.has(a.id));
+
+      if (pendingToPlay) {
+        console.log("[AchievementTicker] Tocando som para venda não ouvida:", pendingToPlay.id);
+        
+        // Registrar que ouviu ANTES de tocar para evitar loops
+        const { error } = await supabase
+          .from('audio_notifications_read')
+          .insert({ user_id: user.id, achievement_id: pendingToPlay.id });
+
+        if (!error) {
           playSound('SALE');
+          setPlayedIds(prev => new Set([...prev, pendingToPlay.id]));
         }
-      )
+      }
+    };
+
+    syncPendingSounds();
+  }, [achievements, user?.id, playSound, playedIds]);
+
+  // 2. Escuta Realtime para novos achievements
+  useEffect(() => {
+    const channel = supabase
+      .channel('achievements-live')
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'achievements'
-        },
-        (payload) => {
-          if (payload.new.status === 'APPROVED' && payload.old.status !== 'APPROVED') {
-            console.log("[AchievementTicker] Venda aprovada agora!", payload.new);
-            playSound('SALE');
-          }
+        { event: '*', schema: 'public', table: 'achievements' },
+        () => {
+          console.log("[AchievementTicker] Mudança detectada, atualizando lista...");
+          refetch();
         }
       )
       .subscribe();
@@ -68,7 +89,7 @@ export function AchievementTicker() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [playSound]);
+  }, [refetch]);
 
   const getMessage = (ach: any) => {
     const name = ach.profiles?.first_name || "Corretor";
