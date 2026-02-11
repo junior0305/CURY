@@ -16,13 +16,16 @@ serve(async (req) => {
     const payload = await req.json();
     console.log("[incoming-lead] Payload recebido:", JSON.stringify(payload));
 
+    // Suporte para estruturas aninhadas como as do Facebook/Make (data.attributes)
+    const sourceData = payload.data?.attributes || payload.attributes || payload;
+
     // Mapeamento flexível para aceitar nomes comuns vindos do Make/Zapier/Facebook
-    const name = payload.name || payload.nome || payload.fullName || 'Lead Sem Nome';
-    const phone = payload.phone || payload.telefone || payload.cellphone || payload.whatsapp || payload.contact;
-    const email = payload.email || payload.mail || '';
-    const origin = payload.origin || payload.origem || 'Make/Webhook';
-    const message = payload.message || payload.mensagem || '';
-    const tag = payload.tag || payload.tags || '';
+    const name = sourceData.name || sourceData.nome || sourceData.fullName || payload.name || 'Lead Sem Nome';
+    const phone = sourceData.phone || sourceData.telefone || sourceData.cellphone || sourceData.whatsapp || sourceData.contact || payload.phone;
+    const email = sourceData.email || sourceData.mail || payload.email || '';
+    const origin = sourceData.source || sourceData.origin || sourceData.origem || payload.origin || 'Make/Webhook';
+    const message = sourceData.message || sourceData.mensagem || sourceData.Interesse || payload.message || '';
+    const tag = sourceData.tag || sourceData.tags || sourceData.Interesse || payload.tag || '';
     
     if (!phone) {
       console.error("[incoming-lead] Erro: Telefone não encontrado no payload.", payload);
