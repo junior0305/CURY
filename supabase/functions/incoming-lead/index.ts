@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
@@ -50,13 +49,21 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // 5. Lógica de Distribuição (Round Robin simplificado)
-    const { data: brokers } = await supabase
+    // Buscamos perfis que tenham o ID presente na tabela de usuários com role BROKER
+    // Como a tabela profiles do Supabase Auth é gerenciada, vamos buscar todos os perfis
+    // que tenham a flag lead_assignment_enabled ativa.
+    const { data: brokers, error: brokerError } = await supabase
       .from('profiles')
-      .select('id, name, manager_id')
-      .eq('role', 'BROKER')
+      .select('id, first_name, last_name')
       .eq('lead_assignment_enabled', true);
 
+    if (brokerError) {
+      console.error("[incoming-lead] Erro ao buscar corretores:", brokerError.message);
+      throw brokerError;
+    }
+
     if (!brokers || brokers.length === 0) {
+      console.warn("[incoming-lead] Nenhum corretor disponível para atribuição.");
       // Registrar log de falha de distribuição
       await supabase.from('distribution_logs').insert({
         lead_name: name,
@@ -100,7 +107,7 @@ serve(async (req) => {
       lead_name: name,
       lead_phone: phone,
       assigned_to_id: chosenBroker.id,
-      assigned_to_name: chosenBroker.name,
+      assigned_to_name: `${chosenBroker.first_name} ${chosenBroker.last_name}`,
       status: 'SUCCESS'
     });
 

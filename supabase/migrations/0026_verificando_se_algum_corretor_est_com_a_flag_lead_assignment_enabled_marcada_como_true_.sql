@@ -1,0 +1,1 @@
+SELECT id, first_name, lead_assignment_enabled FROM public.profiles WHERE lead_assignment_enabled = true;

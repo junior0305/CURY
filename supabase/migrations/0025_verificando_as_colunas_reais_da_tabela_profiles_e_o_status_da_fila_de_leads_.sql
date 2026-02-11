@@ -1,0 +1,1 @@
+SELECT id, first_name, last_name, lead_assignment_enabled FROM public.profiles;
