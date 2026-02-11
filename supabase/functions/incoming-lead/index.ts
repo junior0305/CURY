@@ -35,6 +35,7 @@ serve(async (req) => {
     const email = sourceData.email || sourceData.mail || '';
     const origin = sourceData.source || sourceData.origin || sourceData.origem || 'Make/Webhook';
     const message = sourceData.message || sourceData.mensagem || sourceData.Interesse || '';
+    const tag = sourceData.tag || sourceData.interest || sourceData.interest || '';
 
     if (!phone) {
       return new Response(JSON.stringify({ error: 'Phone is required', received: payload }), {
@@ -89,8 +90,7 @@ serve(async (req) => {
         name,
         phone,
         email,
-        origin,
-        message,
+        tag: tag || message || origin, // Usamos 'tag' para guardar a mensagem, já que 'message' não existe no banco
         status: 'NEW',
         broker_id: chosenBroker.id,
         manager_id: chosenBroker.manager_id,
