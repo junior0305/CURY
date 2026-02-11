@@ -48,6 +48,22 @@ const statusColors: Record<LeadStatus, string> = {
   ABANDONED: "bg-rose-600",
 };
 
+const getTimeSince = (isoString: string | null) => {
+  if (!isoString) return "Agora";
+  const date = new Date(isoString);
+  const now = new Date();
+  
+  // CORREÇÃO: Se a diferença for negativa (fuso horário do servidor vs cliente), trata como 0
+  const diffMs = now.getTime() - date.getTime();
+  if (diffMs < 0) return "Agora";
+  
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "Agora";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h`;
+};
+
 const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: LeadListProps) => {
   const { session } = useAuth();
   

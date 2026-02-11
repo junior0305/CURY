@@ -510,10 +510,15 @@ const Admin = () => {
   });
 
   // Lógica de cálculo de horas de inatividade ignorando o período das 21h às 08h
-  const getStaleHours = (lastActionIso: string) => {
+  const getStaleHours = (lastActionIso: string | null) => {
+    if (!lastActionIso) return 0;
+    
     const lastAction = new Date(lastActionIso);
     const now = new Date();
     
+    // Se a data for inválida ou no futuro (erro de fuso), retorna 0
+    if (isNaN(lastAction.getTime()) || lastAction > now) return 0;
+
     // Se agora for entre 21h e 08h, usamos 21h do dia atual (ou anterior) como "agora" para o cálculo
     let effectiveNow = new Date(now);
     const nowHour = now.getHours();
