@@ -31,6 +31,20 @@ const LeadRework = () => {
     queryFn: fetchLeadsForAdmin,
   });
 
+  // 2. Busca de Filas de Distribuição Reais
+  const { data: activeQueues = [] } = useQuery({
+    queryKey: ['distribution-queues'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('distribution_queues')
+        .select('*')
+        .eq('is_active', true);
+      
+      if (error) throw error;
+      return data;
+    }
+  });
+
   // Filtra leads abandonados
   const leadsForRework = useMemo(() => {
     return allLeads.filter(l => l.status === 'ABANDONED');
@@ -57,8 +71,8 @@ const LeadRework = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['adminLeads'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] }); // Invalida o dashboard para o lead reaparecer
-      const queueName = mockActiveQueues.find(q => q.id === data.queueId)?.name;
+      queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] });
+      const queueName = activeQueues.find((q: any) => q.id === data.queueId)?.name;
       toast({ title: "Retrabalho Concluído", description: `Lead enviado para a fila: ${queueName}.` });
     },
     onError: (err: any) => {
@@ -116,7 +130,7 @@ const LeadRework = () => {
                 <SelectValue placeholder="Selecione a Fila de Distribuição" />
               </SelectTrigger>
               <SelectContent>
-                {mockActiveQueues.map(q => (
+                {activeQueues.map((q: any) => (
                   <SelectItem key={q.id} value={q.id}>{q.name}</SelectItem>
                 ))}
               </SelectContent>
