@@ -9,7 +9,7 @@ import { Crown, Sparkles, Trophy, BarChart3, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 
 type PodiumEntry = {
   id: string;
