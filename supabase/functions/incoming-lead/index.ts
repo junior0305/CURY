@@ -7,12 +7,16 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders })
+  }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const payload = await req.json();
+    console.log("[incoming-lead] Payload recebido:", payload);
+
+    const { name, phone, email, origin, message, tag } = payload;
+    const nowIso = new Date().toISOString(); // Hora exata da entrada
 
     // 1. Receber o corpo de forma segura
     const rawBody = await req.text();
@@ -26,13 +30,13 @@ serve(async (req) => {
 
     // Extração flexível (aceita sua estrutura antiga ou a nova)
     const data = body.data?.attributes || body;
-    const { name, phone, email, tag, notes, source, renda } = data;
+    const { name: nameData, phone: phoneData, email: emailData, tag: tagData, notes, source, renda } = data;
 
-    if (!name || !phone) {
+    if (!nameData || !phoneData) {
       throw new Error("Nome e Telefone são obrigatórios.");
     }
 
-    console.log(`[incoming-lead] Novo lead recebido: ${name} (${phone}) - Tag: ${tag}`);
+    console.log(`[incoming-lead] Novo lead recebido: ${nameData} (${phoneData}) - Tag: ${tagData}`);
 
     // 2. Lógica de Distribuição (Round Robin Simples)
     let eligibleBrokers = [];
@@ -69,10 +73,10 @@ serve(async (req) => {
     const { data: newLead, error: insertError } = await supabaseAdmin
       .from('leads')
       .insert({
-        name: name || "Lead Sem Nome",
-        phone: phone || "000000000",
-        email: email || null,
-        tag: tag || source || 'Web',
+        name: nameData || "Lead Sem Nome",
+        phone: phoneData || "000000000",
+        email: emailData || null,
+        tag: tagData || source || 'Web',
         broker_id: assignedBrokerId,
         manager_id: assignedManagerId,
         status: 'NEW',
@@ -86,9 +90,9 @@ serve(async (req) => {
 
     // 4. REGISTRAR LOG DE DISTRIBUIÇÃO
     await supabaseAdmin.from('distribution_logs').insert({
-      lead_name: name,
-      lead_phone: phone,
-      queue_name: tag || 'Geral',
+      lead_name: nameData,
+      lead_phone: phoneData,
+      queue_name: tagData || 'Geral',
       assigned_to_name: assignedBrokerName,
       status: logStatus
     });

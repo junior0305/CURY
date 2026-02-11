@@ -35,11 +35,12 @@ export function AchievementTicker() {
     refetchInterval: 5000,
   });
 
-  // 1. Sincronizar sons não ouvidos ao carregar ou atualizar
+  // 1. Sincronizar sons não ouvidos (Vendas E Novos Leads)
   useEffect(() => {
-    if (!user?.id || achievements.length === 0) return;
+    if (!user?.id) return;
 
     const syncPendingSounds = async () => {
+      // --- BLOCO DE VENDAS (Já existente) ---
       // Buscar quais desses achievements o usuário já "ouviu" (estão na tabela de lidos)
       const achievementIds = achievements.map((a: any) => a.id);
       
@@ -65,6 +66,43 @@ export function AchievementTicker() {
         if (!error) {
           playSound('SALE');
           setPlayedIds(prev => new Set([...prev, pendingToPlay.id]));
+        }
+      }
+
+      // --- NOVO BLOCO: LEADS NÃO OUVIDOS ---
+      // Buscar leads NOVOS atribuídos a este corretor que ele ainda não "ouviu"
+      const { data: recentLeads } = await supabase
+        .from('leads')
+        .select('id, name')
+        .eq('broker_id', user.id)
+        .eq('status', 'NEW')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (recentLeads && recentLeads.length > 0) {
+        const leadIds = recentLeads.map(l => l.id);
+        
+        // Verificar quais desses já foram marcados como "lidos" no áudio
+        const { data: heardLeads } = await supabase
+          .from('audio_notifications_read')
+          .select('achievement_id') // Usamos a mesma coluna para simplificar
+          .eq('user_id', user.id)
+          .in('achievement_id', leadIds);
+
+        const heardSet = new Set(heardLeads?.map(h => h.achievement_id) || []);
+        
+        // Pegar o mais recente que ele ainda não ouviu
+        const leadToNotify = recentLeads.find(l => !heardSet.has(l.id) && !playedIds.has(l.id));
+
+        if (leadToNotify) {
+          console.log("[AudioPersistence] Novo lead não ouvido detectado:", leadToNotify.name);
+          
+          await supabase
+            .from('audio_notifications_read')
+            .insert({ user_id: user.id, achievement_id: leadToNotify.id });
+
+          playSound('NEW_LEAD');
+          setPlayedIds(prev => new Set([...prev, leadToNotify.id]));
         }
       }
     };
