@@ -42,7 +42,7 @@ import { useAudioArena } from "@/hooks/use-audio-arena";
 import { Volume2, VolumeX } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "react-hot-toast";
+import { toast } from "sonner";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
@@ -122,10 +122,9 @@ const Dashboard = () => {
           console.log("[Dashboard] NOVO LEAD RECEBIDO! Disparando som...", payload.new);
           playSound('NEW_LEAD');
           
-          // Opcional: Toast para reforçar visualmente
+          // Opcional: Toast para reforçar visualmente usando sonner
           toast.info(`🚀 Novo Lead: ${payload.new.name}`, {
             description: "Atenda o mais rápido possível para garantir a conversão!",
-            duration: 5000,
           });
         }
       )
