@@ -2,9 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 
 // Nomes dos arquivos que devem estar na pasta /public
 const SOUND_FILES = {
-  SALE: '/sale.mp3',      // Caixa registradora
-  OVERTAKE: '/overtake.mp3', // Carro de corrida
-  NOTIFICATION: '/notification.mp3',
+  SALE: 'sale.mp3',
+  OVERTAKE: 'overtake.mp3',
 };
 
 export function useAudioArena() {
@@ -12,13 +11,12 @@ export function useAudioArena() {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    console.log("[AudioArena] Inicializando com arquivos locais da pasta /public...");
-    
     const loadSounds = () => {
-      Object.entries(SOUND_FILES).forEach(([key, url]) => {
+      Object.entries(SOUND_FILES).forEach(([key, filename]) => {
+        // Agora busca da URL pública do Supabase Storage
+        const url = `https://jcmovytbcghvvukaszyb.supabase.co/storage/v1/object/public/audio-arena/${filename}`;
         const audio = new Audio(url);
         audio.preload = 'auto';
-        audio.load();
         audioRefs.current[key] = audio;
       });
       setIsLoaded(true);

@@ -34,6 +34,7 @@ import TeamManagement from "@/components/admin/TeamManagement";
 import AdminStats from "@/components/admin/AdminStats";
 import LeadDistribution from "@/components/admin/LeadDistribution";
 import IntegrationsManagement from "@/components/admin/IntegrationsManagement";
+import AudioSettings from "@/components/admin/AudioSettings";
 import LeadRework from "@/components/admin/LeadRework";
 import { useAuth } from "@/components/AuthProvider";
 import { User, UserRole } from "@/types/user";
@@ -957,7 +958,7 @@ const Admin = () => {
           )}
 
           <TabsContent value="integrations"><IntegrationsManagement /></TabsContent>
-          <TabsContent value="settings"><Card className="p-10 text-center text-gray-400">Configurações globais em breve.</Card></TabsContent>
+          <TabsContent value="settings"><AudioSettings /></TabsContent>
         </Tabs>
       </div>
     </div>
