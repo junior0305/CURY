@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { Lead } from "@/types/lead";
 import { User } from "@/types/user";
 import { Crown, Sparkles, Trophy, BarChart3, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAudioArena } from "@/hooks/use-audio-arena";
 
 type PodiumEntry = {
   id: string;
@@ -31,19 +32,26 @@ function scoreForLead(lead: Lead) {
   return 0;
 }
 
-export default function LeaderboardPodium({
-  leads,
-  users,
-  onOpenKPIs,
-  isMonthly = false,
-  onToggleTimeframe
-}: {
-  leads: Lead[];
-  users: User[];
-  onOpenKPIs?: (brokerId: string, brokerName: string) => void;
-  isMonthly?: boolean;
-  onToggleTimeframe?: () => void;
-}) {
+export function LeaderboardPodium({ brokers }: { brokers: BrokerRank[] }) {
+  const { playSound } = useAudioArena();
+  const prevRankings = useRef<string[]>([]);
+
+  useEffect(() => {
+    const currentRankIds = brokers.map(b => b.id);
+    
+    // Se não for a primeira carga e a ordem mudou (especialmente no top 3)
+    if (prevRankings.current.length > 0) {
+      const topChanged = currentRankIds[0] !== prevRankings.current[0] || 
+                         currentRankIds[1] !== prevRankings.current[1];
+      
+      if (topChanged) {
+        playSound('OVERTAKE');
+      }
+    }
+    
+    prevRankings.current = currentRankIds;
+  }, [brokers, playSound]);
+
   const top3 = useMemo(() => {
     // IMPORTANTE: Ranking UNIVERSAL e ABSOLUTO
     const brokers = users.filter((u) => u.role === "BROKER");

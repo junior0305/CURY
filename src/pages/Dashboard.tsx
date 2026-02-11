@@ -38,11 +38,21 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import BrokerKPIs from "@/components/dashboard/BrokerKPIs";
 import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
+import { useAudioArena } from "@/hooks/use-audio-arena";
+import { Volume2, VolumeX } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
+  const { playSound } = useAudioArena();
+  const [isMuted, setIsMuted] = useState(localStorage.getItem('crm_audio_muted') === 'true');
+
+  const toggleMute = () => {
+    const newState = !isMuted;
+    setIsMuted(newState);
+    localStorage.setItem('crm_audio_muted', String(newState));
+  };
 
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
@@ -180,6 +190,16 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleMute}
+              className="rounded-full mr-2"
+              title={isMuted ? "Ativar Sons" : "Mutar Arena Sonora"}
+            >
+              {isMuted ? <VolumeX className="h-5 w-5 text-slate-400" /> : <Volume2 className="h-5 w-5 text-indigo-600" />}
+            </Button>
+
             <Button
               variant="ghost"
               size="sm"

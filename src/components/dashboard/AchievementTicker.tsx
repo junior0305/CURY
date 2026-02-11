@@ -3,8 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Trophy, Target, ArrowRight, Banknote } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAudioArena } from "@/hooks/use-audio-arena";
 
-export default function AchievementTicker() {
+export function AchievementTicker() {
+  const { playSound } = useAudioArena();
   const { data: achievements = [] } = useQuery({
     queryKey: ["public-achievements"],
     queryFn: async () => {
@@ -27,6 +29,16 @@ export default function AchievementTicker() {
     },
     refetchInterval: 5000,
   });
+
+  useEffect(() => {
+    // Lógica para detectar novo achievement 'APPROVED' (Venda)
+    const handleNewSale = (payload: any) => {
+      if (payload.new.status === 'APPROVED' && payload.new.type === 'SALE') {
+        playSound('SALE');
+      }
+    };
+    // ... subscribe logic ...
+  }, [playSound]);
 
   const getMessage = (ach: any) => {
     const name = ach.profiles?.first_name || "Corretor";
