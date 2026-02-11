@@ -664,17 +664,12 @@ const Admin = () => {
 
       // 1. Pegar todos os telefones dos logs que falharam (leads sem dono)
       const phoneNumbers = failedLogs.map(log => log.lead_phone).filter(Boolean);
+      const leadNames = failedLogs.map(log => log.lead_name).filter(Boolean);
       
-      if (phoneNumbers.length === 0) {
-        toast.info("Nenhum lead com telefone encontrado para resgate nos logs.");
-        setIsRescueOpen(false);
-        return;
-      }
-
-      console.log(`[AdminRescue] Tentando resgatar leads com telefones:`, phoneNumbers);
+      console.log(`[AdminRescue] Tentando resgatar leads. Nomes:`, leadNames);
 
       // 2. Atualizar a tabela de leads para atribuir ao corretor escolhido
-      // O filtro principal deve ser leads onde broker_id é nulo e o telefone bate com os logs
+      // Reforçamos a busca: ou pelo telefone, ou pelo nome exato se o telefone falhar
       const { data: updatedLeads, error: updateError } = await supabase
         .from('leads')
         .update({ 
@@ -683,29 +678,31 @@ const Admin = () => {
           status: 'NEW',
           last_interaction_at: new Date().toISOString()
         })
-        .in('phone', phoneNumbers)
+        .or(`phone.in.(${phoneNumbers.map(p => `"${p}"`).join(',')}),name.in.(${leadNames.map(n => `"${n}"`).join(',')})`)
         .is('broker_id', null)
         .select();
 
       if (updateError) throw updateError;
       
-      console.log(`[AdminRescue] Leads atualizados com sucesso:`, updatedLeads);
+      const count = updatedLeads?.length || 0;
 
-      // 3. Atualizar os logs de distribuição para marcar como SUCESSO e mostrar o novo dono
-      const { error: logError } = await supabase
-        .from('distribution_logs')
-        .update({ 
-          status: 'SUCCESS', 
-          assigned_to_id: selectedBroker.id,
-          assigned_to_name: `${selectedBroker.name} (Resgatado)` 
-        })
-        .in('lead_phone', phoneNumbers)
-        .eq('status', 'NO_BROKER_AVAILABLE');
+      if (count === 0) {
+        toast.warning("Nenhum lead correspondente foi encontrado para atualização. Verifique se ele já foi atribuído.");
+      } else {
+        // 3. Atualizar os logs de distribuição para marcar como SUCESSO
+        await supabase
+          .from('distribution_logs')
+          .update({ 
+            status: 'SUCCESS', 
+            assigned_to_id: selectedBroker.id,
+            assigned_to_name: `${selectedBroker.name} (Resgatado)` 
+          })
+          .or(`lead_phone.in.(${phoneNumbers.map(p => `"${p}"`).join(',')}),lead_name.in.(${leadNames.map(n => `"${n}"`).join(',')})`)
+          .eq('status', 'NO_BROKER_AVAILABLE');
 
-      if (logError) console.error("Erro ao atualizar logs:", logError);
+        toast.success(`${count} lead(s) resgatado(s) com sucesso para ${selectedBroker.name}!`);
+      }
 
-      toast.success(`${updatedLeads?.length || 0} leads resgatados com sucesso!`);
-      
       // Forçar atualização das listas
       queryClient.invalidateQueries({ queryKey: ['failed-distribution-logs'] });
       queryClient.invalidateQueries({ queryKey: ['distribution-logs'] });
