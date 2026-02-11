@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
 
-// URLs de sons (usando assets públicos estáveis ou placeholders)
+// URLs de sons mais temáticos
 const SOUNDS = {
-  SALE: 'https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3', // Ka-ching
-  OVERTAKE: 'https://assets.mixkit.co/active_storage/sfx/2836/2836-preview.mp3', // F1/Whoosh
-  NOTIFICATION: 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3', // Pop/Bubble
+  // Som de Caixa Registradora clássico para Vendas
+  SALE: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3', 
+  // Som de Carro de Corrida / Fórmula 1 para Ultrapassagem no Ranking
+  OVERTAKE: 'https://assets.mixkit.co/active_storage/sfx/1545/1545-preview.mp3', 
+  NOTIFICATION: 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3', 
 };
 
 export function useAudioArena() {
