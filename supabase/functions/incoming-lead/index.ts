@@ -16,10 +16,21 @@ serve(async (req) => {
     const payload = await req.json();
     console.log("[incoming-lead] Payload recebido:", JSON.stringify(payload));
 
-    const { name, phone, email, origin, message, tag } = payload;
+    // Mapeamento flexível para aceitar nomes comuns vindos do Make/Zapier/Facebook
+    const name = payload.name || payload.nome || payload.fullName || 'Lead Sem Nome';
+    const phone = payload.phone || payload.telefone || payload.cellphone || payload.whatsapp || payload.contact;
+    const email = payload.email || payload.mail || '';
+    const origin = payload.origin || payload.origem || 'Make/Webhook';
+    const message = payload.message || payload.mensagem || '';
+    const tag = payload.tag || payload.tags || '';
     
     if (!phone) {
-      return new Response(JSON.stringify({ error: 'Phone is required' }), {
+      console.error("[incoming-lead] Erro: Telefone não encontrado no payload.", payload);
+      return new Response(JSON.stringify({ 
+        error: 'Phone is required', 
+        received_payload: payload,
+        tip: 'Certifique-se de enviar o campo "phone" ou "telefone" no seu JSON do Make.'
+      }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
