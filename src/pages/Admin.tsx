@@ -65,6 +65,15 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
 const DistributionLogs = () => {
@@ -518,6 +527,10 @@ const Admin = () => {
   const [rescueBrokerId, setRescueBrokerId] = useState<string>("");
   const [isRescuing, setIsRescuing] = useState(false);
   const [selectedStaleLeadId, setSelectedStaleLeadId] = useState<string | null>(null);
+  const [isStaleRescueOpen, setIsStaleRescueOpen] = useState(false);
+  const [staleLeadsToRescue, setStaleLeadsToRescue] = useState<Lead[]>([]);
+  const [selectedStaleLeads, setSelectedStaleLeads] = useState<string[]>([]);
+  const [staleRescueBrokerId, setStaleRescueBrokerId] = useState<string>("");
   const queryClient = useQueryClient();
 
   const { data: profiles = [] } = useQuery<User[]>({
@@ -572,6 +585,13 @@ const Admin = () => {
   const staleLeadsStats = useMemo(() => {
     const now = Date.now();
     const staleList = leads.filter(l => {
+      // Filtrar leads que foram cutucados recentemente (< 10 min)
+      if (l.last_nudge_at) {
+        const lastNudge = new Date(l.last_nudge_at).getTime();
+        const diffMinutes = (now - lastNudge) / 60000;
+        if (diffMinutes < 10) return false;
+      }
+      
       const hours = getStaleHours(l.lastInteractionAt);
       return hours >= 4 && l.status !== 'CONCLUDED' && l.status !== 'EXCLUDED';
     });
@@ -626,12 +646,22 @@ const Admin = () => {
     }
   };
 
-  const nudgeCorretor = async (brokerId: string, leadName: string, leadPhone: string) => {
+  const nudgeCorretor = async (brokerId: string, leadName: string, leadPhone: string, leadId?: string) => {
     try {
       const broker = profiles.find(p => p.id === brokerId);
       const hours = getStaleHours(leads.find(l => l.name === leadName)?.lastInteractionAt || new Date().toISOString());
       
-      // 1. Notificação Interna
+      // 1. Atualizar last_nudge_at no lead para ativar "Soneca"
+      if (leadId) {
+        await supabase.from('leads').update({ last_nudge_at: new Date().toISOString() }).eq('id', leadId);
+      }
+      
+      // 2. Incrementar Advertência (warning_count)
+      if (broker) {
+        await supabase.from('profiles').update({ warning_count: (broker.warning_count || 0) + 1 }).eq('id', brokerId);
+      }
+
+      // 3. Notificação Interna
       await supabase.from('internal_notifications').insert({
         from_id: currentUser.id,
         to_id: brokerId,
@@ -639,7 +669,7 @@ const Admin = () => {
         type: 'STALE_LEAD_ALERT'
       });
 
-      // 2. Notificação via WhatsApp (se o corretor tiver telefone cadastrado)
+      // 4. Notificação via WhatsApp (se o corretor tiver telefone cadastrado)
       if (broker?.phone) {
         const cleanPhone = broker.phone.replace(/\D/g, '');
         const message = encodeURIComponent(
@@ -765,6 +795,47 @@ const Admin = () => {
     }
   };
 
+  const handleStaleRescue = async () => {
+    if (selectedStaleLeads.length === 0) {
+      toast.error("Selecione pelo menos um lead.");
+      return;
+    }
+    if (!staleRescueBrokerId) {
+      toast.error("Selecione um corretor de destino.");
+      return;
+    }
+
+    try {
+      const selectedBroker = profiles.find(p => p.id === staleRescueBrokerId);
+      
+      const { error } = await supabase
+        .from('leads')
+        .update({
+          broker_id: staleRescueBrokerId,
+          manager_id: selectedBroker?.managerId, // Assumindo que o novo corretor tem um gerente definido
+          status: 'NEW',
+          last_interaction_at: new Date().toISOString()
+        })
+        .in('id', selectedStaleLeads);
+
+      if (error) throw error;
+
+      toast.success(`${selectedStaleLeads.length} leads transferidos com sucesso!`);
+      queryClient.invalidateQueries({ queryKey: ['adminLeads'] });
+      setIsStaleRescueOpen(false);
+      setSelectedStaleLeads([]);
+    } catch (error: any) {
+      toast.error("Erro ao transferir leads: " + error.message);
+    }
+  };
+
+  const openStaleRescueModal = (managerLeads: Lead[]) => {
+    setStaleLeadsToRescue(managerLeads);
+    setSelectedStaleLeads([]);
+    setStaleRescueBrokerId("");
+    setIsStaleRescueOpen(true);
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -849,6 +920,78 @@ const Admin = () => {
               >
                 {isRescuing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
                 Confirmar Resgate
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Resgate de Leads Parados (Stale Rescue) */}
+        <Dialog open={isStaleRescueOpen} onOpenChange={setIsStaleRescueOpen}>
+          <DialogContent className="sm:max-w-2xl rounded-3xl border-none shadow-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-black text-slate-900">Resgate Cirúrgico</DialogTitle>
+              <DialogDescription className="text-slate-500 font-medium">
+                Selecione os leads parados que deseja transferir e escolha o novo dono.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="py-4 space-y-4">
+              <div className="border rounded-xl overflow-hidden max-h-[300px] overflow-y-auto">
+                <Table>
+                  <TableHeader className="bg-slate-50">
+                    <TableRow>
+                      <TableHead className="w-[50px]"><Checkbox 
+                        checked={selectedStaleLeads.length === staleLeadsToRescue.length && staleLeadsToRescue.length > 0}
+                        onCheckedChange={(checked) => {
+                          if (checked) setSelectedStaleLeads(staleLeadsToRescue.map(l => l.id));
+                          else setSelectedStaleLeads([]);
+                        }}
+                      /></TableHead>
+                      <TableHead>Lead</TableHead>
+                      <TableHead>Tempo Parado</TableHead>
+                      <TableHead>Corretor Atual</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {staleLeadsToRescue.map(lead => (
+                      <TableRow key={lead.id}>
+                        <TableCell><Checkbox 
+                          checked={selectedStaleLeads.includes(lead.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) setSelectedStaleLeads([...selectedStaleLeads, lead.id]);
+                            else setSelectedStaleLeads(selectedStaleLeads.filter(id => id !== lead.id));
+                          }}
+                        /></TableCell>
+                        <TableCell className="font-medium">{lead.name}</TableCell>
+                        <TableCell className="text-rose-600 font-bold">{getStaleHours(lead.lastInteractionAt)}h</TableCell>
+                        <TableCell className="text-xs text-slate-500">{profiles.find(p => p.id === lead.brokerId)?.name}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="font-bold text-slate-700">Novo Dono:</Label>
+                <Select onValueChange={setStaleRescueBrokerId} value={staleRescueBrokerId}>
+                  <SelectTrigger className="h-12 rounded-xl border-slate-200">
+                    <SelectValue placeholder="Selecione o corretor salvador" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-none shadow-xl">
+                    {profiles.filter(p => p.role === 'BROKER').map(broker => (
+                      <SelectItem key={broker.id} value={broker.id}>
+                        {broker.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setIsStaleRescueOpen(false)} className="rounded-xl font-bold">Cancelar</Button>
+              <Button onClick={handleStaleRescue} className="bg-rose-600 hover:bg-rose-700 text-white font-black px-8 rounded-xl shadow-lg h-11">
+                <RefreshCcw className="w-4 h-4 mr-2" /> Confirmar Transferência
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -995,18 +1138,28 @@ const Admin = () => {
                                 size="sm" 
                                 variant="outline" 
                                 className="rounded-xl text-[10px] font-black uppercase tracking-tighter border-amber-200 text-amber-700 hover:bg-amber-50"
-                                onClick={() => nudgeGerente(manager.id, manager.name, manager.phone, staleCount)}
+                                onClick={() => {
+                                  // Cutucar o gerente
+                                  nudgeGerente(manager.id, manager.name, manager.phone, staleCount);
+                                  // Opcional: Cutucar individualmente os leads dessa lista? 
+                                  // Por enquanto mantém o cutucão no gerente, mas poderíamos iterar sobre manager.leads
+                                  // para marcar o "snooze" neles também se desejado.
+                                  // Vamos marcar snooze em TODOS os leads desse gerente para limpar o dashboard?
+                                  // O usuário disse "quando eu resgato ou cutuco". Então SIM.
+                                  manager.leads.forEach(l => {
+                                      // Chama update silencioso
+                                      supabase.from('leads').update({ last_nudge_at: new Date().toISOString() }).eq('id', l.id).then();
+                                  });
+                                  // Invalida queries para atualizar a tela
+                                  setTimeout(() => queryClient.invalidateQueries({ queryKey: ['adminLeads'] }), 1000);
+                                }}
                               >
                                 <SendHorizontal className="h-3 w-3 mr-1" /> Cutucar
                               </Button>
                               <Button 
                                 size="sm" 
                                 className="rounded-xl text-[10px] font-black uppercase tracking-tighter bg-rose-600 hover:bg-rose-700 shadow-md"
-                                onClick={() => {
-                                  setSelectedStaleLeadId(manager.id);
-                                  setRescueBrokerId("");
-                                  setIsRescueOpen(true);
-                                }}
+                                onClick={() => openStaleRescueModal(manager.leads)}
                               >
                                 <RefreshCcw className="h-3 w-3 mr-1" /> Resgatar
                               </Button>
