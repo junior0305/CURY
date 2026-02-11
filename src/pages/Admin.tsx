@@ -687,13 +687,11 @@ const Admin = () => {
       
       const count = updatedLeads?.length || 0;
 
-      // 3. SEMPRE atualizar os logs, mesmo que o lead físico não seja encontrado
-      // Isso garante que o ALERTA pare de piscar se o log ficou "preso"
+      // 3. Atualizar os logs de distribuição (REMOVIDO assigned_to_id QUE NÃO EXISTE NO SCHEMA)
       const { error: logUpdateError } = await supabase
         .from('distribution_logs')
         .update({ 
           status: 'SUCCESS', 
-          assigned_to_id: selectedBroker.id,
           assigned_to_name: `${selectedBroker.name} (Resgatado)` 
         })
         .in('id', logIds);
