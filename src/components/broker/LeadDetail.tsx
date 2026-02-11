@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import TaskForm from "./TaskForm";
+import { checkAndAwardAchievements } from "@/utils/gamification";
 
 interface LeadDetailProps {
   leadId: string | null;

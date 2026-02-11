@@ -162,7 +162,8 @@ const EconomyManagement = () => {
     action_type: 'SALE',
     label: '',
     reward_type: 'PIX',
-    amount_value: 0
+    amount_value: 0,
+    target_count: 1 // Novo campo padrão
   });
 
   const createRuleMutation = useMutation({
@@ -174,7 +175,7 @@ const EconomyManagement = () => {
       queryClient.invalidateQueries({ queryKey: ['reward-configs'] });
       toast.success("Nova regra de premiação ativa!");
       setIsAddingRule(false);
-      setNewRule({ action_type: 'SALE', label: '', reward_type: 'PIX', amount_value: 0 });
+      setNewRule({ action_type: 'SALE', label: '', reward_type: 'PIX', amount_value: 0, target_count: 1 });
     }
   });
 
@@ -323,20 +324,33 @@ const EconomyManagement = () => {
 
             {isAddingRule && (
               <div className="mb-6 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 space-y-3 animate-in slide-in-from-top-2">
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-black uppercase">Ação (Gatilho)</Label>
-                  <Select value={newRule.action_type} onValueChange={(v) => setNewRule({...newRule, action_type: v})}>
-                    <SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="SALE">Venda Concluída</SelectItem>
-                      <SelectItem value="VISIT">Visita Agendada</SelectItem>
-                      <SelectItem value="DOCS">Documento Recebido</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-black uppercase">Ação (Gatilho)</Label>
+                    <Select value={newRule.action_type} onValueChange={(v) => setNewRule({...newRule, action_type: v})}>
+                      <SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="SALE">Venda Concluída</SelectItem>
+                        <SelectItem value="VISIT">Visita Agendada</SelectItem>
+                        <SelectItem value="DOCS">Documento Recebido</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-black uppercase text-indigo-700">Quantidade Alvo</Label>
+                    <Input 
+                      type="number" 
+                      min="1"
+                      className="h-9 bg-white border-indigo-200" 
+                      placeholder="Ex: 1"
+                      value={newRule.target_count} 
+                      onChange={e => setNewRule({...newRule, target_count: parseInt(e.target.value) || 1})} 
+                    />
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] font-black uppercase">Nome do Prêmio</Label>
-                  <Input placeholder="Ex: Jantar na Lapa" className="h-9 bg-white" value={newRule.label} onChange={e => setNewRule({...newRule, label: e.target.value})} />
+                  <Input placeholder="Ex: Jantar na Lapa (A cada 3 vendas)" className="h-9 bg-white" value={newRule.label} onChange={e => setNewRule({...newRule, label: e.target.value})} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] font-black uppercase">Valor (R$)</Label>
@@ -351,9 +365,16 @@ const EconomyManagement = () => {
                 <div key={c.id} className={cn("p-4 rounded-2xl border transition-all", c.is_active ? "bg-slate-50 border-slate-100" : "bg-slate-100/50 border-slate-200 opacity-60")}>
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <Badge className="text-[8px] font-black uppercase tracking-tighter mb-1 bg-indigo-100 text-indigo-600 border-none">
-                        {c.action_type === 'SALE' ? 'VENDA' : c.action_type === 'VISIT' ? 'VISITA' : 'DOCS'}
-                      </Badge>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge className="text-[8px] font-black uppercase tracking-tighter bg-indigo-100 text-indigo-600 border-none">
+                          {c.action_type === 'SALE' ? 'VENDA' : c.action_type === 'VISIT' ? 'VISITA' : 'DOCS'}
+                        </Badge>
+                        {c.target_count > 1 && (
+                          <Badge className="text-[8px] font-black uppercase tracking-tighter bg-amber-100 text-amber-700 border-none">
+                            META: {c.target_count}
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-sm font-bold text-slate-800 leading-tight">{c.label}</p>
                     </div>
                     <div className="flex gap-1">
