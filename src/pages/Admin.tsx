@@ -662,14 +662,15 @@ const Admin = () => {
       const selectedBroker = profiles.find(p => p.id === rescueBrokerId);
       if (!selectedBroker) throw new Error("Corretor não encontrado.");
 
-      // 1. Pegar todos os telefones dos logs que falharam (leads sem dono)
+      // 1. Pegar informações dos logs que falharam
       const phoneNumbers = failedLogs.map(log => log.lead_phone).filter(Boolean);
       const leadNames = failedLogs.map(log => log.lead_name).filter(Boolean);
+      const logIds = failedLogs.map(log => log.id);
       
-      console.log(`[AdminRescue] Tentando resgatar leads. Nomes:`, leadNames);
+      console.log(`[AdminRescue] Tentando resgatar leads. Nomes:`, leadNames, "Logs:", logIds);
 
-      // 2. Atualizar a tabela de leads para atribuir ao corretor escolhido
-      // Reforçamos a busca: ou pelo telefone, ou pelo nome exato se o telefone falhar
+      // 2. Atualizar a tabela de leads
+      // Usamos uma estratégia mais agressiva de busca
       const { data: updatedLeads, error: updateError } = await supabase
         .from('leads')
         .update({ 
@@ -686,27 +687,32 @@ const Admin = () => {
       
       const count = updatedLeads?.length || 0;
 
-      if (count === 0) {
-        toast.warning("Nenhum lead correspondente foi encontrado para atualização. Verifique se ele já foi atribuído.");
-      } else {
-        // 3. Atualizar os logs de distribuição para marcar como SUCESSO
-        await supabase
-          .from('distribution_logs')
-          .update({ 
-            status: 'SUCCESS', 
-            assigned_to_id: selectedBroker.id,
-            assigned_to_name: `${selectedBroker.name} (Resgatado)` 
-          })
-          .or(`lead_phone.in.(${phoneNumbers.map(p => `"${p}"`).join(',')}),lead_name.in.(${leadNames.map(n => `"${n}"`).join(',')})`)
-          .eq('status', 'NO_BROKER_AVAILABLE');
+      // 3. SEMPRE atualizar os logs, mesmo que o lead físico não seja encontrado
+      // Isso garante que o ALERTA pare de piscar se o log ficou "preso"
+      const { error: logUpdateError } = await supabase
+        .from('distribution_logs')
+        .update({ 
+          status: 'SUCCESS', 
+          assigned_to_id: selectedBroker.id,
+          assigned_to_name: `${selectedBroker.name} (Resgatado)` 
+        })
+        .in('id', logIds);
 
+      if (logUpdateError) throw logUpdateError;
+
+      if (count === 0) {
+        toast.success("O alerta foi limpo. O lead pode ter sido deletado ou já atribuído manualmente.");
+      } else {
         toast.success(`${count} lead(s) resgatado(s) com sucesso para ${selectedBroker.name}!`);
       }
 
-      // Forçar atualização das listas
-      queryClient.invalidateQueries({ queryKey: ['failed-distribution-logs'] });
-      queryClient.invalidateQueries({ queryKey: ['distribution-logs'] });
-      queryClient.invalidateQueries({ queryKey: ['adminLeads'] });
+      // Forçar atualização total da interface
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['failed-distribution-logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['distribution-logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['adminLeads'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] })
+      ]);
       
       setIsRescueOpen(false);
     } catch (err: any) {
