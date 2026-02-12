@@ -16,13 +16,21 @@ const queryClient = new QueryClient();
 
 const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, role, loading } = useAuth();
+  
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center">
       <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
     </div>
   );
+  
   if (!session) return <Navigate to="/login" />;
-  if (role !== 'SUPERINTENDENT' && role !== 'MANAGER') return <Navigate to="/" />;
+  
+  // Permitir ADMIN, SUPERINTENDENT e MANAGER
+  if (role !== 'SUPERINTENDENT' && role !== 'MANAGER' && role !== 'ADMIN') {
+    console.warn(`[AuthGuard] Acesso negado a rota Admin. Role atual: ${role}`);
+    return <Navigate to="/dashboard" />;
+  }
+  
   return <>{children}</>;
 };
 
@@ -34,8 +42,12 @@ const ProtectedBrokerRoute = ({ children }: { children: React.ReactNode }) => {
     </div>
   );
   if (!session) return <Navigate to="/login" />;
-  // Se não for SUPERINTENDENT ou MANAGER, deve ser BROKER (ou redirecionado para o dashboard)
-  if (role === 'SUPERINTENDENT' || role === 'MANAGER') return <Navigate to="/admin" />;
+  
+  // Se for SUPERINTENDENT, MANAGER ou ADMIN, redireciona para o painel Admin
+  if (role === 'SUPERINTENDENT' || role === 'MANAGER' || role === 'ADMIN') {
+    return <Navigate to="/admin" />;
+  }
+  
   return <>{children}</>;
 };
 
