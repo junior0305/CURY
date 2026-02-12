@@ -14,7 +14,10 @@ import {
   LayoutDashboard,
   CalendarDays,
   Settings2,
-  AlertTriangle
+  AlertTriangle,
+  Banknote,
+  Plus,
+  Trash2
 } from "lucide-react";
 import { 
   ResponsiveContainer, 
@@ -33,7 +36,7 @@ import {
   Legend
 } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -43,16 +46,26 @@ import { ptBR } from "date-fns/locale";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
-import { Badge } from "@/components/ui/badge";
-import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/components/AuthProvider";
+import { useQueryClient } from "@tanstack/react-query";
 
 const CommandCenter = () => {
+  const { user } = useAuth();
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<any>(null);
   const [newGoal, setNewGoal] = useState("");
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isInvestmentModalOpen, setIsInvestmentModalOpen] = useState(false);
+  const [newInvestment, setNewInvestment] = useState({
+    amount: "",
+    category: "MARKETING",
+    team_id: "GLOBAL",
+    description: "",
+    date: format(new Date(), 'yyyy-MM-dd')
+  });
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // 1. Fetch Teams
   const { data: teams = [] } = useQuery({
@@ -208,6 +221,74 @@ const CommandCenter = () => {
     }
   });
 
+  // 7. Fetch Manual Investments (CURRENT MONTH)
+  const { data: investments = [], refetch: refetchInvestments } = useQuery({
+    queryKey: ['investments-command', selectedMonth],
+    queryFn: async () => {
+      const start = startOfMonth(selectedMonth).toISOString();
+      const end = endOfMonth(selectedMonth).toISOString();
+      
+      const { data } = await supabase
+        .from('team_investments')
+        .select(`
+          id, 
+          amount, 
+          category, 
+          description,
+          investment_date,
+          team_id,
+          teams:team_id (name),
+          profiles:investor_id (first_name, last_name)
+        `)
+        .gte('investment_date', start)
+        .lte('investment_date', end);
+        
+      return data || [];
+    }
+  });
+
+  const handleSaveInvestment = async () => {
+    if (!newInvestment.amount || !newInvestment.description) {
+      toast.error("Preencha o valor e a descrição.");
+      return;
+    }
+    
+    try {
+      const payload: any = {
+        amount: parseFloat(newInvestment.amount),
+        category: newInvestment.category,
+        description: newInvestment.description,
+        investment_date: newInvestment.date,
+        investor_id: user?.id,
+      };
+
+      if (newInvestment.team_id !== 'GLOBAL') {
+        payload.team_id = newInvestment.team_id;
+      }
+
+      const { error } = await supabase.from('team_investments').insert(payload);
+      if (error) throw error;
+      
+      toast.success("Aporte registrado com sucesso! 💰");
+      refetchInvestments();
+      setIsInvestmentModalOpen(false);
+      setNewInvestment({ amount: "", category: "MARKETING", team_id: "GLOBAL", description: "", date: format(new Date(), 'yyyy-MM-dd') });
+    } catch (e: any) {
+      toast.error("Erro ao registrar aporte: " + e.message);
+    }
+  };
+
+  const deleteInvestmentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('team_investments').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Aporte removido.");
+      refetchInvestments();
+    }
+  });
+
   // AGGREGATION LOGIC
   const teamStats = teams.map(team => {
     // Current Stats
@@ -227,13 +308,17 @@ const CommandCenter = () => {
     const brokersCurrent = new Set(teamLeads.map((l: any) => l.broker_id).filter(Boolean)).size;
     const brokersPrev = new Set(prevTeamLeads.map((l: any) => l.broker_id).filter(Boolean)).size;
 
-    // Financials (Rewards)
+    // Financials (Rewards + Manual Investments)
     const teamRewards = rewardsStats.filter((r: any) => r.profiles?.team_id === team.id);
-    const investment = teamRewards.reduce((acc: number, curr: any) => acc + Number(curr.reward_value), 0);
+    const rewardsTotal = teamRewards.reduce((acc: number, curr: any) => acc + Number(curr.reward_value), 0);
+    
+    const teamManualInvestments = investments.filter((i: any) => i.team_id === team.id);
+    const manualTotal = teamManualInvestments.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
+    
+    const totalInvestment = rewardsTotal + manualTotal;
     
     // ROI Calculation (Cost per Sale)
-    // If 0 sales, cost is infinite (or just total investment if we want to show waste)
-    const costPerSale = sales > 0 ? investment / sales : investment;
+    const costPerSale = sales > 0 ? totalInvestment / sales : totalInvestment;
 
     // Deltas
     const salesDelta = sales - prevSales;
@@ -263,7 +348,9 @@ const CommandCenter = () => {
       brokersDelta,
       prevSales,
       // Finance
-      investment,
+      rewardsTotal,
+      manualTotal,
+      investment: totalInvestment,
       costPerSale
     };
   });
@@ -300,7 +387,7 @@ const CommandCenter = () => {
     }, {});
 
   const lossData = Object.entries(lossReasons).map(([name, value]) => ({ name, value }));
-  const COLORS = ['#ef4444', '#f97316', '#eab308', '#84cc16', '#06b6d4', '#6366f1'];
+  const COLORS = ['#ef4444', '#f97316', '#eab308', '#84cc16', '#06b6d4', '#6366f1', '#ec4899'];
 
   const totalInvestment = rewardsStats.reduce((acc: number, curr: any) => acc + Number(curr.reward_value), 0);
   
@@ -310,6 +397,10 @@ const CommandCenter = () => {
     name: t.name,
     value: t.investment
   })).filter(t => t.value > 0);
+  
+  if (globalManualTotal > 0) {
+    investmentByTeam.push({ name: 'Global (Superintendência)', value: globalManualTotal });
+  }
 
   const handleSaveGoal = async () => {
     if (!editingTeam || !newGoal) return;
@@ -643,29 +734,39 @@ const CommandCenter = () => {
              <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="bg-emerald-600 border-none shadow-xl p-6 text-white relative overflow-hidden">
                    <div className="absolute -right-6 -top-6 bg-white/10 w-32 h-32 rounded-full blur-2xl" />
-                   <p className="text-xs font-black text-emerald-200 uppercase tracking-widest mb-1">Investimento Total ({format(selectedMonth, 'MMM', { locale: ptBR })})</p>
-                   <h2 className="text-4xl font-black mb-1">R$ {totalInvestment.toFixed(2)}</h2>
-                   <p className="text-sm font-medium text-emerald-100">Pago em Prêmios</p>
+                   <p className="text-xs font-black text-emerald-200 uppercase tracking-widest mb-1">Custo Total de Guerra ({format(selectedMonth, 'MMM', { locale: ptBR })})</p>
+                   <h2 className="text-4xl font-black mb-1">R$ {grandTotalInvestment.toFixed(2)}</h2>
+                   <div className="flex gap-4 mt-2 text-xs font-medium text-emerald-100/80">
+                      <span>Prêmios: R$ {totalRewardsSystem.toFixed(2)}</span>
+                      <span>|</span>
+                      <span>Aportes: R$ {totalManualSystem.toFixed(2)}</span>
+                   </div>
                 </Card>
 
-                <Card className="bg-slate-900 border-slate-800 p-6 relative overflow-hidden">
-                   <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Custo Médio por Venda (CAC Interno)</p>
-                   <h2 className="text-4xl font-black text-white mb-1">
-                      R$ {(stats.filter((l: any) => l.status === 'CONCLUDED').length > 0 ? totalInvestment / stats.filter((l: any) => l.status === 'CONCLUDED').length : 0).toFixed(2)}
-                   </h2>
-                   <p className="text-sm font-medium text-slate-500">Quanto custa motivar cada venda?</p>
+                <Card className="bg-slate-900 border-slate-800 p-6 relative overflow-hidden group hover:border-indigo-500/50 transition-all cursor-pointer" onClick={() => setIsInvestmentModalOpen(true)}>
+                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                      <Banknote className="h-16 w-16 text-white" />
+                   </div>
+                   <p className="text-xs font-black text-indigo-400 uppercase tracking-widest mb-1">Novo Aporte Manual</p>
+                   <h2 className="text-2xl font-black text-white mb-2">Lançar Investimento</h2>
+                   <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                      Registre gastos externos (Marketing, Eventos, Bonificações) para compor o ROI real.
+                   </p>
+                   <Button size="sm" className="mt-4 bg-indigo-600 hover:bg-indigo-700 font-bold text-xs w-full">
+                      <Plus className="h-3 w-3 mr-2" /> Adicionar Custo
+                   </Button>
                 </Card>
 
                 <Card className="bg-slate-900 border-slate-800 p-6 flex items-center justify-between">
                    <div>
-                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Maior Investidor</p>
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Maior Custo (Equipe/Global)</p>
                       <h3 className="text-xl font-bold text-white">
-                         {teamStats.sort((a, b) => b.investment - a.investment)[0]?.name || "Ninguém"}
+                         {investmentByTeam.sort((a, b) => b.value - a.value)[0]?.name || "Nenhum"}
                       </h3>
-                      <p className="text-sm text-slate-500">R$ {teamStats.sort((a, b) => b.investment - a.investment)[0]?.investment.toFixed(2)} pagos</p>
+                      <p className="text-sm text-slate-500">R$ {investmentByTeam.sort((a, b) => b.value - a.value)[0]?.value.toFixed(2)} total</p>
                    </div>
-                   <div className="h-12 w-12 bg-amber-500/20 rounded-full flex items-center justify-center">
-                      <TrendingUp className="h-6 w-6 text-amber-500" />
+                   <div className="h-12 w-12 bg-rose-500/20 rounded-full flex items-center justify-center">
+                      <TrendingUp className="h-6 w-6 text-rose-500" />
                    </div>
                 </Card>
              </section>
@@ -675,9 +776,9 @@ const CommandCenter = () => {
                 <Card className="lg:col-span-2 bg-slate-900 border-slate-800 p-6">
                    <div className="mb-6">
                       <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                        <Activity className="h-5 w-5 text-emerald-500" /> Eficiência do Investimento (ROI)
+                        <Activity className="h-5 w-5 text-emerald-500" /> Eficiência do Investimento (ROI Real)
                       </h3>
-                      <p className="text-sm text-slate-500">Quanto cada equipe gastou vs. Quantas vendas entregou.</p>
+                      <p className="text-sm text-slate-500">Prêmios do Sistema + Aportes Manuais vs. Vendas Entregues.</p>
                    </div>
                    <div className="h-[350px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
@@ -688,10 +789,15 @@ const CommandCenter = () => {
                             <YAxis yAxisId="right" orientation="right" stroke="#6366f1" fontSize={12} tickFormatter={(val) => `${val} un`} />
                             <Tooltip 
                                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', color: '#f8fafc', borderRadius: '8px' }} 
-                               formatter={(value: any, name: string) => [name === 'investment' ? `R$ ${value}` : value, name === 'investment' ? 'Investido' : 'Vendas']}
+                               formatter={(value: any, name: string) => [
+                                  name === 'investment' ? `R$ ${value}` : 
+                                  name === 'manualTotal' ? `R$ ${value}` : value, 
+                                  name === 'investment' ? 'Total Investido' : 
+                                  name === 'manualTotal' ? 'Aportes Manuais' : 'Vendas'
+                               ]}
                             />
                             <Legend />
-                            <Bar yAxisId="left" dataKey="investment" name="Investido (R$)" fill="#10b981" radius={[4, 4, 0, 0]} barSize={30} />
+                            <Bar yAxisId="left" dataKey="investment" name="Custo Total (R$)" fill="#10b981" radius={[4, 4, 0, 0]} barSize={30} />
                             <Bar yAxisId="right" dataKey="sales" name="Vendas (Qtd)" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={30} />
                          </BarChart>
                       </ResponsiveContainer>
@@ -700,8 +806,8 @@ const CommandCenter = () => {
 
                 <Card className="bg-slate-900 border-slate-800 p-6 flex flex-col">
                    <div className="mb-4">
-                      <h3 className="text-lg font-bold text-white">Distribuição do Tesouro</h3>
-                      <p className="text-sm text-slate-500">Para onde foi o dinheiro?</p>
+                      <h3 className="text-lg font-bold text-white">Fatia do Orçamento</h3>
+                      <p className="text-sm text-slate-500">Quem consumiu mais recursos?</p>
                    </div>
                    <div className="flex-1 min-h-0 relative">
                       <ResponsiveContainer width="100%" height="100%">
@@ -720,21 +826,78 @@ const CommandCenter = () => {
                                ))}
                             </Pie>
                             <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', color: '#f8fafc', borderRadius: '8px' }} formatter={(val: number) => `R$ ${val.toFixed(2)}`} />
-                            <Legend layout="horizontal" verticalAlign="bottom" wrapperStyle={{ fontSize: '12px', color: '#94a3b8' }} />
+                            <Legend layout="horizontal" verticalAlign="bottom" wrapperStyle={{ fontSize: '10px', color: '#94a3b8' }} />
                          </PieChart>
                       </ResponsiveContainer>
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none mb-8">
-                          <span className="text-xl font-black text-white">R$ {totalInvestment}</span>
+                          <span className="text-xl font-black text-white">R$ {grandTotalInvestment}</span>
                        </div>
                    </div>
                 </Card>
              </section>
 
-             {/* ROW 3: LISTAGEM DE SAÍDAS (AUDITORIA) */}
+             {/* ROW 3: LISTAGEM DE APORTES MANUAIS */}
+             <section>
+               <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden mb-8">
+                 <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950">
+                    <h3 className="font-bold text-white uppercase text-sm tracking-wide flex items-center gap-2">
+                       <Banknote className="h-4 w-4 text-indigo-400" /> Diário de Aportes Manuais
+                    </h3>
+                    <Badge variant="outline" className="border-indigo-500/30 text-indigo-400 font-mono text-xs">{investments.length} lançamentos</Badge>
+                 </div>
+                 <div className="max-h-[300px] overflow-y-auto">
+                   <table className="w-full text-left text-sm text-slate-400">
+                     <thead className="bg-slate-900 text-slate-500 font-bold uppercase tracking-wider text-[10px] sticky top-0">
+                       <tr>
+                         <th className="p-3">Data</th>
+                         <th className="p-3">Responsável</th>
+                         <th className="p-3">Destino</th>
+                         <th className="p-3">Categoria</th>
+                         <th className="p-3">Descrição</th>
+                         <th className="p-3 text-right">Valor</th>
+                         <th className="p-3 text-center">Ação</th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-800">
+                       {investments.length === 0 ? (
+                          <tr><td colSpan={7} className="p-6 text-center text-slate-600 italic">Nenhum aporte manual registrado neste mês.</td></tr>
+                       ) : (
+                         investments.map((i: any) => (
+                           <tr key={i.id} className="hover:bg-slate-800/50 transition-colors group">
+                             <td className="p-3 font-mono text-xs">{format(parseISO(i.investment_date), 'dd/MM/yyyy')}</td>
+                             <td className="p-3 font-bold text-slate-300">{i.profiles?.first_name}</td>
+                             <td className="p-3 text-xs">{i.teams?.name || <Badge variant="secondary" className="bg-indigo-900 text-indigo-200 border-none text-[9px]">GLOBAL</Badge>}</td>
+                             <td className="p-3">
+                                <Badge variant="outline" className="border-slate-700 text-slate-400 text-[9px] uppercase font-bold">
+                                   {i.category}
+                                </Badge>
+                             </td>
+                             <td className="p-3 text-xs italic text-slate-500 max-w-[200px] truncate">{i.description}</td>
+                             <td className="p-3 text-right font-bold text-white font-mono">R$ {i.amount}</td>
+                             <td className="p-3 text-center">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-6 w-6 text-slate-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={() => deleteInvestmentMutation.mutate(i.id)}
+                                >
+                                   <Trash2 className="h-3 w-3" />
+                                </Button>
+                             </td>
+                           </tr>
+                         ))
+                       )}
+                     </tbody>
+                   </table>
+                 </div>
+               </div>
+             </section>
+
+             {/* ROW 4: LISTAGEM DE SAÍDAS (PRÊMIOS) - JÁ EXISTENTE */}
              <section>
                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
                  <div className="p-4 border-b border-slate-800 flex justify-between items-center">
-                    <h3 className="font-bold text-white uppercase text-sm tracking-wide">Registro de Saídas (Prêmios Pagos)</h3>
+                    <h3 className="font-bold text-white uppercase text-sm tracking-wide">Registro de Prêmios (Sistema)</h3>
                     <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 font-mono text-xs">{rewardsStats.length} pagamentos</Badge>
                  </div>
                  <div className="max-h-[400px] overflow-y-auto">
@@ -769,6 +932,91 @@ const CommandCenter = () => {
              </section>
           </TabsContent>
         </Tabs>
+
+        {/* MODAL NOVO APORTE */}
+        <Dialog open={isInvestmentModalOpen} onOpenChange={setIsInvestmentModalOpen}>
+          <DialogContent className="bg-slate-900 border-slate-800 text-slate-100 sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-black flex items-center gap-2">
+                <Banknote className="h-6 w-6 text-indigo-500" />
+                Lançar Investimento Manual
+              </DialogTitle>
+              <DialogDescription className="text-slate-400">
+                Adicione custos de marketing, infraestrutura ou bonificações externas.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-slate-500">Valor (R$)</Label>
+                    <Input 
+                      type="number" 
+                      value={newInvestment.amount} 
+                      onChange={(e) => setNewInvestment({...newInvestment, amount: e.target.value})} 
+                      className="bg-slate-950 border-slate-700 text-white font-mono text-lg font-bold"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase text-slate-500">Data</Label>
+                    <Input 
+                      type="date" 
+                      value={newInvestment.date} 
+                      onChange={(e) => setNewInvestment({...newInvestment, date: e.target.value})} 
+                      className="bg-slate-950 border-slate-700 text-white"
+                    />
+                  </div>
+               </div>
+
+               <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Destino (Equipe)</Label>
+                  <Select value={newInvestment.team_id} onValueChange={(v) => setNewInvestment({...newInvestment, team_id: v})}>
+                    <SelectTrigger className="bg-slate-950 border-slate-700 text-white h-11">
+                      <SelectValue placeholder="Selecione a equipe ou Global" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700 text-white">
+                      <SelectItem value="GLOBAL" className="font-bold text-indigo-300">🏢 GLOBAL (Superintendência)</SelectItem>
+                      {teams.map((t: any) => (
+                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+               </div>
+
+               <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Categoria</Label>
+                  <Select value={newInvestment.category} onValueChange={(v) => setNewInvestment({...newInvestment, category: v})}>
+                    <SelectTrigger className="bg-slate-950 border-slate-700 text-white h-11">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700 text-white">
+                      <SelectItem value="MARKETING">📣 Marketing / Leads</SelectItem>
+                      <SelectItem value="INFRA">🏢 Infraestrutura / Aluguel</SelectItem>
+                      <SelectItem value="BONUS_OFF">💰 Bônus (Fora do Sistema)</SelectItem>
+                      <SelectItem value="EVENTS">🎉 Eventos / Confraternização</SelectItem>
+                      <SelectItem value="OTHER">🔧 Outros</SelectItem>
+                    </SelectContent>
+                  </Select>
+               </div>
+
+               <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase text-slate-500">Descrição</Label>
+                  <Input 
+                    value={newInvestment.description} 
+                    onChange={(e) => setNewInvestment({...newInvestment, description: e.target.value})} 
+                    className="bg-slate-950 border-slate-700 text-white"
+                    placeholder="Ex: Compra de leads Facebook Ads"
+                  />
+               </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setIsInvestmentModalOpen(false)} className="text-slate-400 hover:text-white">Cancelar</Button>
+              <Button onClick={handleSaveInvestment} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8">
+                 Confirmar Lançamento
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
       </main>
 
