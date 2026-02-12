@@ -20,6 +20,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { addHours, formatDistanceToNow, isAfter } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 interface LeadDetailProps {
   leadId: string | null;
