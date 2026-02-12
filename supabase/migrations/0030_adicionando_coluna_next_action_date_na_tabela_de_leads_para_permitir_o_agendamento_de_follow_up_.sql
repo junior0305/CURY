@@ -1,0 +1,3 @@
+
+ALTER TABLE public.leads 
+ADD COLUMN IF NOT EXISTS next_action_date TIMESTAMP WITH TIME ZONE;

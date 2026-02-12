@@ -17,6 +17,7 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import TaskForm from "./TaskForm";
 import { checkAndAwardAchievements } from "@/utils/gamification";
+import { QuickScheduleModal } from "@/components/broker/QuickScheduleModal";
 
 interface LeadDetailProps {
   leadId: string | null;
@@ -45,6 +46,7 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
   const queryClient = useQueryClient();
   const [isExclusionDialogOpen, setIsExclusionDialogOpen] = useState(false);
   const [selectedExclusionReason, setSelectedExclusionReason] = useState<ExclusionReason | null>(null);
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   
   // States for mandatory next step
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
@@ -175,16 +177,12 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
   const isBusy = updateStatusMutation.isPending;
 
   return (
-    <Card className="shadow-xl border-none h-[80vh] flex flex-col rounded-3xl overflow-hidden bg-white ring-1 ring-slate-200">
-      <TaskForm 
-        open={isTaskFormOpen} 
-        onOpenChange={(open) => {
-          setIsTaskFormOpen(open);
-          if (!open) onLeadUpdated(); // Finalize view once task is handled (or dismissed)
-        }}
-        userId={lead.brokerId || ''}
-        leads={leads}
-        defaultLeadId={lead.id}
+    <div className="h-full flex flex-col bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden relative">
+      <QuickScheduleModal 
+        open={isScheduleOpen} 
+        onOpenChange={setIsScheduleOpen} 
+        leadId={leadId}
+        onScheduled={onLeadUpdated}
       />
       
       <CardHeader className="p-6 border-b bg-white">
@@ -337,7 +335,7 @@ const LeadDetail = ({ leadId, onLeadUpdated }: LeadDetailProps) => {
           </div>
         </div>
       </CardContent>
-    </Card>
+    </div>
   );
 };
 

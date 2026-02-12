@@ -25,6 +25,7 @@ import LeadList from "@/components/broker/LeadList";
 import LeadDetail from "@/components/broker/LeadDetail";
 import AchievementTicker from "@/components/dashboard/AchievementTicker";
 import CampaignHeroBanner from "@/components/dashboard/CampaignHeroBanner";
+import { MissionToday } from "@/components/broker/MissionToday";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { fetchLeadsForDashboard } from "@/integrations/supabase/leads";
@@ -305,6 +306,11 @@ const Dashboard = () => {
           />
         ) : (
           <>
+            {/* Mission Today - Agenda do Dia (Só para corretores) */}
+            {role === 'BROKER' && user?.id && (
+              <MissionToday brokerId={user.id} onSelectLead={(id) => { setSelectedLeadId(id); setFilter("ALL"); }} />
+            )}
+
             {/* Campaign Hero Section */}
             <CampaignHeroBanner leads={leads} users={profiles} />
 
