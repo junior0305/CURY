@@ -49,6 +49,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { useAuth } from "@/components/AuthProvider";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
 
 // Helper for safe date formatting
 const safeFormat = (date: any, fmt: string) => {
