@@ -119,7 +119,7 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
       
       const nextTask = leadTasks.length > 0 ? leadTasks[0] : null;
       
-      const lastAction = new Date(lead.lastInteractionAt);
+      const lastAction = new Date(lead.lastInteractionAt || lead.createdAt || now);
       
       // Lógica de cálculo de horas de inatividade ignorando o período das 21h às 08h
       let effectiveNow = new Date(now);
@@ -173,7 +173,9 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
     // Sort: Priority DESC, then oldest interaction ASC
     return filtered.sort((a, b) => {
       if (b.priority !== a.priority) return b.priority - a.priority;
-      return new Date(a.lastInteractionAt).getTime() - new Date(b.lastInteractionAt).getTime();
+      const timeA = new Date(a.lastInteractionAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.lastInteractionAt || b.createdAt || 0).getTime();
+      return timeA - timeB;
     });
   }, [leads, tasks, filter]);
 
@@ -189,7 +191,7 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
 
   return (
     <div className="space-y-2">
-      {filteredLeads.map((lead) => (
+      {processedLeads.map((lead) => (
         <div
           key={lead.id}
           onClick={() => onSelectLead(lead.id)}
