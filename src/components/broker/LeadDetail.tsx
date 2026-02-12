@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLeadsForDashboard, updateLeadStatus } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
 import { Card } from "@/components/ui/card";
-import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, CheckCircle, Trophy, MoreHorizontal, ArrowLeft, ArrowRight, Share2, Flame, RefreshCcw, XCircle, Pencil, AlertCircle } from "lucide-react";
+import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, CheckCircle, Trophy, MoreHorizontal, ArrowLeft, ArrowRight, Share2, Flame, RefreshCcw, XCircle, Pencil, AlertCircle, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
