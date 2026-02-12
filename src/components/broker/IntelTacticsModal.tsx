@@ -15,12 +15,13 @@ import {
   TrendingUp, 
   AlertTriangle, 
   Coins, 
-  ArrowUpRight 
+  ArrowUpRight,
+  CheckCircle2
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Badge, CheckCircle2 } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface IntelTacticsModalProps {
