@@ -7,6 +7,7 @@ import { Save, Loader2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createManualLead } from "@/integrations/supabase/leads";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface LeadFormProps {
   onOpenChange: (open: boolean) => void;
@@ -44,13 +45,47 @@ const LeadForm = ({ onOpenChange, brokerId, managerId }: LeadFormProps) => {
     }
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.phone) {
-      toast.error("Nome e Telefone são obrigatórios.");
-      return;
+    setLoading(true);
+
+    try {
+      if (!name || !phone) {
+        toast.error("Nome e Telefone são obrigatórios.");
+        return;
+      }
+
+      // CORREÇÃO: Usar data UTC (new Date().toISOString()) para garantir que "Agora" seja 0h de atraso
+      // e não 13h devido a fuso horário.
+      const nowIso = new Date().toISOString();
+
+      const { error } = await supabase.from('leads').insert({
+        name,
+        phone,
+        email,
+        tag: interest,
+        status: 'NEW',
+        broker_id: brokerId,
+        manager_id: managerId,
+        created_at: nowIso,
+        last_interaction_at: nowIso, // Sincronizado perfeitamente
+        notes: `Criado manualmente por ${brokerId ? 'Corretor' : 'Gestor'}`
+      });
+
+      if (error) throw error;
+
+      toast.success("Lead criado com sucesso! 🚀");
+      onOpenChange(false);
+      setName("");
+      setPhone("");
+      setEmail("");
+      setInterest("");
+    } catch (error: any) {
+      console.error("Erro ao criar lead:", error);
+      toast.error("Erro ao criar lead: " + error.message);
+    } finally {
+      setLoading(false);
     }
-    createLeadMutation.mutate(formData);
   };
 
   const isSaving = createLeadMutation.isPending;

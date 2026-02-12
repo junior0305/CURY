@@ -220,28 +220,59 @@ const Dashboard = () => {
           </section>
 
           {/* MEIO: ÁREA DE TRABALHO (Split View) */}
-          <section className="grid grid-cols-12 gap-6 h-[700px]">
+          <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[700px]">
             {/* Coluna Esquerda: Agenda e Lista (4 colunas) */}
-            <div className="col-span-4 flex flex-col gap-4 h-full">
-              <Card className="flex-none p-0 overflow-hidden border-none shadow-md bg-white">
+            <div className="lg:col-span-4 flex flex-col gap-4">
+              <Card className="p-0 overflow-hidden border-none shadow-md bg-white">
                 <div className="p-3 bg-indigo-50/50 border-b border-indigo-100">
                   <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
                 </div>
               </Card>
               
-              <Card className="flex-1 flex flex-col overflow-hidden border-slate-200 shadow-sm">
-                <div className="p-3 border-b bg-slate-50 flex flex-col gap-3">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Carteira Total</h3>
-                    <Badge variant="outline" className="text-[10px]">{leads.filter(l => l.brokerId === user?.id).length} Leads</Badge>
-                  </div>
-                  {/* Filtros rápidos de Pipeline */}
-                  <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
-                    <PipelineBadge label="Novos" count={stats.new} active={filter === 'NEW'} onClick={() => setFilter('NEW')} color="sky" />
-                    <PipelineBadge label="Atend." count={stats.in_progress} active={filter === 'IN_PROGRESS'} onClick={() => setFilter('IN_PROGRESS')} color="indigo" />
-                    <PipelineBadge label="Visita" count={stats.visits} active={filter === 'VISIT_SCHEDULED'} onClick={() => setFilter('VISIT_SCHEDULED')} color="emerald" />
-                    <PipelineBadge label="Docs" count={stats.docs} active={filter === 'DOCS_REQUESTED'} onClick={() => setFilter('DOCS_REQUESTED')} color="amber" />
-                  </div>
+              {/* CARDS DE PIPELINE (Trazidos de volta em formato Grid Compacto) */}
+              <div className="grid grid-cols-2 gap-2">
+                <PipelineStat 
+                  label="Novos" 
+                  count={stats.new} 
+                  active={filter === 'NEW'} 
+                  onClick={() => {setFilter('NEW'); setSelectedLeadId(null);}}
+                  color="sky"
+                  icon={Sparkles}
+                  compact
+                />
+                <PipelineStat 
+                  label="Atendimento" 
+                  count={stats.in_progress} 
+                  active={filter === 'IN_PROGRESS'} 
+                  onClick={() => {setFilter('IN_PROGRESS'); setSelectedLeadId(null);}}
+                  color="indigo"
+                  icon={Users2}
+                  compact
+                />
+                <PipelineStat 
+                  label="Visitas" 
+                  count={stats.visits} 
+                  active={filter === 'VISIT_SCHEDULED'} 
+                  onClick={() => {setFilter('VISIT_SCHEDULED'); setSelectedLeadId(null);}}
+                  color="emerald"
+                  icon={Calendar}
+                  compact
+                />
+                <PipelineStat 
+                  label="Documentação" 
+                  count={stats.docs} 
+                  active={filter === 'DOCS_REQUESTED'} 
+                  onClick={() => {setFilter('DOCS_REQUESTED'); setSelectedLeadId(null);}}
+                  color="amber"
+                  icon={FileText}
+                  compact
+                />
+              </div>
+
+              <Card className="flex-1 flex flex-col overflow-hidden border-slate-200 shadow-sm min-h-[400px]">
+                <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
+                  <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Carteira Total</h3>
+                  <Badge variant="outline" className="text-[10px]">{leads.filter(l => l.brokerId === user?.id).length} Leads</Badge>
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 bg-white">
                   <LeadList selectedLeadId={selectedLeadId} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact={true} />
@@ -250,7 +281,7 @@ const Dashboard = () => {
             </div>
 
             {/* Coluna Direita: Ação / Detalhe (8 colunas) */}
-            <div className="col-span-8 h-full">
+            <div className="lg:col-span-8 h-full min-h-[600px] mb-20">
               {selectedLeadId ? (
                 <LeadDetail leadId={selectedLeadId} onLeadUpdated={() => {}} />
               ) : (
@@ -265,11 +296,11 @@ const Dashboard = () => {
             </div>
           </section>
 
-          {/* RODAPÉ: HALL DA FAMA (Horizontal) */}
-          <section className="w-full pb-10">
-            <div className="flex items-center gap-2 mb-4">
-              <Trophy className="h-5 w-5 text-amber-500" />
-              <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Ranking de Elite</h2>
+          {/* RODAPÉ: HALL DA FAMA (Horizontal - Com margem de segurança) */}
+          <section className="w-full pb-10 pt-10 border-t border-slate-200 mt-10">
+            <div className="flex items-center gap-2 mb-6 justify-center">
+              <Trophy className="h-6 w-6 text-amber-500" />
+              <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Ranking de Elite</h2>
             </div>
             <LeaderboardPodium leads={leads} users={profiles} />
           </section>
@@ -288,16 +319,22 @@ const NavButton = ({ icon: Icon, label, active, onClick }: any) => (
   </button>
 );
 
-const PipelineBadge = ({ label, count, active, onClick, color }: any) => {
+const PipelineStat = ({ label, count, active, onClick, color, icon: Icon, compact }: any) => {
   const colors: any = {
-    sky: "bg-sky-100 text-sky-700 border-sky-200",
-    indigo: "bg-indigo-100 text-indigo-700 border-indigo-200",
-    emerald: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    amber: "bg-amber-100 text-amber-700 border-amber-200",
+    sky: active ? "bg-sky-600 text-white" : "bg-sky-50 text-sky-700 border-sky-100",
+    indigo: active ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700 border-indigo-100",
+    emerald: active ? "bg-emerald-600 text-white" : "bg-emerald-50 text-emerald-700 border-emerald-100",
+    amber: active ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-700 border-amber-100",
+    slate: active ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 border-slate-200",
   };
+
   return (
-    <button onClick={onClick} className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold transition-all whitespace-nowrap", active ? colors[color] : "bg-white border-slate-100 text-slate-500 hover:border-slate-200")}>
-      {label} <span className="bg-white/50 px-1 rounded text-current">{count}</span>
+    <button onClick={onClick} className={cn("flex flex-col rounded-2xl border transition-all duration-300 text-left relative overflow-hidden group", colors[color], active ? "shadow-md scale-[1.02] ring-2 ring-offset-1 ring-indigo-500" : "hover:border-slate-300 shadow-sm", compact ? "p-3" : "p-4")}>
+      <div className="flex items-center justify-between w-full">
+        <p className={cn("font-bold uppercase tracking-wider opacity-80 truncate", compact ? "text-[9px]" : "text-[11px]", active ? "text-white" : "text-slate-500")}>{label}</p>
+        <Icon className={cn(compact ? "h-3 w-3" : "h-4 w-4", active ? "text-white" : "")} />
+      </div>
+      <p className={cn("font-black tracking-tighter mt-1", compact ? "text-xl" : "text-3xl")}>{count}</p>
     </button>
   );
 };
