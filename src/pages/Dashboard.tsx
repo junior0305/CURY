@@ -196,7 +196,7 @@ const Dashboard = () => {
       <header className="h-14 bg-white border-b flex items-center justify-between px-6 shrink-0 z-20">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white"><Target className="h-5 w-5" /></div>
-          <span className="font-bold text-slate-900 tracking-tight">Cockpit de Vendas</span>
+          <span className="font-bold text-slate-900 tracking-tight">QG de Vendas</span>
         </div>
         <div className="flex items-center gap-2">
            <Sheet open={isLeadFormOpen} onOpenChange={setIsLeadFormOpen}>
@@ -211,52 +211,70 @@ const Dashboard = () => {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* COLUNA 1: AGENDA & LISTA (30%) */}
-        <aside className="w-[380px] flex flex-col border-r bg-white z-10 shadow-sm">
-          <div className="p-4 border-b bg-indigo-50/50">
-            <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
-          </div>
-          <div className="flex-1 overflow-y-auto p-2">
-            <div className="mb-2 px-2 pt-2">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Carteira Total</h3>
-              {/* Filtros rápidos de Pipeline */}
-              <div className="flex gap-1 mb-3 overflow-x-auto pb-2 scrollbar-hide">
-                <PipelineBadge label="Novos" count={stats.new} active={filter === 'NEW'} onClick={() => setFilter('NEW')} color="sky" />
-                <PipelineBadge label="Atend." count={stats.in_progress} active={filter === 'IN_PROGRESS'} onClick={() => setFilter('IN_PROGRESS')} color="indigo" />
-                <PipelineBadge label="Visita" count={stats.visits} active={filter === 'VISIT_SCHEDULED'} onClick={() => setFilter('VISIT_SCHEDULED')} color="emerald" />
-                <PipelineBadge label="Docs" count={stats.docs} active={filter === 'DOCS_REQUESTED'} onClick={() => setFilter('DOCS_REQUESTED')} color="amber" />
-              </div>
-            </div>
-            <LeadList selectedLeadId={selectedLeadId} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact={true} />
-          </div>
-        </aside>
-
-        {/* COLUNA 2: AÇÃO (50%) */}
-        <main className="flex-1 bg-slate-50/50 relative flex flex-col min-w-[500px]">
-          {selectedLeadId ? (
-            <LeadDetail leadId={selectedLeadId} onLeadUpdated={() => {}} />
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
-              <Target className="w-24 h-24 mb-4 opacity-20" />
-              <p className="text-lg font-medium">Selecione um lead ao lado para iniciar a missão</p>
-            </div>
-          )}
-        </main>
-
-        {/* COLUNA 3: GLÓRIA (20%) */}
-        <aside className="w-[320px] flex flex-col border-l bg-white overflow-y-auto">
-          <div className="p-4 space-y-6">
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="max-w-[1800px] mx-auto p-4 space-y-6">
+          
+          {/* TOPO: BANNER DA CAMPANHA (Horizontal) */}
+          <section className="w-full">
             <CampaignHeroBanner leads={leads} users={profiles} />
-            
-            <div className="space-y-3">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <Trophy className="w-3 h-3" /> Hall da Fama
-              </h3>
-              <LeaderboardPodium leads={leads} users={profiles} />
+          </section>
+
+          {/* MEIO: ÁREA DE TRABALHO (Split View) */}
+          <section className="grid grid-cols-12 gap-6 h-[700px]">
+            {/* Coluna Esquerda: Agenda e Lista (4 colunas) */}
+            <div className="col-span-4 flex flex-col gap-4 h-full">
+              <Card className="flex-none p-0 overflow-hidden border-none shadow-md bg-white">
+                <div className="p-3 bg-indigo-50/50 border-b border-indigo-100">
+                  <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
+                </div>
+              </Card>
+              
+              <Card className="flex-1 flex flex-col overflow-hidden border-slate-200 shadow-sm">
+                <div className="p-3 border-b bg-slate-50 flex flex-col gap-3">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Carteira Total</h3>
+                    <Badge variant="outline" className="text-[10px]">{leads.filter(l => l.brokerId === user?.id).length} Leads</Badge>
+                  </div>
+                  {/* Filtros rápidos de Pipeline */}
+                  <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+                    <PipelineBadge label="Novos" count={stats.new} active={filter === 'NEW'} onClick={() => setFilter('NEW')} color="sky" />
+                    <PipelineBadge label="Atend." count={stats.in_progress} active={filter === 'IN_PROGRESS'} onClick={() => setFilter('IN_PROGRESS')} color="indigo" />
+                    <PipelineBadge label="Visita" count={stats.visits} active={filter === 'VISIT_SCHEDULED'} onClick={() => setFilter('VISIT_SCHEDULED')} color="emerald" />
+                    <PipelineBadge label="Docs" count={stats.docs} active={filter === 'DOCS_REQUESTED'} onClick={() => setFilter('DOCS_REQUESTED')} color="amber" />
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 bg-white">
+                  <LeadList selectedLeadId={selectedLeadId} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact={true} />
+                </div>
+              </Card>
             </div>
-          </div>
-        </aside>
+
+            {/* Coluna Direita: Ação / Detalhe (8 colunas) */}
+            <div className="col-span-8 h-full">
+              {selectedLeadId ? (
+                <LeadDetail leadId={selectedLeadId} onLeadUpdated={() => {}} />
+              ) : (
+                <Card className="h-full flex flex-col items-center justify-center text-slate-300 border-dashed border-2 bg-slate-50/50 shadow-none">
+                  <div className="bg-white p-6 rounded-full shadow-sm mb-4">
+                    <Target className="w-12 h-12 text-indigo-200" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-700">Pronto para o Combate?</h3>
+                  <p className="text-sm font-medium">Selecione um alvo na lista ao lado para iniciar a missão.</p>
+                </Card>
+              )}
+            </div>
+          </section>
+
+          {/* RODAPÉ: HALL DA FAMA (Horizontal) */}
+          <section className="w-full pb-10">
+            <div className="flex items-center gap-2 mb-4">
+              <Trophy className="h-5 w-5 text-amber-500" />
+              <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Ranking de Elite</h2>
+            </div>
+            <LeaderboardPodium leads={leads} users={profiles} />
+          </section>
+
+        </div>
       </div>
     </div>
   );
