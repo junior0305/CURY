@@ -135,6 +135,11 @@ const Dashboard = () => {
   if (!isDesktop) {
     return (
       <div className="flex flex-col h-screen bg-[#F8FAFC]">
+        {/* Ticker de Conquistas Fixo no Topo Mobile */}
+        <div className="flex-none z-50">
+          <AchievementTicker />
+        </div>
+
         <header className="flex-none p-4 bg-white border-b flex justify-between items-center">
           <h1 className="font-black text-slate-900">CRM <span className="text-indigo-600">Mobile</span></h1>
           <div className="flex gap-2">
@@ -151,9 +156,23 @@ const Dashboard = () => {
         <main className="flex-1 overflow-y-auto p-4 pb-20">
           {activeTab === 'mission' && (
             <div className="space-y-6">
+              {/* Banner de Campanha no Topo da Missão */}
+              <CampaignHeroBanner leads={leads} users={profiles} />
+              
+              {/* Cards de Pipeline (Grid 2 colunas) */}
+              <div className="grid grid-cols-2 gap-2">
+                <PipelineStat label="Novos" count={stats.new} active={filter === 'NEW'} onClick={() => setFilter('NEW')} color="sky" icon={Sparkles} compact />
+                <PipelineStat label="Atend." count={stats.in_progress} active={filter === 'IN_PROGRESS'} onClick={() => setFilter('IN_PROGRESS')} color="indigo" icon={Users2} compact />
+                <PipelineStat label="Visita" count={stats.visits} active={filter === 'VISIT_SCHEDULED'} onClick={() => setFilter('VISIT_SCHEDULED')} color="emerald" icon={Calendar} compact />
+                <PipelineStat label="Docs" count={stats.docs} active={filter === 'DOCS_REQUESTED'} onClick={() => setFilter('DOCS_REQUESTED')} color="amber" icon={FileText} compact />
+              </div>
+
+              {/* Agenda do Dia */}
               <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
+              
+              {/* Lista Completa */}
               <div className="space-y-3">
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Pipeline</h3>
+                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Pipeline Geral</h3>
                 <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} />
               </div>
             </div>
@@ -172,14 +191,14 @@ const Dashboard = () => {
           )}
 
           {activeTab === 'stats' && (
-            <div className="space-y-6">
-              <CampaignHeroBanner leads={leads} users={profiles} />
+            <div className="space-y-6 pt-4">
+              <h2 className="text-xl font-black text-slate-900 text-center uppercase tracking-tight">Ranking de Elite</h2>
               <LeaderboardPodium leads={leads} users={profiles} />
             </div>
           )}
         </main>
 
-        <nav className="flex-none bg-white border-t flex justify-around p-2 pb-safe">
+        <nav className="flex-none bg-white border-t flex justify-around p-2 pb-safe z-40 relative">
           <NavButton icon={LayoutDashboard} label="Missão" active={activeTab === 'mission'} onClick={() => setActiveTab('mission')} />
           <NavButton icon={Target} label="Lead Atual" active={activeTab === 'lead'} onClick={() => setActiveTab('lead')} />
           <NavButton icon={Trophy} label="Ranking" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
