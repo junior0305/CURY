@@ -12,7 +12,8 @@ import {
   BellRing,
   Trophy,
   LayoutDashboard,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
