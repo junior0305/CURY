@@ -41,13 +41,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { format, startOfMonth, endOfMonth, parseISO, subMonths, eachMonthOfInterval, subYears } from "date-fns";
+import { format, startOfMonth, endOfMonth, parseISO, subMonths, eachMonthOfInterval, subYears, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import { useAuth } from "@/components/AuthProvider";
 import { useQueryClient } from "@tanstack/react-query";
+
+// Helper for safe date formatting
+const safeFormat = (date: any, fmt: string) => {
+  try {
+    if (!date) return "-";
+    const d = typeof date === 'string' ? parseISO(date) : date;
+    if (!isValid(d)) return "-";
+    return format(d, fmt, { locale: ptBR });
+  } catch (e) {
+    return "-";
+  }
+};
 
 const CommandCenter = () => {
   const { user } = useAuth();
@@ -182,7 +194,7 @@ const CommandCenter = () => {
         const total = monthLeads.length;
 
         return {
-          name: format(month, 'MMM', { locale: ptBR }).toUpperCase(),
+          name: safeFormat(month, 'MMM').toUpperCase(),
           Vendas: sales,
           Leads: total
         };
@@ -456,7 +468,7 @@ const CommandCenter = () => {
              <PopoverTrigger asChild>
                <Button variant="outline" className="bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 hover:text-white font-bold h-10 px-4">
                  <CalendarDays className="h-4 w-4 mr-2 text-indigo-400" />
-                 <span className="capitalize">{format(selectedMonth, 'MMMM yyyy', { locale: ptBR })}</span>
+                 <span className="capitalize">{safeFormat(selectedMonth, 'MMMM yyyy')}</span>
                </Button>
              </PopoverTrigger>
              <PopoverContent className="w-auto p-0 bg-slate-900 border-slate-700" align="end">
@@ -516,7 +528,7 @@ const CommandCenter = () => {
 
                <Card className="col-span-1 bg-indigo-600 border-none shadow-xl p-6 flex flex-col justify-center text-white relative overflow-hidden">
                   <div className="absolute -right-10 -bottom-10 bg-white/10 w-40 h-40 rounded-full blur-3xl" />
-                  <p className="text-xs font-black text-indigo-200 uppercase tracking-widest mb-2">Total Consolidado ({format(selectedMonth, 'MMM', { locale: ptBR })})</p>
+                  <p className="text-xs font-black text-indigo-200 uppercase tracking-widest mb-2">Total Consolidado ({safeFormat(selectedMonth, 'MMM')})</p>
                   <h2 className="text-5xl font-black mb-1">{stats.filter((l: any) => l.status === 'CONCLUDED').length}</h2>
                   <p className="text-sm font-bold text-indigo-100 mb-6">Vendas Confirmadas</p>
                   
@@ -743,7 +755,7 @@ const CommandCenter = () => {
              <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="bg-emerald-600 border-none shadow-xl p-6 text-white relative overflow-hidden">
                    <div className="absolute -right-6 -top-6 bg-white/10 w-32 h-32 rounded-full blur-2xl" />
-                   <p className="text-xs font-black text-emerald-200 uppercase tracking-widest mb-1">Custo Total de Guerra ({format(selectedMonth, 'MMM', { locale: ptBR })})</p>
+                   <p className="text-xs font-black text-emerald-200 uppercase tracking-widest mb-1">Custo Total de Guerra ({safeFormat(selectedMonth, 'MMM')})</p>
                    <h2 className="text-4xl font-black mb-1">R$ {grandTotalInvestment.toFixed(2)}</h2>
                    <div className="flex gap-4 mt-2 text-xs font-medium text-emerald-100/80">
                       <span>Prêmios: R$ {totalRewardsSystem.toFixed(2)}</span>
@@ -883,7 +895,7 @@ const CommandCenter = () => {
                        ) : (
                          investments.map((i: any) => (
                            <tr key={i.id} className="hover:bg-slate-800/50 transition-colors group">
-                             <td className="p-3 font-mono text-xs">{format(parseISO(i.investment_date), 'dd/MM/yyyy')}</td>
+                             <td className="p-3 font-mono text-xs">{safeFormat(i.investment_date, 'dd/MM/yyyy')}</td>
                              <td className="p-3 font-bold text-slate-300">{i.profiles?.first_name}</td>
                              <td className="p-3 text-xs">{i.teams?.name || <Badge variant="secondary" className="bg-indigo-900 text-indigo-200 border-none text-[9px]">GLOBAL</Badge>}</td>
                              <td className="p-3">
@@ -933,7 +945,7 @@ const CommandCenter = () => {
                      <tbody className="divide-y divide-slate-800">
                        {rewardsStats.map((r: any) => (
                          <tr key={r.id} className="hover:bg-slate-800/50 transition-colors">
-                           <td className="p-3 font-mono text-xs">{format(new Date(r.created_at), 'dd/MM HH:mm')}</td>
+                           <td className="p-3 font-mono text-xs">{safeFormat(r.created_at, 'dd/MM HH:mm')}</td>
                            <td className="p-3 font-bold text-slate-200">{r.profiles?.first_name} {r.profiles?.last_name}</td>
                            <td className="p-3 text-xs">{r.profiles?.teams?.name || '-'}</td>
                            <td className="p-3">
