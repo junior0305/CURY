@@ -13,7 +13,10 @@ import {
   Trophy,
   LayoutDashboard,
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  ChevronRight,
+  TrendingUp,
+  Activity
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
@@ -425,21 +428,56 @@ const NavButton = ({ icon: Icon, label, active, onClick }: any) => (
 );
 
 const PipelineStat = ({ label, count, active, onClick, color, icon: Icon, compact }: any) => {
-  const colors: any = {
-    sky: active ? "bg-sky-600 text-white" : "bg-sky-50 text-sky-700 border-sky-100",
-    indigo: active ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700 border-indigo-100",
-    emerald: active ? "bg-emerald-600 text-white" : "bg-emerald-50 text-emerald-700 border-emerald-100",
-    amber: active ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-700 border-amber-100",
-    slate: active ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 border-slate-200",
+  const gradients: any = {
+    sky: active 
+      ? "bg-gradient-to-br from-sky-500 to-blue-600 shadow-sky-500/30 text-white ring-2 ring-sky-400 ring-offset-2" 
+      : "bg-gradient-to-br from-white to-sky-50 hover:to-sky-100 border-sky-100/50 text-sky-900 shadow-sm",
+    indigo: active 
+      ? "bg-gradient-to-br from-indigo-500 to-violet-600 shadow-indigo-500/30 text-white ring-2 ring-indigo-400 ring-offset-2" 
+      : "bg-gradient-to-br from-white to-indigo-50 hover:to-indigo-100 border-indigo-100/50 text-indigo-900 shadow-sm",
+    emerald: active 
+      ? "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/30 text-white ring-2 ring-emerald-400 ring-offset-2" 
+      : "bg-gradient-to-br from-white to-emerald-50 hover:to-emerald-100 border-emerald-100/50 text-emerald-900 shadow-sm",
+    amber: active 
+      ? "bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/30 text-white ring-2 ring-amber-400 ring-offset-2" 
+      : "bg-gradient-to-br from-white to-amber-50 hover:to-amber-100 border-amber-100/50 text-amber-900 shadow-sm",
+  };
+
+  const iconColors: any = {
+    sky: active ? "text-white/20" : "text-sky-500/10",
+    indigo: active ? "text-white/20" : "text-indigo-500/10",
+    emerald: active ? "text-white/20" : "text-emerald-500/10",
+    amber: active ? "text-white/20" : "text-amber-500/10",
   };
 
   return (
-    <button onClick={onClick} className={cn("flex flex-col rounded-2xl border transition-all duration-300 text-left relative overflow-hidden group", colors[color], active ? "shadow-md scale-[1.02] ring-2 ring-offset-1 ring-indigo-500" : "hover:border-slate-300 shadow-sm", compact ? "p-3" : "p-4")}>
-      <div className="flex items-center justify-between w-full">
-        <p className={cn("font-bold uppercase tracking-wider opacity-80 truncate", compact ? "text-[9px]" : "text-[11px]", active ? "text-white" : "text-slate-500")}>{label}</p>
-        <Icon className={cn(compact ? "h-3 w-3" : "h-4 w-4", active ? "text-white" : "")} />
+    <button 
+      onClick={onClick} 
+      className={cn(
+        "relative overflow-hidden rounded-3xl border transition-all duration-500 group flex flex-col justify-between",
+        gradients[color],
+        active ? "scale-105 z-10" : "hover:scale-[1.02]",
+        compact ? "p-4 min-h-[100px]" : "p-5 min-h-[120px]"
+      )}
+    >
+      {/* Background Icon (Watermark) */}
+      <Icon className={cn("absolute -right-4 -bottom-4 w-24 h-24 rotate-12 transition-transform duration-700 group-hover:rotate-0 group-hover:scale-110", iconColors[color])} />
+      
+      {/* Top Label */}
+      <div className="flex items-center gap-2 relative z-10">
+        <div className={cn("p-1.5 rounded-lg backdrop-blur-sm", active ? "bg-white/20" : "bg-white shadow-sm")}>
+          <Icon className={cn("w-4 h-4", active ? "text-white" : "text-slate-600")} />
+        </div>
+        <span className={cn("text-[10px] font-black uppercase tracking-widest", active ? "text-white/90" : "text-slate-400")}>{label}</span>
       </div>
-      <p className={cn("font-black tracking-tighter mt-1", compact ? "text-xl" : "text-3xl")}>{count}</p>
+
+      {/* Number */}
+      <div className="relative z-10 mt-auto">
+        <p className={cn("font-black tracking-tighter leading-none transition-all", compact ? "text-3xl" : "text-4xl")}>
+          {count}
+        </p>
+        <div className={cn("h-1 w-8 rounded-full mt-2 transition-all duration-500", active ? "bg-white/50 w-full" : "bg-slate-200 group-hover:w-16")} />
+      </div>
     </button>
   );
 };
