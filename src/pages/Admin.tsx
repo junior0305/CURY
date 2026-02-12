@@ -27,7 +27,8 @@ import {
   Plus,
   Trash2,
   Users2,
-  Target
+  Target,
+  LayoutDashboard
 } from "lucide-react";
 import UserManagement from "@/components/admin/UserManagement";
 import TeamManagement from "@/components/admin/TeamManagement";
@@ -75,6 +76,7 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 const DistributionLogs = () => {
   const { data: logs = [], isLoading } = useQuery({
@@ -512,6 +514,7 @@ const EconomyManagement = () => {
 const Admin = () => {
   const { user: authUser, role: userRole, loading: authLoading, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("users");
+  const navigate = useNavigate();
   
   const currentUser: User = {
     id: authUser?.id || "unknown",
@@ -1007,6 +1010,14 @@ const Admin = () => {
             </p>
           </div>
           <div className="flex items-center gap-4">
+            <Button 
+              onClick={() => navigate('/command-center')}
+              className="rounded-2xl bg-slate-900 hover:bg-slate-800 text-white h-12 px-6 font-bold shadow-lg shadow-slate-200 transition-all"
+            >
+              <LayoutDashboard className="w-4 h-4 mr-2" />
+              QG de Comando
+            </Button>
+            
             <div className="bg-white p-3 rounded-2xl shadow-sm border border-indigo-50 flex items-center gap-3">
               <UserCircle className="w-8 h-8 text-indigo-200" />
               <div className="flex flex-col">
