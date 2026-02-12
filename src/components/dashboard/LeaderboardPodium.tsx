@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { startOfWeek, startOfMonth, isAfter, parseISO } from "date-fns";
 
 type PodiumEntry = {
   id: string;
@@ -25,14 +26,19 @@ function initials(name: string) {
   return (first + last).toUpperCase();
 }
 
-function scoreForLead(lead: Lead, history: any[] = []) {
-  // Agora calculamos os pontos baseados no HISTÓRICO de etapas atingidas, 
-  // não apenas no status ATUAL.
-  const leadHistory = history.filter(h => h.lead_id === lead.id);
-  const stagesReached = new Set(leadHistory.map(h => h.stage));
+function scoreForLead(lead: Lead, filteredHistory: any[], startDate: Date) {
+  // Filtra o histórico para incluir apenas eventos dentro do período
+  const relevantHistory = filteredHistory.filter(h => 
+    h.lead_id === lead.id && 
+    isAfter(parseISO(h.created_at), startDate)
+  );
+
+  const stagesReached = new Set(relevantHistory.map(h => h.stage));
   
-  // Adiciona o status atual também, para garantir que o tempo real funcione
-  stagesReached.add(lead.status);
+  // Só adiciona o status atual se a última interação foi dentro do período
+  if (lead.last_interaction_at && isAfter(parseISO(lead.last_interaction_at), startDate)) {
+    stagesReached.add(lead.status);
+  }
 
   let totalPoints = 0;
   
@@ -41,16 +47,22 @@ function scoreForLead(lead: Lead, history: any[] = []) {
   if (stagesReached.has("VISIT_SCHEDULED")) totalPoints += 20;
   if (stagesReached.has("IN_PROGRESS")) totalPoints += 2;
   
-  return totalPoints || 0.5; // 0.5 para leads novos
+  // Pontos por lead NOVO apenas se criado no período
+  if (lead.created_at && isAfter(parseISO(lead.created_at), startDate)) {
+     totalPoints += 0.5;
+  }
+  
+  return totalPoints;
 }
 
-export function LeaderboardPodium({ leads, users, isMonthly, onToggleTimeframe, onOpenKPIs }: { 
+export function LeaderboardPodium({ leads, users, onOpenKPIs }: { 
   leads: Lead[]; 
   users: User[];
-  isMonthly?: boolean;
-  onToggleTimeframe?: () => void;
   onOpenKPIs?: (id: string, name: string) => void;
 }) {
+  // Estado interno para controle de timeframe (já que o Dashboard não controlava)
+  const [timeframe, setTimeframe] = useState<'WEEK' | 'MONTH'>('MONTH');
+
   const { data: history = [] } = useQuery({
     queryKey: ['funnel-history'],
     queryFn: async () => {
@@ -68,11 +80,15 @@ export function LeaderboardPodium({ leads, users, isMonthly, onToggleTimeframe, 
     const brokers = users.filter((u) => u.role === "BROKER");
     const byBroker: Record<string, number> = {};
 
-    console.log(`[Podium] Rankeando ${brokers.length} corretores...`);
+    // Define data de corte
+    const now = new Date();
+    const startDate = timeframe === 'WEEK' ? startOfWeek(now) : startOfMonth(now);
+
+    console.log(`[Podium] Rankeando ${brokers.length} corretores para timeframe: ${timeframe}`);
 
     for (const lead of leads) {
       if (!lead.brokerId) continue;
-      byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead, history);
+      byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead, history, startDate);
     }
 
     // Gerar lista de ranking real, sem favorecer ninguém
@@ -88,7 +104,7 @@ export function LeaderboardPodium({ leads, users, isMonthly, onToggleTimeframe, 
 
     console.log("[Podium] Top 3 Real detectado:", entries.slice(0, 3));
     return entries.slice(0, 3);
-  }, [leads, users, history]);
+  }, [leads, users, history, timeframe]);
 
   useEffect(() => {
     const currentRankIds = top3.map(b => b.id);
@@ -135,10 +151,10 @@ export function LeaderboardPodium({ leads, users, isMonthly, onToggleTimeframe, 
                 </Badge>
                 <div className="h-1 w-1 rounded-full bg-slate-300" />
                 <button 
-                  onClick={onToggleTimeframe}
+                  onClick={() => setTimeframe(timeframe === 'WEEK' ? 'MONTH' : 'WEEK')}
                   className="text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors underline decoration-2 underline-offset-4"
                 >
-                  Ver {isMonthly ? "da Semana" : "do Mês"}
+                  Ver {timeframe === 'MONTH' ? "da Semana" : "do Mês"}
                 </button>
               </div>
             </div>
@@ -147,18 +163,18 @@ export function LeaderboardPodium({ leads, users, isMonthly, onToggleTimeframe, 
 
         <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
           <Button 
-            variant={!isMonthly ? "default" : "ghost"} 
+            variant={timeframe === 'WEEK' ? "default" : "ghost"} 
             size="sm" 
-            onClick={() => !isMonthly ? null : onToggleTimeframe?.()}
-            className={cn("rounded-xl text-xs font-bold px-4 transition-all", !isMonthly ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500")}
+            onClick={() => setTimeframe('WEEK')}
+            className={cn("rounded-xl text-xs font-bold px-4 transition-all", timeframe === 'WEEK' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500")}
           >
             Semana
           </Button>
           <Button 
-            variant={isMonthly ? "default" : "ghost"} 
+            variant={timeframe === 'MONTH' ? "default" : "ghost"} 
             size="sm" 
-            onClick={() => isMonthly ? null : onToggleTimeframe?.()}
-            className={cn("rounded-xl text-xs font-bold px-4 transition-all", isMonthly ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500")}
+            onClick={() => setTimeframe('MONTH')}
+            className={cn("rounded-xl text-xs font-bold px-4 transition-all", timeframe === 'MONTH' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500")}
           >
             Mês
           </Button>

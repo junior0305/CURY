@@ -145,16 +145,36 @@ const Dashboard = () => {
           <AchievementTicker />
         </div>
 
-        <header className="flex-none p-4 bg-white border-b flex justify-between items-center">
-          <h1 className="font-black text-slate-900">CRM <span className="text-indigo-600">Mobile</span></h1>
-          <div className="flex gap-2">
+        <header className="flex-none p-4 bg-white border-b flex justify-between items-center shadow-sm z-40">
+           <div className="flex items-center gap-2">
+             <Avatar className="h-9 w-9 border-2 border-indigo-100">
+               <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email}`} />
+               <AvatarFallback className="bg-indigo-600 text-white font-black text-xs">
+                 {userName.substring(0, 2).toUpperCase()}
+               </AvatarFallback>
+             </Avatar>
+             <div>
+                <h1 className="font-black text-slate-900 text-sm leading-none">{userName}</h1>
+                <p className="text-[10px] font-bold text-indigo-600 uppercase">Agente Tático</p>
+             </div>
+           </div>
+           
+           <div className="flex gap-2">
+             <Button 
+               size="sm" 
+               variant="outline" 
+               className="rounded-full border-indigo-100 text-indigo-600 bg-indigo-50 h-9 w-9 p-0"
+               onClick={() => setIsIntelOpen(true)}
+             >
+               <BarChart3 className="w-4 h-4" />
+             </Button>
+
              <Sheet open={isLeadFormOpen} onOpenChange={setIsLeadFormOpen}>
               <SheetTrigger asChild>
-                <Button size="sm" variant="outline" className="rounded-full"><PlusCircle className="w-4 h-4" /></Button>
+                <Button size="sm" className="rounded-full bg-indigo-600 h-9 w-9 p-0 shadow-md shadow-indigo-200"><PlusCircle className="w-5 h-5" /></Button>
               </SheetTrigger>
               <LeadForm onOpenChange={setIsLeadFormOpen} brokerId={user?.id || ""} />
             </Sheet>
-            <Button size="sm" variant="ghost" onClick={signOut}><LogOut className="w-4 h-4 text-rose-500" /></Button>
           </div>
         </header>
 
@@ -202,8 +222,11 @@ const Dashboard = () => {
             </div>
           )}
         </main>
+        
+        {/* Modais Globais Mobile */}
+        <IntelTacticsModal open={isIntelOpen} onOpenChange={setIsIntelOpen} />
 
-        <nav className="flex-none bg-white border-t flex justify-around p-2 pb-safe z-40 relative">
+        <nav className="flex-none bg-white border-t flex justify-around p-2 pb-safe z-40 relative shadow-[0_-5px_10px_rgba(0,0,0,0.02)]">
           <NavButton icon={LayoutDashboard} label="Missão" active={activeTab === 'mission'} onClick={() => setActiveTab('mission')} />
           <NavButton icon={Target} label="Lead Atual" active={activeTab === 'lead'} onClick={() => setActiveTab('lead')} />
           <NavButton icon={Trophy} label="Ranking" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
@@ -216,6 +239,7 @@ const Dashboard = () => {
   return (
     <div className="h-screen flex flex-col bg-[#F8FAFC] overflow-hidden">
       <AchievementTicker />
+      <IntelTacticsModal open={isIntelOpen} onOpenChange={setIsIntelOpen} />
       
       <header className="h-14 bg-white border-b flex items-center justify-between px-6 shrink-0 z-20">
         <div className="flex items-center gap-3">

@@ -3,7 +3,7 @@ import { Lead } from "@/types/lead";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Zap, RefreshCw, Sparkles, HelpCircle } from "lucide-react";
+import { Send, Zap, RefreshCw, Sparkles, HelpCircle, Flame, ShieldAlert, BadgeCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,7 +19,7 @@ const AIAssistant = ({ lead, isBusy }: AIAssistantProps) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [approachInfo, setApproachInfo] = useState<{ approach: string; reason: string } | null>(null);
 
-  const generateMessage = async () => {
+  const generateMessage = async (tactic?: string) => {
     setIsGenerating(true);
     setApproachInfo(null);
     try {
@@ -27,6 +27,7 @@ const AIAssistant = ({ lead, isBusy }: AIAssistantProps) => {
         body: { 
           leadId: lead.id,
           brokerId: lead.brokerId,
+          tactic // Envia a tática selecionada (opcional)
         }
       });
 
@@ -34,7 +35,7 @@ const AIAssistant = ({ lead, isBusy }: AIAssistantProps) => {
 
       setGeneratedMessage(data.message);
       setApproachInfo({ approach: data.approach, reason: data.reason });
-      toast.success("IA gerou uma nova estratégia!");
+      toast.success(tactic ? "Munição Tática Carregada!" : "IA gerou uma nova estratégia!");
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao chamar a IA. Usando template padrão.");
@@ -63,7 +64,7 @@ const AIAssistant = ({ lead, isBusy }: AIAssistantProps) => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-bold text-gray-700 flex items-center gap-2">
-          <Zap className="w-5 h-5 text-amber-500" /> Estratégia de Conversão IA
+          <Zap className="w-5 h-5 text-amber-500" /> IA Tática (Neurovendas)
         </h3>
         {approachInfo && (
           <TooltipProvider>
@@ -85,32 +86,67 @@ const AIAssistant = ({ lead, isBusy }: AIAssistantProps) => {
       
       <Card className="border-amber-200 bg-amber-50/50 shadow-inner overflow-hidden rounded-2xl">
         <CardContent className="p-4 space-y-3">
+          
+          {/* Botões Táticos de Viés Cognitivo */}
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => generateMessage('SCARCITY')}
+              disabled={isBusy || isGenerating}
+              className="flex flex-col h-auto py-2 text-[10px] uppercase font-bold text-rose-600 border-rose-200 hover:bg-rose-50"
+            >
+              <Flame className="w-4 h-4 mb-1" />
+              Escassez
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => generateMessage('LOSS_AVERSION')}
+              disabled={isBusy || isGenerating}
+              className="flex flex-col h-auto py-2 text-[10px] uppercase font-bold text-orange-600 border-orange-200 hover:bg-orange-50"
+            >
+              <ShieldAlert className="w-4 h-4 mb-1" />
+              Perda
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => generateMessage('AUTHORITY')}
+              disabled={isBusy || isGenerating}
+              className="flex flex-col h-auto py-2 text-[10px] uppercase font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+            >
+              <BadgeCheck className="w-4 h-4 mb-1" />
+              Autoridade
+            </Button>
+          </div>
+
           <Textarea 
-            placeholder="A IA vai sugerir uma abordagem baseada no momento do lead..."
+            placeholder="Selecione uma tática acima ou clique em 'Sugerir Abordagem' para a IA decidir..."
             value={generatedMessage}
             onChange={(e) => setGeneratedMessage(e.target.value)}
             rows={4}
             disabled={isBusy || isGenerating}
-            className="bg-white border-amber-200 rounded-xl resize-none focus:ring-amber-500 shadow-sm"
+            className="bg-white border-amber-200 rounded-xl resize-none focus:ring-amber-500 shadow-sm text-sm"
           />
           
           <div className="flex gap-3">
             <Button 
-              onClick={generateMessage} 
+              onClick={() => generateMessage()} 
               disabled={isBusy || isGenerating}
-              variant="outline"
-              className="flex-1 rounded-xl border-amber-600 text-amber-600 hover:bg-amber-100 h-11 font-bold"
+              variant="ghost"
+              className="flex-1 rounded-xl text-slate-500 hover:bg-slate-100 h-11 font-bold text-xs"
             >
-              {isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-              {generatedMessage ? "Trocar Estratégia" : "Sugerir Abordagem"}
+              {isGenerating ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <RefreshCw className="w-3 h-3 mr-2" />}
+              Automático
             </Button>
             
             <Button 
               onClick={handleSendWhatsApp} 
               disabled={isBusy || isGenerating || !generatedMessage}
-              className="flex-1 bg-green-600 hover:bg-green-700 rounded-xl h-11 font-bold shadow-lg shadow-green-100"
+              className="flex-[2] bg-green-600 hover:bg-green-700 rounded-xl h-11 font-bold shadow-lg shadow-green-100 text-white"
             >
-              <Send className="w-4 h-4 mr-2" /> Abrir WhatsApp
+              <Send className="w-4 h-4 mr-2" /> Enviar WhatsApp
             </Button>
           </div>
         </CardContent>
