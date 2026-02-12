@@ -1,4 +1,3 @@
-
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -34,23 +33,24 @@ export function MissionToday({ brokerId, onSelectLead }: { brokerId: string, onS
     }
   });
 
-  if (missionLeads.length === 0) return null;
+  if (missionLeads.length === 0) return (
+    <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center bg-slate-50/50">
+      <p className="text-xs text-slate-400 font-medium">Sua agenda está limpa por hoje. 🏖️</p>
+    </div>
+  );
 
   return (
-    <div className="mb-8 animate-in slide-in-from-top-4 duration-500">
-      <div className="flex items-center gap-2 mb-4">
-        <div className="p-2 bg-indigo-600 rounded-lg text-white">
-          <Calendar className="h-5 w-5" />
-        </div>
-        <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">
-          Sua Missão de Hoje
+    <div className="mb-4 animate-in slide-in-from-top-4 duration-500">
+      <div className="flex items-center justify-between mb-3 px-1">
+        <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+          <Calendar className="h-3 w-3" /> Missão de Hoje
         </h2>
-        <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-none">
-          {missionLeads.length} Prioridades
+        <Badge className="bg-indigo-100 text-indigo-700 h-5 px-2 text-[10px] border-none">
+          {missionLeads.length}
         </Badge>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="space-y-2">
         {missionLeads.map((lead: any) => {
           const date = lead.next_action_date ? new Date(lead.next_action_date) : null;
           const isLate = date && isPast(date) && !isToday(date);
@@ -61,23 +61,29 @@ export function MissionToday({ brokerId, onSelectLead }: { brokerId: string, onS
               key={lead.id}
               onClick={() => onSelectLead(lead.id)}
               className={cn(
-                "flex flex-col p-4 rounded-2xl border text-left transition-all hover:scale-105 active:scale-95 group relative overflow-hidden",
-                isLate ? "bg-rose-50 border-rose-100" : isNow ? "bg-white border-indigo-200 ring-2 ring-indigo-50" : "bg-white border-slate-100"
+                "flex items-center justify-between w-full p-3 rounded-xl border text-left transition-all hover:shadow-md active:scale-95 group bg-white",
+                isLate ? "border-rose-200 bg-rose-50/30" : isNow ? "border-indigo-200 bg-indigo-50/30" : "border-slate-100"
               )}
             >
-              <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20">
-                <Clock className="h-12 w-12" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <h3 className="font-bold text-slate-900 text-xs truncate">{lead.name}</h3>
+                  {isLate && <Badge variant="destructive" className="h-4 px-1 text-[8px]">ATRASADO</Badge>}
+                </div>
+                <p className="text-[10px] text-slate-500 truncate flex items-center gap-1">
+                  {lead.phone} • <span className="uppercase">{lead.status}</span>
+                </p>
               </div>
               
-              <div className="flex justify-between items-start mb-2">
-                <Badge variant="outline" className={cn("text-[9px] font-bold border-none", isLate ? "bg-rose-200 text-rose-700" : "bg-slate-100 text-slate-500")}>
-                  {isLate ? "ATRASADO" : isNow ? "HOJE" : "NOVO"}
-                </Badge>
-                {date && <span className="text-[10px] font-bold text-slate-400">{format(date, "HH:mm")}</span>}
+              <div className="flex flex-col items-end pl-2">
+                {date ? (
+                  <span className={cn("text-[10px] font-bold", isLate ? "text-rose-600" : "text-indigo-600")}>
+                    {format(date, "HH:mm")}
+                  </span>
+                ) : (
+                  <Clock className="h-3 w-3 text-slate-300" />
+                )}
               </div>
-              
-              <h3 className="font-bold text-slate-900 truncate w-full">{lead.name}</h3>
-              <p className="text-xs text-slate-500 mt-1 truncate">{lead.status}</p>
             </button>
           );
         })}
