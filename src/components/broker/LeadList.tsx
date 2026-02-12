@@ -20,12 +20,34 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/AuthProvider";
+import { formatDistanceToNow, differenceInMinutes } from "date-fns";
+import { ptBR } from "date-fns/locale";
+
+// Função auxiliar para tempo relativo seguro (Ignora fuso horário negativo/pequeno)
+const getSafeRelativeTime = (dateString: string | null) => {
+  if (!dateString) return "";
+  
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMinutes = differenceInMinutes(now, date);
+
+  // Se a diferença for menor que 60 minutos (ou negativa por erro de fuso), mostra "Agora"
+  if (diffMinutes < 60) {
+    return "Agora";
+  }
+
+  return formatDistanceToNow(date, { addSuffix: true, locale: ptBR })
+    .replace("cerca de ", "")
+    .replace("atrás", "")
+    .trim();
+};
 
 interface LeadListProps {
   selectedLeadId: string | null;
   onSelectLead: (id: string) => void;
   currentUserRole: string;
   filter: LeadStatus | "ACTIVE" | "ALL";
+  compact?: boolean;
 }
 
 const statusLabels: Record<LeadStatus, string> = {
@@ -64,7 +86,7 @@ const getTimeSince = (isoString: string | null) => {
   return `${hours}h`;
 };
 
-const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: LeadListProps) => {
+const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compact }: LeadListProps) => {
   const { session } = useAuth();
   
   const { data: leads = [], isLoading: loadingLeads } = useQuery<Lead[]>({
@@ -157,102 +179,91 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter }: Lea
 
   if (loadingLeads) {
     return (
-      <Card className="border-none h-full flex items-center justify-center bg-transparent shadow-none">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-      </Card>
+      <div className="space-y-2">
+        <div className="flex items-center justify-center h-12">
+          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className="h-full flex flex-col rounded-3xl sm:rounded-[2.5rem] bg-white border border-slate-200/60 shadow-[0_20px_50px_-30px_rgba(0,0,0,0.1)] overflow-hidden">
-      <CardHeader className="p-4 sm:p-6 border-b border-slate-100 shrink-0">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">Fila de Ação</CardTitle>
-          <Badge className="rounded-full bg-indigo-600 text-white font-bold">{processedLeads.length}</Badge>
-        </div>
-        <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ordem de urgência</p>
-      </CardHeader>
-      
-      <CardContent className="p-0 flex-1 overflow-y-auto bg-slate-50/30">
-        {processedLeads.length === 0 ? (
-          <div className="p-12 text-center text-slate-400">
-            <Check className="w-10 h-10 mx-auto mb-4 text-emerald-400 opacity-50" />
-            <p className="font-bold text-slate-600 italic">Tudo limpo por aqui!</p>
+    <div className="space-y-2">
+      {filteredLeads.map((lead) => (
+        <div
+          key={lead.id}
+          onClick={() => onSelectLead(lead.id)}
+          className={cn(
+            "p-3 rounded-xl border cursor-pointer transition-all hover:bg-slate-50 relative group",
+            selectedLeadId === lead.id ? "bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200" : "bg-white border-slate-100",
+            compact ? "py-2" : "p-3"
+          )}
+        >
+          <div className="flex justify-between items-start mb-1">
+            <h4 className={cn("font-bold text-slate-900 truncate", compact ? "text-xs" : "text-sm")}>{lead.name}</h4>
+            <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
+              {getSafeRelativeTime(lead.last_interaction_at || lead.created_at)}
+            </span>
           </div>
-        ) : (
-          processedLeads.map((lead) => (
-            <div
-              key={lead.id}
-              className={cn(
-                "group relative p-5 border-b border-slate-100 cursor-pointer transition-all duration-300",
-                selectedLeadId === lead.id ? "bg-white shadow-[0_10px_30px_-10px_rgba(0,0,0,0.1)] z-10" : "hover:bg-indigo-50/30",
-                lead.priority >= 2 && "bg-rose-50/20",
-                lead.isStale && "ring-2 ring-inset ring-amber-500 bg-amber-50/30"
-              )}
-              onClick={() => onSelectLead(lead.id)}
-            >
-              {selectedLeadId === lead.id && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-600 rounded-r-full" />}
-              
-              <div className="flex justify-between items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <h4 className="font-bold text-slate-900 truncate text-[15px]">{lead.name}</h4>
-                    {lead.isStale && (
-                      <Badge className="bg-amber-500 text-white animate-pulse text-[9px] font-black uppercase">
-                        <Hourglass className="w-2 h-2 mr-1" /> Esfriando
-                      </Badge>
-                    )}
-                    <Badge className={cn("text-[9px] font-black tracking-tighter h-4 px-1.5 rounded-full", statusColors[lead.status], "text-white border-none")}>
-                      {statusLabels[lead.status]}
-                    </Badge>
-                  </div>
+          
+          <div className="flex justify-between items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <h4 className="font-bold text-slate-900 truncate text-[15px]">{lead.name}</h4>
+                {lead.isStale && (
+                  <Badge className="bg-amber-500 text-white animate-pulse text-[9px] font-black uppercase">
+                    <Hourglass className="w-2 h-2 mr-1" /> Esfriando
+                  </Badge>
+                )}
+                <Badge className={cn("text-[9px] font-black tracking-tighter h-4 px-1.5 rounded-full", statusColors[lead.status], "text-white border-none")}>
+                  {statusLabels[lead.status]}
+                </Badge>
+              </div>
 
-                  {lead.isStale ? (
-                    <div className="flex items-center gap-1.5 text-[11px] font-black mt-2 py-1 px-2 rounded-lg w-fit bg-amber-100 text-amber-700">
-                      <AlertCircle className="w-3 h-3" />
-                      ALERTA: {Math.floor(lead.hoursSinceLastAction)}h sem atendimento!
-                    </div>
-                  ) : lead.nextTask ? (
-                    <div className={cn(
-                      "flex items-center gap-1.5 text-[11px] font-bold mt-2 py-1 px-2 rounded-lg w-fit",
-                      lead.priority >= 2 ? "bg-rose-600 text-white animate-pulse" : "bg-indigo-100 text-indigo-700"
-                    )}>
-                      <Bell className="w-3 h-3" />
-                      PROX: {lead.nextTask.title} • {new Date(lead.nextTask.dueAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </div>
-                  ) : lead.status === 'NEW' ? (
-                    <div className="flex items-center gap-1.5 text-[11px] font-bold mt-2 py-1 px-2 rounded-lg w-fit bg-sky-600 text-white">
-                      <Zap className="w-3 h-3" />
-                      NOVO: Inicie a cadência agora!
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5 text-[11px] font-bold mt-2 py-1 px-2 rounded-lg w-fit bg-slate-200 text-slate-500 italic">
-                      <AlertTriangle className="w-3 h-3" />
-                      Sem tarefa agendada!
-                    </div>
-                  )}
+              {lead.isStale ? (
+                <div className="flex items-center gap-1.5 text-[11px] font-black mt-2 py-1 px-2 rounded-lg w-fit bg-amber-100 text-amber-700">
+                  <AlertCircle className="w-3 h-3" />
+                  ALERTA: {Math.floor(lead.hoursSinceLastAction)}h sem atendimento!
                 </div>
+              ) : lead.nextTask ? (
+                <div className={cn(
+                  "flex items-center gap-1.5 text-[11px] font-bold mt-2 py-1 px-2 rounded-lg w-fit",
+                  lead.priority >= 2 ? "bg-rose-600 text-white animate-pulse" : "bg-indigo-100 text-indigo-700"
+                )}>
+                  <Bell className="w-3 h-3" />
+                  PROX: {lead.nextTask.title} • {new Date(lead.nextTask.dueAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                </div>
+              ) : lead.status === 'NEW' ? (
+                <div className="flex items-center gap-1.5 text-[11px] font-bold mt-2 py-1 px-2 rounded-lg w-fit bg-sky-600 text-white">
+                  <Zap className="w-3 h-3" />
+                  NOVO: Inicie a cadência agora!
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-[11px] font-bold mt-2 py-1 px-2 rounded-lg w-fit bg-slate-200 text-slate-500 italic">
+                  <AlertTriangle className="w-3 h-3" />
+                  Sem tarefa agendada!
+                </div>
+              )}
+            </div>
 
-                <div className="flex flex-col gap-2 shrink-0 items-end">
-                  <div className="flex gap-1">
-                    <div className="grid h-8 w-8 place-items-center rounded-xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                      <MessageSquare className="w-3.5 h-3.5" />
-                    </div>
-                    <div className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                      <Phone className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                  <span className="text-[9px] font-black text-slate-400 flex items-center gap-1">
-                    <Clock className="w-2.5 h-2.5" /> 
-                    {Math.round((Date.now() - new Date(lead.lastInteractionAt).getTime()) / 3600000)}h parado
-                  </span>
+            <div className="flex flex-col gap-2 shrink-0 items-end">
+              <div className="flex gap-1">
+                <div className="grid h-8 w-8 place-items-center rounded-xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                  <MessageSquare className="w-3.5 h-3.5" />
+                </div>
+                <div className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                  <Phone className="w-3.5 h-3.5" />
                 </div>
               </div>
+              <span className="text-[9px] font-black text-slate-400 flex items-center gap-1">
+                <Clock className="w-2.5 h-2.5" /> 
+                {Math.round((Date.now() - new Date(lead.lastInteractionAt).getTime()) / 3600000)}h parado
+              </span>
             </div>
-          ))
-        )}
-      </CardContent>
-    </Card>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 };
 

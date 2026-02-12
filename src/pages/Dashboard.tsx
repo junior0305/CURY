@@ -42,9 +42,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { IntelTacticsModal } from "@/components/broker/IntelTacticsModal";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
+  const [isIntelOpen, setIsIntelOpen] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const { playSound } = useAudioArena();
   
@@ -52,6 +55,7 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState("mission"); // 'mission', 'lead', 'stats'
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
+  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [filter, setFilter] = useState<LeadStatus | "ACTIVE" | "ALL">("ACTIVE");
   
   // Data Fetching
@@ -216,9 +220,35 @@ const Dashboard = () => {
       <header className="h-14 bg-white border-b flex items-center justify-between px-6 shrink-0 z-20">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white"><Target className="h-5 w-5" /></div>
-          <span className="font-bold text-slate-900 tracking-tight">QG de Vendas</span>
+          <span className="font-bold text-slate-900 tracking-tight hidden sm:inline">QG de Vendas</span>
         </div>
-        <div className="flex items-center gap-2">
+        
+        <div className="flex items-center gap-3">
+           <Button 
+             variant="outline" 
+             size="sm" 
+             onClick={() => setIsIntelOpen(true)}
+             className="hidden sm:flex items-center gap-2 rounded-full border-indigo-100 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-bold h-9 px-4 shadow-sm"
+           >
+             <BarChart3 className="w-4 h-4" />
+             Intel Tática
+           </Button>
+
+           <div className="h-6 w-[1px] bg-slate-200 mx-1 hidden sm:block" />
+
+           <div className="flex items-center gap-2 mr-2">
+             <div className="text-right hidden sm:block">
+               <p className="text-xs font-bold text-slate-900 leading-none">{userName}</p>
+               <p className="text-[10px] font-medium text-slate-500 uppercase">{role === 'BROKER' ? 'Agente de Campo' : role}</p>
+             </div>
+             <Avatar className="h-8 w-8 border-2 border-white shadow-sm cursor-pointer hover:scale-105 transition-transform">
+               <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email}`} />
+               <AvatarFallback className="bg-indigo-600 text-white font-black text-xs">
+                 {userName.substring(0, 2).toUpperCase()}
+               </AvatarFallback>
+             </Avatar>
+           </div>
+
            <Sheet open={isLeadFormOpen} onOpenChange={setIsLeadFormOpen}>
               <SheetTrigger asChild>
                 <Button className="rounded-full bg-indigo-600 hover:bg-indigo-700 font-bold h-9">
