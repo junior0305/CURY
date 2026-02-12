@@ -391,16 +391,25 @@ const CommandCenter = () => {
 
   const totalInvestment = rewardsStats.reduce((acc: number, curr: any) => acc + Number(curr.reward_value), 0);
   
-  // Data for Pie Chart (Distribution by Type - Mocked or derived if available in 'reward_type' or label)
-  // Assuming 'reward_type' is PIX, GIFT, etc. For simplicity let's categorize by Teams for now in the pie chart
+  // Global Investments (Superintendent level not tied to a team)
+  const globalInvestments = investments.filter((i: any) => !i.team_id);
+  const globalManualTotal = globalInvestments.reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0);
+  
+  const totalRewardsSystem = rewardsStats.reduce((acc: number, curr: any) => acc + Number(curr.reward_value || 0), 0);
+  const totalManualSystem = investments.reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0);
+  const grandTotalInvestment = totalRewardsSystem + totalManualSystem;
+
   const investmentByTeam = teamStats.map(t => ({
     name: t.name,
-    value: t.investment
+    value: t.investment || 0
   })).filter(t => t.value > 0);
   
   if (globalManualTotal > 0) {
     investmentByTeam.push({ name: 'Global (Superintendência)', value: globalManualTotal });
   }
+
+  // PROTECTION: If no data for pie chart, provide a placeholder or don't render
+  const hasInvestmentData = investmentByTeam.length > 0;
 
   const handleSaveGoal = async () => {
     if (!editingTeam || !newGoal) return;
@@ -810,28 +819,38 @@ const CommandCenter = () => {
                       <p className="text-sm text-slate-500">Quem consumiu mais recursos?</p>
                    </div>
                    <div className="flex-1 min-h-0 relative">
-                      <ResponsiveContainer width="100%" height="100%">
-                         <PieChart>
-                            <Pie
-                               data={investmentByTeam}
-                               cx="50%"
-                               cy="50%"
-                               innerRadius={60}
-                               outerRadius={80}
-                               paddingAngle={5}
-                               dataKey="value"
-                            >
-                               {investmentByTeam.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="rgba(0,0,0,0)" />
-                               ))}
-                            </Pie>
-                            <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', color: '#f8fafc', borderRadius: '8px' }} formatter={(val: number) => `R$ ${val.toFixed(2)}`} />
-                            <Legend layout="horizontal" verticalAlign="bottom" wrapperStyle={{ fontSize: '10px', color: '#94a3b8' }} />
-                         </PieChart>
-                      </ResponsiveContainer>
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none mb-8">
-                          <span className="text-xl font-black text-white">R$ {grandTotalInvestment}</span>
-                       </div>
+                      {hasInvestmentData ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                           <PieChart>
+                              <Pie
+                                 data={investmentByTeam}
+                                 cx="50%"
+                                 cy="50%"
+                                 innerRadius={60}
+                                 outerRadius={80}
+                                 paddingAngle={5}
+                                 dataKey="value"
+                              >
+                                 {investmentByTeam.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="rgba(0,0,0,0)" />
+                                 ))}
+                              </Pie>
+                              <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', color: '#f8fafc', borderRadius: '8px' }} formatter={(val: number) => `R$ ${val.toFixed(2)}`} />
+                              <Legend layout="horizontal" verticalAlign="bottom" wrapperStyle={{ fontSize: '10px', color: '#94a3b8' }} />
+                           </PieChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-600">
+                           <Banknote className="h-12 w-12 mb-2 opacity-20" />
+                           <p className="text-xs">Sem investimentos registrados.</p>
+                        </div>
+                      )}
+                      
+                      {hasInvestmentData && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none mb-8">
+                            <span className="text-xl font-black text-white">R$ {grandTotalInvestment.toFixed(0)}</span>
+                         </div>
+                      )}
                    </div>
                 </Card>
              </section>
