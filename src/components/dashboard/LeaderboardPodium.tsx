@@ -30,6 +30,7 @@ function scoreForLead(lead: Lead, filteredHistory: any[], startDate: Date) {
   // 1. Tenta calcular pelo histórico (Mais preciso para o período)
   const relevantHistory = filteredHistory.filter(h => 
     h.lead_id === lead.id && 
+    h.created_at && // Proteção contra histórico sem data
     isAfter(parseISO(h.created_at), startDate)
   );
 
@@ -37,7 +38,9 @@ function scoreForLead(lead: Lead, filteredHistory: any[], startDate: Date) {
   
   // 2. FALLBACK HÍBRIDO: Se não tiver histórico, mas o lead estiver no status E foi atualizado recentemente
   // Isso cobre casos de migração ou erro no log de histórico
-  const lastUpdate = lead.last_interaction_at ? parseISO(lead.last_interaction_at) : parseISO(lead.created_at);
+  // CORREÇÃO: Usar camelCase (createdAt/lastInteractionAt) conforme definido na interface Lead
+  const lastUpdateStr = lead.lastInteractionAt || lead.createdAt;
+  const lastUpdate = lastUpdateStr ? parseISO(lastUpdateStr) : new Date(0); // Data segura
   
   if (isAfter(lastUpdate, startDate)) {
      // Se a última interação foi no período, assumimos que o status atual foi alcançado (ou mantido) neste período
@@ -55,7 +58,8 @@ function scoreForLead(lead: Lead, filteredHistory: any[], startDate: Date) {
   if (stagesReached.has("IN_PROGRESS")) totalPoints += 2;
   
   // Pontos por lead NOVO apenas se criado no período
-  if (lead.created_at && isAfter(parseISO(lead.created_at), startDate)) {
+  // CORREÇÃO: Usar camelCase (createdAt)
+  if (lead.createdAt && isAfter(parseISO(lead.createdAt), startDate)) {
      totalPoints += 0.5;
   }
   
