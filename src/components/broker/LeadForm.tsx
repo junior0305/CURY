@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Save, Loader2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createManualLead } from "@/integrations/supabase/leads";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -17,6 +19,7 @@ interface LeadFormProps {
 
 const LeadForm = ({ onOpenChange, brokerId, managerId }: LeadFormProps) => {
   const queryClient = useQueryClient();
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -28,26 +31,11 @@ const LeadForm = ({ onOpenChange, brokerId, managerId }: LeadFormProps) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const createLeadMutation = useMutation({
-    mutationFn: (data: typeof formData) => createManualLead({
-      ...data,
-      brokerId,
-      managerId,
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] });
-      toast.success("Lead manual criado com sucesso! Ele já está na sua lista de atendimento.");
-      onOpenChange(false);
-      setFormData({ name: "", email: "", phone: "", tag: "" });
-    },
-    onError: (err: any) => {
-      toast.error(`Falha ao criar lead: ${err.message}`);
-    }
-  });
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    const { name, phone, email, tag } = formData;
 
     try {
       if (!name || !phone) {
@@ -63,7 +51,7 @@ const LeadForm = ({ onOpenChange, brokerId, managerId }: LeadFormProps) => {
         name,
         phone,
         email,
-        tag: interest,
+        tag: tag,
         status: 'NEW',
         broker_id: brokerId,
         manager_id: managerId,
@@ -75,11 +63,9 @@ const LeadForm = ({ onOpenChange, brokerId, managerId }: LeadFormProps) => {
       if (error) throw error;
 
       toast.success("Lead criado com sucesso! 🚀");
+      queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] });
       onOpenChange(false);
-      setName("");
-      setPhone("");
-      setEmail("");
-      setInterest("");
+      setFormData({ name: "", email: "", phone: "", tag: "" });
     } catch (error: any) {
       console.error("Erro ao criar lead:", error);
       toast.error("Erro ao criar lead: " + error.message);
@@ -87,8 +73,6 @@ const LeadForm = ({ onOpenChange, brokerId, managerId }: LeadFormProps) => {
       setLoading(false);
     }
   };
-
-  const isSaving = createLeadMutation.isPending;
 
   return (
     <SheetContent side="right" className="sm:max-w-md bg-white p-6 overflow-y-auto">
@@ -100,26 +84,26 @@ const LeadForm = ({ onOpenChange, brokerId, managerId }: LeadFormProps) => {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="space-y-2">
           <Label>Nome Completo *</Label>
-          <Input value={formData.name} onChange={(e) => handleChange("name", e.target.value)} disabled={isSaving} required />
+          <Input value={formData.name} onChange={(e) => handleChange("name", e.target.value)} disabled={loading} required />
         </div>
 
         <div className="space-y-2">
           <Label>Telefone (WhatsApp) *</Label>
-          <Input type="tel" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} disabled={isSaving} required />
+          <Input type="tel" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} disabled={loading} required />
         </div>
 
         <div className="space-y-2">
           <Label>Email</Label>
-          <Input type="email" value={formData.email} onChange={(e) => handleChange("email", e.target.value)} disabled={isSaving} />
+          <Input type="email" value={formData.email} onChange={(e) => handleChange("email", e.target.value)} disabled={loading} />
         </div>
 
         <div className="space-y-2">
           <Label>Tag / Origem</Label>
-          <Input placeholder="Ex: Indicação João, Feirão" value={formData.tag} onChange={(e) => handleChange("tag", e.target.value)} disabled={isSaving} />
+          <Input placeholder="Ex: Indicação João, Feirão" value={formData.tag} onChange={(e) => handleChange("tag", e.target.value)} disabled={loading} />
         </div>
 
-        <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={isSaving}>
-          {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+        <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={loading}>
+          {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
           <Save className="w-4 h-4 mr-2" /> Salvar Lead
         </Button>
       </form>
