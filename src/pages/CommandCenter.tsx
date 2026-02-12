@@ -320,12 +320,12 @@ const CommandCenter = () => {
     const brokersCurrent = new Set(teamLeads.map((l: any) => l.broker_id).filter(Boolean)).size;
     const brokersPrev = new Set(prevTeamLeads.map((l: any) => l.broker_id).filter(Boolean)).size;
 
-    // Financials (Rewards + Manual Investments)
+    // Financials (Rewards)
     const teamRewards = rewardsStats.filter((r: any) => r.profiles?.team_id === team.id);
-    const rewardsTotal = teamRewards.reduce((acc: number, curr: any) => acc + Number(curr.reward_value), 0);
+    const rewardsTotal = teamRewards.reduce((acc: number, curr: any) => acc + (Number(curr.reward_value) || 0), 0);
     
     const teamManualInvestments = investments.filter((i: any) => i.team_id === team.id);
-    const manualTotal = teamManualInvestments.reduce((acc: number, curr: any) => acc + Number(curr.amount), 0);
+    const manualTotal = teamManualInvestments.reduce((acc: number, curr: any) => acc + (Number(curr.amount) || 0), 0);
     
     const totalInvestment = rewardsTotal + manualTotal;
     
@@ -401,27 +401,27 @@ const CommandCenter = () => {
   const lossData = Object.entries(lossReasons).map(([name, value]) => ({ name, value }));
   const COLORS = ['#ef4444', '#f97316', '#eab308', '#84cc16', '#06b6d4', '#6366f1', '#ec4899'];
 
-  const totalInvestment = rewardsStats.reduce((acc: number, curr: any) => acc + Number(curr.reward_value), 0);
+  const totalInvestment = rewardsStats.reduce((acc: number, curr: any) => acc + (Number(curr.reward_value) || 0), 0);
   
   // Global Investments (Superintendent level not tied to a team)
   const globalInvestments = investments.filter((i: any) => !i.team_id);
-  const globalManualTotal = globalInvestments.reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0);
+  const globalManualTotal = globalInvestments.reduce((acc: number, curr: any) => acc + (Number(curr.amount) || 0), 0);
   
-  const totalRewardsSystem = rewardsStats.reduce((acc: number, curr: any) => acc + Number(curr.reward_value || 0), 0);
-  const totalManualSystem = investments.reduce((acc: number, curr: any) => acc + Number(curr.amount || 0), 0);
+  const totalRewardsSystem = rewardsStats.reduce((acc: number, curr: any) => acc + (Number(curr.reward_value) || 0), 0);
+  const totalManualSystem = investments.reduce((acc: number, curr: any) => acc + (Number(curr.amount) || 0), 0);
   const grandTotalInvestment = totalRewardsSystem + totalManualSystem;
 
   const investmentByTeam = teamStats.map(t => ({
-    name: t.name,
-    value: t.investment || 0
+    name: t.name || 'Equipe',
+    value: Number(t.investment) || 0
   })).filter(t => t.value > 0);
   
   if (globalManualTotal > 0) {
     investmentByTeam.push({ name: 'Global (Superintendência)', value: globalManualTotal });
   }
 
-  // PROTECTION: If no data for pie chart, provide a placeholder or don't render
-  const hasInvestmentData = investmentByTeam.length > 0;
+  // PROTECTION: If no data for pie chart or INVALID data, provide a placeholder
+  const hasInvestmentData = investmentByTeam.length > 0 && investmentByTeam.every(i => !isNaN(i.value) && i.value > 0);
 
   const handleSaveGoal = async () => {
     if (!editingTeam || !newGoal) return;
