@@ -1,4 +1,3 @@
-
 import {
   Dialog,
   DialogContent,
@@ -21,14 +20,17 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { Badge, CheckCircle2 } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 interface IntelTacticsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   brokerId: string;
+  userName?: string; // Nome do usuário sendo visualizado (opcional)
 }
 
-export function IntelTacticsModal({ open, onOpenChange, brokerId }: IntelTacticsModalProps) {
+export function IntelTacticsModal({ open, onOpenChange, brokerId, userName }: IntelTacticsModalProps) {
   
   // 1. Meus Dados
   const { data: myStats } = useQuery({
@@ -84,6 +86,8 @@ export function IntelTacticsModal({ open, onOpenChange, brokerId }: IntelTactics
     { name: 'Fechamento', Eu: myStats?.saleRate || 0, Tropa: troopStats?.saleRate || 0 },
   ];
 
+  const displayName = userName ? userName.split(' ')[0] : 'Eu';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0 gap-0 bg-slate-50 overflow-hidden rounded-3xl">
@@ -91,7 +95,7 @@ export function IntelTacticsModal({ open, onOpenChange, brokerId }: IntelTactics
           <div>
             <DialogTitle className="text-2xl font-black text-slate-900 flex items-center gap-2 uppercase tracking-tighter">
               <Target className="h-6 w-6 text-indigo-600" />
-              Intel Tática
+              {userName ? `Dossiê: ${userName}` : "Intel Tática"}
             </DialogTitle>
             <DialogDescription className="text-slate-500 font-medium">
               Análise de performance e espólios de guerra.
@@ -117,7 +121,9 @@ export function IntelTacticsModal({ open, onOpenChange, brokerId }: IntelTactics
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Gráfico Comparativo */}
               <Card className="p-6 border-none shadow-md">
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Eu vs. A Tropa</h3>
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">
+                   {displayName} vs. A Tropa
+                </h3>
                 <div className="h-[250px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} layout="vertical">
@@ -127,15 +133,16 @@ export function IntelTacticsModal({ open, onOpenChange, brokerId }: IntelTactics
                       <Tooltip 
                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}
                         cursor={{fill: 'transparent'}}
+                        labelStyle={{fontWeight: 'bold', color: '#1e293b'}}
                       />
-                      <Bar dataKey="Eu" fill="#4F46E5" radius={[0, 4, 4, 0]} barSize={20} />
-                      <Bar dataKey="Tropa" fill="#CBD5E1" radius={[0, 4, 4, 0]} barSize={20} />
+                      <Bar dataKey="Eu" name={displayName} fill="#4F46E5" radius={[0, 4, 4, 0]} barSize={20} />
+                      <Bar dataKey="Tropa" name="Média Tropa" fill="#CBD5E1" radius={[0, 4, 4, 0]} barSize={20} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="mt-4 flex justify-center gap-6 text-xs font-bold">
-                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-indigo-600 rounded-full"/> Minha Performance</div>
-                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-slate-300 rounded-full"/> Média do Time</div>
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-indigo-600 rounded-full"/> {displayName}</div>
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 bg-slate-300 rounded-full"/> Média Tropa</div>
                 </div>
               </Card>
 
@@ -145,14 +152,14 @@ export function IntelTacticsModal({ open, onOpenChange, brokerId }: IntelTactics
                   <div className="absolute top-0 right-0 p-4 opacity-10"><TrendingUp className="h-24 w-24" /></div>
                   <h4 className="font-black text-lg mb-2">Diagnóstico de Combate</h4>
                   <p className="text-indigo-100 text-sm leading-relaxed">
-                    Sua taxa de conversão em visitas está {(myStats?.visitRate || 0) > (troopStats?.visitRate || 0) ? 'acima' : 'abaixo'} da média do batalhão.
+                    A taxa de conversão em visitas está {(myStats?.visitRate || 0) > (troopStats?.visitRate || 0) ? 'acima' : 'abaixo'} da média do batalhão.
                   </p>
                   <div className="mt-4 pt-4 border-t border-indigo-500/30">
                     <p className="text-xs font-bold uppercase tracking-widest text-indigo-300 mb-1">Dica do Comandante:</p>
                     <p className="text-sm font-medium">
                       {(myStats?.visitRate || 0) < 15 
                         ? "Foque em ligar nos primeiros 10 minutos. Isso aumenta em 3x a chance de agendamento."
-                        : "Excelente ritmo! Tente agora focar em pedir indicações para os leads quentes."}
+                        : "Excelente ritmo! O foco agora é pedir indicações para os leads quentes."}
                     </p>
                   </div>
                 </Card>
@@ -164,11 +171,8 @@ export function IntelTacticsModal({ open, onOpenChange, brokerId }: IntelTactics
                   </div>
                   <ul className="text-sm text-slate-500 space-y-2 list-disc list-inside">
                     <li>3 leads sem interação há mais de 48h.</li>
-                    <li>Sua agenda de amanhã está com poucas ações.</li>
+                    <li>Agenda de amanhã com poucas ações de ataque.</li>
                   </ul>
-                  <Button variant="link" className="text-indigo-600 p-0 h-auto font-bold text-xs mt-2">
-                    Ver Agenda Completa <ArrowUpRight className="h-3 w-3 ml-1" />
-                  </Button>
                 </Card>
               </div>
             </div>

@@ -27,7 +27,7 @@ function initials(name: string) {
 }
 
 function scoreForLead(lead: Lead, filteredHistory: any[], startDate: Date) {
-  // Filtra o histórico para incluir apenas eventos dentro do período
+  // 1. Tenta calcular pelo histórico (Mais preciso para o período)
   const relevantHistory = filteredHistory.filter(h => 
     h.lead_id === lead.id && 
     isAfter(parseISO(h.created_at), startDate)
@@ -35,11 +35,18 @@ function scoreForLead(lead: Lead, filteredHistory: any[], startDate: Date) {
 
   const stagesReached = new Set(relevantHistory.map(h => h.stage));
   
-  // Só adiciona o status atual se a última interação foi dentro do período
-  if (lead.last_interaction_at && isAfter(parseISO(lead.last_interaction_at), startDate)) {
-    stagesReached.add(lead.status);
+  // 2. FALLBACK HÍBRIDO: Se não tiver histórico, mas o lead estiver no status E foi atualizado recentemente
+  // Isso cobre casos de migração ou erro no log de histórico
+  const lastUpdate = lead.last_interaction_at ? parseISO(lead.last_interaction_at) : parseISO(lead.created_at);
+  
+  if (isAfter(lastUpdate, startDate)) {
+     // Se a última interação foi no período, assumimos que o status atual foi alcançado (ou mantido) neste período
+     stagesReached.add(lead.status);
   }
 
+  // Se for "All Time" (ou se a regra de negócio mudar), poderíamos remover a verificação de data para status final
+  // Mas por enquanto, mantemos a coerência com o filtro de tempo.
+  
   let totalPoints = 0;
   
   if (stagesReached.has("CONCLUDED")) totalPoints += 500;

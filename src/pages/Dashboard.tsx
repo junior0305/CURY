@@ -48,6 +48,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
   const [isIntelOpen, setIsIntelOpen] = useState(false);
+  const [intelTargetUser, setIntelTargetUser] = useState<{id: string, name: string} | null>(null); // Estado para alvo do modal
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const { playSound } = useAudioArena();
   
@@ -164,7 +165,10 @@ const Dashboard = () => {
                size="sm" 
                variant="outline" 
                className="rounded-full border-indigo-100 text-indigo-600 bg-indigo-50 h-9 w-9 p-0"
-               onClick={() => setIsIntelOpen(true)}
+               onClick={() => {
+                 setIntelTargetUser(null); // Reseta para ver o próprio
+                 setIsIntelOpen(true);
+               }}
              >
                <BarChart3 className="w-4 h-4" />
              </Button>
@@ -218,13 +222,25 @@ const Dashboard = () => {
           {activeTab === 'stats' && (
             <div className="space-y-6 pt-4">
               <h2 className="text-xl font-black text-slate-900 text-center uppercase tracking-tight">Ranking de Elite</h2>
-              <LeaderboardPodium leads={leads} users={profiles} />
+              <LeaderboardPodium 
+                leads={leads} 
+                users={profiles} 
+                onOpenKPIs={(id, name) => {
+                  setIntelTargetUser({ id, name });
+                  setIsIntelOpen(true);
+                }}
+              />
             </div>
           )}
         </main>
         
         {/* Modais Globais Mobile */}
-        <IntelTacticsModal open={isIntelOpen} onOpenChange={setIsIntelOpen} />
+        <IntelTacticsModal 
+          open={isIntelOpen} 
+          onOpenChange={setIsIntelOpen} 
+          brokerId={intelTargetUser?.id || user?.id || ""} 
+          userName={intelTargetUser?.name}
+        />
 
         <nav className="flex-none bg-white border-t flex justify-around p-2 pb-safe z-40 relative shadow-[0_-5px_10px_rgba(0,0,0,0.02)]">
           <NavButton icon={LayoutDashboard} label="Missão" active={activeTab === 'mission'} onClick={() => setActiveTab('mission')} />
@@ -239,7 +255,12 @@ const Dashboard = () => {
   return (
     <div className="h-screen flex flex-col bg-[#F8FAFC] overflow-hidden">
       <AchievementTicker />
-      <IntelTacticsModal open={isIntelOpen} onOpenChange={setIsIntelOpen} />
+      <IntelTacticsModal 
+        open={isIntelOpen} 
+        onOpenChange={setIsIntelOpen} 
+        brokerId={intelTargetUser?.id || user?.id || ""}
+        userName={intelTargetUser?.name}
+      />
       
       <header className="h-14 bg-white border-b flex items-center justify-between px-6 shrink-0 z-20">
         <div className="flex items-center gap-3">
@@ -251,7 +272,10 @@ const Dashboard = () => {
            <Button 
              variant="outline" 
              size="sm" 
-             onClick={() => setIsIntelOpen(true)}
+             onClick={() => {
+               setIntelTargetUser(null); // Reseta para o próprio
+               setIsIntelOpen(true);
+             }}
              className="hidden sm:flex items-center gap-2 rounded-full border-indigo-100 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-bold h-9 px-4 shadow-sm"
            >
              <BarChart3 className="w-4 h-4" />
@@ -376,7 +400,14 @@ const Dashboard = () => {
               <Trophy className="h-6 w-6 text-amber-500" />
               <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Ranking de Elite</h2>
             </div>
-            <LeaderboardPodium leads={leads} users={profiles} />
+            <LeaderboardPodium 
+              leads={leads} 
+              users={profiles} 
+              onOpenKPIs={(id, name) => {
+                setIntelTargetUser({ id, name });
+                setIsIntelOpen(true);
+              }}
+            />
           </section>
 
         </div>
