@@ -20,8 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/AuthProvider";
-import { formatDistanceToNow, differenceInMinutes } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { safeFormatDistanceToNow } from "@/utils/date-utils";
 
 // Função auxiliar para tempo relativo seguro (Ignora fuso horário negativo/pequeno)
 const getSafeRelativeTime = (dateString: string | null) => {
@@ -204,7 +203,7 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
           <div className="flex justify-between items-start mb-1">
             <h4 className={cn("font-bold text-slate-900 truncate", compact ? "text-xs" : "text-sm")}>{lead.name}</h4>
             <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
-              {getSafeRelativeTime(lead.last_interaction_at || lead.created_at)}
+              {safeFormatDistanceToNow(lead.last_interaction_at || lead.created_at).replace("cerca de ", "").replace("atrás", "")}
             </span>
           </div>
           

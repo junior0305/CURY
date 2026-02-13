@@ -1,9 +1,7 @@
-
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { safeFormatDistanceToNow } from "@/utils/date-utils";
 import { User, FileText, CheckCircle2, Clock, AlertTriangle, Phone, MessageCircle } from "lucide-react";
 
 interface TimelineEvent {
@@ -47,7 +45,7 @@ export function LeadTimeline({ events }: LeadTimelineProps) {
                     {event.content}
                   </div>
                   <span className="text-[9px] text-slate-300 font-mono">
-                    {formatDistanceToNow(new Date(event.createdAt), { addSuffix: true, locale: ptBR })}
+                    {safeFormatDistanceToNow(event.createdAt)}
                   </span>
                 </div>
               )}
@@ -60,7 +58,7 @@ export function LeadTimeline({ events }: LeadTimelineProps) {
                       {event.content}
                     </div>
                     <span className="text-[10px] text-slate-400 mt-1 mr-1">
-                      {formatDistanceToNow(new Date(event.createdAt), { addSuffix: true, locale: ptBR })} • {event.authorName || 'Você'}
+                      {safeFormatDistanceToNow(event.createdAt)} • {event.authorName || 'Você'}
                     </span>
                   </div>
                   <Avatar className="h-6 w-6 border-2 border-white shadow-sm">
