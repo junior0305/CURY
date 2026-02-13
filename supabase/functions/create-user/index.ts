@@ -20,7 +20,7 @@ serve(async (req) => {
     })
 
     const body = await req.json()
-    const { email, password, firstName, lastName, role, managerId, teamId, userId, action, phone } = body
+    const { email, password, firstName, lastName, role, managerId, teamId, userId, action, phone, leadAssignmentEnabled } = body
 
     // ACTION: DELETE USER
     if (action === 'delete') {
@@ -65,6 +65,7 @@ serve(async (req) => {
         role: role,
         email: email,
         phone: phone, // Salvando telefone no perfil
+        lead_assignment_enabled: leadAssignmentEnabled || false, // ADDED THIS
         updated_at: new Date().toISOString()
       })
     

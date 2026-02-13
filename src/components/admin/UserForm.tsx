@@ -128,7 +128,8 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
             phone: formData.phone || null,
             role: formData.role,
             managerId: formData.managerId === "none" ? null : formData.managerId,
-            teamId: formData.teamId === "none" ? null : formData.teamId
+            teamId: formData.teamId === "none" ? null : formData.teamId,
+            leadAssignmentEnabled: formData.leadAssignmentEnabled
           }
         });
 
