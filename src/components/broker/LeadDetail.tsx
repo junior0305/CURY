@@ -240,43 +240,45 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
           </div>
         </div>
 
-        {/* PROGRESS STEPPER (Pipeline Bar) */}
-        <div className="w-full bg-slate-50 rounded-xl p-1 flex items-center justify-between relative">
-           {/* Connecting Line */}
-           <div className="absolute left-4 right-4 top-1/2 h-0.5 bg-slate-200 -z-0" />
+        {/* PROGRESS STEPPER (Pipeline Bar) - Mobile Optimized with Scroll */}
+        <div className="w-full bg-slate-50 rounded-xl p-1 relative group/stepper">
+           {/* Connecting Line (Hidden on very small screens if needed, or scaled) */}
+           <div className="absolute left-4 right-4 top-1/2 h-0.5 bg-slate-200 -z-0 hidden sm:block" />
            
-           {pipelineSteps.map((step, idx) => {
-             const isActive = idx === currentStepIndex;
-             const isPast = idx < currentStepIndex;
-             const isFuture = idx > currentStepIndex;
-             
-             return (
-               <button
-                 key={step.id}
-                 disabled={isFuture && idx !== currentStepIndex + 1} // Only allow clicking next immediate step or past
-                 onClick={() => updateStatusMutation.mutate({ status: step.id as LeadStatus })}
-                 className={cn(
-                   "relative z-10 flex flex-col items-center group transition-all duration-300",
-                   isFuture && idx !== currentStepIndex + 1 ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:-translate-y-1"
-                 )}
-               >
-                 <div className={cn(
-                   "w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all shadow-sm",
-                   isActive ? `${step.color} border-white text-white scale-110 ring-2 ring-offset-1 ring-slate-200` : 
-                   isPast ? "bg-slate-200 border-slate-200 text-slate-500" : 
-                   "bg-white border-slate-300 text-slate-300 group-hover:border-indigo-300 group-hover:text-indigo-300"
-                 )}>
-                   <step.icon className="w-3.5 h-3.5" />
-                 </div>
-                 <span className={cn(
-                   "text-[9px] font-bold mt-1 uppercase tracking-wider transition-colors",
-                   isActive ? "text-slate-800" : "text-slate-400"
-                 )}>
-                   {step.label}
-                 </span>
-               </button>
-             )
-           })}
+           <div className="flex items-center justify-between overflow-x-auto sm:overflow-visible no-scrollbar gap-2 sm:gap-0 px-1">
+             {pipelineSteps.map((step, idx) => {
+               const isActive = idx === currentStepIndex;
+               const isPast = idx < currentStepIndex;
+               const isFuture = idx > currentStepIndex;
+               
+               return (
+                 <button
+                   key={step.id}
+                   disabled={isFuture && idx !== currentStepIndex + 1}
+                   onClick={() => updateStatusMutation.mutate({ status: step.id as LeadStatus })}
+                   className={cn(
+                     "relative z-10 flex flex-col items-center group transition-all duration-300 min-w-[60px] sm:min-w-0 flex-shrink-0",
+                     isFuture && idx !== currentStepIndex + 1 ? "cursor-not-allowed opacity-50" : "cursor-pointer active:scale-95"
+                   )}
+                 >
+                   <div className={cn(
+                     "w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all shadow-sm",
+                     isActive ? `${step.color} border-white text-white scale-110 ring-2 ring-offset-1 ring-slate-200` : 
+                     isPast ? "bg-slate-200 border-slate-200 text-slate-500" : 
+                     "bg-white border-slate-300 text-slate-300"
+                   )}>
+                     <step.icon className="w-3.5 h-3.5" />
+                   </div>
+                   <span className={cn(
+                     "text-[8px] sm:text-[9px] font-bold mt-1 uppercase tracking-wider transition-colors truncate w-full text-center",
+                     isActive ? "text-slate-800" : "text-slate-400"
+                   )}>
+                     {step.label}
+                   </span>
+                 </button>
+               )
+             })}
+           </div>
         </div>
       </header>
 
@@ -293,7 +295,7 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
       </div>
 
       {/* 3. TACTICAL DECK (Footer Fixed) */}
-      <div className="flex-none bg-white border-t border-slate-200 p-3 sm:p-4 z-20">
+      <div className="flex-none bg-white border-t border-slate-200 p-3 sm:p-4 z-20 pb-safe">
         
         {/* Quick Input */}
         <div className="flex gap-2 mb-3">
@@ -325,7 +327,7 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
             className="col-span-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl h-12 shadow-sm flex flex-col items-center justify-center gap-0 active:scale-95 transition-transform"
             onClick={handleWhatsApp}
           >
-            <div className="flex items-center gap-2 text-sm uppercase tracking-wide">
+            <div className="flex items-center gap-1.5 text-xs sm:text-sm uppercase tracking-wide">
               <MessageSquare className="w-4 h-4" /> WhatsApp
             </div>
           </Button>
