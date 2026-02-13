@@ -77,16 +77,21 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { subDays, startOfDay } from "date-fns";
 
 const DistributionLogs = () => {
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ['distribution-logs'],
     queryFn: async () => {
+      // Filter logs from yesterday (start of day) until now
+      const yesterday = startOfDay(subDays(new Date(), 1)).toISOString();
+      
       const { data, error } = await supabase
         .from('distribution_logs')
         .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
+        .gte('created_at', yesterday)
+        .order('created_at', { ascending: false });
+        
       if (error) throw error;
       return data;
     },
@@ -97,7 +102,7 @@ const DistributionLogs = () => {
     <Card className="shadow-xl border-none p-6 bg-white rounded-3xl">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Histórico de Entrada (Make)</h2>
+          <h2 className="text-xl font-bold text-slate-900">Histórico de Entrada (Ontem e Hoje)</h2>
           <p className="text-sm text-slate-500">Acompanhe quem recebeu cada lead em tempo real.</p>
         </div>
         {isLoading && <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />}

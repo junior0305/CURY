@@ -10,8 +10,10 @@ import { Upload, RefreshCw, FileSpreadsheet, Loader2, AlertTriangle } from "luci
 import { useToast } from "@/components/ui/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLeadsForAdmin } from "@/integrations/supabase/leads";
+import { fetchProfiles } from "@/integrations/supabase/profiles";
 import { Lead } from "@/types/lead";
 import { DistributionQueue } from "@/types/queue";
+import { User } from "@/types/user";
 import { supabase } from "@/integrations/supabase/client";
 import { read, utils } from "xlsx";
 
@@ -25,7 +27,9 @@ const LeadRework = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [selectedQueueId, setSelectedQueueId] = useState<string | null>(null);
-  const [importQueueId, setImportQueueId] = useState<string | null>(null);
+  
+  // CORREÇÃO: Permitir selecionar um Corretor Específico ou "Distribuir para Todos"
+  const [targetBrokerId, setTargetBrokerId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Busca de Leads para Retrabalho
@@ -33,18 +37,13 @@ const LeadRework = () => {
     queryKey: ['adminLeads'],
     queryFn: fetchLeadsForAdmin,
   });
-
-  // 2. Busca de Filas de Distribuição Reais
-  const { data: activeQueues = [] } = useQuery({
-    queryKey: ['distribution-queues'],
+  
+  // 2. Busca de Corretores Ativos
+  const { data: brokers = [] } = useQuery<User[]>({
+    queryKey: ['active-brokers'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('distribution_queues')
-        .select('*')
-        .eq('is_active', true);
-      
-      if (error) throw error;
-      return data;
+      const users = await fetchProfiles();
+      return users.filter(u => u.role === 'BROKER' || u.role === 'MANAGER');
     }
   });
 
@@ -53,7 +52,7 @@ const LeadRework = () => {
     return allLeads.filter(l => l.status === 'ABANDONED');
   }, [allLeads]);
 
-  // 2. Mutação para Redistribuição
+  // 3. Mutação para Redistribuição (Rework Individual)
   const reworkMutation = useMutation({
     mutationFn: async ({ leadId, queueId }: { leadId: string, queueId: string }) => {
       // Na implementação real, a Edge Function faria a lógica de distribuição.
@@ -96,8 +95,8 @@ const LeadRework = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!importQueueId) {
-      toast({ title: "Erro", description: "Selecione uma fila de destino primeiro.", variant: "destructive" });
+    if (!targetBrokerId) {
+      toast({ title: "Erro", description: "Selecione um DESTINO (Corretor ou Distribuição) antes de importar.", variant: "destructive" });
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
@@ -106,39 +105,90 @@ const LeadRework = () => {
       const data = await file.arrayBuffer();
       const workbook = read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      
+      // Parse com header A (primeira linha como chaves)
       const jsonData = utils.sheet_to_json(worksheet);
 
       console.log("Dados importados:", jsonData);
 
-      // Validação básica
-      const validLeads = jsonData.map((row: any) => ({
-        name: row.Nome || row.Name || row.name || row.nome,
-        phone: row.Telefone || row.Phone || row.phone || row.telefone || row.celular || row.whatsapp,
-        email: row.Email || row.email || row.mail,
-        tag: row.Tag || row.tag || row.interesse || 'Importado via Planilha',
-        status: 'NEW',
-        last_interaction_at: new Date().toISOString()
-      })).filter((l: any) => l.name && l.phone);
+      // Validação e normalização robusta das chaves
+      const validLeads = jsonData.map((row: any) => {
+        // Tenta encontrar colunas com nomes variados (case-insensitive)
+        const keys = Object.keys(row);
+        const findKey = (pattern: RegExp) => keys.find(k => pattern.test(k));
+
+        const nameKey = findKey(/nome|name|cliente/i);
+        const phoneKey = findKey(/telefone|phone|celular|whatsapp|tel/i);
+        const emailKey = findKey(/email|mail|e-mail/i);
+        const tagKey = findKey(/tag|origem|interesse|campanha/i);
+        
+        const name = row[nameKey || ''] || "Lead Importado";
+        const phoneRaw = row[phoneKey || ''];
+        
+        // Limpeza básica de telefone se existir
+        const phone = phoneRaw ? String(phoneRaw).replace(/[^0-9+]/g, '') : null;
+        
+        return {
+          name: name,
+          phone: phone,
+          email: row[emailKey || ''] || null,
+          tag: row[tagKey || ''] || 'Importação Planilha',
+          status: 'NEW',
+          last_interaction_at: new Date().toISOString()
+        };
+      }).filter((l: any) => l.name && l.phone && l.phone.length >= 8); // Filtro mínimo de validade
 
       if (validLeads.length === 0) {
-        toast({ title: "Erro", description: "Nenhum lead válido encontrado. Verifique as colunas (Nome, Telefone).", variant: "destructive" });
+        toast({ title: "Erro", description: "Nenhum lead válido encontrado. A planilha deve ter colunas de Nome e Telefone.", variant: "destructive" });
         return;
       }
 
-      // Inserção em massa (Batch Insert)
-      // Nota: Na versão real, isso deveria passar pela Edge Function para distribuição Round Robin
-      // Por simplicidade aqui, vamos inserir como "NEW" sem dono, para cair no radar de "Sem Dono" ou usar uma lógica simples
+      // DISTRIBUIÇÃO INTELIGENTE (CLIENT-SIDE)
+      let leadsToInsert = [];
       
-      const { error } = await supabase.from('leads').insert(validLeads);
+      if (targetBrokerId === 'DISTRIBUTE_ALL') {
+         // Round Robin
+         if (brokers.length === 0) {
+            toast({ title: "Erro", description: "Não há corretores ativos para distribuir.", variant: "destructive" });
+            return;
+         }
+         
+         leadsToInsert = validLeads.map((lead, index) => {
+            const broker = brokers[index % brokers.length];
+            return {
+               ...lead,
+               broker_id: broker.id,
+               manager_id: broker.managerId,
+               notes: `Importado e distribuído automaticamente para ${broker.name}`
+            };
+         });
+      } else {
+         // Destino Único
+         const broker = brokers.find(b => b.id === targetBrokerId);
+         leadsToInsert = validLeads.map(lead => ({
+            ...lead,
+            broker_id: targetBrokerId,
+            manager_id: broker?.managerId || null,
+            notes: `Importado manualmente para ${broker?.name || 'Corretor'}`
+         }));
+      }
+
+      console.log(`Inserindo ${leadsToInsert.length} leads...`, leadsToInsert);
+
+      // Batch Insert (Supabase limita payload, mas para < 1000 linhas costuma ser ok. Se for muito grande, dividir em chunks)
+      const { error } = await supabase.from('leads').insert(leadsToInsert);
 
       if (error) throw error;
 
-      toast({ title: "Sucesso!", description: `${validLeads.length} leads importados. Eles aparecerão como 'Sem Dono' para distribuição.` });
+      toast({ title: "Sucesso!", description: `${leadsToInsert.length} leads importados e distribuídos com sucesso!` });
+      queryClient.invalidateQueries({ queryKey: ['adminLeads'] });
+      
       if (fileInputRef.current) fileInputRef.current.value = "";
+      setTargetBrokerId(null);
       
     } catch (err: any) {
       console.error("Erro na importação:", err);
-      toast({ title: "Erro na Importação", description: err.message, variant: "destructive" });
+      toast({ title: "Erro Crítico", description: err.message, variant: "destructive" });
     }
   };
   
@@ -164,22 +214,31 @@ const LeadRework = () => {
           <CardTitle className="text-green-700 flex items-center gap-2"><FileSpreadsheet className="w-5 h-5" /> Importar Planilha</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Select onValueChange={setImportQueueId} value={importQueueId || ""}>
-            <SelectTrigger>
-              <SelectValue placeholder="Fila de Destino" />
-            </SelectTrigger>
-            <SelectContent>
-              {activeQueues.map((q: any) => (
-                <SelectItem key={q.id} value={q.id}>{q.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="space-y-2">
+            <Label className="text-xs font-bold uppercase text-slate-500">Destino dos Leads</Label>
+            <Select onValueChange={setTargetBrokerId} value={targetBrokerId || ""}>
+              <SelectTrigger className="bg-slate-50 border-slate-200">
+                <SelectValue placeholder="Selecione quem recebe..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="DISTRIBUTE_ALL" className="font-bold text-indigo-600 bg-indigo-50">
+                  🚀 Distribuir para Todos (Equitativo)
+                </SelectItem>
+                {brokers.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           
           <div className="space-y-2">
-            <Label className="border-2 border-dashed rounded-xl p-8 flex flex-col items-center cursor-pointer hover:bg-green-50 transition-colors">
-              <Upload className="w-8 h-8 text-gray-400 mb-2" />
-              <span className="text-xs text-gray-500 font-medium">Clique para subir .xlsx ou .csv</span>
-              <Input type="file" className="hidden" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} ref={fileInputRef} />
+            <Label className="border-2 border-dashed rounded-xl p-8 flex flex-col items-center cursor-pointer hover:bg-green-50 transition-colors group">
+              <Upload className="w-8 h-8 text-slate-300 group-hover:text-green-500 mb-2 transition-colors" />
+              <span className="text-xs text-gray-500 font-medium text-center">
+                Clique para subir .xlsx ou .csv <br/>
+                <span className="text-[10px] text-slate-400">(Nome, Telefone, Email, Tag)</span>
+              </span>
+              <Input type="file" className="hidden" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} ref={fileInputRef} disabled={!targetBrokerId} />
             </Label>
             <Button variant="link" onClick={downloadTemplate} className="w-full text-xs text-slate-500">
               Baixar modelo de planilha
