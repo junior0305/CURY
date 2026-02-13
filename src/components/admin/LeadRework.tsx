@@ -26,10 +26,13 @@ const mockActiveQueues: DistributionQueue[] = [
 const LeadRework = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [selectedQueueId, setSelectedQueueId] = useState<string | null>(null);
   
   // CORREÇÃO: Permitir selecionar um Corretor Específico ou "Distribuir para Todos"
   const [targetBrokerId, setTargetBrokerId] = useState<string | null>(null);
+  
+  // NEW: State for Rework Destination (same logic as Import)
+  const [reworkTargetId, setReworkTargetId] = useState<string | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Busca de Leads para Retrabalho
@@ -54,28 +57,41 @@ const LeadRework = () => {
 
   // 3. Mutação para Redistribuição (Rework Individual)
   const reworkMutation = useMutation({
-    mutationFn: async ({ leadId, queueId }: { leadId: string, queueId: string }) => {
-      // Na implementação real, a Edge Function faria a lógica de distribuição.
-      // Por enquanto, vamos apenas atualizar o status para NEW e remover o brokerId para re-entrada na fila.
+    mutationFn: async ({ leadId, brokerId }: { leadId: string, brokerId: string }) => {
+      let finalBrokerId = brokerId;
+      let finalManagerId = null;
+
+      // Handle Round Robin for Rework
+      if (brokerId === 'DISTRIBUTE_ALL') {
+         if (brokers.length === 0) throw new Error("Sem corretores ativos para distribuir.");
+         const randomBroker = brokers[Math.floor(Math.random() * brokers.length)]; // Simple Random/Round Robin
+         finalBrokerId = randomBroker.id;
+         finalManagerId = randomBroker.managerId;
+      } else {
+         const broker = brokers.find(b => b.id === brokerId);
+         finalManagerId = broker?.managerId || null;
+      }
       
       const { error } = await supabase
         .from('leads')
         .update({ 
-          broker_id: null, // Remove o corretor atual
+          broker_id: finalBrokerId, 
+          manager_id: finalManagerId,
           status: 'NEW', // Volta para o status inicial
           last_interaction_at: new Date().toISOString(),
           exclusion_reason: null, // Limpa o motivo do abandono
+          notes: `Lead recuperado do retrabalho manualmente.`
         })
         .eq('id', leadId);
 
       if (error) throw error;
-      return { leadId, queueId };
+      return { leadId, brokerId: finalBrokerId };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['adminLeads'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] });
-      const queueName = activeQueues.find((q: any) => q.id === data.queueId)?.name;
-      toast({ title: "Retrabalho Concluído", description: `Lead enviado para a fila: ${queueName}.` });
+      const brokerName = brokers.find(b => b.id === data.brokerId)?.name || 'Corretor';
+      toast({ title: "Retrabalho Concluído", description: `Lead enviado para: ${brokerName}.` });
     },
     onError: (err: any) => {
       console.error("Erro ao redistribuir lead:", err);
@@ -84,11 +100,11 @@ const LeadRework = () => {
   });
 
   const handleRework = (leadId: string) => {
-    if (!selectedQueueId) {
-      toast({ title: "Atenção", description: "Selecione uma Fila de Destino antes de retrabalhar.", variant: "destructive" });
+    if (!reworkTargetId) {
+      toast({ title: "Atenção", description: "Selecione um DESTINO antes de retrabalhar.", variant: "destructive" });
       return;
     }
-    reworkMutation.mutate({ leadId, queueId: selectedQueueId });
+    reworkMutation.mutate({ leadId, brokerId: reworkTargetId });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -256,18 +272,21 @@ const LeadRework = () => {
         <CardContent>
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex gap-3 text-amber-800 mb-4">
             <AlertTriangle className="w-5 h-5 shrink-0" />
-            <p className="text-sm">Estes leads estão <b>Abandonados</b> e podem ser re-enviados para uma fila de distribuição.</p>
+            <p className="text-sm">Estes leads estão <b>Abandonados</b> e podem ser re-enviados para um corretor ativo.</p>
           </div>
 
           <div className="mb-4 space-y-2">
-            <Label htmlFor="queue-select" className="font-semibold">Fila de Destino para Retrabalho</Label>
-            <Select onValueChange={setSelectedQueueId} value={selectedQueueId || ""}>
+            <Label htmlFor="queue-select" className="font-semibold">Destino do Retrabalho</Label>
+            <Select onValueChange={setReworkTargetId} value={reworkTargetId || ""}>
               <SelectTrigger id="queue-select" className="w-full md:w-1/2">
-                <SelectValue placeholder="Selecione a Fila de Distribuição" />
+                <SelectValue placeholder="Selecione quem recebe..." />
               </SelectTrigger>
               <SelectContent>
-                {activeQueues.map((q: any) => (
-                  <SelectItem key={q.id} value={q.id}>{q.name}</SelectItem>
+                 <SelectItem value="DISTRIBUTE_ALL" className="font-bold text-indigo-600 bg-indigo-50">
+                  🚀 Distribuir para Todos (Sorteio)
+                </SelectItem>
+                {brokers.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -306,7 +325,7 @@ const LeadRework = () => {
                           size="sm" 
                           className="bg-indigo-600 hover:bg-indigo-700"
                           onClick={() => handleRework(l.id)}
-                          disabled={!selectedQueueId || reworkMutation.isPending}
+                          disabled={!reworkTargetId || reworkMutation.isPending}
                         >
                           <RefreshCw className="w-3 h-3 mr-2" /> Retrabalhar
                         </Button>
