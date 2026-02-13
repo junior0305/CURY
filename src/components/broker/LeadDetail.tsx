@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLeadsForDashboard, updateLeadStatus } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
 import { Card } from "@/components/ui/card";
-import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, CheckCircle, Trophy, MoreHorizontal, ArrowLeft, ArrowRight, Share2, Flame, RefreshCcw, XCircle, Pencil, AlertCircle, Send } from "lucide-react";
+import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, CheckCircle, Trophy, MoreHorizontal, ArrowLeft, ArrowRight, Share2, Flame, RefreshCcw, XCircle, Pencil, AlertCircle, Send, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
@@ -42,6 +42,17 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
   });
 
   const lead = leads.find(l => l.id === leadId);
+
+  // Define Pipeline Steps
+  const pipelineSteps = [
+    { id: 'NEW', label: 'Novo', icon: Zap, color: 'bg-sky-500' },
+    { id: 'IN_PROGRESS', label: 'Atend.', icon: MessageSquare, color: 'bg-blue-500' },
+    { id: 'VISIT_SCHEDULED', label: 'Visita', icon: Calendar, color: 'bg-emerald-500' },
+    { id: 'DOCS_REQUESTED', label: 'Docs', icon: FileText, color: 'bg-amber-500' },
+    { id: 'CONCLUDED', label: 'Venda', icon: Trophy, color: 'bg-indigo-600' },
+  ];
+
+  const currentStepIndex = lead ? pipelineSteps.findIndex(s => s.id === lead.status) : -1;
 
   // Fetch Timeline Events (Notes + Audit Logs)
   const { data: timelineEvents = [], refetch: refetchTimeline } = useQuery({
@@ -189,68 +200,83 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
       />
 
       {/* 1. HUD HEADER (Sticky) */}
-      <header className="flex-none bg-white border-b border-slate-100 p-4 flex items-center justify-between z-20 shadow-sm">
-        <div className="flex items-center gap-3">
-          {onBack && (
-            <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden -ml-2">
-              <ArrowLeft className="w-5 h-5 text-slate-400" />
-            </Button>
-          )}
-          <Avatar className="h-10 w-10 border-2 border-slate-100">
-            <AvatarFallback className={cn("font-black text-white", isHot ? "bg-rose-500" : "bg-indigo-500")}>
-              {lead.name.substring(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-black text-slate-900 leading-none truncate max-w-[150px] sm:max-w-md">{lead.name}</h2>
-              <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-wider border-none", tempColor, "bg-opacity-10 bg-current")}>
-                {isHot ? 'QUENTE 🔥' : isCold ? 'FRIO ❄️' : 'MORNO ⚡'}
-              </Badge>
+      <header className="flex-none bg-white border-b border-slate-100 p-4 flex flex-col gap-4 z-20 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {onBack && (
+              <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden -ml-2">
+                <ArrowLeft className="w-5 h-5 text-slate-400" />
+              </Button>
+            )}
+            <Avatar className="h-10 w-10 border-2 border-slate-100">
+              <AvatarFallback className={cn("font-black text-white", isHot ? "bg-rose-500" : "bg-indigo-500")}>
+                {lead.name.substring(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-slate-900 leading-none truncate max-w-[150px] sm:max-w-md">{lead.name}</h2>
+                <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-wider border-none", tempColor, "bg-opacity-10 bg-current")}>
+                  {isHot ? 'QUENTE 🔥' : isCold ? 'FRIO ❄️' : 'MORNO ⚡'}
+                </Badge>
+              </div>
+              <p className="text-xs font-medium text-slate-500 mt-1">{lead.phone}</p>
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <p className="text-xs font-medium text-slate-500">{lead.phone}</p>
-              <div className="h-3 w-[1px] bg-slate-200" />
-              <DropdownMenu>
+          </div>
+
+          <div className="flex items-center gap-2">
+             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
-                    {lead.status} <Pencil className="w-3 h-3" />
-                  </button>
+                  <Button variant="ghost" size="icon" className="text-rose-400 hover:text-rose-600 hover:bg-rose-50">
+                    <XCircle className="w-5 h-5" />
+                  </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuLabel>Mover para Fase</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => updateStatusMutation.mutate({ status: 'IN_PROGRESS' })}>
-                    <CheckCircle className="w-4 h-4 mr-2 text-blue-500" /> Em Atendimento
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => updateStatusMutation.mutate({ status: 'VISIT_SCHEDULED' })}>
-                    <Calendar className="w-4 h-4 mr-2 text-emerald-500" /> Agendar Visita
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => updateStatusMutation.mutate({ status: 'DOCS_REQUESTED' })}>
-                    <FileText className="w-4 h-4 mr-2 text-amber-500" /> Pedir Documentos
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => updateStatusMutation.mutate({ status: 'CONCLUDED' })} className="bg-indigo-50 text-indigo-700 font-bold">
-                    <Trophy className="w-4 h-4 mr-2 text-amber-500" /> Venda Concluída
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setIsExclusionDialogOpen(true)} className="text-rose-600">
-                    <XCircle className="w-4 h-4 mr-2" /> Perder Lead
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setIsExclusionDialogOpen(true)} className="text-rose-600 font-bold">
+                    Confirmar Perda do Lead
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Actions for Desktop Header - Simplified */}
-          <Button variant="ghost" size="icon" className="text-slate-400 hover:text-indigo-600 hidden sm:flex">
-            <Share2 className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="text-slate-400 hover:text-indigo-600">
-            <AlertCircle className="w-4 h-4" />
-          </Button>
+        {/* PROGRESS STEPPER (Pipeline Bar) */}
+        <div className="w-full bg-slate-50 rounded-xl p-1 flex items-center justify-between relative">
+           {/* Connecting Line */}
+           <div className="absolute left-4 right-4 top-1/2 h-0.5 bg-slate-200 -z-0" />
+           
+           {pipelineSteps.map((step, idx) => {
+             const isActive = idx === currentStepIndex;
+             const isPast = idx < currentStepIndex;
+             const isFuture = idx > currentStepIndex;
+             
+             return (
+               <button
+                 key={step.id}
+                 disabled={isFuture && idx !== currentStepIndex + 1} // Only allow clicking next immediate step or past
+                 onClick={() => updateStatusMutation.mutate({ status: step.id as LeadStatus })}
+                 className={cn(
+                   "relative z-10 flex flex-col items-center group transition-all duration-300",
+                   isFuture && idx !== currentStepIndex + 1 ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:-translate-y-1"
+                 )}
+               >
+                 <div className={cn(
+                   "w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all shadow-sm",
+                   isActive ? `${step.color} border-white text-white scale-110 ring-2 ring-offset-1 ring-slate-200` : 
+                   isPast ? "bg-slate-200 border-slate-200 text-slate-500" : 
+                   "bg-white border-slate-300 text-slate-300 group-hover:border-indigo-300 group-hover:text-indigo-300"
+                 )}>
+                   <step.icon className="w-3.5 h-3.5" />
+                 </div>
+                 <span className={cn(
+                   "text-[9px] font-bold mt-1 uppercase tracking-wider transition-colors",
+                   isActive ? "text-slate-800" : "text-slate-400"
+                 )}>
+                   {step.label}
+                 </span>
+               </button>
+             )
+           })}
         </div>
       </header>
 
