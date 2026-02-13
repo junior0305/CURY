@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLeadsForDashboard, updateLeadStatus } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
 import { Card } from "@/components/ui/card";
-import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, CheckCircle, Trophy, MoreHorizontal, ArrowLeft, ArrowRight, Share2, Flame, RefreshCcw, XCircle, Pencil, AlertCircle, Send, ChevronRight } from "lucide-react";
+import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, CheckCircle, Trophy, MoreHorizontal, ArrowLeft, ArrowRight, Share2, Flame, RefreshCcw, XCircle, Pencil, AlertCircle, Send, ChevronRight, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
@@ -214,11 +214,19 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
               </AvatarFallback>
             </Avatar>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-lg font-black text-slate-900 leading-none truncate max-w-[150px] sm:max-w-md">{lead.name}</h2>
                 <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-wider border-none", tempColor, "bg-opacity-10 bg-current")}>
                   {isHot ? 'QUENTE 🔥' : isCold ? 'FRIO ❄️' : 'MORNO ⚡'}
                 </Badge>
+                
+                {/* Interest Tag in Header */}
+                {lead.tag && (
+                  <Badge variant="secondary" className="bg-slate-100 text-slate-600 border border-slate-200 text-[9px] font-black uppercase tracking-tight flex items-center gap-0.5">
+                    <MapPin className="w-2.5 h-2.5" />
+                    {lead.tag}
+                  </Badge>
+                )}
               </div>
               <p className="text-xs font-medium text-slate-500 mt-1">{lead.phone}</p>
             </div>

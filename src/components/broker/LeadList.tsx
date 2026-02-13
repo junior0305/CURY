@@ -14,7 +14,8 @@ import {
   Bell, 
   Zap, 
   AlertCircle,
-  Hourglass 
+  Hourglass,
+  MapPin 
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -211,6 +212,15 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <h4 className="font-bold text-slate-900 truncate text-[15px]">{lead.name}</h4>
+                
+                {/* INTEREST TAG BADGE */}
+                {lead.tag && (
+                  <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 border border-indigo-100 text-[9px] font-black uppercase tracking-tight h-5 px-1.5 flex items-center gap-0.5">
+                    <MapPin className="w-2.5 h-2.5" />
+                    {lead.tag}
+                  </Badge>
+                )}
+
                 {lead.isStale && (
                   <Badge className="bg-amber-500 text-white animate-pulse text-[9px] font-black uppercase">
                     <Hourglass className="w-2 h-2 mr-1" /> Esfriando
