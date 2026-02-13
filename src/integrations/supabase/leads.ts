@@ -1,5 +1,6 @@
-import { supabase } from "./client";
+import { supabase } from "@/integrations/supabase/client";
 import { Lead, ExclusionReason, LeadStatus } from "@/types/lead";
+import { toast } from "sonner";
 
 const mapLeadFromDB = (l: any): Lead => ({
   id: l.id,
@@ -107,10 +108,45 @@ export const updateLeadStatus = async (
     payload.exclusion_reason = exclusionReason;
   }
 
+  // 1. Atualizar no Banco
   const { error } = await supabase
     .from('leads')
     .update(payload)
     .eq('id', leadId);
 
   if (error) throw error;
+
+  // 2. AUTOMAÇÃO: Se for VENDA, dispara Parabéns via WhatsApp (n8n)
+  if (status === 'CONCLUDED') {
+    try {
+      // Buscar dados do lead e do corretor
+      const { data: leadData } = await supabase
+        .from('leads')
+        .select(`
+          name, 
+          broker_id,
+          profiles:broker_id (first_name, phone)
+        `)
+        .eq('id', leadId)
+        .single();
+
+      if (leadData && leadData.profiles && leadData.profiles.phone) {
+        const brokerName = leadData.profiles.first_name;
+        const brokerPhone = leadData.profiles.phone;
+        const leadName = leadData.name;
+
+        const message = `🚀 Parabéns ${brokerName}! O Superintendente viu sua venda do cliente ${leadName}. Excelente trabalho! Mais uma para a conta!`;
+
+        // Disparo "Fire and Forget" para a Edge Function
+        supabase.functions.invoke('send-whatsapp', {
+          body: { phone: brokerPhone, message }
+        });
+        
+        console.log(`[Auto-Zap] Mensagem de parabéns enviada para ${brokerName}`);
+      }
+    } catch (err) {
+      console.error("[Auto-Zap] Falha silenciosa ao enviar parabéns:", err);
+      // Não damos erro para o usuário pois a atualização do status funcionou
+    }
+  }
 };

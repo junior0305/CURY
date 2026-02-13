@@ -636,16 +636,19 @@ const Admin = () => {
         type: 'STALE_LEAD_ALERT'
       });
 
-      // 2. WhatsApp para o Gerente
+      // 2. WhatsApp para o Gerente (AGORA VIA EDGE FUNCTION AUTOMÁTICA)
       if (managerPhone) {
-        const cleanPhone = managerPhone.replace(/\D/g, '');
-        const message = encodeURIComponent(
-          `🚨 *ALERTA DE SUPERINTENDÊNCIA*\n\n` +
+        const message = `🚨 *ALERTA DE SUPERINTENDÊNCIA*\n\n` +
           `Olá ${managerName.split(' ')[0]}, identifiquei *${staleCount} leads parados* há mais de 4 horas na sua equipe.\n\n` +
-          `Por favor, realize a cobrança imediata dos corretores para evitar a perda dessas oportunidades! 📈`
-        );
-        window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
-        toast.success(`Alerta enviado para o Gerente ${managerName}!`);
+          `Por favor, realize a cobrança imediata dos corretores para evitar a perda dessas oportunidades! 📈`;
+
+        // Substitui o window.open pela chamada da automação real
+        const { error } = await supabase.functions.invoke('send-whatsapp', {
+          body: { phone: managerPhone, message }
+        });
+
+        if (error) throw error;
+        toast.success(`Alerta enviado para o Gerente ${managerName} via WhatsApp!`);
       } else {
         toast.warning("Alerta enviado apenas no CRM (Gerente sem telefone cadastrado).");
       }
@@ -659,12 +662,12 @@ const Admin = () => {
       const broker = profiles.find(p => p.id === brokerId);
       const hours = getStaleHours(leads.find(l => l.name === leadName)?.lastInteractionAt || new Date().toISOString());
       
-      // 1. Atualizar last_nudge_at no lead para ativar "Soneca"
+      // 1. Atualizar last_nudge_at
       if (leadId) {
         await supabase.from('leads').update({ last_nudge_at: new Date().toISOString() }).eq('id', leadId);
       }
       
-      // 2. Incrementar Advertência (warning_count)
+      // 2. Incrementar Advertência
       if (broker) {
         await supabase.from('profiles').update({ warning_count: (broker.warning_count || 0) + 1 }).eq('id', brokerId);
       }
@@ -677,15 +680,17 @@ const Admin = () => {
         type: 'STALE_LEAD_ALERT'
       });
 
-      // 4. Notificação via WhatsApp (se o corretor tiver telefone cadastrado)
+      // 4. WhatsApp via Automação
       if (broker?.phone) {
-        const cleanPhone = broker.phone.replace(/\D/g, '');
-        const message = encodeURIComponent(
-          `🚨 *ALERTA DE GESTÃO - CRM*\n\n` +
+        const message = `🚨 *ALERTA DE GESTÃO - CRM*\n\n` +
           `Olá ${broker.name.split(' ')[0]}, seu cliente *${leadName}* (${leadPhone}) está há *${hours} horas* sem contato.\n\n` +
-          `Por favor, atualize a ferramenta agora para não perder o lead! 📈`
-        );
-        window.open(`https://wa.me/${cleanPhone}?text=${message}`, '_blank');
+          `Por favor, atualize a ferramenta agora para não perder o lead! 📈`;
+          
+        const { error } = await supabase.functions.invoke('send-whatsapp', {
+          body: { phone: broker.phone, message }
+        });
+
+        if (error) throw error;
         toast.success("Notificações enviadas (Interna + WhatsApp)!");
       } else {
         toast.warning("Cutucão enviado apenas no CRM (Corretor sem telefone cadastrado).");
