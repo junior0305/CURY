@@ -20,24 +20,28 @@ serve(async (req) => {
 
   try {
     requestBody = await req.json()
-    const { phone, message } = requestBody
+    const { phone, message, overrideUrl } = requestBody
 
     if (!phone || !message) {
       throw new Error('Phone and message are required')
     }
 
-    // 1. Fetch Dynamic URL from DB
-    const { data: config, error: configError } = await supabase
-      .from('system_integrations')
-      .select('value')
-      .eq('key', integrationKey)
-      .single();
-    
-    if (configError || !config) {
-       throw new Error('Configuration WHATSAPP_N8N_URL not found in system_integrations table.');
+    let WEBHOOK_URL = overrideUrl; // Priority to override
+
+    // Only fetch from DB if no override provided
+    if (!WEBHOOK_URL) {
+      const { data: config, error: configError } = await supabase
+        .from('system_integrations')
+        .select('value')
+        .eq('key', integrationKey)
+        .single();
+      
+      if (configError || !config) {
+         throw new Error('Configuration WHATSAPP_N8N_URL not found in system_integrations table.');
+      }
+      WEBHOOK_URL = config.value;
     }
 
-    const WEBHOOK_URL = config.value;
     const cleanPhone = phone.replace(/\D/g, '')
 
     // VALIDATION: Ensure phone has content

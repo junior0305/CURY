@@ -18,6 +18,7 @@ const IntegrationsManagement = () => {
   // State for Output Webhook
   const [webhookUrl, setWebhookUrl] = useState("");
   const [testPhone, setTestPhone] = useState("");
+  const [testUrl, setTestUrl] = useState("");
   const [isTesting, setIsTesting] = useState(false);
   
   const webhookIncomingUrl = "https://jcmovytbcghvvukaszyb.supabase.co/functions/v1/incoming-lead";
@@ -81,7 +82,8 @@ const IntegrationsManagement = () => {
       const { error } = await supabase.functions.invoke('send-whatsapp', {
         body: { 
           phone: testPhone, 
-          message: "🔔 Teste de Conectividade CRM -> N8N. Se você recebeu isso, a integração está ativa!" 
+          message: "🔔 Teste de Conectividade CRM -> N8N. Se você recebeu isso, a integração está ativa!",
+          overrideUrl: testUrl || null
         }
       });
       if (error) throw error;
@@ -162,21 +164,37 @@ const IntegrationsManagement = () => {
                   <Label className="font-black text-indigo-800 flex items-center gap-2">
                     <Activity className="w-4 h-4" /> Teste de Conexão (Ping)
                   </Label>
-                  <div className="flex gap-2">
-                    <Input 
-                      placeholder="Seu número (com DDD)" 
-                      value={testPhone}
-                      onChange={(e) => setTestPhone(e.target.value)}
-                      className="bg-white h-10 rounded-xl border-indigo-200"
-                    />
+                  
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <Input 
+                        placeholder="Seu número (com DDD)" 
+                        value={testPhone}
+                        onChange={(e) => setTestPhone(e.target.value)}
+                        className="bg-white h-10 rounded-xl border-indigo-200"
+                      />
+                      <Input 
+                        placeholder="URL de Teste N8N (Opcional)" 
+                        value={testUrl}
+                        onChange={(e) => setTestUrl(e.target.value)}
+                        className="bg-white h-10 rounded-xl border-indigo-200 text-xs"
+                      />
+                    </div>
+                    
                     <Button 
                       onClick={() => sendTestMutation.mutate()}
                       disabled={!testPhone || isTesting}
-                      className="bg-indigo-600 text-white font-bold h-10 rounded-xl px-6"
+                      className="bg-indigo-600 text-white font-bold h-10 rounded-xl px-6 w-full"
                     >
                       {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-                      Enviar Teste
+                      {testUrl ? "Enviar para URL de Teste" : "Enviar para URL de Produção"}
                     </Button>
+                    
+                    {testUrl && (
+                      <p className="text-[10px] text-amber-600 font-bold text-center">
+                        * Usando URL temporária. A produção não será afetada.
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
