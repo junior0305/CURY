@@ -46,11 +46,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { IntelTacticsModal } from "@/components/broker/IntelTacticsModal";
+import { MyRewardsModal } from "@/components/broker/MyRewardsModal";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
   const [isIntelOpen, setIsIntelOpen] = useState(false);
+  const [isRewardsOpen, setIsRewardsOpen] = useState(false);
   const [intelTargetUser, setIntelTargetUser] = useState<{id: string, name: string} | null>(null); // Estado para alvo do modal
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const { playSound } = useAudioArena();
@@ -264,6 +266,10 @@ const Dashboard = () => {
         brokerId={intelTargetUser?.id || user?.id || ""}
         userName={intelTargetUser?.name}
       />
+      <MyRewardsModal 
+        isOpen={isRewardsOpen} 
+        onOpenChange={setIsRewardsOpen} 
+      />
       
       <header className="h-14 bg-white border-b flex items-center justify-between px-6 shrink-0 z-20">
         <div className="flex items-center gap-3">
@@ -283,6 +289,16 @@ const Dashboard = () => {
            >
              <BarChart3 className="w-4 h-4" />
              Intel Tática
+           </Button>
+
+           <Button 
+             variant="ghost" 
+             size="sm" 
+             onClick={() => setIsRewardsOpen(true)}
+             className="hidden sm:flex items-center gap-2 rounded-full text-amber-600 hover:bg-amber-50 hover:text-amber-700 font-bold h-9 px-4"
+           >
+             <Trophy className="w-4 h-4" />
+             Espólio
            </Button>
 
            <div className="h-6 w-[1px] bg-slate-200 mx-1 hidden sm:block" />
