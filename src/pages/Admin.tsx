@@ -28,7 +28,8 @@ import {
   Trash2,
   Users2,
   Target,
-  LayoutDashboard
+  LayoutDashboard,
+  Activity
 } from "lucide-react";
 import UserManagement from "@/components/admin/UserManagement";
 import TeamManagement from "@/components/admin/TeamManagement";
@@ -78,6 +79,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { subDays, startOfDay } from "date-fns";
+import { Pencil } from "lucide-react";
 
 const DistributionLogs = () => {
   const { data: logs = [], isLoading } = useQuery({
@@ -285,6 +287,10 @@ const EconomyManagement = () => {
     ends_at: ""
   });
 
+  // EDIT STATE
+  const [editingCampaign, setEditingCampaign] = useState<any>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+
   const createCampaignMutation = useMutation({
     mutationFn: async (payload: any) => {
       const { error } = await supabase.from('active_campaigns').insert([payload]);
@@ -295,6 +301,31 @@ const EconomyManagement = () => {
       queryClient.invalidateQueries({ queryKey: ['active-campaign'] });
       toast.success("Novo desafio publicado para o time!");
       setNewCampaign({ title: "", target_action: "VISIT", target_count: 10, reward_amount: 150, ends_at: "" });
+    }
+  });
+
+  const updateCampaignMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const { error } = await supabase.from('active_campaigns').update(payload).eq('id', payload.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['active-campaigns'] });
+      toast.success("Campanha atualizada com sucesso!");
+      setIsEditOpen(false);
+      setEditingCampaign(null);
+    },
+    onError: (err: any) => toast.error("Erro ao atualizar: " + err.message)
+  });
+
+  const deleteCampaignMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('active_campaigns').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['active-campaigns'] });
+      toast.success("Campanha encerrada/removida.");
     }
   });
 
@@ -447,6 +478,60 @@ const EconomyManagement = () => {
               <Button onClick={() => createCampaignMutation.mutate(newCampaign)} disabled={!newCampaign.title || !newCampaign.ends_at} className="w-full bg-white text-indigo-600 hover:bg-indigo-50 font-black rounded-xl">PUBLICAR DESAFIO</Button>
             </div>
           </Card>
+
+          {/* LISTA DE CAMPANHAS ATIVAS (EDITÁVEL) */}
+          <Card className="border-none shadow-xl rounded-3xl p-6 bg-slate-900 text-white mt-6">
+            <h3 className="font-black uppercase tracking-tighter italic mb-4 flex items-center gap-2 text-emerald-400">
+              <Activity className="h-5 w-5" /> Gerenciar Ativas
+            </h3>
+            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+              {campaigns.length === 0 ? (
+                <p className="text-xs text-slate-500 italic">Nenhuma campanha rodando.</p>
+              ) : (
+                campaigns.map((c: any) => (
+                  <div key={c.id} className="p-3 bg-white/5 rounded-xl border border-white/10 flex justify-between items-center group hover:bg-white/10 transition-all">
+                    <div>
+                      <p className="font-bold text-sm text-white">{c.title}</p>
+                      <div className="flex gap-2 mt-1">
+                        <Badge variant="outline" className="text-[9px] border-indigo-400 text-indigo-300 bg-indigo-400/10">
+                          {c.target_count} {c.target_action === 'SALE' ? 'VENDAS' : c.target_action === 'VISIT' ? 'VISITAS' : 'DOCS'}
+                        </Badge>
+                        <Badge variant="outline" className="text-[9px] border-emerald-400 text-emerald-300 bg-emerald-400/10">
+                          R$ {c.reward_amount}
+                        </Badge>
+                      </div>
+                      <p className="text-[9px] text-slate-400 mt-1">Fim: {new Date(c.ends_at).toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="h-8 w-8 text-indigo-300 hover:bg-indigo-500/20 hover:text-white"
+                        onClick={() => {
+                          setEditingCampaign(c);
+                          setIsEditOpen(true);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        className="h-8 w-8 text-rose-400 hover:bg-rose-500/20 hover:text-white"
+                        onClick={() => {
+                          if (confirm('Tem certeza que deseja remover esta campanha?')) {
+                            deleteCampaignMutation.mutate(c.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
         </div>
 
         {/* Box 2: Aprovações Pendentes */}
@@ -512,6 +597,82 @@ const EconomyManagement = () => {
           </div>
         </Card>
       </div>
+
+      {/* MODAL DE EDIÇÃO DE CAMPANHA */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-white sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Pencil className="w-4 h-4" /> Editar Campanha</DialogTitle>
+            <DialogDescription className="text-slate-400">Ajuste as regras do jogo em tempo real.</DialogDescription>
+          </DialogHeader>
+          
+          {editingCampaign && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black text-indigo-200">Título</Label>
+                <Input 
+                  value={editingCampaign.title} 
+                  onChange={(e) => setEditingCampaign({...editingCampaign, title: e.target.value})} 
+                  className="bg-slate-950 border-slate-700 text-white" 
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black text-indigo-200">Ação Alvo</Label>
+                  <Select 
+                    value={editingCampaign.target_action} 
+                    onValueChange={(v) => setEditingCampaign({...editingCampaign, target_action: v})}
+                  >
+                    <SelectTrigger className="bg-slate-950 border-slate-700 text-white"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700 text-white">
+                      <SelectItem value="VISIT">Visitas</SelectItem>
+                      <SelectItem value="SALE">Vendas</SelectItem>
+                      <SelectItem value="DOCS">Documentos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black text-indigo-200">Meta (Qtde)</Label>
+                  <Input 
+                    type="number" 
+                    value={editingCampaign.target_count} 
+                    onChange={(e) => setEditingCampaign({...editingCampaign, target_count: parseInt(e.target.value)})} 
+                    className="bg-slate-950 border-slate-700 text-white" 
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black text-indigo-200">Prêmio (R$)</Label>
+                <Input 
+                  type="number" 
+                  value={editingCampaign.reward_amount} 
+                  onChange={(e) => setEditingCampaign({...editingCampaign, reward_amount: parseFloat(e.target.value)})} 
+                  className="bg-slate-950 border-slate-700 text-white" 
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black text-indigo-200">Data Limite</Label>
+                <Input 
+                  type="date" 
+                  value={editingCampaign.ends_at ? editingCampaign.ends_at.split('T')[0] : ''} 
+                  onChange={(e) => setEditingCampaign({...editingCampaign, ends_at: e.target.value})} 
+                  className="bg-slate-950 border-slate-700 text-white" 
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsEditOpen(false)} className="text-slate-400">Cancelar</Button>
+            <Button 
+              onClick={() => updateCampaignMutation.mutate(editingCampaign)} 
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+            >
+              Salvar Alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
