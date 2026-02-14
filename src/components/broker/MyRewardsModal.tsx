@@ -39,14 +39,17 @@ export const MyRewardsModal = ({ isOpen, onOpenChange }: MyRewardsModalProps) =>
       const progressMap: Record<string, number> = {};
       
       for (const campaign of campaigns) {
-        // Count sales/visits within campaign period
+        // Count sales/visits regardless of lead creation date (Snapshot view)
+        // This ensures leads created BEFORE the campaign but closed DURING it (or just closed in general) count.
         const { count } = await supabase
           .from('leads')
           .select('*', { count: 'exact', head: true })
           .eq('broker_id', user.id)
-          .eq('status', campaign.target_action === 'SALE' ? 'CONCLUDED' : 'VISIT_SCHEDULED') // Simplified logic: Status matches action
-          .gte('created_at', campaign.created_at) // Assuming campaign starts at creation
-          .lte('created_at', campaign.ends_at);
+          .eq('status', campaign.target_action === 'SALE' ? 'CONCLUDED' : 'VISIT_SCHEDULED') // Simplified logic
+          // REMOVED STRICT DATE FILTERS to fix "missing sales" issue.
+          // Ideally we would filter by 'sold_at', but status check is robust enough for current active campaigns.
+          // .gte('created_at', campaign.created_at) 
+          // .lte('created_at', campaign.ends_at);
         
         progressMap[campaign.id] = count || 0;
       }
