@@ -48,24 +48,17 @@ export default function CampaignHeroBanner({ leads, users }: { leads: any[], use
     const targetStatus = actionMap[campaign.target_action];
     
     return brokers.map(broker => {
-      // NOVA LÓGICA: Contar leads únicos que atingiram o status no histórico
-      // OU que estão atualmente nesse status (backup)
+      // NOVA LÓGICA: Focar na REALIDADE ATUAL (Snapshot)
+      // O histórico (funnel_history) pode conter sujeira (leads excluídos, testes, vai-e-vem).
+      // Para garantir que o número "2" vire "1" se ela só tem 1 lead ativo, olhamos apenas para a tabela LEADS.
       
-      const historyLeads = history.filter(h => 
-        h.broker_id === broker.id && 
-        h.stage === targetStatus &&
-        // Opcional: Filtrar pela data da campanha se necessário
-        (campaign.created_at ? new Date(h.created_at) >= new Date(campaign.created_at) : true)
-      ).map(h => h.lead_id);
-
-      // Usar Set para deduplicar IDs de leads (evita contar o mesmo lead 2x)
-      const uniqueHistoryCount = new Set(historyLeads).size;
-
-      // Fallback para contagem atual se histórico estiver vazio (retrocompatibilidade)
-      const currentStatusCount = leads.filter(l => l.brokerId === broker.id && l.status === targetStatus).length;
-      
-      // Usa o maior valor (Histórico Único vs Atual) para garantir que ninguém perca pontos
-      const count = Math.max(uniqueHistoryCount, currentStatusCount);
+      const count = leads.filter(l => 
+        l.brokerId === broker.id && 
+        l.status === targetStatus
+        // Opcional: Se quiser rigor com datas, descomente abaixo. 
+        // Mas para "Meta Batida", o status atual costuma ser o melhor juiz.
+        // && (campaign.created_at ? new Date(l.lastInteractionAt) >= new Date(campaign.created_at) : true)
+      ).length;
 
       return {
         name: broker.name.split(' ')[0],
@@ -73,7 +66,7 @@ export default function CampaignHeroBanner({ leads, users }: { leads: any[], use
         progress: Math.min(Math.round((count / campaign.target_count) * 100), 100)
       };
     })
-    .filter(b => b.count > 0) // Apenas quem já deu o primeiro passo
+    .filter(b => b.count > 0) // Apenas quem já pontuou
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
   }, [campaign, leads, users, history]);
