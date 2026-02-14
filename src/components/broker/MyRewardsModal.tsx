@@ -39,15 +39,17 @@ export const MyRewardsModal = ({ isOpen, onOpenChange }: MyRewardsModalProps) =>
       const progressMap: Record<string, number> = {};
       
       for (const campaign of campaigns) {
-        // Count sales/visits based on WHEN they happened (last_interaction_at), not when lead was created.
+        // Count sales/visits based on CURRENT STATUS solely (Milestone Logic)
+        // If the broker currently HAS 10 sales in their portfolio, they qualify, regardless of WHEN strictly.
+        // This is robust for "First to Reach" or "Total Accumulated" campaigns.
         const { count } = await supabase
           .from('leads')
           .select('*', { count: 'exact', head: true })
           .eq('broker_id', user.id)
-          .eq('status', campaign.target_action === 'SALE' ? 'CONCLUDED' : 'VISIT_SCHEDULED')
-          // CORRECTION: Filter by INTERACTION DATE (Event Date) within Campaign Window
-          .gte('last_interaction_at', campaign.created_at) 
-          .lte('last_interaction_at', campaign.ends_at);
+          .eq('status', campaign.target_action === 'SALE' ? 'CONCLUDED' : 'VISIT_SCHEDULED');
+          // REMOVED DATE FILTER: This fixes the issue where a campaign created TODAY wouldn't count sales made YESTERDAY.
+          // .gte('last_interaction_at', campaign.created_at) 
+          // .lte('last_interaction_at', campaign.ends_at);
         
         progressMap[campaign.id] = count || 0;
       }
