@@ -42,13 +42,25 @@ serve(async (req) => {
       WEBHOOK_URL = config.value;
     }
 
-    const cleanPhone = phone.replace(/\D/g, '')
+    let cleanPhone = phone.replace(/\D/g, '')
 
     // VALIDATION: Ensure phone has content
     if (!cleanPhone || cleanPhone.length < 8) {
        throw new Error(`Phone number invalid after cleaning: ${phone} -> ${cleanPhone}`);
     }
 
+    // INTELLIGENT FORMATTING: Add Brazil Country Code (55) if missing
+    // Logic: If it doesn't start with 55 OR it starts with 55 but is too short (likely just local number starting with 55, rare but possible, usually local is 8-9 digits, with area 10-11)
+    // Standard BR mobile with Area: 11 digits (11 99999 9999) -> Needs 55 -> 13 digits
+    // Standard BR landline with Area: 10 digits (11 3333 3333) -> Needs 55 -> 12 digits
+    
+    // If length is 10 or 11 (Area + Number), add 55.
+    if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+      cleanPhone = '55' + cleanPhone;
+    } 
+    // If length is 8 or 9 (No Area Code), we can't reliably guess, but usually systems expect area code. 
+    // We will assume provided numbers have area code as per CRM best practices.
+    
     console.log(`[WhatsApp] Sending to ${cleanPhone} via ${WEBHOOK_URL}`)
 
     const startTime = Date.now();
