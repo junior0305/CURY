@@ -40,9 +40,10 @@ serve(async (req) => {
     const WEBHOOK_URL = config.value;
     const cleanPhone = phone.replace(/\D/g, '')
 
-    const formData = new URLSearchParams()
-    formData.append('Contato', cleanPhone)
-    formData.append('Mensagem', message)
+    // VALIDATION: Ensure phone has content
+    if (!cleanPhone || cleanPhone.length < 8) {
+       throw new Error(`Phone number invalid after cleaning: ${phone} -> ${cleanPhone}`);
+    }
 
     console.log(`[WhatsApp] Sending to ${cleanPhone} via ${WEBHOOK_URL}`)
 
@@ -53,12 +54,16 @@ serve(async (req) => {
     let fetchError = null;
 
     try {
+      // SWITCHOVER: Sending JSON instead of Form Data for better N8N compatibility
       response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
         },
-        body: formData.toString(),
+        body: JSON.stringify({
+          Contato: cleanPhone,
+          Mensagem: message
+        }),
       })
       statusCode = response.status;
       responseText = await response.text();
