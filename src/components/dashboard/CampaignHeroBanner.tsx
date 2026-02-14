@@ -51,19 +51,21 @@ export default function CampaignHeroBanner({ leads, users }: { leads: any[], use
       // NOVA LÓGICA: Contar leads únicos que atingiram o status no histórico
       // OU que estão atualmente nesse status (backup)
       
-      const historyCount = history.filter(h => 
+      const historyLeads = history.filter(h => 
         h.broker_id === broker.id && 
         h.stage === targetStatus &&
         // Opcional: Filtrar pela data da campanha se necessário
-        // (Assume-se que a campanha conta "tudo" por enquanto ou implementamos filtro de data)
         (campaign.created_at ? new Date(h.created_at) >= new Date(campaign.created_at) : true)
-      ).length;
+      ).map(h => h.lead_id);
+
+      // Usar Set para deduplicar IDs de leads (evita contar o mesmo lead 2x)
+      const uniqueHistoryCount = new Set(historyLeads).size;
 
       // Fallback para contagem atual se histórico estiver vazio (retrocompatibilidade)
       const currentStatusCount = leads.filter(l => l.brokerId === broker.id && l.status === targetStatus).length;
       
-      // Usa o maior valor (Histórico vs Atual) para garantir que ninguém perca pontos
-      const count = Math.max(historyCount, currentStatusCount);
+      // Usa o maior valor (Histórico Único vs Atual) para garantir que ninguém perca pontos
+      const count = Math.max(uniqueHistoryCount, currentStatusCount);
 
       return {
         name: broker.name.split(' ')[0],
