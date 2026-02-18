@@ -1,19 +1,33 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Trophy, Banknote, Zap } from "lucide-react";
+import { Trophy, Banknote, Zap, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { differenceInMinutes } from "date-fns";
+import { differenceInMinutes, differenceInSeconds } from "date-fns";
 
 export function AchievementTicker() {
   const { user } = useAuth();
   const { playSound } = useAudioArena();
   const [playedIds, setPlayedIds] = useState<Set<string>>(new Set());
+  const [mountTime] = useState(new Date());
+  const [isInitialMinute, setIsInitialMinute] = useState(true);
 
-  const { data: achievements = [], refetch } = useQuery({
+  // Monitora o primeiro minuto de sessão
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const secondsPassed = differenceInSeconds(new Date(), mountTime);
+      if (secondsPassed >= 60) {
+        setIsInitialMinute(false);
+        clearInterval(timer);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [mountTime]);
+
+  const { data: achievements = [] } = useQuery({
     queryKey: ["public-achievements"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -82,6 +96,8 @@ export function AchievementTicker() {
     return templates[index];
   };
 
+  const userName = user?.email?.split('@')[0] || "Agente";
+
   return (
     <div className="relative overflow-hidden bg-[#0F172A] h-12 flex items-center border-b border-indigo-500/30 shadow-[0_4px_25px_rgba(79,70,229,0.5)] z-50">
       <div className="absolute left-0 top-0 bottom-0 px-3 sm:px-6 bg-indigo-600 text-white flex items-center gap-2 z-20 font-black text-[10px] sm:text-xs tracking-tighter uppercase italic skew-x-[-12deg] -ml-2 border-r-2 border-indigo-400">
@@ -93,13 +109,24 @@ export function AchievementTicker() {
       
       <div className="flex w-full overflow-hidden">
         <div className="flex animate-marquee whitespace-nowrap gap-12 sm:gap-24 items-center pl-32">
-          {achievements.length === 0 ? (
+          
+          {/* MENSAGEM DE ENTRADA TÁTICA (Apenas no 1º minuto) */}
+          {isInitialMinute && (
+            <div className="flex items-center gap-4 py-1.5 px-6 rounded-2xl bg-indigo-500/20 border border-indigo-400/50 animate-radiant-glow shadow-[0_0_20px_rgba(99,102,241,0.3)]">
+              <ShieldCheck className="h-5 w-5 text-indigo-400 animate-pulse" />
+              <span className="font-black text-xs sm:text-sm tracking-[0.1em] text-white uppercase italic">
+                PROTOCOLOS ATIVOS: BEM-VINDO AO CAMPO DE BATALHA, AGENTE {userName.toUpperCase()}. BOA CAÇADA!
+              </span>
+              <div className="h-2 w-2 rounded-full bg-green-500 animate-ping" />
+            </div>
+          )}
+
+          {achievements.length === 0 && !isInitialMinute ? (
             <span className="text-indigo-300/50 font-bold text-[10px] sm:text-xs uppercase tracking-widest animate-pulse">
               Aguardando o próximo grande fechamento... 🚀
             </span>
           ) : (
             [...achievements, ...achievements].map((ach: any, idx) => {
-              // Verifica se a venda é "FRESCA" (menos de 5 minutos desde a aprovação)
               const isFresh = differenceInMinutes(new Date(), new Date(ach.created_at)) < 5;
 
               return (

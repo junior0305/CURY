@@ -28,7 +28,7 @@
     animation: marquee 25s linear infinite;
   }
 
-  /* NOVA ANIMAÇÃO: Brilho Pulsante para Vendas Novas */
+  /* Animação: Brilho Pulsante para Vendas Novas */
   @keyframes pulse-glow {
     0%, 100% { 
       box-shadow: 0 0 5px rgba(99, 102, 241, 0.2);
@@ -40,8 +40,24 @@
     }
   }
 
+  /* NOVA ANIMAÇÃO: Radiant Glow (Boas-vindas sofisticada) */
+  @keyframes radiant-glow {
+    0%, 100% {
+      background-color: rgba(99, 102, 241, 0.1);
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+    }
+    50% {
+      background-color: rgba(99, 102, 241, 0.25);
+      box-shadow: 0 0 30px rgba(99, 102, 241, 0.5);
+    }
+  }
+
   .animate-pulse-glow {
     animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .animate-radiant-glow {
+    animation: radiant-glow 3s ease-in-out infinite;
   }
 
   .no-scrollbar::-webkit-scrollbar {
