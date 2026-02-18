@@ -167,6 +167,72 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Realtime: listen for changes on the current user's profiles row and keep role in sync.
+  useEffect(() => {
+    let profileChannel: any = null;
+    if (session?.user?.id) {
+      try {
+        profileChannel = supabase
+          .channel(`public:profiles:id=eq.${session.user.id}`)
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'profiles',
+            filter: `id=eq.${session.user.id}`
+          }, (payload: any) => {
+            console.log("[AuthProvider] realtime profile payload:", payload);
+            const newRole = payload.new?.role ?? payload.record?.role ?? null;
+            if (newRole) {
+              if (newRole !== role) {
+                console.log(`[AuthProvider] role updated via realtime: ${newRole}`);
+                setRole(newRole);
+                setAuthDebug({ realtimeRoleUpdateAt: new Date().toISOString(), role: newRole });
+              } else {
+                // still update to be safe (keeps state consistent)
+                setRole(newRole);
+              }
+            }
+          })
+          .subscribe();
+      } catch (err) {
+        console.warn("[AuthProvider] realtime subscription failed:", err);
+      }
+    }
+
+    return () => {
+      try {
+        if (profileChannel) {
+          supabase.removeChannel(profileChannel);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
+
+  // Redirect based on role changes to ensure the UI navigates to the correct area
+  useEffect(() => {
+    if (!loading && session && role) {
+      const adminRoles = ['SUPERINTENDENT', 'MANAGER', 'ADMIN'];
+      try {
+        if (adminRoles.includes(role)) {
+          if (window.location.pathname !== '/admin' && window.location.pathname !== '/command-center') {
+            navigate('/admin', { replace: true });
+          }
+        } else {
+          // broker or other roles -> dashboard
+          if (window.location.pathname !== '/dashboard') {
+            navigate('/dashboard', { replace: true });
+          }
+        }
+      } catch (e) {
+        console.warn("[AuthProvider] navigate failed:", e);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, loading, session]);
+
   const signOut = async () => {
     setLoading(true);
     await supabase.auth.signOut();
