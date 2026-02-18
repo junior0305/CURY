@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import { Loader2 } from "lucide-react";
 import CommandCenter from "./pages/CommandCenter";
 import AuthDebug from "@/components/AuthDebug";
+import BootstrapAdmin from "@/pages/BootstrapAdmin";
 
 const queryClient = new QueryClient();
 
@@ -65,6 +66,7 @@ const App = () => (
             <Route path="/dashboard" element={<ProtectedBrokerRoute><Dashboard /></ProtectedBrokerRoute>} />
             <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
             <Route path="/command-center" element={<ProtectedAdminRoute><CommandCenter /></ProtectedAdminRoute>} />
+            <Route path="/bootstrap-admin" element={<BootstrapAdmin />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
 
