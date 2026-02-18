@@ -22,10 +22,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  // helper to keep debug info on window for inspection
+  const setAuthDebug = (payload: any) => {
+    try {
+      (window as any).__authDebug = {
+        ...( (window as any).__authDebug || {} ),
+        ...payload
+      };
+    } catch (e) {
+      // ignore in non-browser env
+    }
+  };
+
   const fetchUserRole = async (userId: string, email?: string) => {
     try {
-      console.log("Fetching role for user:", userId, email ?? "(no email)");
-      // First try to find profile by the auth user id
+      console.log("[AuthProvider] fetchUserRole start", { userId, email });
+      setAuthDebug({ lastFetchStartedAt: new Date().toISOString(), authId: userId, email });
+
+      // First try to find profile row by auth user id
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -33,17 +47,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .maybeSingle();
 
       if (error) {
-        console.error("Error selecting profile by id:", error);
+        console.error("[AuthProvider] Error selecting profile by id:", error);
         throw error;
       }
 
       if (data && data.role) {
-        console.log("Role found by id:", data.role);
+        console.log("[AuthProvider] Role found by id:", data.role);
         setRole(data.role);
+        setAuthDebug({ profileRow: data, role: data.role, resolvedBy: 'id' });
         return;
       }
 
-      // If not found by id, try to find a profile by email and copy it to the correct id
       if (email) {
         const { data: byEmail, error: errByEmail } = await supabase
           .from('profiles')
@@ -52,13 +66,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           .maybeSingle();
 
         if (errByEmail) {
-          console.error("Error selecting profile by email:", errByEmail);
+          console.error("[AuthProvider] Error selecting profile by email:", errByEmail);
           throw errByEmail;
         }
 
         if (byEmail) {
-          console.log("Profile found by email but not by id — creating/upserting profile with correct id to preserve role.");
-          // Build payload copying relevant fields but using the real auth user id
+          console.log("[AuthProvider] Profile found by email (will upsert to auth id):", byEmail);
           const payload: any = {
             id: userId,
             first_name: byEmail.first_name || null,
@@ -72,32 +85,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             updated_at: new Date().toISOString(),
           };
 
-          // Upsert to create a profile row matching the auth user id
           const { error: upsertError } = await supabase
             .from('profiles')
             .upsert(payload, { onConflict: 'id' });
 
           if (upsertError) {
-            console.error("Error upserting profile to match auth id:", upsertError);
-            // still proceed with role fallback
+            console.error("[AuthProvider] Upsert profile error:", upsertError);
             setRole(byEmail.role || 'BROKER');
+            setAuthDebug({ profileRow: byEmail, role: byEmail.role, resolvedBy: 'email-no-upsert' });
             return;
           }
 
-          console.log("Upsert successful. Role set to:", payload.role);
+          console.log("[AuthProvider] Upsert successful. Role set to:", payload.role);
           setRole(payload.role);
+          setAuthDebug({ profileRow: payload, role: payload.role, resolvedBy: 'email-upsert' });
           return;
         }
       }
 
-      // If nothing found, default to BROKER (conservative)
-      console.log("No profile found for user; defaulting to BROKER");
+      console.log("[AuthProvider] No profile found for user; defaulting to BROKER");
       setRole('BROKER');
+      setAuthDebug({ profileRow: null, role: 'BROKER', resolvedBy: 'default' });
     } catch (e) {
-      console.error("Error fetching role:", e);
+      console.error("[AuthProvider] Error fetching role:", e);
       setRole('BROKER');
+      setAuthDebug({ error: (e as any)?.message ?? String(e), role: 'BROKER', resolvedBy: 'error' });
     } finally {
       setLoading(false);
+      setAuthDebug({ lastFetchEndedAt: new Date().toISOString() });
     }
   };
 
@@ -106,7 +121,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      setAuthDebug({ sessionId: session?.user?.id ?? null });
+
       if (session) {
+        // Ensure we explicitly mark loading true while resolving role
+        setLoading(true);
         fetchUserRole(session.user.id, session.user.email ?? undefined);
       } else {
         setLoading(false);
@@ -114,9 +133,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("Auth event:", event);
+      console.log("[AuthProvider] onAuthStateChange:", event);
       setSession(session);
       setUser(session?.user ?? null);
+      setAuthDebug({ lastAuthEvent: event, sessionId: session?.user?.id ?? null });
 
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
         if (session) {
@@ -127,11 +147,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setRole(null);
         setUser(null);
         setLoading(false);
+        setAuthDebug({ sessionId: null, role: null });
       }
     });
 
     const handleAuthError = (e: any) => {
-      console.warn("Auth error detected, signing out...", e.detail);
+      console.warn("[AuthProvider] supabase-auth-error event detected", e.detail);
       supabase.auth.signOut().then(() => {
         window.location.href = '/login';
       });
@@ -143,6 +164,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       subscription.unsubscribe();
       window.removeEventListener('supabase-auth-error', handleAuthError);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const signOut = async () => {
@@ -152,8 +174,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(null);
     setRole(null);
     setLoading(false);
+    setAuthDebug({ sessionId: null, role: null });
     navigate('/login', { replace: true });
   };
+
+  // Keep window debug updated whenever role/session change
+  useEffect(() => {
+    setAuthDebug({
+      sessionId: session?.user?.id ?? null,
+      role,
+      userEmail: user?.email ?? null,
+      lastUpdated: new Date().toISOString()
+    });
+  }, [session, role, user]);
 
   return (
     <AuthContext.Provider value={{ session, user, role, loading, signOut }}>
