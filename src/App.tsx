@@ -11,7 +11,6 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import { Loader2 } from "lucide-react";
 import CommandCenter from "./pages/CommandCenter";
-import AuthDebug from "@/components/AuthDebug";
 import BootstrapAdmin from "@/pages/BootstrapAdmin";
 import ProfileDebug from "@/pages/ProfileDebug";
 
@@ -71,9 +70,6 @@ const App = () => (
             <Route path="/profile-debug" element={<ProfileDebug />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
-
-          {/* Debug overlay to inspect session/role in the running app */}
-          <AuthDebug />
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
