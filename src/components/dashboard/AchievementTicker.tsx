@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Trophy, Banknote, Zap, ShieldCheck } from "lucide-react";
+import { Trophy, Banknote, Zap, ShieldCheck, Flame, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 import { useEffect, useState } from "react";
@@ -15,7 +15,6 @@ export function AchievementTicker() {
   const [mountTime] = useState(new Date());
   const [isInitialMinute, setIsInitialMinute] = useState(true);
 
-  // Monitora o primeiro minuto de sessão
   useEffect(() => {
     const timer = setInterval(() => {
       const secondsPassed = differenceInSeconds(new Date(), mountTime);
@@ -55,7 +54,6 @@ export function AchievementTicker() {
 
     const syncPendingSounds = async () => {
       const achievementIds = achievements.map((a: any) => a.id);
-      
       const { data: readIds } = await supabase
         .from('audio_notifications_read')
         .select('achievement_id')
@@ -76,14 +74,12 @@ export function AchievementTicker() {
         }
       }
     };
-
     syncPendingSounds();
   }, [achievements, user?.id, playSound, playedIds]);
 
   const getMessage = (ach: any) => {
     const name = ach.profiles?.first_name || "Corretor";
     const value = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(ach.reward_value);
-    
     const templates = [
       `🔥 EXPLODIU! ${name} acaba de faturar ${value}!`,
       `🚀 NINGUÉM SEGURA! ${name} garantiu +${value} de bônus!`,
@@ -91,9 +87,19 @@ export function AchievementTicker() {
       `📈 PERFORMANCE ELITE! ${name} desbloqueou ${value}!`,
       `⚡️ META BATIDA! ${name} faturou ${value} em prêmios!`,
     ];
+    return templates[ach.id.charCodeAt(0) % templates.length];
+  };
 
-    const index = ach.id.charCodeAt(0) % templates.length;
-    return templates[index];
+  // MENSAGEM PROVOCATIVA PARA QUEM ACABOU DE LOGAR
+  const getProvocativeMessage = () => {
+    const provocations = [
+      "💰 O PRÓXIMO PIX PODE SER SEU. VAI DEIXAR ESSE DINHEIRO NA MESA?",
+      "🔥 A ARENA ESTÁ QUENTE. TEM GENTE FATURANDO ALTO ENQUANTO VOCÊ SÓ OLHA.",
+      "🚀 VAI FICAR SÓ ASSISTINDO OS COLEGAS GANHAREM OU VAI PRA CIMA HOJE?",
+      "📈 A ELITE JÁ ESTÁ EM CAMPO. BUSQUE SEU ESPÓLIO DE GUERRA AGORA!",
+    ];
+    // Escolhe uma baseada no dia/hora para variar
+    return provocations[new Date().getMinutes() % provocations.length];
   };
 
   const userName = user?.email?.split('@')[0] || "Agente";
@@ -110,17 +116,32 @@ export function AchievementTicker() {
       <div className="flex w-full overflow-hidden">
         <div className="flex animate-marquee whitespace-nowrap gap-12 sm:gap-24 items-center pl-32">
           
-          {/* MENSAGEM DE ENTRADA TÁTICA (Apenas no 1º minuto) */}
+          {/* LOGICA DE MENSAGEM INICIAL (1º MINUTO) */}
           {isInitialMinute && (
-            <div className="flex items-center gap-4 py-1.5 px-6 rounded-2xl bg-indigo-500/20 border border-indigo-400/50 animate-radiant-glow shadow-[0_0_20px_rgba(99,102,241,0.3)]">
-              <ShieldCheck className="h-5 w-5 text-indigo-400 animate-pulse" />
-              <span className="font-black text-xs sm:text-sm tracking-[0.1em] text-white uppercase italic">
-                PROTOCOLOS ATIVOS: BEM-VINDO AO CAMPO DE BATALHA, AGENTE {userName.toUpperCase()}. BOA CAÇADA!
-              </span>
-              <div className="h-2 w-2 rounded-full bg-green-500 animate-ping" />
+            <div className="flex items-center gap-4 py-1.5 px-6 rounded-2xl bg-indigo-500/10 border border-indigo-400/50 animate-radiant-glow shadow-[0_0_20px_rgba(99,102,241,0.3)]">
+              {achievements.length > 0 ? (
+                // PROVOCAÇÃO (Se já houver ganhadores)
+                <>
+                  <Flame className="h-5 w-5 text-rose-500 animate-pulse" />
+                  <span className="font-black text-xs sm:text-sm tracking-[0.1em] text-white uppercase italic">
+                    {getProvocativeMessage()}
+                  </span>
+                  <div className="h-2 w-2 rounded-full bg-rose-500 animate-ping" />
+                </>
+              ) : (
+                // BEM-VINDO (Se a arena estiver vazia)
+                <>
+                  <ShieldCheck className="h-5 w-5 text-indigo-400 animate-pulse" />
+                  <span className="font-black text-xs sm:text-sm tracking-[0.1em] text-white uppercase italic">
+                    PROTOCOLOS ATIVOS: BEM-VINDO AO CAMPO DE BATALHA, AGENTE {userName.toUpperCase()}.
+                  </span>
+                  <div className="h-2 w-2 rounded-full bg-green-500 animate-ping" />
+                </>
+              )}
             </div>
           )}
 
+          {/* LISTA DE VENCEDORES (Aparece após o 1º minuto ou rola junto com a provocação) */}
           {achievements.length === 0 && !isInitialMinute ? (
             <span className="text-indigo-300/50 font-bold text-[10px] sm:text-xs uppercase tracking-widest animate-pulse">
               Aguardando o próximo grande fechamento... 🚀
@@ -128,15 +149,12 @@ export function AchievementTicker() {
           ) : (
             [...achievements, ...achievements].map((ach: any, idx) => {
               const isFresh = differenceInMinutes(new Date(), new Date(ach.created_at)) < 5;
-
               return (
                 <div 
                   key={`${ach.id}-${idx}`} 
                   className={cn(
                     "flex items-center gap-4 py-1.5 px-4 rounded-2xl border transition-all",
-                    isFresh 
-                      ? "bg-indigo-600/20 border-indigo-400 animate-pulse-glow shadow-[0_0_15px_rgba(99,102,241,0.4)]" 
-                      : "bg-white/5 border-white/10"
+                    isFresh ? "bg-indigo-600/20 border-indigo-400 animate-pulse-glow" : "bg-white/5 border-white/10"
                   )}
                 >
                   <span className={cn(
@@ -145,20 +163,10 @@ export function AchievementTicker() {
                   )}>
                     {getMessage(ach)}
                   </span>
-                  
-                  {isFresh ? (
+                  {isFresh && (
                     <div className="flex items-center gap-1 bg-amber-400 px-2 py-0.5 rounded-lg border border-amber-300 shadow-lg animate-bounce">
                       <Zap className="h-3 w-3 text-indigo-900 fill-indigo-900" />
-                      <span className="text-indigo-900 font-black text-[9px] uppercase tracking-tighter">
-                        RECÉM-FECHADO
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 bg-emerald-500/20 px-2 py-0.5 rounded-lg border border-emerald-500/30">
-                      <Banknote className="h-3 w-3 text-emerald-400" />
-                      <span className="text-emerald-400 font-black text-[10px]">
-                        VALOR CREDITADO
-                      </span>
+                      <span className="text-indigo-900 font-black text-[9px] uppercase tracking-tighter">RECÉM-FECHADO</span>
                     </div>
                   )}
                 </div>
