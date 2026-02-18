@@ -13,6 +13,7 @@ import { Loader2 } from "lucide-react";
 import CommandCenter from "./pages/CommandCenter";
 import AuthDebug from "@/components/AuthDebug";
 import BootstrapAdmin from "@/pages/BootstrapAdmin";
+import ProfileDebug from "@/pages/ProfileDebug";
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,7 @@ const App = () => (
             <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
             <Route path="/command-center" element={<ProtectedAdminRoute><CommandCenter /></ProtectedAdminRoute>} />
             <Route path="/bootstrap-admin" element={<BootstrapAdmin />} />
+            <Route path="/profile-debug" element={<ProfileDebug />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
 
