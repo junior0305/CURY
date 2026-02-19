@@ -1,1367 +1,467 @@
-import { useState, useMemo } from "react";
-import { Card } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Users, 
-  Settings, 
-  Zap, 
-  Globe, 
-  RefreshCw, 
-  ShieldCheck, 
-  UserCircle, 
-  Loader2, 
-  Group, 
-  History, 
-  CheckCircle, 
-  AlertCircle,
-  LogOut,
-  Coins, 
-  CheckCircle2, 
-  XCircle as XCircleIcon, 
-  Banknote, 
-  Rocket, 
-  Save,
-  Hourglass,
-  SendHorizontal,
-  RefreshCcw,
-  Plus,
-  Trash2,
-  Users2,
-  Target,
-  LayoutDashboard,
-  Activity
-} from "lucide-react";
-import UserManagement from "@/components/admin/UserManagement";
-import TeamManagement from "@/components/admin/TeamManagement";
-import AdminStats from "@/components/admin/AdminStats";
-import LeadDistribution from "@/components/admin/LeadDistribution";
-import IntegrationsManagement from "@/components/admin/IntegrationsManagement";
-import AudioSettings from "@/components/admin/AudioSettings";
-import LeadRework from "@/components/admin/LeadRework";
-import { useAuth } from "@/components/AuthProvider";
-import { User, UserRole } from "@/types/user";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchProfiles } from "@/integrations/supabase/profiles";
-import { fetchLeadsForAdmin } from "@/integrations/supabase/leads";
-import type { Lead } from "@/types/lead";
-import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogDescription, 
-  DialogFooter 
-} from "@/components/ui/dialog";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
-import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ChevronDown, ChevronRight, Plus, Shield, Users, Swords, Target } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { subDays, startOfDay } from "date-fns";
-import { Pencil } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
-const DistributionLogs = () => {
-  const { data: logs = [], isLoading } = useQuery({
-    queryKey: ['distribution-logs'],
-    queryFn: async () => {
-      // Filter logs from yesterday (start of day) until now
-      const yesterday = startOfDay(subDays(new Date(), 1)).toISOString();
-      
-      const { data, error } = await supabase
-        .from('distribution_logs')
-        .select('*')
-        .gte('created_at', yesterday)
-        .order('created_at', { ascending: false });
-        
-      if (error) throw error;
-      return data;
-    },
-    refetchInterval: 10000 // Atualiza a cada 10 segundos
+interface Profile {
+  id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  role: string;
+  team_id: string | null;
+  manager_id: string | null;
+  lead_assignment_enabled: boolean;
+  phone: string | null;
+}
+
+interface Team {
+  id: string;
+  name: string;
+}
+
+export default function Admin() {
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [expandedManagers, setExpandedManagers] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [newUser, setNewUser] = useState({
+    email: "",
+    password: "",
+    firstName: "",
+    lastName: "",
+    phone: "",
+    role: "BROKER",
+    teamId: "",
+    managerId: ""
   });
-
-  return (
-    <Card className="shadow-xl border-none p-6 bg-white rounded-3xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">Histórico de Entrada (Ontem e Hoje)</h2>
-          <p className="text-sm text-slate-500">Acompanhe quem recebeu cada lead em tempo real.</p>
-        </div>
-        {isLoading && <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />}
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-slate-100">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b border-slate-100">
-            <tr>
-              <th className="px-4 py-3 text-left font-bold text-slate-700">Data/Hora</th>
-              <th className="px-4 py-3 text-left font-bold text-slate-700">Lead</th>
-              <th className="px-4 py-3 text-left font-bold text-slate-700">Regra (Tag)</th>
-              <th className="px-4 py-3 text-left font-bold text-slate-700">Corretor Destino</th>
-              <th className="px-4 py-3 text-left font-bold text-slate-700">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {logs.length === 0 && !isLoading ? (
-              <tr><td colSpan={5} className="py-10 text-center text-slate-400 italic">Nenhum lead recebido ainda via integração externa.</td></tr>
-            ) : (
-              logs.map((log: any) => (
-                <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3 text-slate-500 text-xs">
-                    {new Date(log.created_at).toLocaleString('pt-BR')}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-bold text-slate-900">{log.lead_name}</div>
-                    <div className="text-[10px] text-slate-400">{log.lead_phone}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant="outline" className="bg-slate-100 border-none font-bold text-[10px] uppercase">{log.queue_name}</Badge>
-                  </td>
-                  <td className="px-4 py-3 font-medium text-indigo-600">
-                    {log.assigned_to_name}
-                  </td>
-                  <td className="px-4 py-3">
-                    {log.status === 'SUCCESS' ? (
-                      <span className="flex items-center text-xs text-green-600 font-bold">
-                        <CheckCircle className="w-3 h-3 mr-1" /> OK
-                      </span>
-                    ) : (
-                      <span className="flex items-center text-xs text-rose-600 font-bold">
-                        <AlertCircle className="w-3 h-3 mr-1" /> FALHOU
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-};
-
-const EconomyManagement = () => {
-  const queryClient = useQueryClient();
-  
-  // 1. Fetch Configs
-  const { data: configs = [], isLoading: loadingConfigs } = useQuery({
-    queryKey: ['reward-configs'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('reward_configs').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      return data;
-    }
-  });
-
-  // 2. NEW: State for adding rules
-  const [isAddingRule, setIsAddingRule] = useState(false);
-  const [newRule, setNewRule] = useState({
-    action_type: 'SALE',
-    label: '',
-    reward_type: 'PIX',
-    amount_value: 0,
-    target_count: 1 // Novo campo padrão
-  });
-
-  const createRuleMutation = useMutation({
-    mutationFn: async (payload: any) => {
-      const { error } = await supabase.from('reward_configs').insert([payload]);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reward-configs'] });
-      toast.success("Nova regra de premiação ativa!");
-      setIsAddingRule(false);
-      setNewRule({ action_type: 'SALE', label: '', reward_type: 'PIX', amount_value: 0, target_count: 1 });
-    }
-  });
-
-  const toggleRuleMutation = useMutation({
-    mutationFn: async ({ id, active }: { id: string, active: boolean }) => {
-      const { error } = await supabase.from('reward_configs').update({ is_active: active }).eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reward-configs'] })
-  });
-
-  const deleteRuleMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('reward_configs').delete().eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reward-configs'] });
-      toast.success("Regra removida.");
-    }
-  });
-
-  // 3. Fetch Pending Redemptions (Achievements)
-  const { data: pending = [], isLoading: loadingPending } = useQuery({
-    queryKey: ['pending-achievements'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('achievements')
-        .select('*, profiles(first_name, last_name)')
-        .eq('status', 'PENDING')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data;
-    }
-  });
-
-  const updateConfigMutation = useMutation({
-    mutationFn: async ({ id, value }: { id: string, value: number }) => {
-      const { error } = await supabase.from('reward_configs').update({ amount_value: value }).eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reward-configs'] });
-      toast.success("Valor do prêmio atualizado!");
-    }
-  });
-
-  const handleAchievementStatus = async (id: string, newStatus: string) => {
-    try {
-      console.log(`[Economy] Alterando status da conquista ${id} para ${newStatus}`);
-      const { error } = await supabase
-        .from('achievements')
-        .update({ status: newStatus })
-        .eq('id', id);
-
-      if (error) {
-        console.error("[Economy] Erro ao atualizar status:", error);
-        throw error;
-      }
-
-      toast.success(newStatus === 'APPROVED' ? "Prêmio aprovado e publicado!" : "Solicitação recusada.");
-      
-      // Invalidação forçada de múltiplas queries para limpar a tela
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['pending-achievements'] }),
-        queryClient.invalidateQueries({ queryKey: ['public-achievements'] }),
-        queryClient.invalidateQueries({ queryKey: ['my-achievements'] }),
-        queryClient.invalidateQueries({ queryKey: ['adminLeads'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] })
-      ]);
-    } catch (err: any) {
-      toast.error(`Erro ao processar: ${err.message}`);
-    }
-  };
-
-  // NEW: Campaign Management logic
-  const { data: campaigns = [] } = useQuery({
-    queryKey: ['active-campaigns'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('active_campaigns').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      return data;
-    }
-  });
-
-  const [newCampaign, setNewCampaign] = useState({
-    title: "",
-    target_action: "VISIT",
-    target_count: 10,
-    reward_amount: 150,
-    ends_at: ""
-  });
-
-  // EDIT STATE
-  const [editingCampaign, setEditingCampaign] = useState<any>(null);
-  const [isEditOpen, setIsEditOpen] = useState(false);
-
-  const createCampaignMutation = useMutation({
-    mutationFn: async (payload: any) => {
-      const { error } = await supabase.from('active_campaigns').insert([payload]);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['active-campaigns'] });
-      queryClient.invalidateQueries({ queryKey: ['active-campaign'] });
-      toast.success("Novo desafio publicado para o time!");
-      setNewCampaign({ title: "", target_action: "VISIT", target_count: 10, reward_amount: 150, ends_at: "" });
-    }
-  });
-
-  const updateCampaignMutation = useMutation({
-    mutationFn: async (payload: any) => {
-      const { error } = await supabase.from('active_campaigns').update(payload).eq('id', payload.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['active-campaigns'] });
-      toast.success("Campanha atualizada com sucesso!");
-      setIsEditOpen(false);
-      setEditingCampaign(null);
-    },
-    onError: (err: any) => toast.error("Erro ao atualizar: " + err.message)
-  });
-
-  const deleteCampaignMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('active_campaigns').delete().eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['active-campaigns'] });
-      toast.success("Campanha encerrada/removida.");
-    }
-  });
-
-  const stats = useMemo(() => {
-    // Calculando totais para o controle de caixa
-    return {
-      totalPaid: 0, // Placeholder
-      totalPending: pending.reduce((acc: number, curr: any) => acc + Number(curr.reward_value), 0)
-    };
-  }, [pending]);
-
-  return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {/* 3. Dashboard de Caixa (NOVO) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-6 rounded-3xl border-none shadow-lg bg-white">
-          <p className="text-[10px] font-black text-slate-400 uppercase">Total Pendente</p>
-          <p className="text-3xl font-black text-rose-600">R$ {stats.totalPending.toFixed(2)}</p>
-        </Card>
-        <Card className="p-6 rounded-3xl border-none shadow-lg bg-slate-900">
-          <p className="text-[10px] font-black text-indigo-300 uppercase">Campanha Ativa</p>
-          <p className="text-xl font-bold text-white truncate">{campaigns.find(c => c.is_active)?.title || "Nenhuma"}</p>
-        </Card>
-        <Card className="p-6 rounded-3xl border-none shadow-lg bg-emerald-600">
-          <p className="text-[10px] font-black text-emerald-100 uppercase">Fator de Urgência</p>
-          <p className="text-3xl font-black text-white">MÁXIMO</p>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Lado Esquerdo: Config de Valores e Nova Campanha */}
-        <div className="lg:col-span-1 space-y-6">
-          <Card className="border-none shadow-xl rounded-3xl p-6 bg-white ring-1 ring-slate-100">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-amber-100 text-amber-600 rounded-2xl"><Coins className="h-6 w-6" /></div>
-                <div><h3 className="font-black text-slate-900 uppercase tracking-tighter italic">Gatilhos</h3></div>
-              </div>
-              <Button size="icon" variant="outline" className="rounded-full" onClick={() => setIsAddingRule(!isAddingRule)}>
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {isAddingRule && (
-              <div className="mb-6 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 space-y-3 animate-in slide-in-from-top-2">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-black uppercase">Ação (Gatilho)</Label>
-                    <Select value={newRule.action_type} onValueChange={(v) => setNewRule({...newRule, action_type: v})}>
-                      <SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="SALE">Venda Concluída</SelectItem>
-                        <SelectItem value="VISIT">Visita Agendada</SelectItem>
-                        <SelectItem value="DOCS">Documento Recebido</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] font-black uppercase text-indigo-700">Quantidade Alvo</Label>
-                    <Input 
-                      type="number" 
-                      min="1"
-                      className="h-9 bg-white border-indigo-200" 
-                      placeholder="Ex: 1"
-                      value={newRule.target_count} 
-                      onChange={e => setNewRule({...newRule, target_count: parseInt(e.target.value) || 1})} 
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-black uppercase">Nome do Prêmio</Label>
-                  <Input placeholder="Ex: Jantar na Lapa (A cada 3 vendas)" className="h-9 bg-white" value={newRule.label} onChange={e => setNewRule({...newRule, label: e.target.value})} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-black uppercase">Valor (R$)</Label>
-                  <Input type="number" className="h-9 bg-white" value={newRule.amount_value} onChange={e => setNewRule({...newRule, amount_value: parseFloat(e.target.value)})} />
-                </div>
-                <Button className="w-full h-9 bg-indigo-600 text-xs font-bold" onClick={() => createRuleMutation.mutate(newRule)} disabled={!newRule.label}>ATIVAR REGRA</Button>
-              </div>
-            )}
-
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-              {configs.map((c: any) => (
-                <div key={c.id} className={cn("p-4 rounded-2xl border transition-all", c.is_active ? "bg-slate-50 border-slate-100" : "bg-slate-100/50 border-slate-200 opacity-60")}>
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge className="text-[8px] font-black uppercase tracking-tighter bg-indigo-100 text-indigo-600 border-none">
-                          {c.action_type === 'SALE' ? 'VENDA' : c.action_type === 'VISIT' ? 'VISITA' : 'DOCS'}
-                        </Badge>
-                        {c.target_count > 1 && (
-                          <Badge className="text-[8px] font-black uppercase tracking-tighter bg-amber-100 text-amber-700 border-none">
-                            META: {c.target_count}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm font-bold text-slate-800 leading-tight">{c.label}</p>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-rose-400" onClick={() => deleteRuleMutation.mutate(c.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between mt-3">
-                    <p className="text-lg font-black text-slate-900 leading-none">R$ {c.amount_value}</p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">{c.is_active ? 'Ativo' : 'Pausado'}</span>
-                      <input 
-                        type="checkbox" 
-                        checked={c.is_active} 
-                        onChange={(e) => toggleRuleMutation.mutate({ id: c.id, active: e.target.checked })}
-                        className="accent-indigo-600 h-4 w-4 cursor-pointer"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="border-none shadow-xl rounded-3xl p-6 bg-indigo-600 text-white">
-            <h3 className="font-black uppercase tracking-tighter italic mb-4 flex items-center gap-2">
-              <Rocket className="h-5 w-5" /> Lançar Desafio
-            </h3>
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-black text-indigo-200">Título do Anúncio</Label>
-                <Input value={newCampaign.title} onChange={(e) => setNewCampaign({...newCampaign, title: e.target.value})} placeholder="Ex: SEMANA TURBO" className="bg-white/10 border-white/20 text-white placeholder:text-white/30 h-10 rounded-xl" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black text-indigo-200">Ação</Label>
-                  <Select value={newCampaign.target_action} onValueChange={(v) => setNewCampaign({...newCampaign, target_action: v})}>
-                    <SelectTrigger className="bg-white/10 border-white/20 text-white h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="VISIT">Visitas</SelectItem><SelectItem value="SALE">Vendas</SelectItem><SelectItem value="DOCS">Documentos</SelectItem></SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black text-indigo-200">Meta (Qtde)</Label>
-                  <Input type="number" value={newCampaign.target_count} onChange={(e) => setNewCampaign({...newCampaign, target_count: parseInt(e.target.value)})} className="bg-white/10 border-white/20 text-white h-10 rounded-xl" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-black text-indigo-200">Prêmio Extra (R$)</Label>
-                <Input type="number" value={newCampaign.reward_amount} onChange={(e) => setNewCampaign({...newCampaign, reward_amount: parseFloat(e.target.value)})} className="bg-white/10 border-white/20 text-white h-10 rounded-xl" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-black text-indigo-200">Expira em</Label>
-                <Input type="date" value={newCampaign.ends_at} onChange={(e) => setNewCampaign({...newCampaign, ends_at: e.target.value})} className="bg-white/10 border-white/20 text-white h-10 rounded-xl" />
-              </div>
-              <Button onClick={() => createCampaignMutation.mutate(newCampaign)} disabled={!newCampaign.title || !newCampaign.ends_at} className="w-full bg-white text-indigo-600 hover:bg-indigo-50 font-black rounded-xl">PUBLICAR DESAFIO</Button>
-            </div>
-          </Card>
-
-          {/* LISTA DE CAMPANHAS ATIVAS (EDITÁVEL) */}
-          <Card className="border-none shadow-xl rounded-3xl p-6 bg-slate-900 text-white mt-6">
-            <h3 className="font-black uppercase tracking-tighter italic mb-4 flex items-center gap-2 text-emerald-400">
-              <Activity className="h-5 w-5" /> Gerenciar Ativas
-            </h3>
-            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
-              {campaigns.length === 0 ? (
-                <p className="text-xs text-slate-500 italic">Nenhuma campanha rodando.</p>
-              ) : (
-                campaigns.map((c: any) => (
-                  <div key={c.id} className="p-3 bg-white/5 rounded-xl border border-white/10 flex justify-between items-center group hover:bg-white/10 transition-all">
-                    <div>
-                      <p className="font-bold text-sm text-white">{c.title}</p>
-                      <div className="flex gap-2 mt-1">
-                        <Badge variant="outline" className="text-[9px] border-indigo-400 text-indigo-300 bg-indigo-400/10">
-                          {c.target_count} {c.target_action === 'SALE' ? 'VENDAS' : c.target_action === 'VISIT' ? 'VISITAS' : 'DOCS'}
-                        </Badge>
-                        <Badge variant="outline" className="text-[9px] border-emerald-400 text-emerald-300 bg-emerald-400/10">
-                          R$ {c.reward_amount}
-                        </Badge>
-                      </div>
-                      <p className="text-[9px] text-slate-400 mt-1">Fim: {new Date(c.ends_at).toLocaleDateString()}</p>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-8 w-8 text-indigo-300 hover:bg-indigo-500/20 hover:text-white"
-                        onClick={() => {
-                          setEditingCampaign(c);
-                          setIsEditOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-8 w-8 text-rose-400 hover:bg-rose-500/20 hover:text-white"
-                        onClick={() => {
-                          if (confirm('Tem certeza que deseja remover esta campanha?')) {
-                            deleteCampaignMutation.mutate(c.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
-
-        {/* Box 2: Aprovações Pendentes */}
-        <Card className="lg:col-span-2 border-none shadow-xl rounded-3xl p-6 bg-white ring-1 ring-slate-100 overflow-hidden">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-indigo-100 text-indigo-600 rounded-2xl"><Banknote className="h-6 w-6" /></div>
-              <div>
-                <h3 className="font-black text-slate-900 uppercase tracking-tighter italic">Pedidos de Resgate</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase">Aguardando Validação Financeira</p>
-              </div>
-            </div>
-            <Badge className="bg-rose-500 text-white animate-pulse">{pending.length} Pendentes</Badge>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-slate-400 text-[10px] uppercase font-black border-b border-slate-50">
-                  <th className="pb-3 text-left">Corretor</th>
-                  <th className="pb-3 text-left">Conquista</th>
-                  <th className="pb-3 text-left">Valor Est.</th>
-                  <th className="pb-3 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {pending.length === 0 ? (
-                  <tr><td colSpan={4} className="py-10 text-center text-slate-300 italic">Nenhum prêmio pendente de aprovação.</td></tr>
-                ) : (
-                  pending.map((p: any) => (
-                    <tr key={p.id} className="group hover:bg-slate-50/50 transition-colors">
-                      <td className="py-4 font-bold text-slate-900">{p.profiles?.first_name}</td>
-                      <td className="py-4">
-                        <Badge variant="outline" className="bg-indigo-50 border-none text-indigo-600 font-bold text-[10px]">
-                          {p.reward_label}
-                        </Badge>
-                      </td>
-                      <td className="py-4 font-black text-slate-700">R$ {p.reward_value}</td>
-                      <td className="py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button 
-                            size="sm" 
-                            className="bg-emerald-600 hover:bg-emerald-700 h-8 rounded-lg font-bold text-[11px]"
-                            onClick={() => handleAchievementStatus(p.id, 'APPROVED')}
-                          >
-                            <CheckCircle2 className="h-3 w-3 mr-1" /> Aprovar
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
-                            className="text-rose-500 hover:bg-rose-50 h-8 rounded-lg font-bold text-[11px]"
-                            onClick={() => handleAchievementStatus(p.id, 'CANCELLED')}
-                          >
-                            <XCircleIcon className="h-3 w-3 mr-1" /> Recusar
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </div>
-
-      {/* MODAL DE EDIÇÃO DE CAMPANHA */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="bg-slate-900 border-slate-800 text-white sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Pencil className="w-4 h-4" /> Editar Campanha</DialogTitle>
-            <DialogDescription className="text-slate-400">Ajuste as regras do jogo em tempo real.</DialogDescription>
-          </DialogHeader>
-          
-          {editingCampaign && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-black text-indigo-200">Título</Label>
-                <Input 
-                  value={editingCampaign.title} 
-                  onChange={(e) => setEditingCampaign({...editingCampaign, title: e.target.value})} 
-                  className="bg-slate-950 border-slate-700 text-white" 
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black text-indigo-200">Ação Alvo</Label>
-                  <Select 
-                    value={editingCampaign.target_action} 
-                    onValueChange={(v) => setEditingCampaign({...editingCampaign, target_action: v})}
-                  >
-                    <SelectTrigger className="bg-slate-950 border-slate-700 text-white"><SelectValue /></SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-700 text-white">
-                      <SelectItem value="VISIT">Visitas</SelectItem>
-                      <SelectItem value="SALE">Vendas</SelectItem>
-                      <SelectItem value="DOCS">Documentos</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black text-indigo-200">Meta (Qtde)</Label>
-                  <Input 
-                    type="number" 
-                    value={editingCampaign.target_count} 
-                    onChange={(e) => setEditingCampaign({...editingCampaign, target_count: parseInt(e.target.value)})} 
-                    className="bg-slate-950 border-slate-700 text-white" 
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-black text-indigo-200">Prêmio (R$)</Label>
-                <Input 
-                  type="number" 
-                  value={editingCampaign.reward_amount} 
-                  onChange={(e) => setEditingCampaign({...editingCampaign, reward_amount: parseFloat(e.target.value)})} 
-                  className="bg-slate-950 border-slate-700 text-white" 
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-black text-indigo-200">Data Limite</Label>
-                <Input 
-                  type="date" 
-                  value={editingCampaign.ends_at ? editingCampaign.ends_at.split('T')[0] : ''} 
-                  onChange={(e) => setEditingCampaign({...editingCampaign, ends_at: e.target.value})} 
-                  className="bg-slate-950 border-slate-700 text-white" 
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsEditOpen(false)} className="text-slate-400">Cancelar</Button>
-            <Button 
-              onClick={() => updateCampaignMutation.mutate(editingCampaign)} 
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
-            >
-              Salvar Alterações
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-};
-
-const Admin = () => {
-  const { user: authUser, role: userRole, loading: authLoading, signOut } = useAuth();
-  const [activeTab, setActiveTab] = useState("users");
   const navigate = useNavigate();
-  
-  const currentUser: User = {
-    id: authUser?.id || "unknown",
-    name: authUser?.email || "Admin User",
-    email: authUser?.email || "",
-    role: (userRole as UserRole) || "SUPERINTENDENT",
-    managerId: null,
-    teamId: null,
-    leadAssignmentEnabled: false,
-  };
+  const { toast } = useToast();
 
-  const [isRescueOpen, setIsRescueOpen] = useState(false);
-  const [rescueBrokerId, setRescueBrokerId] = useState<string>("");
-  const [isRescuing, setIsRescuing] = useState(false);
-  const [selectedStaleLeadId, setSelectedStaleLeadId] = useState<string | null>(null);
-  const [isStaleRescueOpen, setIsStaleRescueOpen] = useState(false);
-  const [staleLeadsToRescue, setStaleLeadsToRescue] = useState<Lead[]>([]);
-  const [selectedStaleLeads, setSelectedStaleLeads] = useState<string[]>([]);
-  const [staleRescueBrokerId, setStaleRescueBrokerId] = useState<string>("");
-  const queryClient = useQueryClient();
+  useEffect(() => {
+    loadData();
+  }, []);
 
-  const { data: profiles = [] } = useQuery<User[]>({
-    queryKey: ["profiles"],
-    queryFn: fetchProfiles,
-  });
-
-  const { data: leads = [] } = useQuery<Lead[]>({
-    queryKey: ["adminLeads"],
-    queryFn: fetchLeadsForAdmin,
-  });
-
-  // Lógica de cálculo de horas de inatividade ignorando o período das 21h às 08h
-  const getStaleHours = (lastActionIso: string | null) => {
-    if (!lastActionIso) return 0;
-    
-    const lastAction = new Date(lastActionIso);
-    const now = new Date();
-    
-    // Se a data for inválida ou no futuro (erro de fuso), retorna 0
-    if (isNaN(lastAction.getTime()) || lastAction > now) return 0;
-
-    // Se agora for entre 21h e 08h, usamos 21h do dia atual (ou anterior) como "agora" para o cálculo
-    let effectiveNow = new Date(now);
-    const nowHour = now.getHours();
-    
-    if (nowHour >= 21) {
-      effectiveNow.setHours(21, 0, 0, 0);
-    } else if (nowHour < 8) {
-      effectiveNow.setDate(effectiveNow.getDate() - 1);
-      effectiveNow.setHours(21, 0, 0, 0);
-    }
-
-    // Se a última ação foi após as 21h, consideramos que o relógio só começa a contar às 08h
-    let effectiveStart = new Date(lastAction);
-    const startHour = lastAction.getHours();
-    if (startHour >= 21) {
-      effectiveStart.setDate(effectiveStart.getDate() + 1);
-      effectiveStart.setHours(8, 0, 0, 0);
-    } else if (startHour < 8) {
-      effectiveStart.setHours(8, 0, 0, 0);
-    }
-
-    // Cálculo simples em horas. Nota: Uma implementação ultra-precisa exigiria loop pelos dias, 
-    // mas para o radar de 4h, essa lógica de "congelamento" noturno atende bem.
-    const diffMs = effectiveNow.getTime() - effectiveStart.getTime();
-    const hours = Math.floor(diffMs / 3600000);
-    return hours > 0 ? hours : 0;
-  };
-
-  // NEW: Stale Leads Detection for Managers and Superintendents
-  const staleLeadsStats = useMemo(() => {
-    const now = Date.now();
-    const staleList = leads.filter(l => {
-      // Filtrar leads que foram cutucados recentemente (< 10 min)
-      if (l.last_nudge_at) {
-        const lastNudge = new Date(l.last_nudge_at).getTime();
-        const diffMinutes = (now - lastNudge) / 60000;
-        if (diffMinutes < 10) return false;
-      }
-      
-      const hours = getStaleHours(l.lastInteractionAt);
-      return hours >= 4 && l.status !== 'CONCLUDED' && l.status !== 'EXCLUDED';
-    });
-
-    // Agrupar por gerente para o Superintendente ver
-    const byManager: Record<string, { id: string, name: string, count: number, phone: string, leads: Lead[] }> = {};
-    
-    staleList.forEach(l => {
-      const managerId = l.managerId || 'unassigned';
-      const manager = profiles.find(p => p.id === managerId);
-      const managerName = manager ? manager.name : 'Sem Gestor';
-      const managerPhone = manager?.phone || '';
-
-      if (!byManager[managerId]) {
-        byManager[managerId] = { id: managerId, name: managerName, count: 0, phone: managerPhone, leads: [] };
-      }
-      byManager[managerId].count++;
-      byManager[managerId].leads.push(l);
-    });
-
-    return {
-      total: staleList.length,
-      byManager: Object.values(byManager).sort((a, b) => b.count - a.count)
-    };
-  }, [leads, profiles]);
-
-  const nudgeGerente = async (managerId: string, managerName: string, managerPhone: string, staleCount: number) => {
+  const loadData = async () => {
     try {
-      // 1. Notificação Interna para o Gerente
-      await supabase.from('internal_notifications').insert({
-        from_id: currentUser.id,
-        to_id: managerId,
-        message: `⚠️ URGENTE: Sua equipe possui ${staleCount} leads parados há mais de 4h. Por favor, mobilize o time imediatamente!`,
-        type: 'STALE_LEAD_ALERT'
+      const { data: profilesData } = await supabase.from("profiles").select("*").order("role", { ascending: false });
+      const { data: teamsData } = await supabase.from("teams").select("*").order("name");
+      setProfiles(profilesData || []);
+      setTeams(teamsData || []);
+      setLoading(false);
+    } catch (error) {
+      console.error("Erro:", error);
+      setLoading(false);
+    }
+  };
+
+  const toggleManager = (managerId: string) => {
+    const newExpanded = new Set(expandedManagers);
+    if (newExpanded.has(managerId)) {
+      newExpanded.delete(managerId);
+    } else {
+      newExpanded.add(managerId);
+    }
+    setExpandedManagers(newExpanded);
+  };
+
+  const handleCreateUser = async () => {
+    try {
+      const session = await supabase.auth.getSession();
+      const response = await fetch(`${supabase.supabaseUrl}/functions/v1/create-user`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.data.session?.access_token}`
+        },
+        body: JSON.stringify({
+          email: newUser.email,
+          password: newUser.password,
+          firstName: newUser.firstName,
+          lastName: newUser.lastName,
+          phone: newUser.phone,
+          role: newUser.role,
+          teamId: newUser.teamId || null,
+          managerId: newUser.managerId || null
+        })
       });
 
-      // 2. WhatsApp para o Gerente (AGORA VIA EDGE FUNCTION AUTOMÁTICA)
-      if (managerPhone) {
-        const message = `🚨 *ALERTA DE SUPERINTENDÊNCIA*\n\n` +
-          `Olá ${managerName.split(' ')[0]}, identifiquei *${staleCount} leads parados* há mais de 4 horas na sua equipe.\n\n` +
-          `Por favor, realize a cobrança imediata dos corretores para evitar a perda dessas oportunidades! 📈`;
+      const result = await response.json();
 
-        // Substitui o window.open pela chamada da automação real
-        const { error } = await supabase.functions.invoke('send-whatsapp', {
-          body: { phone: managerPhone, message }
-        });
-
-        if (error) throw error;
-        toast.success(`Alerta enviado para o Gerente ${managerName} via WhatsApp!`);
+      if (response.ok) {
+        toast({ title: "✅ Sucesso!", description: `${newUser.firstName} foi recrutado!` });
+        setCreateUserOpen(false);
+        setNewUser({ email: "", password: "", firstName: "", lastName: "", phone: "", role: "BROKER", teamId: "", managerId: "" });
+        loadData();
       } else {
-        toast.warning("Alerta enviado apenas no CRM (Gerente sem telefone cadastrado).");
+        toast({ title: "❌ Erro", description: result.error || result.details || "Falha ao criar", variant: "destructive" });
       }
-    } catch (e: any) {
-      toast.error("Erro ao notificar gerente: " + e.message);
+    } catch (error) {
+      toast({ title: "❌ Erro", description: "Falha no servidor", variant: "destructive" });
     }
   };
 
-  const nudgeCorretor = async (brokerId: string, leadName: string, leadPhone: string, leadId?: string) => {
-    try {
-      const broker = profiles.find(p => p.id === brokerId);
-      const hours = getStaleHours(leads.find(l => l.name === leadName)?.lastInteractionAt || new Date().toISOString());
-      
-      // 1. Atualizar last_nudge_at
-      if (leadId) {
-        await supabase.from('leads').update({ last_nudge_at: new Date().toISOString() }).eq('id', leadId);
-      }
-      
-      // 2. Incrementar Advertência
-      if (broker) {
-        await supabase.from('profiles').update({ warning_count: (broker.warning_count || 0) + 1 }).eq('id', brokerId);
-      }
+  const generals = profiles.filter(p => ["ADMIN", "SUPERINTENDENT"].includes(p.role));
+  const managers = profiles.filter(p => p.role === "MANAGER");
+  const orphanSoldiers = profiles.filter(p => p.role === "BROKER" && !p.manager_id);
+  const getSoldiersByManager = (managerId: string) => profiles.filter(p => p.role === "BROKER" && p.manager_id === managerId);
 
-      // 3. Notificação Interna
-      await supabase.from('internal_notifications').insert({
-        from_id: currentUser.id,
-        to_id: brokerId,
-        message: `🚨 GESTÃO: O lead "${leadName}" está parado há ${hours}h. Atenda agora!`,
-        type: 'STALE_LEAD_ALERT'
-      });
-
-      // 4. WhatsApp via Automação
-      if (broker?.phone) {
-        const message = `🚨 *ALERTA DE GESTÃO - CRM*\n\n` +
-          `Olá ${broker.name.split(' ')[0]}, seu cliente *${leadName}* (${leadPhone}) está há *${hours} horas* sem contato.\n\n` +
-          `Por favor, atualize a ferramenta agora para não perder o lead! 📈`;
-          
-        const { error } = await supabase.functions.invoke('send-whatsapp', {
-          body: { phone: broker.phone, message }
-        });
-
-        if (error) throw error;
-        toast.success("Notificações enviadas (Interna + WhatsApp)!");
-      } else {
-        toast.warning("Cutucão enviado apenas no CRM (Corretor sem telefone cadastrado).");
-      }
-    } catch (e: any) {
-      toast.error("Erro ao notificar: " + e.message);
-    }
-  };
-
-  // Query specifically for failed distribution logs to show the alert
-  const { data: failedLogs = [] } = useQuery({
-    queryKey: ['failed-distribution-logs'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('distribution_logs')
-        .select('*')
-        .eq('status', 'NO_BROKER_AVAILABLE')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-    refetchInterval: 15000 
-  });
-
-  const handleRescueLeads = async () => {
-    if (!rescueBrokerId) {
-      toast.error("Selecione um corretor para receber os leads.");
-      return;
-    }
-
-    setIsRescuing(true);
-    try {
-      const selectedBroker = profiles.find(p => p.id === rescueBrokerId);
-      if (!selectedBroker) throw new Error("Corretor não encontrado.");
-
-      // 1. Pegar informações dos logs que falharam
-      const phoneNumbers = failedLogs.map(log => log.lead_phone).filter(Boolean);
-      const leadNames = failedLogs.map(log => log.lead_name).filter(Boolean);
-      const logIds = failedLogs.map(log => log.id);
-      
-      console.log(`[AdminRescue] Tentando resgatar leads. Nomes:`, leadNames, "Logs:", logIds);
-
-      // PASSO INTERMEDIÁRIO: Buscar os IDs dos leads antes de tentar atualizar
-      // Isso evita problemas com a sintaxe complexa do .or() com strings
-      let leadIdsToUpdate: string[] = [];
-      
-      if (phoneNumbers.length > 0 || leadNames.length > 0) {
-        let query = supabase.from('leads').select('id, name, phone').is('broker_id', null);
-        
-        // Construir filtro OR manualmente para ser mais seguro
-        const conditions = [];
-        if (phoneNumbers.length > 0) conditions.push(`phone.in.(${phoneNumbers.map(p => `"${p}"`).join(',')})`);
-        if (leadNames.length > 0) conditions.push(`name.in.(${leadNames.map(n => `"${n}"`).join(',')})`);
-        
-        if (conditions.length > 0) {
-          const { data: foundLeads, error: searchError } = await query.or(conditions.join(','));
-          if (!searchError && foundLeads) {
-            console.log("[AdminRescue] Leads encontrados para atualização:", foundLeads);
-            leadIdsToUpdate = foundLeads.map(l => l.id);
-          } else {
-             console.warn("[AdminRescue] Erro ou nenhum lead encontrado na busca prévia:", searchError);
-          }
-        }
-      }
-
-      let count = 0;
-      if (leadIdsToUpdate.length > 0) {
-         // 2. Atualizar a tabela de leads usando os IDs encontrados
-        const { data: updatedLeads, error: updateError } = await supabase
-          .from('leads')
-          .update({ 
-            broker_id: selectedBroker.id,
-            manager_id: selectedBroker.managerId,
-            status: 'NEW',
-            last_interaction_at: new Date().toISOString()
-          })
-          .in('id', leadIdsToUpdate)
-          .select();
-
-        if (updateError) throw updateError;
-        count = updatedLeads?.length || 0;
-      }
-
-      // 3. Atualizar os logs de distribuição (REMOVIDO assigned_to_id QUE NÃO EXISTE NO SCHEMA)
-      const { error: logUpdateError } = await supabase
-        .from('distribution_logs')
-        .update({ 
-          status: 'SUCCESS', 
-          assigned_to_name: `${selectedBroker.name} (Resgatado)` 
-        })
-        .in('id', logIds);
-
-      if (logUpdateError) throw logUpdateError;
-
-      if (count === 0) {
-        toast.success("O alerta foi limpo. O lead pode ter sido deletado ou já atribuído manualmente.");
-      } else {
-        toast.success(`${count} lead(s) resgatado(s) com sucesso para ${selectedBroker.name}!`);
-      }
-
-      // Forçar atualização total da interface
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['failed-distribution-logs'] }),
-        queryClient.invalidateQueries({ queryKey: ['distribution-logs'] }),
-        queryClient.invalidateQueries({ queryKey: ['adminLeads'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboardLeads'] })
-      ]);
-      
-      setIsRescueOpen(false);
-    } catch (err: any) {
-      console.error("[AdminRescue] Erro crítico no resgate:", err);
-      toast.error(`Falha no resgate: ${err.message}`);
-    } finally {
-      setIsRescuing(false);
-    }
-  };
-
-  const handleStaleRescue = async () => {
-    if (selectedStaleLeads.length === 0) {
-      toast.error("Selecione pelo menos um lead.");
-      return;
-    }
-    if (!staleRescueBrokerId) {
-      toast.error("Selecione um corretor de destino.");
-      return;
-    }
-
-    try {
-      const selectedBroker = profiles.find(p => p.id === staleRescueBrokerId);
-      
-      const { error } = await supabase
-        .from('leads')
-        .update({
-          broker_id: staleRescueBrokerId,
-          manager_id: selectedBroker?.managerId, // Assumindo que o novo corretor tem um gerente definido
-          status: 'NEW',
-          last_interaction_at: new Date().toISOString()
-        })
-        .in('id', selectedStaleLeads);
-
-      if (error) throw error;
-
-      toast.success(`${selectedStaleLeads.length} leads transferidos com sucesso!`);
-      queryClient.invalidateQueries({ queryKey: ['adminLeads'] });
-      setIsStaleRescueOpen(false);
-      setSelectedStaleLeads([]);
-    } catch (error: any) {
-      toast.error("Erro ao transferir leads: " + error.message);
-    }
-  };
-
-  const openStaleRescueModal = (managerLeads: Lead[]) => {
-    setStaleLeadsToRescue(managerLeads);
-    setSelectedStaleLeads([]);
-    setStaleRescueBrokerId("");
-    setIsStaleRescueOpen(true);
-  };
-
-  if (authLoading) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-red-900/20 to-slate-900 flex items-center justify-center">
+        <div className="text-white text-2xl font-black animate-pulse">⚔️ CARREGANDO...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Urgent Alert for unassigned leads */}
-        {failedLogs.length > 0 && (
-          <Alert variant="destructive" className="mb-6 border-2 border-rose-500 bg-rose-50 animate-pulse rounded-2xl shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 p-6">
-            <div className="flex items-center">
-              <AlertCircle className="h-8 w-8 text-rose-600 shrink-0" />
-              <div className="ml-4">
-                <AlertTitle className="font-black text-rose-800 uppercase tracking-wider text-lg">
-                  Leads em Perigo!
-                </AlertTitle>
-                <AlertDescription className="text-rose-700 font-medium">
-                  {failedLogs.length} leads chegaram e estão sem dono. Resgate-os agora para não perder a venda.
-                </AlertDescription>
-              </div>
-            </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <Button 
-                className="bg-rose-600 hover:bg-rose-700 text-white font-black px-6 py-2 rounded-xl shadow-md transition-all active:scale-95 flex-1 sm:flex-none"
-                onClick={() => setIsRescueOpen(true)}
-              >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Resgatar Leads
-              </Button>
-              <Button
-                variant="outline"
-                className="border-rose-200 text-rose-600 font-bold px-4 py-2 rounded-xl flex-1 sm:flex-none"
-                onClick={() => setActiveTab("users")}
-              >
-                Ativar Fila
-              </Button>
-            </div>
-          </Alert>
-        )}
-
-        {/* Rescue Modal */}
-        <Dialog open={isRescueOpen} onOpenChange={setIsRescueOpen}>
-          <DialogContent className="sm:max-w-md rounded-3xl border-none shadow-2xl">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-black text-slate-900">Resgate de Leads</DialogTitle>
-              <DialogDescription className="text-slate-500 font-medium text-left">
-                Escolha o corretor que vai assumir esses {failedLogs.length} leads agora.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-6 space-y-4 text-left">
-              <div className="space-y-2">
-                <Label className="font-bold text-slate-700">Destinar leads para:</Label>
-                <Select onValueChange={setRescueBrokerId} value={rescueBrokerId}>
-                  <SelectTrigger className="h-12 rounded-xl border-slate-200 focus:ring-indigo-500">
-                    <SelectValue placeholder="Selecione o corretor sortudo" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl border-none shadow-xl">
-                    {profiles.filter(p => p.role === 'BROKER').map(broker => (
-                      <SelectItem key={broker.id} value={broker.id} className="focus:bg-indigo-50 rounded-lg">
-                        {broker.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100">
-                <p className="text-xs text-indigo-700 font-medium leading-relaxed">
-                  * Ao resgatar, os leads aparecerão instantaneamente no dashboard do corretor escolhido como "NOVOS".
-                </p>
-              </div>
-            </div>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="ghost" onClick={() => setIsRescueOpen(false)} className="rounded-xl font-bold">Cancelar</Button>
-              <Button
-                onClick={handleRescueLeads}
-                disabled={isRescuing || !rescueBrokerId}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-8 rounded-xl shadow-lg shadow-indigo-100 h-11"
-              >
-                {isRescuing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                Confirmar Resgate
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Modal de Resgate de Leads Parados (Stale Rescue) */}
-        <Dialog open={isStaleRescueOpen} onOpenChange={setIsStaleRescueOpen}>
-          <DialogContent className="sm:max-w-2xl rounded-3xl border-none shadow-2xl">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-black text-slate-900">Resgate Cirúrgico</DialogTitle>
-              <DialogDescription className="text-slate-500 font-medium">
-                Selecione os leads parados que deseja transferir e escolha o novo dono.
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="py-4 space-y-4">
-              <div className="border rounded-xl overflow-hidden max-h-[300px] overflow-y-auto">
-                <Table>
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="w-[50px]"><Checkbox 
-                        checked={selectedStaleLeads.length === staleLeadsToRescue.length && staleLeadsToRescue.length > 0}
-                        onCheckedChange={(checked) => {
-                          if (checked) setSelectedStaleLeads(staleLeadsToRescue.map(l => l.id));
-                          else setSelectedStaleLeads([]);
-                        }}
-                      /></TableHead>
-                      <TableHead>Lead</TableHead>
-                      <TableHead>Tempo Parado</TableHead>
-                      <TableHead>Corretor Atual</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {staleLeadsToRescue.map(lead => (
-                      <TableRow key={lead.id}>
-                        <TableCell><Checkbox 
-                          checked={selectedStaleLeads.includes(lead.id)}
-                          onCheckedChange={(checked) => {
-                            if (checked) setSelectedStaleLeads([...selectedStaleLeads, lead.id]);
-                            else setSelectedStaleLeads(selectedStaleLeads.filter(id => id !== lead.id));
-                          }}
-                        /></TableCell>
-                        <TableCell className="font-medium">{lead.name}</TableCell>
-                        <TableCell className="text-rose-600 font-bold">{getStaleHours(lead.lastInteractionAt)}h</TableCell>
-                        <TableCell className="text-xs text-slate-500">{profiles.find(p => p.id === lead.brokerId)?.name}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="font-bold text-slate-700">Novo Dono:</Label>
-                <Select onValueChange={setStaleRescueBrokerId} value={staleRescueBrokerId}>
-                  <SelectTrigger className="h-12 rounded-xl border-slate-200">
-                    <SelectValue placeholder="Selecione o corretor salvador" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl border-none shadow-xl">
-                    {profiles.filter(p => p.role === 'BROKER').map(broker => (
-                      <SelectItem key={broker.id} value={broker.id}>
-                        {broker.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setIsStaleRescueOpen(false)} className="rounded-xl font-bold">Cancelar</Button>
-              <Button onClick={handleStaleRescue} className="bg-rose-600 hover:bg-rose-700 text-white font-black px-8 rounded-xl shadow-lg h-11">
-                <RefreshCcw className="w-4 h-4 mr-2" /> Confirmar Transferência
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-red-900/20 to-slate-900 p-4 md:p-6">
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
           <div>
-            <h1 className="text-4xl font-extrabold text-gray-900">
-              Dashboard <span className="text-indigo-600">Admin</span>
+            <h1 className="text-4xl md:text-5xl font-black text-white mb-2 flex items-center gap-3">
+              <Shield className="w-10 h-10 text-red-500" />
+              QUARTEL GENERAL
             </h1>
-            <p className="text-gray-500 mt-1 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4" /> Nível: <b>{currentUser.role}</b>
-            </p>
+            <p className="text-gray-400">Gerencie suas Tropas</p>
           </div>
-          <div className="flex items-center gap-4">
-            <Button 
-              onClick={() => navigate('/command-center')}
-              className="rounded-2xl bg-slate-900 hover:bg-slate-800 text-white h-12 px-6 font-bold shadow-lg shadow-slate-200 transition-all"
-            >
-              <LayoutDashboard className="w-4 h-4 mr-2" />
-              QG de Comando
+          <div className="flex gap-2">
+            <Button onClick={() => navigate("/command-center")} variant="outline" className="border-purple-500 text-purple-400">
+              <Target className="w-4 h-4 mr-2" />
+              Comando
             </Button>
-            
-            <div className="bg-white p-3 rounded-2xl shadow-sm border border-indigo-50 flex items-center gap-3">
-              <UserCircle className="w-8 h-8 text-indigo-200" />
-              <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-gray-400">LOGADO COMO:</span>
-                <span className="text-indigo-600 font-bold">{currentUser.name}</span>
-              </div>
-            </div>
-            <Button 
-              variant="outline" 
-              onClick={signOut}
-              className="rounded-2xl border-rose-100 text-rose-600 hover:bg-rose-50 hover:text-rose-700 h-12 px-6 font-bold shadow-sm transition-all"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sair
+            <Button onClick={() => setCreateUserOpen(true)} className="bg-red-600 hover:bg-red-700">
+              <Plus className="w-4 h-4 mr-2" />
+              Recrutar
             </Button>
           </div>
         </div>
-
-        <AdminStats currentUser={currentUser} />
-
-        <div className="mb-8">
-          <LeaderboardPodium
-            leads={leads}
-            users={profiles}
-            isMonthly={false}
-          />
-        </div>
-
-        <Tabs defaultValue="users" value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-8 h-14 bg-white shadow-lg rounded-2xl p-1 mb-8">
-            <TabsTrigger value="users" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><Users className="w-3.5 h-3.5 mr-1" /> Time</TabsTrigger>
-            <TabsTrigger value="teams" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><Group className="w-3.5 h-3.5 mr-1" /> Equipes</TabsTrigger>
-            <TabsTrigger value="economy" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><Coins className="w-3.5 h-3.5 mr-1" /> Economia</TabsTrigger>
-            <TabsTrigger value="leads" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><Zap className="w-3.5 h-3.5 mr-1" /> Regras</TabsTrigger>
-            <TabsTrigger value="logs" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><History className="w-3.5 h-3.5 mr-1" /> Logs</TabsTrigger>
-            <TabsTrigger value="rework" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><RefreshCw className="w-3.5 h-3.5 mr-1" /> Rework</TabsTrigger>
-            <TabsTrigger value="integrations" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><Globe className="w-3.5 h-3.5 mr-1" /> Webhooks</TabsTrigger>
-            <TabsTrigger value="settings" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white rounded-xl text-[10px] sm:text-xs uppercase font-black tracking-tighter"><Settings className="w-3.5 h-3.5 mr-1" /> Ajustes</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="users"><Card className="shadow-xl border-none p-6"><UserManagement currentUser={currentUser} /></Card></TabsContent>
-          <TabsContent value="teams"><Card className="shadow-xl border-none p-6"><TeamManagement /></Card></TabsContent>
-          <TabsContent value="economy"><EconomyManagement /></TabsContent>
-          <TabsContent value="leads"><LeadDistribution /></TabsContent>
-          <TabsContent value="logs"><DistributionLogs /></TabsContent>
-          <TabsContent value="rework"><LeadRework /></TabsContent>
-          
-          {/* Nova Seção: Radar de Leads Parados */}
-          {(currentUser.role === 'SUPERINTENDENT' || currentUser.role === 'MANAGER') && (
-            <div className="mt-12 space-y-8">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-                    <Hourglass className="h-6 w-6 text-amber-500 animate-spin-slow" />
-                    Radar de Leads Parados
-                  </h2>
-                  <p className="text-sm text-slate-500 font-medium">Gestão de velocidade e faturamento.</p>
-                </div>
-                <Badge className="bg-amber-100 text-amber-700 font-black px-4 py-1 rounded-full border-none">
-                  {staleLeadsStats.total} EM RISCO
-                </Badge>
-              </div>
-
-              {/* Visão de Superintendente: Por Equipe/Gerente */}
-              {currentUser.role === 'SUPERINTENDENT' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-                  {staleLeadsStats.byManager.map((m, idx) => (
-                    <Card key={idx} className="p-5 border-none shadow-lg rounded-3xl bg-slate-900 text-white relative overflow-hidden group">
-                      <div className="absolute -right-4 -top-4 opacity-10 group-hover:scale-110 transition-transform">
-                        <Users2 className="h-20 w-20" />
-                      </div>
-                      <div className="relative z-10 space-y-4">
-                        <div>
-                          <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Equipe de:</p>
-                          <h4 className="text-lg font-bold truncate">{m.name}</h4>
-                        </div>
-                        <div className="flex items-end justify-between">
-                          <div>
-                            <p className="text-3xl font-black text-rose-500">{m.count}</p>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase">Leads Parados</p>
-                          </div>
-                          <Button 
-                            size="sm" 
-                            className="bg-indigo-600 hover:bg-indigo-700 rounded-xl font-bold text-[10px] h-8"
-                            onClick={() => nudgeGerente(m.id, m.name, m.phone, m.count)}
-                          >
-                            Cobrar Gerente
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
-
-              {/* Visão Detalhada: Cards de Leads (Existente) */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <Target className="h-4 w-4" /> Detalhamento de Leads em Risco
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {staleLeadsStats.total === 0 ? (
-                    <Card className="col-span-full p-10 text-center text-slate-400 border-dashed border-2 bg-transparent shadow-none rounded-3xl">
-                      <CheckCircle className="h-10 w-10 mx-auto mb-2 text-emerald-400 opacity-50" />
-                      <p className="font-bold">Parabéns! Todo o time está com os leads em dia.</p>
-                    </Card>
-                  ) : (
-                    staleLeadsStats.byManager.map((manager) => {
-                      const staleCount = manager.count;
-                      const broker = profiles.find(p => p.id === manager.id);
-                      const hours = getStaleHours(leads.find(l => l.name === broker?.name)?.lastInteractionAt || new Date().toISOString());
-                      
-                      return (
-                        <Card key={manager.id} className="p-5 border-none shadow-xl rounded-[2rem] bg-white ring-1 ring-amber-100 relative overflow-hidden group">
-                          <div className="absolute top-0 right-0 p-4">
-                            <div className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-full animate-pulse uppercase tracking-tighter">
-                              {staleCount} leads
-                            </div>
-                          </div>
-                          
-                          <div className="space-y-4">
-                            <div>
-                              <h4 className="font-black text-slate-900 text-lg leading-none">{manager.name}</h4>
-                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Gerente: {broker?.name || 'Sem Dono'}</p>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2 pt-2">
-                              <Button 
-                                size="sm" 
-                                variant="outline" 
-                                className="rounded-xl text-[10px] font-black uppercase tracking-tighter border-amber-200 text-amber-700 hover:bg-amber-50"
-                                onClick={() => {
-                                  // Cutucar o gerente
-                                  nudgeGerente(manager.id, manager.name, manager.phone, staleCount);
-                                  // Opcional: Cutucar individualmente os leads dessa lista? 
-                                  // Por enquanto mantém o cutucão no gerente, mas poderíamos iterar sobre manager.leads
-                                  // para marcar o "snooze" neles também se desejado.
-                                  // Vamos marcar snooze em TODOS os leads desse gerente para limpar o dashboard?
-                                  // O usuário disse "quando eu resgato ou cutuco". Então SIM.
-                                  manager.leads.forEach(l => {
-                                      // Chama update silencioso
-                                      supabase.from('leads').update({ last_nudge_at: new Date().toISOString() }).eq('id', l.id).then();
-                                  });
-                                  // Invalida queries para atualizar a tela
-                                  setTimeout(() => queryClient.invalidateQueries({ queryKey: ['adminLeads'] }), 1000);
-                                }}
-                              >
-                                <SendHorizontal className="h-3 w-3 mr-1" /> Cutucar
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                className="rounded-xl text-[10px] font-black uppercase tracking-tighter bg-rose-600 hover:bg-rose-700 shadow-md"
-                                onClick={() => openStaleRescueModal(manager.leads)}
-                              >
-                                <RefreshCcw className="h-3 w-3 mr-1" /> Resgatar
-                              </Button>
-                            </div>
-                          </div>
-                        </Card>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <TabsContent value="integrations"><IntegrationsManagement /></TabsContent>
-          <TabsContent value="settings"><AudioSettings /></TabsContent>
-        </Tabs>
       </div>
+
+      <Dialog open={createUserOpen} onOpenChange={setCreateUserOpen}>
+        <DialogContent className="bg-slate-900 border-2 border-red-500 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white text-2xl font-black">🎖️ Recrutar Guerreiro</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 p-4">
+            <div>
+              <label className="text-white text-sm mb-2 block">Email *</label>
+              <Input 
+                placeholder="email@exemplo.com" 
+                type="email"
+                value={newUser.email} 
+                onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                className="bg-slate-800 text-white border-gray-600"
+              />
+            </div>
+
+            <div>
+              <label className="text-white text-sm mb-2 block">Senha *</label>
+              <Input 
+                placeholder="Senha forte" 
+                type="password"
+                value={newUser.password} 
+                onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                className="bg-slate-800 text-white border-gray-600"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-white text-sm mb-2 block">Nome *</label>
+                <Input 
+                  placeholder="Nome" 
+                  value={newUser.firstName} 
+                  onChange={(e) => setNewUser({...newUser, firstName: e.target.value})}
+                  className="bg-slate-800 text-white border-gray-600"
+                />
+              </div>
+              <div>
+                <label className="text-white text-sm mb-2 block">Sobrenome *</label>
+                <Input 
+                  placeholder="Sobrenome" 
+                  value={newUser.lastName} 
+                  onChange={(e) => setNewUser({...newUser, lastName: e.target.value})}
+                  className="bg-slate-800 text-white border-gray-600"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-white text-sm mb-2 block">Telefone</label>
+              <Input 
+                placeholder="(00) 00000-0000" 
+                value={newUser.phone} 
+                onChange={(e) => setNewUser({...newUser, phone: e.target.value})}
+                className="bg-slate-800 text-white border-gray-600"
+              />
+            </div>
+            
+            <div>
+              <label className="text-white text-sm mb-2 block">Patente *</label>
+              <select 
+                value={newUser.role} 
+                onChange={(e) => setNewUser({...newUser, role: e.target.value, managerId: "", teamId: ""})}
+                className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2"
+              >
+                <option value="BROKER">⚔️ SOLDADO (Corretor)</option>
+                <option value="MANAGER">🎖️ CAPITÃO (Gerente)</option>
+                <option value="SUPERINTENDENT">👑 SUPERINTENDENTE</option>
+                <option value="ADMIN">👑 GENERAL (Admin)</option>
+              </select>
+            </div>
+
+            {teams.length > 0 && (newUser.role === "BROKER" || newUser.role === "MANAGER") && (
+              <div>
+                <label className="text-white text-sm mb-2 block">
+                  Esquadrão (Equipe) {newUser.role === "BROKER" ? "*" : ""}
+                </label>
+                <select 
+                  value={newUser.teamId} 
+                  onChange={(e) => setNewUser({...newUser, teamId: e.target.value})}
+                  className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2"
+                >
+                  <option value="">Selecione uma equipe</option>
+                  {teams.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {newUser.role === "BROKER" && managers.length > 0 && (
+              <div>
+                <label className="text-white text-sm mb-2 block">Capitão (Gerente) *</label>
+                <select 
+                  value={newUser.managerId} 
+                  onChange={(e) => setNewUser({...newUser, managerId: e.target.value})}
+                  className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2"
+                >
+                  <option value="">Selecione um capitão</option>
+                  {managers.map(m => (
+                    <option key={m.id} value={m.id}>
+                      🎖️ {m.first_name} {m.last_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {newUser.role === "MANAGER" && generals.filter(g => g.role === "SUPERINTENDENT").length > 0 && (
+              <div>
+                <label className="text-white text-sm mb-2 block">Superior (Superintendente)</label>
+                <select 
+                  value={newUser.managerId} 
+                  onChange={(e) => setNewUser({...newUser, managerId: e.target.value})}
+                  className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2"
+                >
+                  <option value="">Sem superior direto</option>
+                  {generals.filter(g => g.role === "SUPERINTENDENT").map(g => (
+                    <option key={g.id} value={g.id}>
+                      👑 {g.first_name} {g.last_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="pt-2">
+              <Button 
+                onClick={handleCreateUser} 
+                className="w-full bg-red-600 hover:bg-red-700"
+                disabled={
+                  !newUser.email || 
+                  !newUser.password || 
+                  !newUser.firstName || 
+                  !newUser.lastName ||
+                  (newUser.role === "BROKER" && !newUser.managerId) ||
+                  (newUser.role === "BROKER" && !newUser.teamId)
+                }
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Recrutar Agora
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Card className="border-2 border-yellow-500 bg-yellow-950/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-white flex items-center gap-2">
+              <Shield className="w-5 h-5 text-yellow-500" />
+              Generais
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-black text-white">{generals.length}</div>
+          </CardContent>
+        </Card>
+        <Card className="border-2 border-blue-500 bg-blue-950/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-white flex items-center gap-2">
+              <Users className="w-5 h-5 text-blue-500" />
+              Capitães
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-black text-white">{managers.length}</div>
+          </CardContent>
+        </Card>
+        <Card className="border-2 border-green-500 bg-green-950/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-white flex items-center gap-2">
+              <Swords className="w-5 h-5 text-green-500" />
+              Soldados
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-4xl font-black text-white">{profiles.filter(p => p.role === "BROKER").length}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {generals.length > 0 && (
+        <Card className="border-2 border-yellow-500 bg-slate-900/50 mb-6">
+          <CardHeader>
+            <CardTitle className="text-white text-xl font-black flex items-center gap-2">
+              <Shield className="w-6 h-6 text-yellow-500" />
+              GENERAIS ({generals.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {generals.map(g => (
+                <div key={g.id} className="flex items-center gap-3 p-4 rounded-lg border-2 border-yellow-500 bg-yellow-950/20">
+                  <span className="text-3xl">👑</span>
+                  <div>
+                    <div className="text-white font-bold">{g.first_name} {g.last_name}</div>
+                    <div className="text-sm text-yellow-400">{g.role === "SUPERINTENDENT" ? "SUPERINTENDENTE" : "GENERAL"}</div>
+                    <div className="text-xs text-gray-500">{g.email}</div>
+                    {g.phone && <div className="text-xs text-gray-500">{g.phone}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {managers.length > 0 && (
+        <Card className="border-2 border-blue-500 bg-slate-900/50 mb-6">
+          <CardHeader>
+            <CardTitle className="text-white text-xl font-black flex items-center gap-2">
+              <Users className="w-6 h-6 text-blue-500" />
+              CAPITÃES ({managers.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {managers.map(m => {
+                const soldiers = getSoldiersByManager(m.id);
+                const isExpanded = expandedManagers.has(m.id);
+                const superior = m.manager_id ? profiles.find(p => p.id === m.manager_id) : null;
+                const team = m.team_id ? teams.find(t => t.id === m.team_id) : null;
+                return (
+                  <div key={m.id} className="border-2 border-blue-500 rounded-lg bg-blue-950/20">
+                    <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-blue-950/30" onClick={() => toggleManager(m.id)}>
+                      <div className="flex items-center gap-3 flex-1">
+                        <span className="text-3xl">🎖️</span>
+                        <div className="flex-1">
+                          <div className="text-white font-bold">{m.first_name} {m.last_name}</div>
+                          <div className="text-sm text-blue-400">CAPITÃO</div>
+                          <div className="text-xs text-gray-500">{m.email}</div>
+                          {m.phone && <div className="text-xs text-gray-500">{m.phone}</div>}
+                          {team && <div className="text-xs text-blue-300">Equipe: {team.name}</div>}
+                          {superior && <div className="text-xs text-yellow-300">Superior: {superior.first_name} {superior.last_name}</div>}
+                        </div>
+                        <Badge variant="secondary">{soldiers.length} soldados</Badge>
+                      </div>
+                      <Button variant="ghost" size="sm" className="text-blue-400">
+                        {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+                      </Button>
+                    </div>
+                    {isExpanded && soldiers.length > 0 && (
+                      <div className="border-t-2 border-blue-500 bg-slate-800/50 p-4 space-y-2">
+                        {soldiers.map(s => {
+                          const soldierTeam = s.team_id ? teams.find(t => t.id === s.team_id) : null;
+                          return (
+                            <div key={s.id} className="flex items-center justify-between p-3 rounded-lg border border-green-600 bg-green-950/20">
+                              <div className="flex items-center gap-3">
+                                <span className="text-2xl">⚔️</span>
+                                <div>
+                                  <div className="text-white font-bold text-sm">{s.first_name} {s.last_name}</div>
+                                  <div className="text-xs text-green-400">SOLDADO</div>
+                                  <div className="text-xs text-gray-500">{s.email}</div>
+                                  {s.phone && <div className="text-xs text-gray-500">{s.phone}</div>}
+                                  {soldierTeam && <div className="text-xs text-green-300">Equipe: {soldierTeam.name}</div>}
+                                </div>
+                              </div>
+                              <Badge variant={s.lead_assignment_enabled ? "default" : "secondary"} className="text-xs">
+                                {s.lead_assignment_enabled ? "Ativo" : "Inativo"}
+                              </Badge>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {isExpanded && soldiers.length === 0 && (
+                      <div className="border-t-2 border-blue-500 bg-slate-800/50 p-4 text-center text-gray-400 text-sm">
+                        Sem soldados
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {orphanSoldiers.length > 0 && (
+        <Card className="border-2 border-green-500 bg-slate-900/50">
+          <CardHeader>
+            <CardTitle className="text-white text-xl font-black flex items-center gap-2">
+              <Swords className="w-6 h-6 text-green-500" />
+              SOLDADOS SEM CAPITÃO ({orphanSoldiers.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {orphanSoldiers.map(s => {
+                const team = s.team_id ? teams.find(t => t.id === s.team_id) : null;
+                return (
+                  <div key={s.id} className="flex items-center justify-between p-4 rounded-lg border-2 border-green-500 bg-green-950/20">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">⚔️</span>
+                      <div>
+                        <div className="text-white font-bold">{s.first_name} {s.last_name}</div>
+                        <div className="text-sm text-green-400">SOLDADO</div>
+                        <div className="text-xs text-gray-500">{s.email}</div>
+                        {s.phone && <div className="text-xs text-gray-500">{s.phone}</div>}
+                        {team && <div className="text-xs text-green-300">Equipe: {team.name}</div>}
+                      </div>
+                    </div>
+                    <Badge variant={s.lead_assignment_enabled ? "default" : "secondary"}>
+                      {s.lead_assignment_enabled ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
-};
-
-export default Admin;
+}
