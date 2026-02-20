@@ -1,269 +1,193 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Lead } from "@/types/lead";
 import { User } from "@/types/user";
 import { Crown, Sparkles, Trophy, BarChart3, TrendingUp } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { startOfWeek, startOfMonth, isAfter, parseISO } from "date-fns";
 
-type PodiumEntry = {
-  id: string;
-  name: string;
-  points: number;
-  subtitle: string;
-};
+type PodiumEntry = { id: string; name: string; points: number; subtitle: string };
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  const first = parts[0]?.[0] ?? "?";
-  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] : "";
-  return (first + last).toUpperCase();
+  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1]?.[0] : "")).toUpperCase();
 }
 
 function scoreForLead(lead: Lead, filteredHistory: any[], startDate: Date) {
-  // 1. Tenta calcular pelo histórico (Mais preciso para o período)
-  const relevantHistory = filteredHistory.filter(h => 
-    h.lead_id === lead.id && 
-    h.created_at && // Proteção contra histórico sem data
-    isAfter(parseISO(h.created_at), startDate)
+  const relevantHistory = filteredHistory.filter(h =>
+    h.lead_id === lead.id && h.created_at && isAfter(parseISO(h.created_at), startDate)
   );
-
   const stagesReached = new Set(relevantHistory.map(h => h.stage));
-  
-  // 2. FALLBACK HÍBRIDO: Se não tiver histórico, mas o lead estiver no status E foi atualizado recentemente
-  // Isso cobre casos de migração ou erro no log de histórico
-  // CORREÇÃO: Usar camelCase (createdAt/lastInteractionAt) conforme definido na interface Lead
   const lastUpdateStr = lead.lastInteractionAt || lead.createdAt;
-  const lastUpdate = lastUpdateStr ? parseISO(lastUpdateStr) : new Date(0); // Data segura
-  
-  if (isAfter(lastUpdate, startDate)) {
-     // Se a última interação foi no período, assumimos que o status atual foi alcançado (ou mantido) neste período
-     stagesReached.add(lead.status);
-  }
+  const lastUpdate = lastUpdateStr ? parseISO(lastUpdateStr) : new Date(0);
+  if (isAfter(lastUpdate, startDate)) stagesReached.add(lead.status);
 
-  // Se for "All Time" (ou se a regra de negócio mudar), poderíamos remover a verificação de data para status final
-  // Mas por enquanto, mantemos a coerência com o filtro de tempo.
-  
-  let totalPoints = 0;
-  
-  if (stagesReached.has("CONCLUDED")) totalPoints += 500;
-  if (stagesReached.has("DOCS_REQUESTED")) totalPoints += 50;
-  if (stagesReached.has("VISIT_SCHEDULED")) totalPoints += 20;
-  if (stagesReached.has("IN_PROGRESS")) totalPoints += 2;
-  
-  // Pontos por lead NOVO apenas se criado no período
-  // CORREÇÃO: Usar camelCase (createdAt)
-  if (lead.createdAt && isAfter(parseISO(lead.createdAt), startDate)) {
-     totalPoints += 0.5;
-  }
-  
-  return totalPoints;
+  let pts = 0;
+  if (stagesReached.has("CONCLUDED"))       pts += 500;
+  if (stagesReached.has("DOCS_REQUESTED"))  pts += 50;
+  if (stagesReached.has("VISIT_SCHEDULED")) pts += 20;
+  if (stagesReached.has("IN_PROGRESS"))     pts += 2;
+  if (lead.createdAt && isAfter(parseISO(lead.createdAt), startDate)) pts += 0.5;
+  return pts;
 }
 
-export function LeaderboardPodium({ leads, users, onOpenKPIs }: { 
-  leads: Lead[]; 
+const SLOT_CONFIG = [
+  { place: 2 as const, height: "h-20 sm:h-24", label: "Vice-Líder",  avatarBg: "bg-slate-600",  barBg: "bg-slate-600",   barShadow: "" },
+  { place: 1 as const, height: "h-28 sm:h-32", label: "O Melhor",    avatarBg: "bg-indigo-600", barBg: "bg-indigo-600",  barShadow: "shadow-[0_20px_50px_-10px_rgba(79,70,229,0.6)]" },
+  { place: 3 as const, height: "h-16 sm:h-20", label: "Top 3",       avatarBg: "bg-amber-700",  barBg: "bg-amber-700",   barShadow: "" },
+];
+
+export function LeaderboardPodium({ leads, users, onOpenKPIs }: {
+  leads: Lead[];
   users: User[];
   onOpenKPIs?: (id: string, name: string) => void;
 }) {
-  // Estado interno para controle de timeframe (já que o Dashboard não controlava)
-  const [timeframe, setTimeframe] = useState<'WEEK' | 'MONTH'>('MONTH');
-
-  const { data: history = [] } = useQuery({
-    queryKey: ['funnel-history'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('funnel_history').select('*');
-      if (error) throw error;
-      return data;
-    }
-  });
-
+  const [timeframe, setTimeframe] = useState<"WEEK" | "MONTH">("MONTH");
   const { playSound } = useAudioArena();
   const prevRankings = useRef<string[]>([]);
 
+  const { data: history = [] } = useQuery({
+    queryKey: ["funnel-history"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("funnel_history").select("*");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const top3 = useMemo(() => {
-    // IMPORTANTE: Ranking UNIVERSAL e ABSOLUTO
-    const brokers = users.filter((u) => u.role === "BROKER");
+    const brokers = users.filter(u => u.role === "BROKER");
+    const startDate = timeframe === "WEEK" ? startOfWeek(new Date()) : startOfMonth(new Date());
     const byBroker: Record<string, number> = {};
-
-    // Define data de corte
-    const now = new Date();
-    const startDate = timeframe === 'WEEK' ? startOfWeek(now) : startOfMonth(now);
-
-    console.log(`[Podium] Rankeando ${brokers.length} corretores para timeframe: ${timeframe}`);
-
     for (const lead of leads) {
       if (!lead.brokerId) continue;
       byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead, history, startDate);
     }
-
-    // Gerar lista de ranking real, sem favorecer ninguém
-    const entries: PodiumEntry[] = brokers
-      .map((b) => ({
-        id: b.id,
-        name: b.name,
-        points: Math.round((byBroker[b.id] ?? 0) * 10) / 10,
-        subtitle: b.leadAssignmentEnabled ? "Em Campo" : "Pausa",
-      }))
-      .filter((e) => e.points > 0)
-      .sort((a, b) => b.points - a.points); // Ordenação absoluta por pontos
-
-    console.log("[Podium] Top 3 Real detectado:", entries.slice(0, 3));
-    return entries.slice(0, 3);
+    return brokers
+      .map(b => ({ id: b.id, name: b.name, points: Math.round((byBroker[b.id] ?? 0) * 10) / 10, subtitle: b.leadAssignmentEnabled ? "Em Campo" : "Pausa" }))
+      .filter(e => e.points > 0)
+      .sort((a, b) => b.points - a.points)
+      .slice(0, 3);
   }, [leads, users, history, timeframe]);
 
   useEffect(() => {
-    const currentRankIds = top3.map(b => b.id);
-    console.log("[Podium] Verificando ultrapassagem...", { 
-      atual: currentRankIds, 
-      anterior: prevRankings.current 
-    });
-    
-    // Se não for a primeira carga e a ordem mudou (especialmente no top 3)
-    if (prevRankings.current.length > 0) {
-      const topChanged = JSON.stringify(currentRankIds) !== JSON.stringify(prevRankings.current);
-      
-      if (topChanged) {
-        console.log("[Podium] ULTRAPASSAGEM DETECTADA! Disparando áudio...");
-        playSound('OVERTAKE');
-      }
+    const ids = top3.map(b => b.id);
+    if (prevRankings.current.length > 0 && JSON.stringify(ids) !== JSON.stringify(prevRankings.current)) {
+      playSound("OVERTAKE");
     }
-    
-    prevRankings.current = currentRankIds;
+    prevRankings.current = ids;
   }, [top3, playSound]);
 
-  const slots: Array<{ place: 1 | 2 | 3; entry?: PodiumEntry; height: string; tone: string; ring: string; textTone: string }> = [
-    { place: 2, entry: top3[1], height: "h-20 sm:h-24", tone: "bg-slate-200", ring: "ring-slate-100", textTone: "text-slate-600" },
-    { place: 1, entry: top3[0], height: "h-28 sm:h-32", tone: "bg-indigo-600", ring: "ring-indigo-200", textTone: "text-indigo-600" },
-    { place: 3, entry: top3[2], height: "h-16 sm:h-20", tone: "bg-amber-700/80", ring: "ring-amber-100", textTone: "text-amber-800" },
-  ];
-
   return (
-    <Card className="relative overflow-hidden rounded-[2.5rem] border-none bg-white shadow-[0_30px_100px_-20px_rgba(0,0,0,0.12)] p-6 sm:p-8 animate-in zoom-in-95 duration-700">
-      <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-600/5 blur-3xl" />
-      <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-sky-600/5 blur-3xl" />
+    <div className="relative overflow-hidden rounded-2xl border border-gray-700/40 bg-slate-800/40 p-6 sm:p-8">
+      {/* Glows decorativos */}
+      <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-indigo-600/5 blur-3xl pointer-events-none" />
+      <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-amber-600/5 blur-3xl pointer-events-none" />
 
-      <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-amber-500 rounded-2xl text-white shadow-lg shadow-amber-200">
-              <Trophy className="h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tighter">HALL DA FAMA</h2>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className="border-indigo-100 bg-indigo-50/50 text-indigo-600 font-bold uppercase text-[10px] tracking-widest rounded-full">
-                  Elite Performance
-                </Badge>
-                <div className="h-1 w-1 rounded-full bg-slate-300" />
-                <button 
-                  onClick={() => setTimeframe(timeframe === 'WEEK' ? 'MONTH' : 'WEEK')}
-                  className="text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors underline decoration-2 underline-offset-4"
-                >
-                  Ver {timeframe === 'MONTH' ? "da Semana" : "do Mês"}
-                </button>
-              </div>
-            </div>
+      {/* Header */}
+      <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-2xl">
+            <Trophy className="h-6 w-6 text-amber-400" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-black text-white tracking-tighter">HALL DA FAMA</h2>
+            <Badge className="mt-1 bg-indigo-500/10 border-indigo-500/20 text-indigo-400 font-bold uppercase text-[10px] tracking-widest rounded-full">
+              Elite Performance
+            </Badge>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
-          <Button 
-            variant={timeframe === 'WEEK' ? "default" : "ghost"} 
-            size="sm" 
-            onClick={() => setTimeframe('WEEK')}
-            className={cn("rounded-xl text-xs font-bold px-4 transition-all", timeframe === 'WEEK' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500")}
-          >
-            Semana
-          </Button>
-          <Button 
-            variant={timeframe === 'MONTH' ? "default" : "ghost"} 
-            size="sm" 
-            onClick={() => setTimeframe('MONTH')}
-            className={cn("rounded-xl text-xs font-bold px-4 transition-all", timeframe === 'MONTH' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500")}
-          >
-            Mês
-          </Button>
+        {/* Toggle semana/mês */}
+        <div className="flex items-center gap-1 bg-slate-900/60 p-1 rounded-xl border border-gray-700/40">
+          {(["WEEK", "MONTH"] as const).map(tf => (
+            <button key={tf} onClick={() => setTimeframe(tf)}
+              className={cn(
+                "px-4 py-1.5 rounded-lg text-xs font-bold transition-all",
+                timeframe === tf
+                  ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40"
+                  : "text-gray-600 hover:text-gray-400"
+              )}>
+              {tf === "WEEK" ? "Semana" : "Mês"}
+            </button>
+          ))}
         </div>
       </div>
 
       {top3.length === 0 ? (
-        <div className="py-12 text-center text-slate-400 font-medium italic bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-          A batalha está apenas começando... Aguardando os primeiros avanços no funil.
+        <div className="py-12 text-center text-gray-700 border-2 border-dashed border-gray-700/40 rounded-2xl">
+          A batalha está apenas começando... Aguardando os primeiros avanços.
         </div>
       ) : (
-        <div className="grid grid-cols-3 items-end gap-2 sm:gap-6 max-w-2xl mx-auto">
-          {slots.map((s) => (
-            <div key={s.place} className="flex flex-col items-center group">
-              <div className="relative mb-4 flex flex-col items-center">
-                <Avatar className={cn(
-                  "h-14 w-14 sm:h-20 sm:w-20 ring-4 shadow-xl transition-all duration-500 group-hover:scale-110", 
-                  s.place === 1 ? "ring-indigo-100" : "ring-white"
-                )}>
-                  <AvatarFallback className={cn("text-lg sm:text-2xl font-black", s.place === 1 ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600")}>
-                    {s.entry ? initials(s.entry.name) : s.place}
-                  </AvatarFallback>
-                </Avatar>
-                
-                {s.place === 1 && (
-                  <div className="absolute -top-6 bg-amber-400 p-2 rounded-xl shadow-lg animate-bounce">
-                    <Crown className="h-5 w-5 text-white" />
-                  </div>
-                )}
-                
-                <div className={cn(
-                  "absolute -bottom-2 rounded-full px-3 py-0.5 text-[10px] font-black text-white shadow-md",
-                  s.place === 1 ? "bg-indigo-600" : s.place === 2 ? "bg-slate-500" : "bg-amber-800"
-                )}>
-                  #{s.place}
-                </div>
-              </div>
-
-              <div
-                className={cn(
-                  "w-full rounded-t-[2.5rem] rounded-b-3xl shadow-inner transition-all duration-700 dashboard-float",
-                  s.height,
-                  s.place === 1 ? "bg-indigo-600 shadow-[0_20px_50px_-10px_rgba(79,70,229,0.4)]" : 
-                  s.place === 2 ? "bg-slate-200" : "bg-amber-700/80"
-                )}
-                style={{ animationDelay: `${s.place * 150}ms` }}
-              >
-                <div className="flex h-full items-center justify-center">
-                   <Sparkles className={cn("h-6 w-6 opacity-20 text-white", s.place === 1 ? "animate-pulse" : "hidden")} />
-                </div>
-              </div>
-
-              <div className="mt-4 text-center w-full">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{s.place === 1 ? "O Melhor" : s.place === 2 ? "Vice-Líder" : "No Topo"}</p>
-                <h3 className="mt-1 text-sm sm:text-lg font-black text-slate-900 truncate px-2">{s.entry?.name ?? "—"}</h3>
-                
-                {s.entry && (
-                  <div className="mt-3 flex flex-col items-center gap-2">
-                    <div className="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1 rounded-full text-[11px] font-black shadow-sm">
-                      <TrendingUp className="h-3 w-3 text-emerald-400" />
-                      {s.entry.points} PTS
+        <div className="grid grid-cols-3 items-end gap-3 sm:gap-6 max-w-2xl mx-auto">
+          {SLOT_CONFIG.map(s => {
+            const entry = top3[s.place - 1];
+            return (
+              <div key={s.place} className="flex flex-col items-center group">
+                {/* Avatar */}
+                <div className="relative mb-4 flex flex-col items-center">
+                  {s.place === 1 && (
+                    <div className="absolute -top-7 bg-amber-400 p-2 rounded-xl shadow-lg shadow-amber-900/40 animate-bounce">
+                      <Crown className="h-5 w-5 text-white" />
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => onOpenKPIs?.(s.entry!.id, s.entry!.name)}
-                      className="h-7 text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 rounded-full"
-                    >
-                      <BarChart3 className="h-3 w-3 mr-1" /> Ver KPIs
-                    </Button>
+                  )}
+                  <Avatar className={cn(
+                    "ring-4 shadow-xl transition-all duration-500 group-hover:scale-110",
+                    s.place === 1 ? "h-16 w-16 sm:h-20 sm:w-20 ring-indigo-500/30" : "h-12 w-12 sm:h-16 sm:w-16 ring-gray-700/40"
+                  )}>
+                    <AvatarFallback className={cn("font-black text-white", s.place === 1 ? "text-xl sm:text-2xl" : "text-base sm:text-lg", s.avatarBg)}>
+                      {entry ? initials(entry.name) : s.place}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className={cn(
+                    "absolute -bottom-2 rounded-full px-2 py-0.5 text-[9px] font-black text-white shadow-md",
+                    s.place === 1 ? "bg-indigo-600" : s.place === 2 ? "bg-slate-600" : "bg-amber-700"
+                  )}>
+                    #{s.place}
                   </div>
-                )}
+                </div>
+
+                {/* Barra do pódio */}
+                <div className={cn(
+                  "w-full rounded-t-2xl rounded-b-xl transition-all duration-700",
+                  s.height, s.barBg, s.barShadow
+                )}>
+                  <div className="flex h-full items-center justify-center">
+                    {s.place === 1 && <Sparkles className="h-6 w-6 opacity-30 text-white animate-pulse" />}
+                  </div>
+                </div>
+
+                {/* Info */}
+                <div className="mt-4 text-center w-full">
+                  <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">{s.label}</p>
+                  <h3 className="mt-1 text-sm sm:text-base font-black text-white truncate px-1">
+                    {entry?.name ?? "—"}
+                  </h3>
+                  {entry && (
+                    <div className="mt-2 flex flex-col items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 bg-slate-700/60 border border-gray-700/40 text-white px-3 py-1 rounded-full text-[11px] font-black">
+                        <TrendingUp className="h-3 w-3 text-emerald-400" />
+                        {entry.points} PTS
+                      </div>
+                      <Button variant="ghost" size="sm"
+                        onClick={() => onOpenKPIs?.(entry.id, entry.name)}
+                        className="h-6 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded-full px-2">
+                        <BarChart3 className="h-3 w-3 mr-1" /> Ver KPIs
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 

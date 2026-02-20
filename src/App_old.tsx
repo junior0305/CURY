@@ -9,7 +9,6 @@ import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import ManagerDashboard from "./pages/ManagerDashboard";
 import { Loader2 } from "lucide-react";
 import CommandCenter from "./pages/CommandCenter";
 import BootstrapAdmin from "@/pages/BootstrapAdmin";
@@ -17,41 +16,40 @@ import ProfileDebug from "@/pages/ProfileDebug";
 
 const queryClient = new QueryClient();
 
-const LoadingScreen = () => (
-  <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
-    <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
-  </div>
-);
-
-// Admin/Superintendent apenas — não MANAGER
 const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, role, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
+  
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center">
+      <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+    </div>
+  );
+  
   if (!session) return <Navigate to="/login" />;
-  if (role !== "SUPERINTENDENT" && role !== "ADMIN") {
-    if (role === "MANAGER") return <Navigate to="/manager" />;
+  
+  // Permitir ADMIN, SUPERINTENDENT e MANAGER
+  if (role !== 'SUPERINTENDENT' && role !== 'MANAGER' && role !== 'ADMIN') {
+    console.warn(`[AuthGuard] Acesso negado a rota Admin. Role atual: ${role}`);
     return <Navigate to="/dashboard" />;
   }
+  
   return <>{children}</>;
 };
 
-// MANAGER apenas
-const ProtectedManagerRoute = ({ children }: { children: React.ReactNode }) => {
-  const { session, role, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
-  if (!session) return <Navigate to="/login" />;
-  if (role === "ADMIN" || role === "SUPERINTENDENT") return <Navigate to="/admin" />;
-  if (role !== "MANAGER") return <Navigate to="/dashboard" />;
-  return <>{children}</>;
-};
-
-// BROKER apenas
 const ProtectedBrokerRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, role, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center">
+      <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+    </div>
+  );
   if (!session) return <Navigate to="/login" />;
-  if (role === "ADMIN" || role === "SUPERINTENDENT") return <Navigate to="/admin" />;
-  if (role === "MANAGER") return <Navigate to="/manager" />;
+  
+  // Se for SUPERINTENDENT, MANAGER ou ADMIN, redireciona para o painel Admin
+  if (role === 'SUPERINTENDENT' || role === 'MANAGER' || role === 'ADMIN') {
+    return <Navigate to="/admin" />;
+  }
+  
   return <>{children}</>;
 };
 
@@ -66,7 +64,6 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<ProtectedBrokerRoute><Dashboard /></ProtectedBrokerRoute>} />
-            <Route path="/manager" element={<ProtectedManagerRoute><ManagerDashboard /></ProtectedManagerRoute>} />
             <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
             <Route path="/command-center" element={<ProtectedAdminRoute><CommandCenter /></ProtectedAdminRoute>} />
             <Route path="/bootstrap-admin" element={<BootstrapAdmin />} />

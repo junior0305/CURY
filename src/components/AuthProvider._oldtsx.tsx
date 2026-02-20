@@ -214,19 +214,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Redirect based on role changes to ensure the UI navigates to the correct area
   useEffect(() => {
     if (!loading && session && role) {
-      const path = window.location.pathname;
+      const adminRoles = ['SUPERINTENDENT', 'MANAGER', 'ADMIN'];
       try {
-        if (role === 'ADMIN' || role === 'SUPERINTENDENT') {
-          if (path !== '/admin' && path !== '/command-center') {
+        if (adminRoles.includes(role)) {
+          if (window.location.pathname !== '/admin' && window.location.pathname !== '/command-center') {
             navigate('/admin', { replace: true });
           }
-        } else if (role === 'MANAGER') {
-          if (path !== '/manager') {
-            navigate('/manager', { replace: true });
-          }
         } else {
-          // BROKER e outros -> dashboard
-          if (path !== '/dashboard') {
+          // broker or other roles -> dashboard
+          if (window.location.pathname !== '/dashboard') {
             navigate('/dashboard', { replace: true });
           }
         }
