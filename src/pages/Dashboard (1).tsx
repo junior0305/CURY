@@ -4,7 +4,6 @@ import {
   Loader2, PlusCircle, LogOut, Target, Users2, Calendar,
   FileText, BarChart3, Trophy, LayoutDashboard, Sparkles,
   Zap, Shield, Bell, X, CheckCheck, Calendar as CalendarIcon, FileText as FileTextIcon,
-  Menu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
@@ -103,7 +102,6 @@ const Dashboard = () => {
   const unreadCount = notifications.length;
   // ────────────────────────────────────────────────────────────────────────────
 
-  const [menuOpen, setMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("mission");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
@@ -176,7 +174,6 @@ const Dashboard = () => {
 
         <header className="flex-none bg-slate-900 border-b border-gray-700/50 z-40">
           <div className="p-3 flex justify-between items-center">
-            {/* Avatar + nome */}
             <div className="flex items-center gap-2">
               <Avatar className="h-9 w-9 border-2 border-indigo-500/30">
                 <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email}`} />
@@ -186,15 +183,11 @@ const Dashboard = () => {
               </Avatar>
               <div>
                 <h1 className="font-black text-white text-sm leading-none">{userName}</h1>
-                <p className="text-[10px] font-bold text-indigo-400 uppercase">
-                  {role === "BROKER" ? "Agente de Campo" : role}
-                </p>
+                <p className="text-[10px] font-bold text-indigo-400 uppercase">Agente de Campo</p>
               </div>
             </div>
-
-            {/* Ações direita */}
-            <div className="flex items-center gap-2">
-              {/* Sino */}
+            <div className="flex gap-2">
+              {/* Sino de notificações mobile */}
               <div className="relative">
                 <Button size="sm" variant="ghost"
                   className="rounded-full border border-emerald-500/30 text-emerald-400 bg-emerald-500/10 h-9 w-9 p-0 relative hover:bg-emerald-500/20"
@@ -215,8 +208,23 @@ const Dashboard = () => {
                   />
                 )}
               </div>
-
-              {/* Novo Lead */}
+              {isBroker && (
+                <Button size="sm" variant="ghost"
+                  className="rounded-full border border-yellow-500/30 text-yellow-400 bg-yellow-500/10 h-9 w-9 p-0 relative hover:bg-yellow-500/20"
+                  onClick={() => setIsMissionsOpen(true)}>
+                  <Zap className="w-4 h-4" />
+                  {pendingPrizes > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold">
+                      {pendingPrizes}
+                    </span>
+                  )}
+                </Button>
+              )}
+              <Button size="sm" variant="ghost"
+                className="rounded-full border border-indigo-500/30 text-indigo-400 bg-indigo-500/10 h-9 w-9 p-0 hover:bg-indigo-500/20"
+                onClick={() => { setIntelTargetUser(null); setIsIntelOpen(true); }}>
+                <BarChart3 className="w-4 h-4" />
+              </Button>
               <Sheet open={isLeadFormOpen} onOpenChange={setIsLeadFormOpen}>
                 <SheetTrigger asChild>
                   <Button size="sm" className="rounded-full bg-indigo-600 hover:bg-indigo-500 h-9 w-9 p-0 shadow-lg shadow-indigo-900/40">
@@ -225,49 +233,6 @@ const Dashboard = () => {
                 </SheetTrigger>
                 <LeadForm onOpenChange={setIsLeadFormOpen} brokerId={user?.id || ""} managerId={null} />
               </Sheet>
-
-              {/* Menu hambúrguer */}
-              <div className="relative">
-                <Button size="sm" variant="ghost"
-                  className="rounded-full border border-gray-600/40 text-gray-400 bg-slate-800 h-9 w-9 p-0 hover:bg-slate-700"
-                  onClick={() => setMenuOpen(v => !v)}>
-                  <Menu className="w-4 h-4" />
-                </Button>
-
-                {/* Dropdown do menu */}
-                {menuOpen && (
-                  <div className="absolute right-0 top-11 z-50 w-56 bg-slate-900 border border-gray-700/60 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden">
-                    {isBroker && (
-                      <button
-                        className="w-full flex items-center gap-3 px-4 py-3 text-yellow-400 hover:bg-yellow-500/10 transition-colors text-sm font-bold relative"
-                        onClick={() => { setIsMissionsOpen(true); setMenuOpen(false); }}>
-                        <Zap className="w-4 h-4" /> Missões
-                        {pendingPrizes > 0 && (
-                          <span className="ml-auto text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full font-black">
-                            {pendingPrizes}
-                          </span>
-                        )}
-                      </button>
-                    )}
-                    <button
-                      className="w-full flex items-center gap-3 px-4 py-3 text-indigo-400 hover:bg-indigo-500/10 transition-colors text-sm font-bold"
-                      onClick={() => { setIntelTargetUser(null); setIsIntelOpen(true); setMenuOpen(false); }}>
-                      <BarChart3 className="w-4 h-4" /> Intel Tática
-                    </button>
-                    <button
-                      className="w-full flex items-center gap-3 px-4 py-3 text-amber-400 hover:bg-amber-500/10 transition-colors text-sm font-bold"
-                      onClick={() => { setIsRewardsOpen(true); setMenuOpen(false); }}>
-                      <Trophy className="w-4 h-4" /> Espólio
-                    </button>
-                    <div className="border-t border-gray-700/40" />
-                    <button
-                      className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 transition-colors text-sm font-bold"
-                      onClick={signOut}>
-                      <LogOut className="w-4 h-4" /> Sair
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
@@ -292,7 +257,7 @@ const Dashboard = () => {
                 <PipelineStat label="Novos"     count={stats.new}         active={filter === "NEW"}             onClick={() => setFilter("NEW")}             color="sky"     icon={Sparkles} />
                 <PipelineStat label="Atend."    count={stats.in_progress} active={filter === "IN_PROGRESS"}     onClick={() => setFilter("IN_PROGRESS")}     color="indigo"  icon={Users2} />
                 <PipelineStat label="Visita"    count={stats.visits}      active={filter === "VISIT_SCHEDULED"} onClick={() => setFilter("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
-                <PipelineStat label="Documentação"      count={stats.docs}        active={filter === "DOCS_REQUESTED"}  onClick={() => setFilter("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
+                <PipelineStat label="Docs"      count={stats.docs}        active={filter === "DOCS_REQUESTED"}  onClick={() => setFilter("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
               </div>
               <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
               <div className="space-y-2">
@@ -335,11 +300,6 @@ const Dashboard = () => {
           reload={reload}
         />
 
-        {/* Overlay para fechar menus ao tocar fora */}
-        {(menuOpen || notifOpen) && (
-          <div className="fixed inset-0 z-40" onClick={() => { setMenuOpen(false); setNotifOpen(false); }} />
-        )}
-
         <nav className="flex-none bg-slate-900 border-t border-gray-700/50 flex justify-around p-2 z-40">
           <NavButton icon={LayoutDashboard} label="Missão"  active={activeTab === "mission"} onClick={() => setActiveTab("mission")} />
           <NavButton icon={Target}          label="Lead"    active={activeTab === "lead"}    onClick={() => setActiveTab("lead")} />
@@ -357,12 +317,6 @@ const Dashboard = () => {
       <IntelTacticsModal open={isIntelOpen} onOpenChange={setIsIntelOpen}
         brokerId={intelTargetUser?.id || user?.id || ""} userName={intelTargetUser?.name} />
       <MyRewardsModal isOpen={isRewardsOpen} onOpenChange={setIsRewardsOpen} />
-
-      {/* Overlay para fechar notificações ao clicar fora (desktop) */}
-      {notifOpen && (
-        <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
-      )}
-
       <DailyMissionsPanel
         open={isMissionsOpen}
         onOpenChange={setIsMissionsOpen}

@@ -1,345 +1,308 @@
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { 
-  BarChart3, 
-  Trophy, 
-  Target, 
-  TrendingUp, 
-  AlertTriangle, 
-  Coins, 
-  ArrowUpRight,
-  CheckCircle2,
-  FileText,
-  Percent,
-  Activity,
-  Zap
+  Activity, Target, TrendingUp, AlertTriangle, FileText,
+  Percent, CheckCircle2, Zap, ArrowUp, ArrowDown, Minus,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  ResponsiveContainer, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  Tooltip, 
-  CartesianGrid, 
-  RadarChart, 
-  PolarGrid, 
-  PolarAngleAxis, 
-  PolarRadiusAxis, 
-  Radar,
-  Legend
+import {
+  ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis,
+  PolarRadiusAxis, Radar, Tooltip, Legend,
 } from "recharts";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 
-interface IntelTacticsModalProps {
+interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   brokerId: string;
-  userName?: string; // Nome do usuário sendo visualizado (opcional)
+  userName?: string;
 }
 
-export function IntelTacticsModal({ open, onOpenChange, brokerId, userName }: IntelTacticsModalProps) {
-  
-  // 1. Meus Dados Detalhados
-  const { data: myStats } = useQuery({
-    queryKey: ['intel-my-stats-advanced', brokerId],
+export function IntelTacticsModal({ open, onOpenChange, brokerId, userName }: Props) {
+
+  // Dados do corretor
+  const { data: stats } = useQuery({
+    queryKey: ["intel-stats", brokerId],
     queryFn: async () => {
-      const { data: leads } = await supabase.from('leads').select('status').eq('broker_id', brokerId);
-      
-      const total = leads?.length || 0;
-      const newLeads = leads?.filter(l => l.status === 'NEW').length || 0;
-      const inProgress = leads?.filter(l => l.status === 'IN_PROGRESS').length || 0;
-      const visits = leads?.filter(l => l.status === 'VISIT_SCHEDULED').length || 0;
-      const docs = leads?.filter(l => l.status === 'DOCS_REQUESTED').length || 0;
-      const sales = leads?.filter(l => l.status === 'CONCLUDED').length || 0;
-      
-      // Funil Absoluto
-      const active = total - newLeads; // Leads trabalhados
-      
-      return {
-        total,
-        docs, // A MINA DE OURO
-        funnel: [
-          { name: 'Recebidos', value: total, fill: '#94a3b8' },
-          { name: 'Atendidos', value: active, fill: '#6366f1' },
-          { name: 'Visitas', value: visits, fill: '#8b5cf6' },
-          { name: 'Propostas/Docs', value: docs + sales, fill: '#f59e0b' }, // Docs + Vendas = Propostas reais
-          { name: 'Vendas', value: sales, fill: '#10b981' },
-        ],
-        rates: {
-          engagement: total > 0 ? (active / total) * 100 : 0, // Taxa de Atendimento
-          persuasion: active > 0 ? (visits / active) * 100 : 0, // Conversão para Visita
-          technical: visits > 0 ? ((docs + sales) / visits) * 100 : 0, // Visita para Proposta
-          closing: (docs + sales) > 0 ? (sales / (docs + sales)) * 100 : 0, // Proposta para Venda
-        }
-      };
+      const { data: leads } = await supabase
+        .from("leads")
+        .select("status, created_at, last_interaction_at")
+        .eq("broker_id", brokerId);
+
+      const all      = leads || [];
+      const total    = all.length;
+      const newL     = all.filter(l => l.status === "NEW").length;
+      const active   = all.filter(l => l.status === "IN_PROGRESS").length;
+      const visits   = all.filter(l => l.status === "VISIT_SCHEDULED").length;
+      const docs     = all.filter(l => l.status === "DOCS_REQUESTED").length;
+      const sales    = all.filter(l => l.status === "CONCLUDED").length;
+      const lost     = all.filter(l => l.status === "ABANDONED").length;
+      const worked   = total - newL;
+
+      // Taxas de conversão por etapa
+      const tAtend    = total  > 0 ? (worked / total)          * 100 : 0;
+      const tVisit    = worked > 0 ? (visits  / worked)         * 100 : 0;
+      const tDocs     = visits > 0 ? ((docs + sales) / visits)  * 100 : 0;
+      const tClose    = (docs + sales) > 0 ? (sales / (docs + sales)) * 100 : 0;
+
+      // Eficiência geral (produto das taxas / fator de escala)
+      const efficiency = Math.min(100, (tAtend * tVisit * tDocs * tClose) / 100000 * 10);
+
+      // Tier
+      const tier = efficiency >= 70 ? "S" : efficiency >= 50 ? "A" : efficiency >= 30 ? "B" : "C";
+      const tierColor = efficiency >= 70 ? "text-yellow-400" : efficiency >= 50 ? "text-emerald-400" : efficiency >= 30 ? "text-blue-400" : "text-gray-500";
+
+      return { total, newL, active, visits, docs, sales, lost, worked, tAtend, tVisit, tDocs, tClose, efficiency, tier, tierColor };
     },
-    enabled: open
+    enabled: open && !!brokerId,
   });
 
-  // 2. Benchmarking (Média da Tropa)
-  const { data: troopStats } = useQuery({
-    queryKey: ['intel-troop-stats-advanced'],
+  // Média da tropa (todos os brokers)
+  const { data: troop } = useQuery({
+    queryKey: ["intel-troop"],
     queryFn: async () => {
-      const { data: leads } = await supabase.from('leads').select('status');
-      
-      const total = leads?.length || 0;
-      const newLeads = leads?.filter(l => l.status === 'NEW').length || 0;
-      const active = total - newLeads;
-      const visits = leads?.filter(l => l.status === 'VISIT_SCHEDULED').length || 0;
-      const docs = leads?.filter(l => l.status === 'DOCS_REQUESTED').length || 0;
-      const sales = leads?.filter(l => l.status === 'CONCLUDED').length || 0;
-      
+      const { data: leads } = await supabase.from("leads").select("status");
+      const all    = leads || [];
+      const total  = all.length;
+      const newL   = all.filter(l => l.status === "NEW").length;
+      const worked = total - newL;
+      const visits = all.filter(l => l.status === "VISIT_SCHEDULED").length;
+      const docs   = all.filter(l => l.status === "DOCS_REQUESTED").length;
+      const sales  = all.filter(l => l.status === "CONCLUDED").length;
       return {
-        rates: {
-          engagement: total > 0 ? (active / total) * 100 : 0,
-          persuasion: active > 0 ? (visits / active) * 100 : 0,
-          technical: visits > 0 ? ((docs + sales) / visits) * 100 : 0,
-          closing: (docs + sales) > 0 ? (sales / (docs + sales)) * 100 : 0,
-        }
+        tAtend: total  > 0 ? ((worked) / total)          * 100 : 0,
+        tVisit: worked > 0 ? (visits  / worked)           * 100 : 0,
+        tDocs:  visits > 0 ? ((docs + sales) / visits)    * 100 : 0,
+        tClose: (docs + sales) > 0 ? (sales / (docs + sales)) * 100 : 0,
       };
     },
-    enabled: open
+    enabled: open,
   });
 
-  // 3. Minhas Recompensas (Espólios)
-  const { data: rewards = [] } = useQuery({
-    queryKey: ['my-rewards', brokerId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('achievements')
-        .select('*')
-        .eq('profile_id', brokerId)
-        .order('created_at', { ascending: false });
-      return data || [];
-    },
-    enabled: open
-  });
+  const name = userName ? userName.split(" ")[0] : "Você";
 
   const radarData = [
-    { subject: 'Engajamento', A: myStats?.rates.engagement || 0, B: troopStats?.rates.engagement || 0, fullMark: 100 },
-    { subject: 'Persuasão', A: myStats?.rates.persuasion || 0, B: troopStats?.rates.persuasion || 0, fullMark: 100 },
-    { subject: 'Técnica', A: myStats?.rates.technical || 0, B: troopStats?.rates.technical || 0, fullMark: 100 },
-    { subject: 'Fechamento', A: myStats?.rates.closing || 0, B: troopStats?.rates.closing || 0, fullMark: 100 },
-    { subject: 'Constância', A: 85, B: 70, fullMark: 100 }, // Mockado por enquanto (Baseado em dias ativos)
+    { subject: "Engajamento", A: Math.round(stats?.tAtend || 0), B: Math.round(troop?.tAtend || 0) },
+    { subject: "Persuasão",   A: Math.round(stats?.tVisit || 0), B: Math.round(troop?.tVisit || 0) },
+    { subject: "Técnica",     A: Math.round(stats?.tDocs  || 0), B: Math.round(troop?.tDocs  || 0) },
+    { subject: "Fechamento",  A: Math.round(stats?.tClose || 0), B: Math.round(troop?.tClose || 0) },
   ];
 
-  const displayName = userName ? userName.split(' ')[0] : 'Eu';
+  // Gera ordens de melhoria baseadas nos dados reais
+  const orders: { icon: any; color: string; bg: string; border: string; title: string; body: string }[] = [];
+
+  if ((stats?.docs || 0) > 0) {
+    orders.push({
+      icon: AlertTriangle, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20",
+      title: `⚡ Ataque à Mina de Ouro — ${stats!.docs} leads`,
+      body: `Você tem ${stats!.docs} cliente${stats!.docs > 1 ? "s" : ""} com documentação pendente. São os mais próximos de fechar. Pare de prospectar novos e resolva esses hoje.`,
+    });
+  }
+
+  if (stats && troop && stats.tVisit < troop.tVisit - 10) {
+    orders.push({
+      icon: TrendingUp, color: "text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/20",
+      title: "📅 Gargalo em Visitas",
+      body: `Sua taxa de agendamento (${Math.round(stats.tVisit)}%) está abaixo da tropa (${Math.round(troop.tVisit)}%). Use o "Falso Dilema": ofereça dois horários em vez de perguntar se o cliente quer ir.`,
+    });
+  }
+
+  if (stats && troop && stats.tClose < troop.tClose - 10) {
+    orders.push({
+      icon: Percent, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20",
+      title: "🎯 Fechamento Abaixo da Média",
+      body: `Você chega em proposta mas não fecha. Taxa: ${Math.round(stats.tClose)}% vs tropa: ${Math.round(troop.tClose)}%. Identifique a objeção mais comum e prepare um script específico.`,
+    });
+  }
+
+  if (stats && stats.newL > stats.worked * 0.4) {
+    orders.push({
+      icon: AlertTriangle, color: "text-sky-400", bg: "bg-sky-500/10", border: "border-sky-500/20",
+      title: "📞 Leads Novos Parados",
+      body: `${stats.newL} leads ainda não foram atendidos. Cada hora sem contato reduz a chance de conversão em 10x. Inicie a cadência imediatamente.`,
+    });
+  }
+
+  if (orders.length === 0) {
+    orders.push({
+      icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20",
+      title: "✅ Operação em Ordem",
+      body: "Sua performance está acima ou alinhada com a média da tropa em todos os indicadores. Mantenha o ritmo e foque em volume.",
+    });
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0 gap-0 bg-slate-50 overflow-hidden rounded-3xl">
-        <div className="p-6 bg-white border-b flex items-center justify-between shrink-0">
-          <div>
-            <DialogTitle className="text-2xl font-black text-slate-900 flex items-center gap-2 uppercase tracking-tighter">
-              <Activity className="h-6 w-6 text-indigo-600" />
-              {userName ? `Dossiê Tático: ${userName}` : "Meu Cockpit de Guerra"}
-            </DialogTitle>
-            <DialogDescription className="text-slate-500 font-medium">
-              Análise profunda de performance e inteligência de combate.
-            </DialogDescription>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col gap-0 p-0 bg-slate-900 border-gray-700 rounded-2xl text-white">
+
+        {/* Header */}
+        <div className="px-6 py-5 border-b border-gray-700/50 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-600 rounded-xl">
+              <Activity className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <DialogTitle className="text-lg font-black text-white tracking-tight">
+                {userName ? `Dossiê Tático — ${userName}` : "Meu Cockpit de Guerra"}
+              </DialogTitle>
+              <DialogDescription className="text-gray-500 text-xs font-medium mt-0.5">
+                Inteligência de performance em tempo real
+              </DialogDescription>
+            </div>
           </div>
-          <div className="flex items-center gap-2 bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100">
-            <Trophy className="h-5 w-5 text-amber-500" />
-            <span className="font-bold text-indigo-900 text-sm">
-              Nível: {rewards.length > 5 ? 'Veterano de Elite' : 'Recruta em Ascensão'}
-            </span>
-          </div>
+
+          {stats && (
+            <div className="flex items-center gap-2 bg-slate-800 border border-gray-700/50 px-4 py-2 rounded-xl">
+              <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">Tier</span>
+              <span className={cn("text-2xl font-black", stats.tierColor)}>{stats.tier}</span>
+            </div>
+          )}
         </div>
 
-        <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-6 pt-4 bg-white border-b shrink-0">
-            <TabsList className="bg-slate-100 p-1 rounded-xl">
-              <TabsTrigger value="overview" className="rounded-lg font-bold text-xs px-6">Radar Tático</TabsTrigger>
-              <TabsTrigger value="funnel" className="rounded-lg font-bold text-xs px-6">Funil de Vazamento</TabsTrigger>
-              <TabsTrigger value="rewards" className="rounded-lg font-bold text-xs px-6">Espólios de Guerra</TabsTrigger>
-            </TabsList>
+        <div className="p-6 space-y-5 overflow-y-auto">
+
+          {/* ── BLOCO 1: Mina de Ouro ── */}
+          <section>
+            <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+              <FileText className="w-3.5 h-3.5 text-amber-400" /> Mina de Ouro
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: "Docs Pendentes", value: stats?.docs ?? "—",  color: "text-amber-400",  bg: "bg-amber-500/10",  border: "border-amber-500/20",  note: "Dinheiro na mão" },
+                { label: "Visitas Agendadas", value: stats?.visits ?? "—", color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", note: "Quase lá" },
+                { label: "Vendas Fechadas", value: stats?.sales ?? "—",  color: "text-indigo-400", bg: "bg-indigo-500/10",  border: "border-indigo-500/20",  note: "Concluídos" },
+                { label: "Leads Perdidos",  value: stats?.lost ?? "—",  color: "text-rose-400",   bg: "bg-rose-500/10",   border: "border-rose-500/20",   note: "Analisar motivo" },
+              ].map(({ label, value, color, bg, border, note }) => (
+                <div key={label} className={cn("rounded-xl border p-4", bg, border)}>
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wide mb-1">{label}</p>
+                  <p className={cn("text-3xl font-black leading-none", color)}>{value}</p>
+                  <p className="text-[10px] text-gray-600 mt-1.5">{note}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* ── BLOCO 2: Taxa de Fechamento ── */}
+          <section>
+            <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+              <Percent className="w-3.5 h-3.5 text-indigo-400" /> Taxa de Fechamento por Etapa
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: "Atendimento",  mine: stats?.tAtend, troop: troop?.tAtend },
+                { label: "→ Visita",     mine: stats?.tVisit, troop: troop?.tVisit },
+                { label: "→ Proposta",   mine: stats?.tDocs,  troop: troop?.tDocs  },
+                { label: "→ Venda",      mine: stats?.tClose, troop: troop?.tClose },
+              ].map(({ label, mine, troop: troopVal }) => {
+                const m = Math.round(mine || 0);
+                const t = Math.round(troopVal || 0);
+                const diff = m - t;
+                const Icon = diff > 5 ? ArrowUp : diff < -5 ? ArrowDown : Minus;
+                const iconColor = diff > 5 ? "text-emerald-400" : diff < -5 ? "text-rose-400" : "text-gray-500";
+                return (
+                  <div key={label} className="bg-slate-800/50 border border-gray-700/40 rounded-xl p-4">
+                    <p className="text-xs text-gray-500 font-bold mb-2">{label}</p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-black text-white">{m}%</span>
+                      <Icon className={cn("w-4 h-4", iconColor)} />
+                    </div>
+                    <p className="text-[10px] text-gray-600 mt-1.5">Tropa: {t}%</p>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* ── BLOCO 3: Radar de Competências + Eficiência Tática ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Radar */}
+            <section className="lg:col-span-2 bg-slate-800/40 border border-gray-700/40 rounded-2xl p-4">
+              <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                <Target className="w-3.5 h-3.5 text-indigo-400" /> Radar de Competências vs Tropa
+              </h3>
+              <div className="h-52">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart data={radarData}>
+                    <PolarGrid stroke="#374151" />
+                    <PolarAngleAxis
+                      dataKey="subject"
+                      tick={{ fill: "#6b7280", fontSize: 10, fontWeight: "bold" }}
+                    />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                    <Radar name={name} dataKey="A" stroke="#6366f1" strokeWidth={2.5} fill="#6366f1" fillOpacity={0.25} />
+                    <Radar name="Tropa" dataKey="B" stroke="#4b5563" strokeWidth={1.5} fill="#4b5563" fillOpacity={0.1} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: "11px", fontWeight: "bold", color: "#9ca3af" }} />
+                    <Tooltip
+                      contentStyle={{ background: "#1e293b", border: "1px solid #374151", borderRadius: "12px", color: "#fff" }}
+                      itemStyle={{ fontSize: "12px", fontWeight: "bold" }}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+
+            {/* Eficiência Tática */}
+            <section className="bg-slate-800/40 border border-gray-700/40 rounded-2xl p-5 flex flex-col justify-between">
+              <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                <Zap className="w-3.5 h-3.5 text-yellow-400" /> Eficiência Tática
+              </h3>
+
+              {/* Tier grande */}
+              <div className="flex-1 flex flex-col items-center justify-center">
+                <div className={cn(
+                  "text-8xl font-black leading-none mb-3",
+                  stats?.tierColor || "text-gray-600"
+                )}>
+                  {stats?.tier ?? "—"}
+                </div>
+                <p className="text-xs text-gray-500 text-center">
+                  {stats?.tier === "S" ? "Performance Excepcional" :
+                   stats?.tier === "A" ? "Acima da Média" :
+                   stats?.tier === "B" ? "Em Desenvolvimento" : "Precisa de Atenção"}
+                </p>
+              </div>
+
+              {/* Barra de eficiência */}
+              <div className="mt-4">
+                <div className="flex justify-between text-[10px] text-gray-600 mb-1.5">
+                  <span>Eficiência Geral</span>
+                  <span className="font-bold text-white">{Math.round(stats?.efficiency || 0)}%</span>
+                </div>
+                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-1000",
+                      (stats?.efficiency || 0) >= 70 ? "bg-yellow-400" :
+                      (stats?.efficiency || 0) >= 50 ? "bg-emerald-500" :
+                      (stats?.efficiency || 0) >= 30 ? "bg-blue-500" : "bg-gray-600"
+                    )}
+                    style={{ width: `${stats?.efficiency || 0}%` }}
+                  />
+                </div>
+              </div>
+            </section>
           </div>
 
-          {/* TAB 1: VISÃO GERAL (RADAR + MINA DE OURO) */}
-          <TabsContent value="overview" className="flex-1 p-6 overflow-y-auto space-y-6">
-            
-            {/* KPI CARDS */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="p-4 bg-amber-50 border-amber-200 border-l-4 border-l-amber-500 shadow-sm relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><FileText className="h-16 w-16 text-amber-600" /></div>
-                <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">Mina de Ouro (Docs)</p>
-                <div className="flex items-baseline gap-1">
-                  <h3 className="text-3xl font-black text-slate-900">{myStats?.docs || 0}</h3>
-                  <span className="text-xs font-bold text-amber-600">Leads Travados</span>
+          {/* ── BLOCO 4 + 5: Ordens de Melhoria ── */}
+          <section>
+            <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-400" /> Ordens de Melhoria
+            </h3>
+            <div className="space-y-2.5">
+              {orders.map((order, i) => (
+                <div key={i} className={cn("rounded-xl border p-4 flex gap-3", order.bg, order.border)}>
+                  <order.icon className={cn("w-5 h-5 shrink-0 mt-0.5", order.color)} />
+                  <div>
+                    <p className={cn("text-xs font-black mb-1", order.color)}>{order.title}</p>
+                    <p className="text-xs text-gray-400 leading-relaxed">{order.body}</p>
+                  </div>
                 </div>
-                <p className="text-xs text-amber-800 mt-2 font-medium">Potencial de fechamento imediato. Foque aqui!</p>
-              </Card>
-
-              <Card className="p-4 bg-white border-slate-200 shadow-sm relative overflow-hidden">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Taxa de Fechamento</p>
-                 <div className="flex items-baseline gap-2">
-                    <h3 className="text-3xl font-black text-emerald-600">{Math.round(myStats?.rates.closing || 0)}%</h3>
-                    <TrendingUp className="h-4 w-4 text-emerald-500" />
-                 </div>
-                 <p className="text-xs text-slate-500 mt-2">Média da Tropa: <span className="font-bold">{Math.round(troopStats?.rates.closing || 0)}%</span></p>
-              </Card>
-
-              <Card className="p-4 bg-indigo-600 text-white border-none shadow-md relative overflow-hidden">
-                 <div className="absolute -right-4 -bottom-4 bg-white/10 w-24 h-24 rounded-full blur-2xl" />
-                 <p className="text-[10px] font-black text-indigo-200 uppercase tracking-widest mb-1">Eficiência Tática</p>
-                 <div className="flex items-baseline gap-2">
-                    <h3 className="text-3xl font-black text-white">{(myStats?.rates.engagement || 0) > 80 ? 'S' : (myStats?.rates.engagement || 0) > 50 ? 'A' : 'B'}</h3>
-                    <span className="text-xs font-bold text-indigo-200">Tier</span>
-                 </div>
-                 <p className="text-xs text-indigo-100 mt-2">Baseado na sua velocidade e conversão.</p>
-              </Card>
+              ))}
             </div>
+          </section>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
-              {/* GRÁFICO DE RADAR */}
-              <Card className="p-4 border-slate-200 shadow-sm flex flex-col">
-                <div className="mb-4">
-                  <h3 className="text-sm font-black text-slate-700 uppercase tracking-tight flex items-center gap-2">
-                    <Target className="h-4 w-4 text-indigo-600" /> Radar de Competências
-                  </h3>
-                  <p className="text-xs text-slate-400">Comparativo direto com a média do batalhão.</p>
-                </div>
-                <div className="flex-1 min-h-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                      <PolarGrid stroke="#e2e8f0" />
-                      <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
-                      <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                      <Radar name={displayName} dataKey="A" stroke="#4f46e5" strokeWidth={3} fill="#4f46e5" fillOpacity={0.2} />
-                      <Radar name="Tropa" dataKey="B" stroke="#94a3b8" strokeWidth={2} fill="#94a3b8" fillOpacity={0.1} />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', fontWeight: 'bold' }} />
-                      <Tooltip 
-                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}
-                        itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
-                      />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
-              </Card>
-
-              {/* DICAS DE INTELIGÊNCIA */}
-              <Card className="p-0 border-slate-200 shadow-sm overflow-hidden flex flex-col bg-slate-50">
-                 <div className="p-4 bg-white border-b">
-                    <h3 className="text-sm font-black text-slate-700 uppercase tracking-tight flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-amber-500" /> Ordens de Melhoria
-                    </h3>
-                 </div>
-                 <div className="p-4 space-y-3 overflow-y-auto custom-scrollbar">
-                    {(myStats?.docs || 0) > 0 && (
-                      <div className="bg-amber-50 p-3 rounded-xl border border-amber-100 flex gap-3">
-                         <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                         <div>
-                            <h4 className="text-xs font-bold text-amber-800 uppercase mb-1">Ataque à Mina de Ouro</h4>
-                            <p className="text-xs text-amber-700 leading-relaxed">
-                               Você tem <span className="font-black">{myStats?.docs} clientes</span> com documentação pendente. 
-                               Se focar neles hoje, sua chance de venda é de 60%. Pare de prospectar novos e feche esses primeiro!
-                            </p>
-                         </div>
-                      </div>
-                    )}
-
-                    {(myStats?.rates.persuasion || 0) < (troopStats?.rates.persuasion || 0) && (
-                      <div className="bg-white p-3 rounded-xl border border-slate-200 flex gap-3">
-                         <TrendingUp className="h-5 w-5 text-rose-500 shrink-0 mt-0.5" />
-                         <div>
-                            <h4 className="text-xs font-bold text-rose-700 uppercase mb-1">Melhore a Persuasão</h4>
-                            <p className="text-xs text-slate-600 leading-relaxed">
-                               Você atende muito, mas agenda pouco. Tente usar a técnica do "Falso Dilema" (Manhã ou Tarde?) para forçar o agendamento.
-                            </p>
-                         </div>
-                      </div>
-                    )}
-
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 flex gap-3 opacity-70">
-                       <CheckCircle2 className="h-5 w-5 text-slate-400 shrink-0 mt-0.5" />
-                       <div>
-                          <h4 className="text-xs font-bold text-slate-600 uppercase mb-1">Volume de Atividade</h4>
-                          <p className="text-xs text-slate-500 leading-relaxed">
-                             Seu volume de novos leads está saudável. Mantenha a cadência atual para garantir o funil cheio na próxima semana.
-                          </p>
-                       </div>
-                    </div>
-                 </div>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* TAB 2: FUNIL */}
-          <TabsContent value="funnel" className="flex-1 p-6 overflow-y-auto">
-            <Card className="p-6 h-[500px] border-none shadow-none bg-transparent">
-              <div className="flex items-center justify-between mb-6">
-                 <div>
-                    <h3 className="text-lg font-black text-slate-800">Seu Funil de Vendas</h3>
-                    <p className="text-sm text-slate-500">Onde seus leads estão ficando pelo caminho.</p>
-                 </div>
-                 <div className="text-right">
-                    <p className="text-xs font-bold text-slate-400 uppercase">Conversão Global</p>
-                    <p className="text-2xl font-black text-indigo-600">
-                       {((myStats?.rates.closing || 0) * (myStats?.rates.technical || 0) * (myStats?.rates.persuasion || 0) * (myStats?.rates.engagement || 0) / 1000000).toFixed(1)}%
-                    </p>
-                 </div>
-              </div>
-
-              <ResponsiveContainer width="100%" height="100%">
-                 <BarChart data={myStats?.funnel || []} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                    <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 11, fontWeight: 'bold', fill: '#475569'}} />
-                    <Tooltip 
-                      cursor={{fill: 'transparent'}}
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}
-                    />
-                    <Bar dataKey="value" name="Leads" radius={[0, 4, 4, 0]} barSize={30} label={{ position: 'right', fill: '#64748b', fontWeight: 'bold', fontSize: 12 }} />
-                 </BarChart>
-              </ResponsiveContainer>
-            </Card>
-          </TabsContent>
-
-          {/* TAB 3: REWARDS (Mantido igual) */}
-          <TabsContent value="rewards" className="flex-1 p-6 overflow-y-auto">
-            {rewards.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                <Coins className="h-16 w-16 mb-4 opacity-20" />
-                <p className="font-medium">Nenhum espólio conquistado ainda.</p>
-                <p className="text-sm">Bata as metas da Semana Turbinada para encher seu cofre!</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {rewards.map((r: any) => (
-                  <Card key={r.id} className="p-4 border-l-4 border-l-emerald-500 shadow-sm hover:shadow-md transition-all">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                          {new Date(r.created_at).toLocaleDateString()}
-                        </p>
-                        <h4 className="font-bold text-slate-900">{r.reward_label}</h4>
-                      </div>
-                      <Badge className={cn("text-[10px]", r.status === 'APPROVED' ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
-                        {r.status === 'APPROVED' ? 'RESGATADO' : 'PENDENTE'}
-                      </Badge>
-                    </div>
-                    <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
-                      <span className="font-black text-emerald-600 text-lg">R$ {r.reward_value}</span>
-                      {r.status === 'APPROVED' && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+        </div>
       </DialogContent>
     </Dialog>
   );

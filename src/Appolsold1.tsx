@@ -14,7 +14,6 @@ import { Loader2 } from "lucide-react";
 import CommandCenter from "./pages/CommandCenter";
 import BootstrapAdmin from "@/pages/BootstrapAdmin";
 import ProfileDebug from "@/pages/ProfileDebug";
-import UserManagement from "@/pages/UserManagement";
 
 const queryClient = new QueryClient();
 
@@ -70,7 +69,6 @@ const App = () => (
             <Route path="/manager" element={<ProtectedManagerRoute><ManagerDashboard /></ProtectedManagerRoute>} />
             <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
             <Route path="/command-center" element={<ProtectedAdminRoute><CommandCenter /></ProtectedAdminRoute>} />
-            <Route path="/user-management" element={<ProtectedAdminRoute><UserManagement /></ProtectedAdminRoute>} />
             <Route path="/bootstrap-admin" element={<BootstrapAdmin />} />
             <Route path="/profile-debug" element={<ProfileDebug />} />
             <Route path="*" element={<NotFound />} />

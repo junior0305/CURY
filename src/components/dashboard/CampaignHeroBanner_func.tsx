@@ -20,37 +20,16 @@ export default function CampaignHeroBanner({ leads, users }: { leads: any[]; use
 
   const leaderboard = useMemo(() => {
     if (!campaign) return [];
-
-    // Mapa de ação para status do lead
-    const actionMap: Record<string, string> = {
-      VISIT:    "VISIT_SCHEDULED",
-      SALE:     "CONCLUDED",
-      DOCS:     "DOCS_REQUESTED",
-      PROPOSAL: "DOCS_REQUESTED", // alias
-    };
+    const actionMap: Record<string, string> = { VISIT: "VISIT_SCHEDULED", SALE: "CONCLUDED", DOCS: "DOCS_REQUESTED" };
     const targetStatus = actionMap[campaign.target_action];
-    if (!targetStatus) return [];
-
-    // Filtrar APENAS leads atualizados dentro do período da campanha
-    const startsAt = campaign.starts_at ? new Date(campaign.starts_at) : new Date(campaign.created_at);
-    const endsAt   = new Date(campaign.ends_at);
-
     return users
       .filter(u => u.role === "BROKER")
-      .map(broker => {
-        const count = leads.filter(l => {
-          if (l.brokerId !== broker.id) return false;
-          if (l.status !== targetStatus) return false;
-          // Só conta leads cujo updatedAt (ou createdAt) está dentro do período
-          const updatedAt = l.updatedAt ? new Date(l.updatedAt) : new Date(l.createdAt);
-          return updatedAt >= startsAt && updatedAt <= endsAt;
-        }).length;
-        return {
-          name: broker.name.split(" ")[0],
-          count,
-          progress: Math.min(Math.round((count / campaign.target_count) * 100), 100),
-        };
-      })
+      .map(broker => ({
+        name: broker.name.split(" ")[0],
+        count: leads.filter(l => l.brokerId === broker.id && l.status === targetStatus).length,
+        progress: 0,
+      }))
+      .map(b => ({ ...b, progress: Math.min(Math.round((b.count / campaign.target_count) * 100), 100) }))
       .filter(b => b.count > 0)
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
@@ -60,23 +39,17 @@ export default function CampaignHeroBanner({ leads, users }: { leads: any[]; use
 
   const daysLeft = Math.max(0, Math.floor((new Date(campaign.ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
 
-  const actionLabel: Record<string, string> = {
-    VISIT:    "Visitas",
-    SALE:     "Vendas",
-    DOCS:     "Documentações",
-    PROPOSAL: "Documentações",
-  };
-
   return (
     <div className="relative overflow-hidden rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-slate-800 via-slate-800/90 to-indigo-900/30 shadow-2xl shadow-indigo-900/20">
+      {/* Decoração */}
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-600/5 to-indigo-600/10 pointer-events-none" />
       <div className="absolute -right-12 -top-12 w-48 h-48 bg-indigo-600/10 blur-3xl rounded-full pointer-events-none" />
       <div className="absolute -left-12 -bottom-12 w-40 h-40 bg-rose-600/5 blur-3xl rounded-full pointer-events-none animate-pulse" />
 
       <div className="relative grid grid-cols-1 lg:grid-cols-12 items-stretch">
-        {/* Lado esquerdo */}
+        {/* Lado esquerdo — O Desafio */}
         <div className="lg:col-span-7 p-5 sm:p-7 space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3">
             <Badge className="bg-rose-600/80 text-white font-black px-3 py-1 rounded-full border-none shadow-lg shadow-rose-900/40 animate-pulse">
               🔥 CAMPANHA ATIVA
             </Badge>
@@ -93,13 +66,14 @@ export default function CampaignHeroBanner({ leads, users }: { leads: any[]; use
             <p className="text-gray-400 mt-2 font-medium text-sm">
               Meta:{" "}
               <span className="text-white font-black">
-                {campaign.target_count} {actionLabel[campaign.target_action] ?? "Ações"}
+                {campaign.target_count} {campaign.target_action === "VISIT" ? "Visitas" : "Ações"}
               </span>
               {" "}={" "}
               <span className="text-emerald-400 font-black">R$ {campaign.reward_amount} no PIX 💸</span>
             </p>
           </div>
 
+          {/* Progresso próprio — placeholder visual */}
           <div className="flex items-center gap-3 bg-slate-700/40 border border-gray-700/40 rounded-xl px-4 py-2.5 w-fit">
             <Trophy className="h-4 w-4 text-amber-400 shrink-0" />
             <p className="text-xs font-bold text-gray-400">
@@ -133,7 +107,9 @@ export default function CampaignHeroBanner({ leads, users }: { leads: any[]; use
                     <div
                       className={cn(
                         "h-full rounded-full transition-all duration-1000 ease-out",
-                        idx === 0 ? "bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]" : "bg-slate-600"
+                        idx === 0
+                          ? "bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]"
+                          : "bg-slate-600"
                       )}
                       style={{ width: `${broker.progress}%` }}
                     />

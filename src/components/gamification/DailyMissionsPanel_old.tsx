@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useGamification } from "@/hooks/useGamification";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/hooks/use-toast";
@@ -6,9 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Zap, Gift, CheckCircle2, Star, RefreshCw, Trophy } from "lucide-react";
+import { Zap, Gift, CheckCircle2, Clock, Star, RefreshCw, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { BrokerXP, DailyMission, PrizeClaim } from "@/hooks/useGamification";
 
 const DIFFICULTY_CONFIG = {
   EASY:   { label: "Fácil",   color: "bg-green-900/40 text-green-300 border-green-500/30" },
@@ -28,16 +28,11 @@ const ACTION_ICONS: Record<string, string> = {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // Dados vindos do hook centralizado no Dashboard
-  missions: DailyMission[];
-  xpStats: BrokerXP | null;
-  prizeClaims: PrizeClaim[];
-  loading: boolean;
-  reload: () => Promise<void>;
 }
 
-export function DailyMissionsPanel({ open, onOpenChange, missions, xpStats, prizeClaims, loading, reload }: Props) {
+export function DailyMissionsPanel({ open, onOpenChange }: Props) {
   const { user } = useAuth();
+  const { missions, xpStats, prizeClaims, loading, reload } = useGamification();
   const { toast } = useToast();
   const [claiming, setClaiming] = useState<string | null>(null);
 
@@ -49,10 +44,11 @@ export function DailyMissionsPanel({ open, onOpenChange, missions, xpStats, priz
     if (!user?.id) return;
     setClaiming(missionId);
     try {
+      // Marcar como claimed
       await supabase.from("daily_missions").update({ prize_claimed: true }).eq("id", missionId);
       toast({ title: `🎁 ${prizeLabel} registrado!`, description: "Aguarde aprovação do gestor." });
       await reload();
-    } catch {
+    } catch (e) {
       toast({ title: "Erro ao registrar prêmio", variant: "destructive" });
     } finally {
       setClaiming(null);
@@ -69,12 +65,12 @@ export function DailyMissionsPanel({ open, onOpenChange, missions, xpStats, priz
           </DialogTitle>
         </DialogHeader>
 
-        {/* Resumo */}
+        {/* Resumo do dia */}
         <div className="grid grid-cols-3 gap-3 my-2">
           {[
             { label: "Concluídas", value: `${completedCount}/${missions.length}`, icon: CheckCircle2, color: "text-green-400" },
-            { label: "XP Ganho",   value: `+${xpEarned}`,                         icon: Zap,          color: "text-yellow-400" },
-            { label: "Nível",      value: xpStats?.levelName || "—",              icon: Star,         color: "text-purple-400" },
+            { label: "XP Ganho", value: `+${xpEarned}`, icon: Zap, color: "text-yellow-400" },
+            { label: "Nível Atual", value: xpStats?.levelName || "—", icon: Star, color: "text-purple-400" },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="bg-slate-800/60 rounded-xl p-3 text-center border border-gray-700/40">
               <Icon className={cn("w-4 h-4 mx-auto mb-1", color)} />
@@ -84,16 +80,16 @@ export function DailyMissionsPanel({ open, onOpenChange, missions, xpStats, priz
           ))}
         </div>
 
-        {/* Progresso geral */}
+        {/* Barra de progresso do dia */}
         <div className="bg-slate-800/40 rounded-xl p-3 border border-gray-700/40">
           <div className="flex justify-between text-xs text-gray-400 mb-2">
             <span>Progresso de hoje</span>
-            <span className="text-yellow-400 font-bold">{xpEarned} / {totalXpAvailable} XP</span>
+            <span className="text-yellow-400 font-bold">{xpEarned} / {totalXpAvailable} XP disponíveis</span>
           </div>
           <Progress value={totalXpAvailable > 0 ? (xpEarned / totalXpAvailable) * 100 : 0} className="h-2" />
         </div>
 
-        {/* Lista */}
+        {/* Lista de missões */}
         {loading ? (
           <div className="flex items-center justify-center py-10">
             <RefreshCw className="w-6 h-6 text-yellow-400 animate-spin" />
@@ -108,6 +104,7 @@ export function DailyMissionsPanel({ open, onOpenChange, missions, xpStats, priz
             {missions.map(mission => {
               const diffConfig = DIFFICULTY_CONFIG[mission.difficulty];
               const progressPercent = Math.min(100, (mission.progress / mission.target) * 100);
+              const canClaim = mission.completed && mission.prizeType && mission.prizeValue > 0 && !mission.prizeClaimed;
 
               return (
                 <div key={mission.id}
@@ -133,12 +130,10 @@ export function DailyMissionsPanel({ open, onOpenChange, missions, xpStats, priz
                     </div>
                   </div>
 
-                  {/* Barra de progresso individual */}
+                  {/* Barra de progresso */}
                   <div className="flex items-center gap-2 mb-2">
-                    <Progress
-                      value={progressPercent}
-                      className={cn("flex-1 h-2", mission.completed && "[&>div]:bg-green-500")}
-                    />
+                    <Progress value={progressPercent}
+                      className={cn("flex-1 h-2", mission.completed && "[&>div]:bg-green-500")} />
                     <span className="text-xs text-gray-400 shrink-0 font-mono w-12 text-right">
                       {mission.progress}/{mission.target}
                     </span>
@@ -152,8 +147,7 @@ export function DailyMissionsPanel({ open, onOpenChange, missions, xpStats, priz
                         <span className="text-yellow-300 font-bold">{mission.prizeLabel}</span>
                       </div>
                       {mission.completed && !mission.prizeClaimed && (
-                        <Button size="sm"
-                          onClick={() => handleClaimPrize(mission.id, mission.prizeLabel!)}
+                        <Button size="sm" onClick={() => handleClaimPrize(mission.id, mission.prizeLabel!)}
                           disabled={claiming === mission.id}
                           className="h-7 px-3 text-xs bg-yellow-600 hover:bg-yellow-500 font-bold text-black gap-1">
                           <Gift className="w-3 h-3" />

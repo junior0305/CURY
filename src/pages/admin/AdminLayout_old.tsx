@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Shield, Users, DollarSign, Settings, FileText, RefreshCw, Webhook, Crown, LogOut, Gift, Bot, Target, UserCog } from "lucide-react";
+import { Shield, Users, DollarSign, Settings, FileText, RefreshCw, Webhook, Crown, LogOut, Gift } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,21 +12,17 @@ import Logs from "./Logs";
 import Rework from "./Rework";
 import Webhooks from "./Webhooks";
 import Premios from "./Premios";
-import { IaBuilder } from "./IaBuilder";
-import { Prospeccao } from "./Prospeccao";
-import UserManagement from "@/pages/UserManagement";
 
 // ─── Definição de todas as abas e quem pode ver cada uma ──────────────────────
 const ALL_TABS = [
-
   {
     value: "tropas",
     label: "Tropas",
     icon: Users,
     color: "red",
+    // MANAGER vê tropas mas só da sua equipe (o RLS filtra os dados)
     roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"],
   },
-
   {
     value: "equipes",
     label: "Equipes",
@@ -34,15 +30,14 @@ const ALL_TABS = [
     color: "blue",
     roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"],
   },
-
   {
     value: "economia",
     label: "Economia",
     icon: DollarSign,
     color: "yellow",
+    // Apenas admin/superintendent gerencia campanhas e investimentos
     roles: ["ADMIN", "SUPERINTENDENT"],
   },
-
   {
     value: "regras",
     label: "Regras",
@@ -50,15 +45,14 @@ const ALL_TABS = [
     color: "purple",
     roles: ["ADMIN", "SUPERINTENDENT"],
   },
-
   {
     value: "logs",
     label: "Logs",
     icon: FileText,
     color: "green",
+    // Manager pode ver logs de distribuição da sua equipe (RLS filtra)
     roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"],
   },
-
   {
     value: "rework",
     label: "Rework",
@@ -66,7 +60,6 @@ const ALL_TABS = [
     color: "orange",
     roles: ["ADMIN", "SUPERINTENDENT"],
   },
-
   {
     value: "webhooks",
     label: "Webhooks",
@@ -74,36 +67,11 @@ const ALL_TABS = [
     color: "indigo",
     roles: ["ADMIN", "SUPERINTENDENT"],
   },
-
-  {
-    value: "prospeccao",
-    label: "Prospecção",
-    icon: Target,
-    color: "green",
-    roles: ["ADMIN", "SUPERINTENDENT"],
-  },
-
-  {
-    value: "ia-builder",
-    label: "IA Builder",
-    icon: Bot,
-    color: "indigo",
-    roles: ["ADMIN", "SUPERINTENDENT"],
-  },
-
   {
     value: "premios",
     label: "Prêmios",
     icon: Gift,
     color: "pink",
-    roles: ["ADMIN", "SUPERINTENDENT"],
-  },
-
-  {
-    value: "usuarios",
-    label: "Usuários",
-    icon: UserCog,
-    color: "blue",
     roles: ["ADMIN", "SUPERINTENDENT"],
   },
 ];
@@ -121,8 +89,7 @@ const COLOR_MAP: Record<string, string> = {
 
 const ICON_COLOR_MAP: Record<string, string> = {
   red: "text-red-400", blue: "text-blue-400", yellow: "text-yellow-400",
-  purple: "text-purple-400", green: "text-green-400", orange: "text-orange-400",
-  indigo: "text-indigo-400", pink: "text-pink-400",
+  purple: "text-purple-400", green: "text-green-400", orange: "text-orange-400", indigo: "text-indigo-400", pink: "text-pink-400",
 };
 
 const ROLE_LABELS: Record<string, { label: string; color: string }> = {
@@ -136,10 +103,12 @@ export default function AdminLayout() {
   const { role, user, signOut } = useAuth();
   const normalizedRole = role?.toUpperCase() ?? "";
 
+  // Filtra abas de acordo com o role do usuário logado
   const visibleTabs = ALL_TABS.filter(tab => tab.roles.includes(normalizedRole));
 
   const [activeTab, setActiveTab] = useState(visibleTabs[0]?.value ?? "tropas");
 
+  // Garante que a aba ativa é válida quando o role muda
   useEffect(() => {
     if (!visibleTabs.find(t => t.value === activeTab)) {
       setActiveTab(visibleTabs[0]?.value ?? "tropas");
@@ -227,17 +196,15 @@ export default function AdminLayout() {
           ))}
         </TabsList>
 
-        {visibleTabs.find(t => t.value === "tropas")     && <TabsContent value="tropas">     <Tropas />     </TabsContent>}
-        {visibleTabs.find(t => t.value === "equipes")    && <TabsContent value="equipes">    <Equipes />    </TabsContent>}
-        {visibleTabs.find(t => t.value === "economia")   && <TabsContent value="economia">   <Economia />   </TabsContent>}
-        {visibleTabs.find(t => t.value === "regras")     && <TabsContent value="regras">     <Regras />     </TabsContent>}
-        {visibleTabs.find(t => t.value === "logs")       && <TabsContent value="logs">       <Logs />       </TabsContent>}
-        {visibleTabs.find(t => t.value === "rework")     && <TabsContent value="rework">     <Rework />     </TabsContent>}
-        {visibleTabs.find(t => t.value === "webhooks")   && <TabsContent value="webhooks">   <Webhooks />   </TabsContent>}
-        {visibleTabs.find(t => t.value === "prospeccao") && <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>}
-        {visibleTabs.find(t => t.value === "ia-builder") && <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>}
-        {visibleTabs.find(t => t.value === "premios")    && <TabsContent value="premios">    <Premios />    </TabsContent>}
-        {visibleTabs.find(t => t.value === "usuarios")   && <TabsContent value="usuarios">   <UserManagement /> </TabsContent>}
+        {/* Renderiza apenas as abas visíveis */}
+        {visibleTabs.find(t => t.value === "tropas")   && <TabsContent value="tropas">   <Tropas />   </TabsContent>}
+        {visibleTabs.find(t => t.value === "equipes")  && <TabsContent value="equipes">  <Equipes />  </TabsContent>}
+        {visibleTabs.find(t => t.value === "economia") && <TabsContent value="economia"> <Economia /> </TabsContent>}
+        {visibleTabs.find(t => t.value === "regras")   && <TabsContent value="regras">   <Regras />   </TabsContent>}
+        {visibleTabs.find(t => t.value === "logs")     && <TabsContent value="logs">     <Logs />     </TabsContent>}
+        {visibleTabs.find(t => t.value === "rework")   && <TabsContent value="rework">   <Rework />   </TabsContent>}
+        {visibleTabs.find(t => t.value === "webhooks") && <TabsContent value="webhooks"> <Webhooks /> </TabsContent>}
+        {visibleTabs.find(t => t.value === "premios")  && <TabsContent value="premios">  <Premios />  </TabsContent>}
       </Tabs>
     </div>
   );

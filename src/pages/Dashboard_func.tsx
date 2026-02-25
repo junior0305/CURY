@@ -3,8 +3,7 @@ import { useAuth } from "@/components/AuthProvider";
 import {
   Loader2, PlusCircle, LogOut, Target, Users2, Calendar,
   FileText, BarChart3, Trophy, LayoutDashboard, Sparkles,
-  Zap, Shield, Bell, X, CheckCheck, Calendar as CalendarIcon, FileText as FileTextIcon,
-  Menu,
+  Zap, Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
@@ -45,65 +44,9 @@ const Dashboard = () => {
 
   const isBroker = role === "BROKER";
   useRivalWatch(isBroker);
-
-  // ── UMA única instância de gamificação — passada para GamificationBar como props
-  const { xpStats, missions, prizeClaims, loading: gamLoading, reload } = useGamification();
+  const { prizeClaims } = useGamification();
   const pendingPrizes = prizeClaims.filter(p => p.status === "PENDING").length;
 
-  // ── Notificações ──────────────────────────────────────────────────────────────
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
-
-  const fetchNotifications = async () => {
-    if (!user?.id) return;
-    const { data } = await supabase
-      .from("internal_notifications")
-      .select("*")
-      .eq("to_id", user.id)
-      .eq("is_read", false)
-      .order("created_at", { ascending: false })
-      .limit(20);
-    if (data) setNotifications(data);
-  };
-
-  useEffect(() => { fetchNotifications(); }, [user?.id]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    const channel = supabase
-      .channel("notifications-realtime")
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "internal_notifications",
-        filter: `to_id=eq.${user.id}`,
-      }, (payload) => {
-        const msg = payload.new as any;
-        setNotifications(prev => [msg, ...prev]);
-        const isVisit = msg.type === "QUALIFIED_VISIT";
-        toast.success(isVisit ? "📅 Lead quer agendar visita!" : "📄 Lead quer enviar documentos!", {
-          description: msg.message, duration: 8000,
-        });
-        playSound("NEW_LEAD");
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [user?.id]);
-
-  const markAllRead = async () => {
-    if (!user?.id || notifications.length === 0) return;
-    await supabase.from("internal_notifications").update({ is_read: true }).in("id", notifications.map(n => n.id));
-    setNotifications([]);
-    setNotifOpen(false);
-  };
-
-  const markOneRead = async (id: string) => {
-    await supabase.from("internal_notifications").update({ is_read: true }).eq("id", id);
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
-
-  const unreadCount = notifications.length;
-  // ────────────────────────────────────────────────────────────────────────────
-
-  const [menuOpen, setMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("mission");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
@@ -128,10 +71,10 @@ const Dashboard = () => {
     const isPowerUser = role === "SUPERINTENDENT" || role === "ADMIN";
     const displayLeads = isPowerUser ? leads : leads.filter(l => l.brokerId === user?.id);
     return {
-      new:         displayLeads.filter(l => l.status === "NEW").length,
+      new: displayLeads.filter(l => l.status === "NEW").length,
       in_progress: displayLeads.filter(l => l.status === "IN_PROGRESS").length,
-      visits:      displayLeads.filter(l => l.status === "VISIT_SCHEDULED").length,
-      docs:        displayLeads.filter(l => l.status === "DOCS_REQUESTED").length,
+      visits: displayLeads.filter(l => l.status === "VISIT_SCHEDULED").length,
+      docs: displayLeads.filter(l => l.status === "DOCS_REQUESTED").length,
     };
   }, [leads, user?.id, role]);
 
@@ -139,13 +82,14 @@ const Dashboard = () => {
     if (!user?.id) return;
     const channel = supabase
       .channel("new-leads-audio")
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "leads",
-        filter: `broker_id=eq.${user.id}`,
-      }, (payload) => {
-        playSound("NEW_LEAD");
-        toast.info(`🚀 Novo Lead: ${payload.new.name}`, { description: "Atenda o mais rápido possível!" });
-      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "leads", filter: `broker_id=eq.${user.id}` },
+        (payload) => {
+          playSound("NEW_LEAD");
+          toast.info(`🚀 Novo Lead: ${payload.new.name}`, {
+            description: "Atenda o mais rápido possível!",
+          });
+        }
+      )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user?.id, playSound]);
@@ -176,7 +120,6 @@ const Dashboard = () => {
 
         <header className="flex-none bg-slate-900 border-b border-gray-700/50 z-40">
           <div className="p-3 flex justify-between items-center">
-            {/* Avatar + nome */}
             <div className="flex items-center gap-2">
               <Avatar className="h-9 w-9 border-2 border-indigo-500/30">
                 <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.email}`} />
@@ -186,37 +129,25 @@ const Dashboard = () => {
               </Avatar>
               <div>
                 <h1 className="font-black text-white text-sm leading-none">{userName}</h1>
-                <p className="text-[10px] font-bold text-indigo-400 uppercase">
-                  {role === "BROKER" ? "Agente de Campo" : role}
-                </p>
+                <p className="text-[10px] font-bold text-indigo-400 uppercase">Agente de Campo</p>
               </div>
             </div>
-
-            {/* Ações direita */}
-            <div className="flex items-center gap-2">
-              {/* Sino */}
-              <div className="relative">
+            <div className="flex gap-2">
+              {isBroker && (
                 <Button size="sm" variant="ghost"
-                  className="rounded-full border border-emerald-500/30 text-emerald-400 bg-emerald-500/10 h-9 w-9 p-0 relative hover:bg-emerald-500/20"
-                  onClick={() => setNotifOpen(v => !v)}>
-                  <Bell className="w-4 h-4" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold animate-pulse">
-                      {unreadCount > 9 ? "9+" : unreadCount}
-                    </span>
+                  className="rounded-full border border-yellow-500/30 text-yellow-400 bg-yellow-500/10 h-9 w-9 p-0 relative hover:bg-yellow-500/20"
+                  onClick={() => setIsMissionsOpen(true)}>
+                  <Zap className="w-4 h-4" />
+                  {pendingPrizes > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold">{pendingPrizes}</span>
                   )}
                 </Button>
-                {notifOpen && (
-                  <NotificationsDropdown
-                    notifications={notifications}
-                    onMarkAll={markAllRead}
-                    onMarkOne={markOneRead}
-                    onClose={() => setNotifOpen(false)}
-                  />
-                )}
-              </div>
-
-              {/* Novo Lead */}
+              )}
+              <Button size="sm" variant="ghost"
+                className="rounded-full border border-indigo-500/30 text-indigo-400 bg-indigo-500/10 h-9 w-9 p-0 hover:bg-indigo-500/20"
+                onClick={() => { setIntelTargetUser(null); setIsIntelOpen(true); }}>
+                <BarChart3 className="w-4 h-4" />
+              </Button>
               <Sheet open={isLeadFormOpen} onOpenChange={setIsLeadFormOpen}>
                 <SheetTrigger asChild>
                   <Button size="sm" className="rounded-full bg-indigo-600 hover:bg-indigo-500 h-9 w-9 p-0 shadow-lg shadow-indigo-900/40">
@@ -225,61 +156,11 @@ const Dashboard = () => {
                 </SheetTrigger>
                 <LeadForm onOpenChange={setIsLeadFormOpen} brokerId={user?.id || ""} managerId={null} />
               </Sheet>
-
-              {/* Menu hambúrguer */}
-              <div className="relative">
-                <Button size="sm" variant="ghost"
-                  className="rounded-full border border-gray-600/40 text-gray-400 bg-slate-800 h-9 w-9 p-0 hover:bg-slate-700"
-                  onClick={() => setMenuOpen(v => !v)}>
-                  <Menu className="w-4 h-4" />
-                </Button>
-
-                {/* Dropdown do menu */}
-                {menuOpen && (
-                  <div className="absolute right-0 top-11 z-50 w-56 bg-slate-900 border border-gray-700/60 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden">
-                    {isBroker && (
-                      <button
-                        className="w-full flex items-center gap-3 px-4 py-3 text-yellow-400 hover:bg-yellow-500/10 transition-colors text-sm font-bold relative"
-                        onClick={() => { setIsMissionsOpen(true); setMenuOpen(false); }}>
-                        <Zap className="w-4 h-4" /> Missões
-                        {pendingPrizes > 0 && (
-                          <span className="ml-auto text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full font-black">
-                            {pendingPrizes}
-                          </span>
-                        )}
-                      </button>
-                    )}
-                    <button
-                      className="w-full flex items-center gap-3 px-4 py-3 text-indigo-400 hover:bg-indigo-500/10 transition-colors text-sm font-bold"
-                      onClick={() => { setIntelTargetUser(null); setIsIntelOpen(true); setMenuOpen(false); }}>
-                      <BarChart3 className="w-4 h-4" /> Intel Tática
-                    </button>
-                    <button
-                      className="w-full flex items-center gap-3 px-4 py-3 text-amber-400 hover:bg-amber-500/10 transition-colors text-sm font-bold"
-                      onClick={() => { setIsRewardsOpen(true); setMenuOpen(false); }}>
-                      <Trophy className="w-4 h-4" /> Espólio
-                    </button>
-                    <div className="border-t border-gray-700/40" />
-                    <button
-                      className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 transition-colors text-sm font-bold"
-                      onClick={signOut}>
-                      <LogOut className="w-4 h-4" /> Sair
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
-
           {isBroker && (
             <div className="px-3 pb-3">
-              <GamificationBar
-                compact
-                xpStats={xpStats}
-                missions={missions}
-                onClickMissions={() => setIsMissionsOpen(true)}
-                pendingPrizes={pendingPrizes}
-              />
+              <GamificationBar compact onClickMissions={() => setIsMissionsOpen(true)} pendingPrizes={pendingPrizes} />
             </div>
           )}
         </header>
@@ -289,10 +170,10 @@ const Dashboard = () => {
             <>
               <CampaignHeroBanner leads={leads} users={profiles} />
               <div className="grid grid-cols-2 gap-2">
-                <PipelineStat label="Novos"     count={stats.new}         active={filter === "NEW"}             onClick={() => setFilter("NEW")}             color="sky"     icon={Sparkles} />
-                <PipelineStat label="Atend."    count={stats.in_progress} active={filter === "IN_PROGRESS"}     onClick={() => setFilter("IN_PROGRESS")}     color="indigo"  icon={Users2} />
-                <PipelineStat label="Visita"    count={stats.visits}      active={filter === "VISIT_SCHEDULED"} onClick={() => setFilter("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
-                <PipelineStat label="Documentação"      count={stats.docs}        active={filter === "DOCS_REQUESTED"}  onClick={() => setFilter("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
+                <PipelineStat label="Novos" count={stats.new} active={filter === "NEW"} onClick={() => setFilter("NEW")} color="sky" icon={Sparkles} />
+                <PipelineStat label="Atend." count={stats.in_progress} active={filter === "IN_PROGRESS"} onClick={() => setFilter("IN_PROGRESS")} color="indigo" icon={Users2} />
+                <PipelineStat label="Visita" count={stats.visits} active={filter === "VISIT_SCHEDULED"} onClick={() => setFilter("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
+                <PipelineStat label="Docs" count={stats.docs} active={filter === "DOCS_REQUESTED"} onClick={() => setFilter("DOCS_REQUESTED")} color="amber" icon={FileText} />
               </div>
               <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
               <div className="space-y-2">
@@ -325,25 +206,12 @@ const Dashboard = () => {
 
         <IntelTacticsModal open={isIntelOpen} onOpenChange={setIsIntelOpen}
           brokerId={intelTargetUser?.id || user?.id || ""} userName={intelTargetUser?.name} />
-        <DailyMissionsPanel
-          open={isMissionsOpen}
-          onOpenChange={setIsMissionsOpen}
-          missions={missions}
-          xpStats={xpStats}
-          prizeClaims={prizeClaims}
-          loading={gamLoading}
-          reload={reload}
-        />
-
-        {/* Overlay para fechar menus ao tocar fora */}
-        {(menuOpen || notifOpen) && (
-          <div className="fixed inset-0 z-40" onClick={() => { setMenuOpen(false); setNotifOpen(false); }} />
-        )}
+        <DailyMissionsPanel open={isMissionsOpen} onOpenChange={setIsMissionsOpen} />
 
         <nav className="flex-none bg-slate-900 border-t border-gray-700/50 flex justify-around p-2 z-40">
-          <NavButton icon={LayoutDashboard} label="Missão"  active={activeTab === "mission"} onClick={() => setActiveTab("mission")} />
-          <NavButton icon={Target}          label="Lead"    active={activeTab === "lead"}    onClick={() => setActiveTab("lead")} />
-          <NavButton icon={Trophy}          label="Ranking" active={activeTab === "stats"}   onClick={() => setActiveTab("stats")} />
+          <NavButton icon={LayoutDashboard} label="Missão" active={activeTab === "mission"} onClick={() => setActiveTab("mission")} />
+          <NavButton icon={Target} label="Lead" active={activeTab === "lead"} onClick={() => setActiveTab("lead")} />
+          <NavButton icon={Trophy} label="Ranking" active={activeTab === "stats"} onClick={() => setActiveTab("stats")} />
         </nav>
       </div>
     );
@@ -357,21 +225,7 @@ const Dashboard = () => {
       <IntelTacticsModal open={isIntelOpen} onOpenChange={setIsIntelOpen}
         brokerId={intelTargetUser?.id || user?.id || ""} userName={intelTargetUser?.name} />
       <MyRewardsModal isOpen={isRewardsOpen} onOpenChange={setIsRewardsOpen} />
-
-      {/* Overlay para fechar notificações ao clicar fora (desktop) */}
-      {notifOpen && (
-        <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
-      )}
-
-      <DailyMissionsPanel
-        open={isMissionsOpen}
-        onOpenChange={setIsMissionsOpen}
-        missions={missions}
-        xpStats={xpStats}
-        prizeClaims={prizeClaims}
-        loading={gamLoading}
-        reload={reload}
-      />
+      <DailyMissionsPanel open={isMissionsOpen} onOpenChange={setIsMissionsOpen} />
 
       {/* Header */}
       <header className="h-14 bg-slate-900/80 backdrop-blur-sm border-b border-gray-700/50 flex items-center justify-between px-6 shrink-0 z-20">
@@ -388,9 +242,7 @@ const Dashboard = () => {
               className="hidden sm:flex items-center gap-2 rounded-full border border-yellow-500/30 text-yellow-400 bg-yellow-500/10 hover:bg-yellow-500/20 font-bold h-9 px-4 relative">
               <Zap className="w-4 h-4" /> Missões
               {pendingPrizes > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold">
-                  {pendingPrizes}
-                </span>
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold">{pendingPrizes}</span>
               )}
             </Button>
           )}
@@ -403,28 +255,6 @@ const Dashboard = () => {
             className="hidden sm:flex items-center gap-2 rounded-full text-amber-400 hover:bg-amber-500/10 font-bold h-9 px-4">
             <Trophy className="w-4 h-4" /> Espólio
           </Button>
-
-          {/* Sino de notificações desktop */}
-          <div className="relative hidden sm:block">
-            <Button variant="ghost" size="sm"
-              onClick={() => setNotifOpen(v => !v)}
-              className="relative rounded-full border border-emerald-500/30 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 h-9 w-9 p-0">
-              <Bell className="w-4 h-4" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold animate-pulse">
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </span>
-              )}
-            </Button>
-            {notifOpen && (
-              <NotificationsDropdown
-                notifications={notifications}
-                onMarkAll={markAllRead}
-                onMarkOne={markOneRead}
-                onClose={() => setNotifOpen(false)}
-              />
-            )}
-          </div>
 
           <div className="h-5 w-px bg-gray-700 mx-1 hidden sm:block" />
 
@@ -462,11 +292,8 @@ const Dashboard = () => {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-[1800px] mx-auto p-4 space-y-4">
 
-          {/* GamificationBar recebe dados do hook centralizado */}
           {isBroker && (
             <GamificationBar
-              xpStats={xpStats}
-              missions={missions}
               onClickMissions={() => setIsMissionsOpen(true)}
               onClickPrizes={() => setIsRewardsOpen(true)}
               pendingPrizes={pendingPrizes}
@@ -475,20 +302,26 @@ const Dashboard = () => {
 
           <CampaignHeroBanner leads={leads} users={profiles} />
 
+          {/* Split view */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-[700px]">
+
             {/* Coluna esquerda */}
             <div className="lg:col-span-4 flex flex-col gap-3">
+
+              {/* Missão do dia */}
               <div className="bg-slate-800/50 border border-gray-700/40 rounded-2xl p-4">
                 <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
               </div>
 
+              {/* Pipeline */}
               <div className="grid grid-cols-2 gap-2">
-                <PipelineStat label="Novos"        count={stats.new}         active={filter === "NEW"}             onClick={() => { setFilter("NEW");             setSelectedLeadId(null); }} color="sky"     icon={Sparkles} />
-                <PipelineStat label="Atendimento"  count={stats.in_progress} active={filter === "IN_PROGRESS"}     onClick={() => { setFilter("IN_PROGRESS");     setSelectedLeadId(null); }} color="indigo"  icon={Users2} />
-                <PipelineStat label="Visitas"      count={stats.visits}      active={filter === "VISIT_SCHEDULED"} onClick={() => { setFilter("VISIT_SCHEDULED"); setSelectedLeadId(null); }} color="emerald" icon={Calendar} />
-                <PipelineStat label="Documentação" count={stats.docs}        active={filter === "DOCS_REQUESTED"}  onClick={() => { setFilter("DOCS_REQUESTED");  setSelectedLeadId(null); }} color="amber"   icon={FileText} />
+                <PipelineStat label="Novos" count={stats.new} active={filter === "NEW"} onClick={() => { setFilter("NEW"); setSelectedLeadId(null); }} color="sky" icon={Sparkles} />
+                <PipelineStat label="Atendimento" count={stats.in_progress} active={filter === "IN_PROGRESS"} onClick={() => { setFilter("IN_PROGRESS"); setSelectedLeadId(null); }} color="indigo" icon={Users2} />
+                <PipelineStat label="Visitas" count={stats.visits} active={filter === "VISIT_SCHEDULED"} onClick={() => { setFilter("VISIT_SCHEDULED"); setSelectedLeadId(null); }} color="emerald" icon={Calendar} />
+                <PipelineStat label="Documentação" count={stats.docs} active={filter === "DOCS_REQUESTED"} onClick={() => { setFilter("DOCS_REQUESTED"); setSelectedLeadId(null); }} color="amber" icon={FileText} />
               </div>
 
+              {/* Lista */}
               <div className="flex-1 flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden min-h-[400px]">
                 <div className="px-4 py-3 border-b border-gray-700/40 flex justify-between items-center">
                   <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">Carteira Total</h3>
@@ -546,10 +379,10 @@ const NavButton = ({ icon: Icon, label, active, onClick }: any) => (
 );
 
 const PIPELINE_COLORS = {
-  sky:     { active: "border-sky-500/50 bg-sky-500/10 text-sky-400",           inactive: "border-gray-700/40 bg-slate-800/60 text-gray-500 hover:border-sky-500/30 hover:text-sky-400" },
-  indigo:  { active: "border-indigo-500/50 bg-indigo-500/10 text-indigo-400",  inactive: "border-gray-700/40 bg-slate-800/60 text-gray-500 hover:border-indigo-500/30 hover:text-indigo-400" },
+  sky:     { active: "border-sky-500/50 bg-sky-500/10 text-sky-400",       inactive: "border-gray-700/40 bg-slate-800/60 text-gray-500 hover:border-sky-500/30 hover:text-sky-400" },
+  indigo:  { active: "border-indigo-500/50 bg-indigo-500/10 text-indigo-400", inactive: "border-gray-700/40 bg-slate-800/60 text-gray-500 hover:border-indigo-500/30 hover:text-indigo-400" },
   emerald: { active: "border-emerald-500/50 bg-emerald-500/10 text-emerald-400", inactive: "border-gray-700/40 bg-slate-800/60 text-gray-500 hover:border-emerald-500/30 hover:text-emerald-400" },
-  amber:   { active: "border-amber-500/50 bg-amber-500/10 text-amber-400",     inactive: "border-gray-700/40 bg-slate-800/60 text-gray-500 hover:border-amber-500/30 hover:text-amber-400" },
+  amber:   { active: "border-amber-500/50 bg-amber-500/10 text-amber-400",   inactive: "border-gray-700/40 bg-slate-800/60 text-gray-500 hover:border-amber-500/30 hover:text-amber-400" },
 };
 
 const PipelineStat = ({ label, count, active, onClick, color, icon: Icon }: any) => {
@@ -564,90 +397,6 @@ const PipelineStat = ({ label, count, active, onClick, color, icon: Icon }: any)
         <p className="text-[10px] uppercase tracking-wider opacity-60 mt-0.5">{label}</p>
       </div>
     </button>
-  );
-};
-
-// ── NotificationsDropdown ──────────────────────────────────────────────────────
-const NOTIF_ICONS: Record<string, { icon: any; color: string; bg: string }> = {
-  QUALIFIED_VISIT:      { icon: CalendarIcon,  color: "text-emerald-400", bg: "bg-emerald-500/10" },
-  QUALIFIED_DOCUMENTS:  { icon: FileTextIcon,  color: "text-amber-400",   bg: "bg-amber-500/10"   },
-};
-
-const NotificationsDropdown = ({
-  notifications, onMarkAll, onMarkOne, onClose,
-}: {
-  notifications: any[];
-  onMarkAll: () => void;
-  onMarkOne: (id: string) => void;
-  onClose: () => void;
-}) => {
-  const formatTime = (iso: string) => {
-    const d = new Date(iso);
-    const diff = Math.floor((Date.now() - d.getTime()) / 60000);
-    if (diff < 1) return "agora";
-    if (diff < 60) return `${diff}m`;
-    if (diff < 1440) return `${Math.floor(diff / 60)}h`;
-    return `${Math.floor(diff / 1440)}d`;
-  };
-
-  return (
-    <div className="absolute right-0 top-11 z-50 w-80 bg-slate-900 border border-gray-700/60 rounded-2xl shadow-2xl shadow-black/60 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700/40">
-        <div className="flex items-center gap-2">
-          <Bell className="w-4 h-4 text-emerald-400" />
-          <span className="text-sm font-black text-white">Notificações</span>
-          {notifications.length > 0 && (
-            <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full">
-              {notifications.length}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {notifications.length > 0 && (
-            <button onClick={onMarkAll}
-              className="flex items-center gap-1 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 px-2 py-1 rounded-lg hover:bg-indigo-500/10 transition-colors">
-              <CheckCheck className="w-3 h-3" /> Marcar todas
-            </button>
-          )}
-          <button onClick={onClose}
-            className="text-gray-600 hover:text-gray-400 p-1 rounded-lg hover:bg-gray-700/40 transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Lista */}
-      <div className="max-h-96 overflow-y-auto">
-        {notifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-gray-600">
-            <Bell className="w-8 h-8 mb-2 opacity-20" />
-            <p className="text-sm font-medium">Sem notificações</p>
-          </div>
-        ) : (
-          notifications.map((n) => {
-            const cfg = NOTIF_ICONS[n.type] || { icon: Bell, color: "text-indigo-400", bg: "bg-indigo-500/10" };
-            const Icon = cfg.icon;
-            return (
-              <div key={n.id}
-                className="flex items-start gap-3 px-4 py-3 border-b border-gray-800/60 hover:bg-slate-800/40 transition-colors group">
-                <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${cfg.bg}`}>
-                  <Icon className={`w-4 h-4 ${cfg.color}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-white leading-snug">{n.message}</p>
-                  <p className="text-[10px] text-gray-600 mt-0.5">{formatTime(n.created_at)}</p>
-                </div>
-                <button onClick={() => onMarkOne(n.id)}
-                  className="shrink-0 opacity-0 group-hover:opacity-100 text-gray-600 hover:text-gray-400 p-1 rounded transition-all">
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
   );
 };
 

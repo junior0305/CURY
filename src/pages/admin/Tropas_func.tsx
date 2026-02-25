@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ChevronDown, ChevronRight, Plus, Shield, Users, Swords, Target, BrainCircuit, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Shield, Users, Swords, Target, BrainCircuit } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 
@@ -29,17 +29,9 @@ interface Team {
   name: string;
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  ADMIN: "👑 General",
-  SUPERINTENDENT: "👑 Superintendente",
-  MANAGER: "🎖️ Capitão",
-  BROKER: "⚔️ Soldado",
-};
-
 export default function Tropas() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [leadCounts, setLeadCounts] = useState<Record<string, number>>({});
   const [expandedManagers, setExpandedManagers] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [createUserOpen, setCreateUserOpen] = useState(false);
@@ -54,16 +46,6 @@ export default function Tropas() {
     managerId: ""
   });
   const [qualAgents, setQualAgents] = useState<{id: string; name: string}[]>([]);
-
-  // Edit
-  const [editingUser, setEditingUser] = useState<Profile | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  // Delete
-  const [deletingUser, setDeletingUser] = useState<Profile | null>(null);
-  const [redirectTo, setRedirectTo] = useState("");
-  const [deleting, setDeleting] = useState(false);
-
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -76,20 +58,9 @@ export default function Tropas() {
       const { data: profilesData } = await supabase.from("profiles").select("*").order("role", { ascending: false });
       const { data: teamsData } = await supabase.from("teams").select("*").order("name");
       const { data: agentsData } = await supabase.from("ai_agents").select("id, name").eq("trigger_type", "QUALIFICATION").eq("is_active", true);
-      const { data: leadsData } = await supabase.from("leads").select("broker_id").not("broker_id", "is", null);
-
       setProfiles(profilesData || []);
       setTeams(teamsData || []);
       setQualAgents(agentsData || []);
-
-      if (leadsData) {
-        const map: Record<string, number> = {};
-        leadsData.forEach((l: { broker_id: string }) => {
-          map[l.broker_id] = (map[l.broker_id] || 0) + 1;
-        });
-        setLeadCounts(map);
-      }
-
       setLoading(false);
     } catch (error) {
       console.error("Erro:", error);
@@ -145,7 +116,9 @@ export default function Tropas() {
           managerId: newUser.managerId || null
         })
       });
+
       const result = await response.json();
+
       if (response.ok) {
         toast({ title: "✅ Sucesso!", description: `${newUser.firstName} foi recrutado!` });
         setCreateUserOpen(false);
@@ -159,89 +132,10 @@ export default function Tropas() {
     }
   };
 
-  const handleSave = async () => {
-    if (!editingUser) return;
-    setSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        first_name: editingUser.first_name,
-        last_name: editingUser.last_name,
-        role: editingUser.role,
-        evolution_instance: editingUser.evolution_instance,
-        qualification_ai_enabled: editingUser.qualification_ai_enabled,
-        lead_assignment_enabled: editingUser.lead_assignment_enabled,
-        phone: editingUser.phone,
-      })
-      .eq("id", editingUser.id);
-    setSaving(false);
-    if (error) {
-      toast({ title: "❌ Erro", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "✅ Salvo!", description: "Usuário atualizado com sucesso." });
-      setEditingUser(null);
-      loadData();
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deletingUser) return;
-    const count = leadCounts[deletingUser.id] || 0;
-    if (count > 0 && !redirectTo) {
-      toast({ title: "⚠️ Atenção", description: "Selecione para quem redirecionar os leads.", variant: "destructive" });
-      return;
-    }
-    setDeleting(true);
-    if (count > 0 && redirectTo) {
-      const { error } = await supabase.from("leads").update({ broker_id: redirectTo }).eq("broker_id", deletingUser.id);
-      if (error) {
-        toast({ title: "❌ Erro ao redirecionar leads", description: error.message, variant: "destructive" });
-        setDeleting(false);
-        return;
-      }
-    }
-    const { error } = await supabase.rpc("delete_profile_cascade", { profile_id: deletingUser.id });
-    setDeleting(false);
-    if (error) {
-      toast({ title: "❌ Erro ao excluir", description: error.message, variant: "destructive" });
-    } else {
-      toast({
-        title: "✅ Excluído!",
-        description: count > 0 ? `Usuário excluído e ${count} lead(s) redirecionado(s).` : "Usuário excluído com sucesso.",
-      });
-      setDeletingUser(null);
-      setRedirectTo("");
-      loadData();
-    }
-  };
-
-  // Botões de ação reutilizáveis
-  const ActionButtons = ({ profile }: { profile: Profile }) => (
-    <div className="flex items-center gap-1">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={(e) => { e.stopPropagation(); setEditingUser({ ...profile }); }}
-        className="text-blue-400 hover:text-blue-300 hover:bg-blue-950/30 h-7 w-7 p-0"
-      >
-        <Pencil className="w-3.5 h-3.5" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={(e) => { e.stopPropagation(); setDeletingUser(profile); setRedirectTo(""); }}
-        className="text-red-500 hover:text-red-400 hover:bg-red-950/30 h-7 w-7 p-0"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </Button>
-    </div>
-  );
-
   const generals = profiles.filter(p => ["ADMIN", "SUPERINTENDENT"].includes(p.role));
   const managers = profiles.filter(p => p.role === "MANAGER");
   const orphanSoldiers = profiles.filter(p => p.role === "BROKER" && !p.manager_id);
   const getSoldiersByManager = (managerId: string) => profiles.filter(p => p.role === "BROKER" && p.manager_id === managerId);
-  const otherUsers = profiles.filter(u => u.id !== deletingUser?.id);
 
   if (loading) {
     return (
@@ -290,29 +184,60 @@ export default function Tropas() {
           <div className="space-y-4 p-4">
             <div>
               <label className="text-white text-sm mb-2 block">Email *</label>
-              <Input placeholder="email@exemplo.com" type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
+              <Input
+                placeholder="email@exemplo.com"
+                type="email"
+                value={newUser.email}
+                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                className="bg-slate-800 text-white border-gray-600"
+              />
             </div>
             <div>
               <label className="text-white text-sm mb-2 block">Senha *</label>
-              <Input placeholder="Senha forte" type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
+              <Input
+                placeholder="Senha forte"
+                type="password"
+                value={newUser.password}
+                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                className="bg-slate-800 text-white border-gray-600"
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-white text-sm mb-2 block">Nome *</label>
-                <Input placeholder="Nome" value={newUser.firstName} onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
+                <Input
+                  placeholder="Nome"
+                  value={newUser.firstName}
+                  onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })}
+                  className="bg-slate-800 text-white border-gray-600"
+                />
               </div>
               <div>
                 <label className="text-white text-sm mb-2 block">Sobrenome *</label>
-                <Input placeholder="Sobrenome" value={newUser.lastName} onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
+                <Input
+                  placeholder="Sobrenome"
+                  value={newUser.lastName}
+                  onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })}
+                  className="bg-slate-800 text-white border-gray-600"
+                />
               </div>
             </div>
             <div>
               <label className="text-white text-sm mb-2 block">Telefone</label>
-              <Input placeholder="(00) 00000-0000" value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
+              <Input
+                placeholder="(00) 00000-0000"
+                value={newUser.phone}
+                onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
+                className="bg-slate-800 text-white border-gray-600"
+              />
             </div>
             <div>
               <label className="text-white text-sm mb-2 block">Patente *</label>
-              <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value, managerId: "", teamId: "" })} className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2">
+              <select
+                value={newUser.role}
+                onChange={(e) => setNewUser({ ...newUser, role: e.target.value, managerId: "", teamId: "" })}
+                className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2"
+              >
                 <option value="BROKER">⚔️ SOLDADO (Corretor)</option>
                 <option value="MANAGER">🎖️ CAPITÃO (Gerente)</option>
                 <option value="SUPERINTENDENT">👑 SUPERINTENDENTE</option>
@@ -321,28 +246,48 @@ export default function Tropas() {
             </div>
             {teams.length > 0 && (newUser.role === "BROKER" || newUser.role === "MANAGER") && (
               <div>
-                <label className="text-white text-sm mb-2 block">Esquadrão (Equipe) {newUser.role === "BROKER" ? "*" : ""}</label>
-                <select value={newUser.teamId} onChange={(e) => setNewUser({ ...newUser, teamId: e.target.value })} className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2">
+                <label className="text-white text-sm mb-2 block">
+                  Esquadrão (Equipe) {newUser.role === "BROKER" ? "*" : ""}
+                </label>
+                <select
+                  value={newUser.teamId}
+                  onChange={(e) => setNewUser({ ...newUser, teamId: e.target.value })}
+                  className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2"
+                >
                   <option value="">Selecione uma equipe</option>
-                  {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  {teams.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
                 </select>
               </div>
             )}
             {newUser.role === "BROKER" && managers.length > 0 && (
               <div>
                 <label className="text-white text-sm mb-2 block">Capitão (Gerente) *</label>
-                <select value={newUser.managerId} onChange={(e) => setNewUser({ ...newUser, managerId: e.target.value })} className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2">
+                <select
+                  value={newUser.managerId}
+                  onChange={(e) => setNewUser({ ...newUser, managerId: e.target.value })}
+                  className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2"
+                >
                   <option value="">Selecione um capitão</option>
-                  {managers.map(m => <option key={m.id} value={m.id}>🎖️ {m.first_name} {m.last_name}</option>)}
+                  {managers.map(m => (
+                    <option key={m.id} value={m.id}>🎖️ {m.first_name} {m.last_name}</option>
+                  ))}
                 </select>
               </div>
             )}
             {newUser.role === "MANAGER" && generals.filter(g => g.role === "SUPERINTENDENT").length > 0 && (
               <div>
                 <label className="text-white text-sm mb-2 block">Superior (Superintendente)</label>
-                <select value={newUser.managerId} onChange={(e) => setNewUser({ ...newUser, managerId: e.target.value })} className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2">
+                <select
+                  value={newUser.managerId}
+                  onChange={(e) => setNewUser({ ...newUser, managerId: e.target.value })}
+                  className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2"
+                >
                   <option value="">Sem superior direto</option>
-                  {generals.filter(g => g.role === "SUPERINTENDENT").map(g => <option key={g.id} value={g.id}>👑 {g.first_name} {g.last_name}</option>)}
+                  {generals.filter(g => g.role === "SUPERINTENDENT").map(g => (
+                    <option key={g.id} value={g.id}>👑 {g.first_name} {g.last_name}</option>
+                  ))}
                 </select>
               </div>
             )}
@@ -350,7 +295,14 @@ export default function Tropas() {
               <Button
                 onClick={handleCreateUser}
                 className="w-full bg-red-600 hover:bg-red-500 font-bold"
-                disabled={!newUser.email || !newUser.password || !newUser.firstName || !newUser.lastName || (newUser.role === "BROKER" && !newUser.managerId) || (newUser.role === "BROKER" && !newUser.teamId)}
+                disabled={
+                  !newUser.email ||
+                  !newUser.password ||
+                  !newUser.firstName ||
+                  !newUser.lastName ||
+                  (newUser.role === "BROKER" && !newUser.managerId) ||
+                  (newUser.role === "BROKER" && !newUser.teamId)
+                }
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Recrutar Agora
@@ -360,126 +312,40 @@ export default function Tropas() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Editar */}
-      <Dialog open={!!editingUser} onOpenChange={(o) => !o && setEditingUser(null)}>
-        <DialogContent className="bg-slate-900 border-2 border-blue-500 max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-white text-2xl font-black">✏️ Editar Usuário</DialogTitle>
-          </DialogHeader>
-          {editingUser && (
-            <div className="space-y-4 p-2">
-              <div className="text-xs text-gray-500">{editingUser.email}</div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-white text-xs mb-1.5 block font-semibold">Nome</label>
-                  <Input value={editingUser.first_name || ""} onChange={(e) => setEditingUser({ ...editingUser, first_name: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
-                </div>
-                <div>
-                  <label className="text-white text-xs mb-1.5 block font-semibold">Sobrenome</label>
-                  <Input value={editingUser.last_name || ""} onChange={(e) => setEditingUser({ ...editingUser, last_name: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
-                </div>
-              </div>
-              <div>
-                <label className="text-white text-xs mb-1.5 block font-semibold">Telefone</label>
-                <Input value={editingUser.phone || ""} onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })} placeholder="5511999999999" className="bg-slate-800 text-white border-gray-600" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-white text-xs mb-1.5 block font-semibold">Cargo</label>
-                  <select value={editingUser.role} onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })} className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2 text-sm">
-                    <option value="ADMIN">👑 General (Admin)</option>
-                    <option value="SUPERINTENDENT">👑 Superintendente</option>
-                    <option value="MANAGER">🎖️ Capitão (Gerente)</option>
-                    <option value="BROKER">⚔️ Soldado (Corretor)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-white text-xs mb-1.5 block font-semibold">Instância Evolution</label>
-                  <Input value={editingUser.evolution_instance || ""} onChange={(e) => setEditingUser({ ...editingUser, evolution_instance: e.target.value })} placeholder="NomeInstancia" className="bg-slate-800 text-white border-gray-600" />
-                </div>
-              </div>
-              <div className="flex gap-6 pt-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={editingUser.qualification_ai_enabled} onChange={(e) => setEditingUser({ ...editingUser, qualification_ai_enabled: e.target.checked })} className="w-4 h-4 accent-blue-500" />
-                  <span className="text-sm text-gray-300">Qualificação IA</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={editingUser.lead_assignment_enabled} onChange={(e) => setEditingUser({ ...editingUser, lead_assignment_enabled: e.target.checked })} className="w-4 h-4 accent-blue-500" />
-                  <span className="text-sm text-gray-300">Receber leads</span>
-                </label>
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="ghost" onClick={() => setEditingUser(null)} className="text-gray-400">Cancelar</Button>
-                <Button onClick={handleSave} disabled={saving} className="bg-blue-600 hover:bg-blue-700">
-                  {saving ? "Salvando..." : "Salvar alterações"}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal Excluir */}
-      <Dialog open={!!deletingUser} onOpenChange={(o) => !o && setDeletingUser(null)}>
-        <DialogContent className="bg-slate-900 border-2 border-red-500">
-          <DialogHeader>
-            <DialogTitle className="text-white text-2xl font-black">🗑️ Excluir Usuário</DialogTitle>
-          </DialogHeader>
-          {deletingUser && (
-            <div className="p-2 space-y-4">
-              <p className="text-gray-300 text-sm">
-                Tem certeza que deseja excluir{" "}
-                <span className="font-bold text-white">{deletingUser.first_name} {deletingUser.last_name || ""}</span>?
-              </p>
-              {(leadCounts[deletingUser.id] || 0) > 0 ? (
-                <div className="p-4 bg-amber-950/40 border-2 border-amber-500 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertTriangle className="w-5 h-5 text-amber-400" />
-                    <span className="text-amber-400 font-bold text-sm">
-                      {leadCounts[deletingUser.id]} lead(s) precisam ser redirecionados!
-                    </span>
-                  </div>
-                  <p className="text-xs text-amber-300 mb-3">Selecione quem vai receber os leads deste usuário:</p>
-                  <select value={redirectTo} onChange={(e) => setRedirectTo(e.target.value)} className="w-full bg-slate-800 text-white border border-amber-500 rounded-md p-2 text-sm">
-                    <option value="">— Selecionar usuário —</option>
-                    {otherUsers.map((u) => (
-                      <option key={u.id} value={u.id}>{ROLE_LABELS[u.role] || u.role} — {u.first_name} {u.last_name || ""}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <p className="text-xs text-gray-500">Este usuário não possui leads vinculados.</p>
-              )}
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="ghost" onClick={() => { setDeletingUser(null); setRedirectTo(""); }} className="text-gray-400">Cancelar</Button>
-                <Button onClick={handleDelete} disabled={deleting || ((leadCounts[deletingUser.id] || 0) > 0 && !redirectTo)} className="bg-red-600 hover:bg-red-700 disabled:opacity-40">
-                  {deleting ? "Excluindo..." : "Confirmar exclusão"}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="border-2 border-yellow-500 bg-yellow-950/20">
           <CardHeader className="pb-3">
-            <CardTitle className="text-white flex items-center gap-2"><Shield className="w-5 h-5 text-yellow-500" />Generais</CardTitle>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Shield className="w-5 h-5 text-yellow-500" />
+              Generais
+            </CardTitle>
           </CardHeader>
-          <CardContent><div className="text-4xl font-black text-white">{generals.length}</div></CardContent>
+          <CardContent>
+            <div className="text-4xl font-black text-white">{generals.length}</div>
+          </CardContent>
         </Card>
         <Card className="border-2 border-blue-500 bg-blue-950/20">
           <CardHeader className="pb-3">
-            <CardTitle className="text-white flex items-center gap-2"><Users className="w-5 h-5 text-blue-500" />Capitães</CardTitle>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Users className="w-5 h-5 text-blue-500" />
+              Capitães
+            </CardTitle>
           </CardHeader>
-          <CardContent><div className="text-4xl font-black text-white">{managers.length}</div></CardContent>
+          <CardContent>
+            <div className="text-4xl font-black text-white">{managers.length}</div>
+          </CardContent>
         </Card>
         <Card className="border-2 border-green-500 bg-green-950/20">
           <CardHeader className="pb-3">
-            <CardTitle className="text-white flex items-center gap-2"><Swords className="w-5 h-5 text-green-500" />Soldados</CardTitle>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Swords className="w-5 h-5 text-green-500" />
+              Soldados
+            </CardTitle>
           </CardHeader>
-          <CardContent><div className="text-4xl font-black text-white">{profiles.filter(p => p.role === "BROKER").length}</div></CardContent>
+          <CardContent>
+            <div className="text-4xl font-black text-white">{profiles.filter(p => p.role === "BROKER").length}</div>
+          </CardContent>
         </Card>
       </div>
 
@@ -488,23 +354,21 @@ export default function Tropas() {
         <Card className="border-2 border-yellow-500 bg-slate-900/50">
           <CardHeader>
             <CardTitle className="text-white text-xl font-black flex items-center gap-2">
-              <Shield className="w-6 h-6 text-yellow-500" />GENERAIS ({generals.length})
+              <Shield className="w-6 h-6 text-yellow-500" />
+              GENERAIS ({generals.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {generals.map(g => (
-                <div key={g.id} className="flex items-center justify-between p-4 rounded-lg border-2 border-yellow-500 bg-yellow-950/20">
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl">👑</span>
-                    <div>
-                      <div className="text-white font-bold">{g.first_name} {g.last_name}</div>
-                      <div className="text-sm text-yellow-400">{g.role === "SUPERINTENDENT" ? "SUPERINTENDENTE" : "GENERAL"}</div>
-                      <div className="text-xs text-gray-500">{g.email}</div>
-                      {g.phone && <div className="text-xs text-gray-500">{g.phone}</div>}
-                    </div>
+                <div key={g.id} className="flex items-center gap-3 p-4 rounded-lg border-2 border-yellow-500 bg-yellow-950/20">
+                  <span className="text-3xl">👑</span>
+                  <div>
+                    <div className="text-white font-bold">{g.first_name} {g.last_name}</div>
+                    <div className="text-sm text-yellow-400">{g.role === "SUPERINTENDENT" ? "SUPERINTENDENTE" : "GENERAL"}</div>
+                    <div className="text-xs text-gray-500">{g.email}</div>
+                    {g.phone && <div className="text-xs text-gray-500">{g.phone}</div>}
                   </div>
-                  <ActionButtons profile={g} />
                 </div>
               ))}
             </div>
@@ -517,7 +381,8 @@ export default function Tropas() {
         <Card className="border-2 border-blue-500 bg-slate-900/50">
           <CardHeader>
             <CardTitle className="text-white text-xl font-black flex items-center gap-2">
-              <Users className="w-6 h-6 text-blue-500" />CAPITÃES ({managers.length})
+              <Users className="w-6 h-6 text-blue-500" />
+              CAPITÃES ({managers.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -529,8 +394,11 @@ export default function Tropas() {
                 const team = m.team_id ? teams.find(t => t.id === m.team_id) : null;
                 return (
                   <div key={m.id} className="border-2 border-blue-500 rounded-lg bg-blue-950/20">
-                    <div className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => toggleManager(m.id)}>
+                    <div
+                      className="flex items-center justify-between p-4 cursor-pointer hover:bg-blue-950/30"
+                      onClick={() => toggleManager(m.id)}
+                    >
+                      <div className="flex items-center gap-3 flex-1">
                         <span className="text-3xl">🎖️</span>
                         <div className="flex-1">
                           <div className="text-white font-bold">{m.first_name} {m.last_name}</div>
@@ -542,12 +410,9 @@ export default function Tropas() {
                         </div>
                         <Badge variant="secondary">{soldiers.length} soldados</Badge>
                       </div>
-                      <div className="flex items-center gap-1 ml-2">
-                        <ActionButtons profile={m} />
-                        <Button variant="ghost" size="sm" onClick={() => toggleManager(m.id)} className="text-blue-400">
-                          {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-                        </Button>
-                      </div>
+                      <Button variant="ghost" size="sm" className="text-blue-400">
+                        {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+                      </Button>
                     </div>
                     {isExpanded && soldiers.length > 0 && (
                       <div className="border-t-2 border-blue-500 bg-slate-800/50 p-4 space-y-2">
@@ -566,9 +431,6 @@ export default function Tropas() {
                                 </div>
                               </div>
                               <div className="flex flex-col items-end gap-1.5">
-                                <div className="flex items-center gap-1">
-                                  <ActionButtons profile={s} />
-                                </div>
                                 <Badge variant={s.lead_assignment_enabled ? "default" : "secondary"} className="text-xs">
                                   {s.lead_assignment_enabled ? "Ativo" : "Inativo"}
                                 </Badge>
@@ -585,7 +447,9 @@ export default function Tropas() {
                       </div>
                     )}
                     {isExpanded && soldiers.length === 0 && (
-                      <div className="border-t-2 border-blue-500 bg-slate-800/50 p-4 text-center text-gray-400 text-sm">Sem soldados</div>
+                      <div className="border-t-2 border-blue-500 bg-slate-800/50 p-4 text-center text-gray-400 text-sm">
+                        Sem soldados
+                      </div>
                     )}
                   </div>
                 );
@@ -600,7 +464,8 @@ export default function Tropas() {
         <Card className="border-2 border-green-500 bg-slate-900/50">
           <CardHeader>
             <CardTitle className="text-white text-xl font-black flex items-center gap-2">
-              <Swords className="w-6 h-6 text-green-500" />SOLDADOS SEM CAPITÃO ({orphanSoldiers.length})
+              <Swords className="w-6 h-6 text-green-500" />
+              SOLDADOS SEM CAPITÃO ({orphanSoldiers.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -620,7 +485,6 @@ export default function Tropas() {
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
-                      <ActionButtons profile={s} />
                       <Badge variant={s.lead_assignment_enabled ? "default" : "secondary"}>
                         {s.lead_assignment_enabled ? "Ativo" : "Inativo"}
                       </Badge>

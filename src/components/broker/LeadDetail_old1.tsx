@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLeadsForDashboard, updateLeadStatus } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
-import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin, Brain, BrainCircuit } from "lucide-react";
+import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -40,7 +40,6 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [noteContent, setNoteContent] = useState("");
   const [isSendingNote, setIsSendingNote] = useState(false);
-  const [showQualModal, setShowQualModal] = useState(false);
 
   const { data: leads = [], isLoading } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
@@ -62,43 +61,6 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
       ].filter(Boolean).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     },
     enabled: !!leadId,
-  });
-
-  const { data: qualAgents = [] } = useQuery({
-    queryKey: ["qual-agents"],
-    queryFn: async () => {
-      const { data } = await supabase.from("ai_agents").select("id, name").eq("trigger_type", "QUALIFICATION").eq("is_active", true);
-      return data || [];
-    },
-  });
-
-  const activateQualMutation = useMutation({
-    mutationFn: async (agentId: string) => {
-      await supabase.from("leads").update({
-        qualification_mode: true,
-        qualification_agent_id: agentId,
-        qualification_step: 1,
-      }).eq("id", leadId);
-    },
-    onSuccess: () => {
-      toast.success("IA de Qualificação ativada!");
-      queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
-      setShowQualModal(false);
-    },
-    onError: () => toast.error("Erro ao ativar qualificação"),
-  });
-
-  const deactivateQualMutation = useMutation({
-    mutationFn: async () => {
-      await supabase.from("leads").update({
-        qualification_mode: false,
-        qualification_step: 1,
-      }).eq("id", leadId);
-    },
-    onSuccess: () => {
-      toast.success("IA de Qualificação desativada");
-      queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
-    },
   });
 
   const updateStatusMutation = useMutation({
@@ -309,61 +271,7 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
             <span className="text-[9px] uppercase">Agendar</span>
           </Button>
         </div>
-
-        {/* Botão IA Qualificação */}
-        {(lead as any).qualificationMode ? (
-          <div className="mt-2 flex items-center justify-between bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-2.5">
-            <div className="flex items-center gap-2">
-              <BrainCircuit className="w-4 h-4 text-indigo-400 animate-pulse" />
-              <span className="text-xs font-bold text-indigo-300">IA Qualificadora ativa — Etapa {(lead as any).qualificationStep || 1}</span>
-            </div>
-            <button onClick={() => deactivateQualMutation.mutate()}
-              className="text-xs text-gray-500 hover:text-rose-400 transition-colors font-bold">
-              Desativar
-            </button>
-          </div>
-        ) : (
-          <button onClick={() => setShowQualModal(true)}
-            className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 text-indigo-400 text-xs font-bold transition-all">
-            <Brain className="w-3.5 h-3.5" />
-            Ativar IA de Qualificação
-          </button>
-        )}
       </div>
-
-      {/* Modal: Ativar IA Qualificação */}
-      <Dialog open={showQualModal} onOpenChange={setShowQualModal}>
-        <DialogContent className="sm:max-w-[400px] rounded-2xl bg-slate-900 border-gray-700 text-white">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-black flex items-center gap-2">
-              <BrainCircuit className="w-5 h-5 text-indigo-400" />
-              Ativar IA de Qualificação
-            </DialogTitle>
-            <DialogDescription className="text-gray-500">
-              A IA vai assumir a conversa e conduzir o lead até a decisão de visita ou documentação.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 py-2">
-            {qualAgents.map((agent: any) => (
-              <button key={agent.id}
-                onClick={() => activateQualMutation.mutate(agent.id)}
-                disabled={activateQualMutation.isPending}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/15 transition-all text-left">
-                <BrainCircuit className="w-5 h-5 text-indigo-400 shrink-0" />
-                <div>
-                  <p className="font-bold text-white text-sm">{agent.name}</p>
-                  <p className="text-xs text-gray-500">Clique para ativar</p>
-                </div>
-              </button>
-            ))}
-            {qualAgents.length === 0 && (
-              <p className="text-center text-gray-600 text-sm py-4">
-                Nenhum agente de qualificação criado ainda.
-              </p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Dialog: Perder lead */}
       <Dialog open={isExclusionDialogOpen} onOpenChange={setIsExclusionDialogOpen}>
