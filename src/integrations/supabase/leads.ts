@@ -284,7 +284,7 @@ export const updateLeadStatus = async (
         const message = `🚀 Parabéns ${brokerProfile.first_name}! O Superintendente viu sua venda do cliente ${leadName}. Excelente trabalho! Mais uma para a conta!`;
 
         supabase.functions.invoke("send-whatsapp", {
-          body: { phone: brokerProfile.phone, message },
+          body: { phone: brokerProfile.phone, message, instance_name: brokerProfile.evolution_instance || null },
         });
 
         console.log(`[Auto-Zap] Parabéns enviado para ${brokerProfile.first_name}`);
