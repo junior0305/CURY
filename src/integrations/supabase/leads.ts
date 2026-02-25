@@ -256,7 +256,7 @@ export const updateLeadStatus = async (
   // 1. Buscar dados do lead ANTES de atualizar (precisamos do broker_id e nome)
   const { data: leadBefore } = await supabase
     .from("leads")
-    .select("broker_id, name, profiles:broker_id(first_name, phone)")
+    .select("broker_id, name, profiles:broker_id(first_name, phone, evolution_instance)")
     .eq("id", leadId)
     .single();
 

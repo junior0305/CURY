@@ -16,11 +16,11 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   let integrationKey = 'WHATSAPP_N8N_URL';
-  let requestBody = {};
+  let requestBody: any = {};
 
   try {
     requestBody = await req.json()
-    const { phone, message, overrideUrl } = requestBody
+    const { phone, message, overrideUrl, instance_id, instance_name } = requestBody
 
     if (!phone || !message) {
       throw new Error('Phone and message are required')
@@ -49,19 +49,27 @@ serve(async (req) => {
        throw new Error(`Phone number invalid after cleaning: ${phone} -> ${cleanPhone}`);
     }
 
-    // INTELLIGENT FORMATTING: Add Brazil Country Code (55) if missing
-    // Logic: If it doesn't start with 55 OR it starts with 55 but is too short (likely just local number starting with 55, rare but possible, usually local is 8-9 digits, with area 10-11)
-    // Standard BR mobile with Area: 11 digits (11 99999 9999) -> Needs 55 -> 13 digits
-    // Standard BR landline with Area: 10 digits (11 3333 3333) -> Needs 55 -> 12 digits
-    
-    // If length is 10 or 11 (Area + Number), add 55.
+    // INTELLIGENT FORMATTING: Add Brazil Country Code (55) if missing for typical 10/11-digit local numbers
     if (cleanPhone.length === 10 || cleanPhone.length === 11) {
       cleanPhone = '55' + cleanPhone;
-    } 
-    // If length is 8 or 9 (No Area Code), we can't reliably guess, but usually systems expect area code. 
-    // We will assume provided numbers have area code as per CRM best practices.
-    
-    console.log(`[WhatsApp] Sending to ${cleanPhone} via ${WEBHOOK_URL}`)
+    }
+
+    // Resolve evolution instance: prefer instance_id -> instance_name -> undefined
+    let resolvedInstanceName: string | null = null;
+    if (instance_id) {
+      const { data: inst, error: instErr } = await supabase
+        .from('prospect_instances')
+        .select('evolution_instance')
+        .eq('id', instance_id)
+        .single();
+      if (instErr) {
+        console.warn('[WhatsApp] Could not fetch prospect_instances for instance_id', instance_id, instErr.message);
+      }
+      resolvedInstanceName = inst?.evolution_instance || null;
+    }
+    if (!resolvedInstanceName && instance_name) resolvedInstanceName = instance_name;
+
+    console.log(`[WhatsApp] Sending to ${cleanPhone} via ${WEBHOOK_URL} (instance: ${resolvedInstanceName || 'none'})`)
 
     const startTime = Date.now();
     let response;
@@ -70,16 +78,20 @@ serve(async (req) => {
     let fetchError = null;
 
     try {
-      // SWITCHOVER: Sending JSON instead of Form Data for better N8N compatibility
+      // Sending JSON payload so n8n can easily read fields like Contato and Instance
+      const payloadToN8n: any = {
+        Contato: cleanPhone,
+        Mensagem: message,
+      };
+      if (resolvedInstanceName) payloadToN8n.Instance = resolvedInstanceName;
+      if (instance_id) payloadToN8n.InstanceId = instance_id;
+
       response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          Contato: cleanPhone,
-          Mensagem: message
-        }),
+        body: JSON.stringify(payloadToN8n),
       })
       statusCode = response.status;
       responseText = await response.text();
@@ -88,10 +100,10 @@ serve(async (req) => {
       statusCode = 0;
     }
 
-    // 2. Log Attempt
+    // 2. Log Attempt (include instance data)
     await supabase.from('webhook_logs').insert({
       integration_key: integrationKey,
-      payload: { phone: cleanPhone, message },
+      payload: { phone: cleanPhone, message, instance_id: instance_id || null, instance_name: resolvedInstanceName },
       status_code: statusCode,
       response_body: responseText ? responseText.substring(0, 1000) : null,
       error_message: fetchError || (statusCode >= 400 ? 'HTTP Error' : null)
@@ -105,16 +117,20 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('[WhatsApp] Error:', error.message)
     
-    // Log fatal errors too
-    await supabase.from('webhook_logs').insert({
-      integration_key: integrationKey,
-      payload: requestBody,
-      status_code: 500,
-      error_message: error.message
-    });
+    // Log fatal errors too (attempt to include raw request body)
+    try {
+      await supabase.from('webhook_logs').insert({
+        integration_key: integrationKey,
+        payload: requestBody || {},
+        status_code: 500,
+        error_message: error.message
+      });
+    } catch (e) {
+      console.error('[WhatsApp] Failed to log error to webhook_logs:', e.message);
+    }
 
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
