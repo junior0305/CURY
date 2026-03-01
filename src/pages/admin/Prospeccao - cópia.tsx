@@ -77,7 +77,7 @@ export function Prospeccao() {
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [campaignName, setCampaignName] = useState("");
-  const [uploadScriptId, setUploadScriptId] = useState<string>("");
+  const [uploadScriptId] = useState<string>("");
   const [uploadInstanceId, setUploadInstanceId] = useState<string>("");
   const [intervalMinutes, setIntervalMinutes] = useState<number>(60);
   const [maxAttempts, setMaxAttempts] = useState<number>(5);
@@ -125,6 +125,7 @@ export function Prospeccao() {
   const { data: scriptsForUpload = [] } = useQuery<ProspectScript[]>({
     queryKey: ["prospect-scripts-upload"],
     queryFn: async () => { const { data } = await supabase.from("prospect_scripts").select("*").eq("is_active", true).order("name"); return data || []; },
+    enabled: view === "scripts",
   });
   const { data: instancesForUpload = [] } = useQuery<ProspectInstance[]>({
     queryKey: ["prospect-instances-upload"],
@@ -464,23 +465,13 @@ export function Prospeccao() {
                 <input value={campaignName} onChange={e => setCampaignName(e.target.value)} placeholder="Ex: Leads Março — Zona Sul"
                   className="w-full bg-slate-900 border border-gray-700/60 rounded-xl px-4 py-3 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-emerald-500/60" />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 block">Instância de Envio *</label>
-                  <select value={uploadInstanceId} onChange={e => setUploadInstanceId(e.target.value)}
-                    className="w-full bg-slate-900 border border-gray-700/60 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-emerald-500/60">
-                    <option value="">Selecione a instância...</option>
-                    {instancesForUpload.map(i => <option key={i.id} value={i.id}>{i.name} — {i.status}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 block">Roteiro</label>
-                  <select value={uploadScriptId} onChange={e => setUploadScriptId(e.target.value)}
-                    className="w-full bg-slate-900 border border-gray-700/60 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-emerald-500/60">
-                    <option value="">Sem roteiro específico</option>
-                    {scriptsForUpload.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
+              <div>
+                <label className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 block">Instância de Envio *</label>
+                <select value={uploadInstanceId} onChange={e => setUploadInstanceId(e.target.value)}
+                  className="w-full bg-slate-900 border border-gray-700/60 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-emerald-500/60">
+                  <option value="">Selecione a instância...</option>
+                  {instancesForUpload.map(i => <option key={i.id} value={i.id}>{i.name} — {i.status}</option>)}
+                </select>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>

@@ -24,7 +24,6 @@ const LoadingScreen = () => (
   </div>
 );
 
-// Admin/Superintendent apenas — não MANAGER
 const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, role, loading } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -36,7 +35,6 @@ const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// MANAGER apenas
 const ProtectedManagerRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, role, loading } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -46,7 +44,6 @@ const ProtectedManagerRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// BROKER apenas
 const ProtectedBrokerRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, role, loading } = useAuth();
   if (loading) return <LoadingScreen />;
