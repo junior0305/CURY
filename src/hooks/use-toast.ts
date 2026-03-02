@@ -87,8 +87,6 @@ export const reducer = (state: State, action: Action): State => {
     case "DISMISS_TOAST": {
       const { toastId } = action;
 
-      // ! Side effects ! - This could be extracted into a dismissToast() action,
-      // but I'll keep it here for simplicity
       if (toastId) {
         addToRemoveQueue(toastId);
       } else {
@@ -139,6 +137,23 @@ type Toast = Omit<ToasterToast, "id">;
 function toast({ ...props }: Toast) {
   const id = genId();
 
+  // 🎨 APLICAR CORES AUTOMÁTICAS BASEADAS NO VARIANT
+  let className = props.className || "";
+  
+  if (props.variant === "destructive") {
+    // ❌ ERRO - Fundo vermelho escuro com texto branco
+    className += " bg-red-900 border-red-600 text-white";
+  } else if (props.title && typeof props.title === 'string' && props.title.includes('✅')) {
+    // ✅ SUCESSO - Fundo verde escuro com texto branco
+    className += " bg-green-900 border-green-600 text-white";
+  } else if (props.title && typeof props.title === 'string' && props.title.includes('⚠️')) {
+    // ⚠️ WARNING - Fundo amarelo escuro com texto branco
+    className += " bg-yellow-900 border-yellow-600 text-white";
+  } else {
+    // 🔵 INFO - Fundo azul escuro com texto branco
+    className += " bg-blue-900 border-blue-600 text-white";
+  }
+
   const update = (props: ToasterToast) =>
     dispatch({
       type: "UPDATE_TOAST",
@@ -150,6 +165,7 @@ function toast({ ...props }: Toast) {
     type: "ADD_TOAST",
     toast: {
       ...props,
+      className,
       id,
       open: true,
       onOpenChange: (open) => {

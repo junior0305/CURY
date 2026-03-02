@@ -128,20 +128,45 @@ export default function Campanhas() {
   }, []);
 
   const handleUploadLeads = async (campaignId: string) => {
-    if (!uploadFile) return;
+    if (!uploadFile) {
+      console.log('⚠️ handleUploadLeads: Nenhum arquivo');
+      return;
+    }
+
+    console.log('📤 handleUploadLeads: Iniciando upload');
+    console.log('📎 Arquivo:', uploadFile.name, uploadFile.size, 'bytes');
+    console.log('🎯 Campaign ID:', campaignId);
 
     setUploading(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('Sessão não encontrada. Faça login novamente.');
+      }
+
       const formData = new FormData();
       formData.append('file', uploadFile);
       formData.append('campaignId', campaignId);
       formData.append('columnMapping', JSON.stringify({}));
 
+      console.log('🚀 Chamando Edge Function com autenticação...');
+
       const { data, error } = await supabase.functions.invoke('upload_campaign_leads', {
         body: formData,
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
-      if (error) throw error;
+      console.log('📥 Resposta da função:', { data, error });
+
+      if (error) {
+        console.error('❌ Erro retornado:', error);
+        throw error;
+      }
+
+      console.log('✅ Upload concluído:', data);
 
       toast({
         title: "✅ Leads importados com sucesso!",
@@ -150,6 +175,7 @@ export default function Campanhas() {
 
       return data.imported;
     } catch (error: any) {
+      console.error('❌ Erro no upload:', error);
       toast({
         title: "❌ Erro ao importar leads",
         description: error.message,
@@ -162,6 +188,11 @@ export default function Campanhas() {
   };
 
   const handleSave = async () => {
+    console.log('💾 handleSave: Iniciando');
+    console.log('📋 formData.name:', formData.name);
+    console.log('📋 leadSource:', leadSource);
+    console.log('📎 uploadFile:', uploadFile?.name);
+
     if (!formData.name.trim()) {
       toast({ title: "Nome da campanha é obrigatório", variant: "destructive" });
       return;
@@ -198,21 +229,30 @@ export default function Campanhas() {
       updated_at: new Date().toISOString(),
     };
 
+    console.log('📦 Payload:', payload);
+
     try {
       if (editCampaign) {
+        console.log('✏️ Modo: Editar campanha');
         const { error } = await supabase.from("ia_campaigns").update(payload).eq("id", editCampaign.id);
         if (error) throw error;
         
         if (leadSource === 'upload' && uploadFile) {
+          console.log('📤 Upload de leads (edição)');
           await handleUploadLeads(editCampaign.id);
         }
         
         toast({ title: "✅ Campanha atualizada!" });
       } else {
+        console.log('➕ Modo: Criar nova campanha');
         const { data: newCampaign, error } = await supabase.from("ia_campaigns").insert(payload).select().single();
+        
+        console.log('📥 Resposta do INSERT:', { newCampaign, error });
+        
         if (error) throw error;
 
         if (leadSource === 'upload' && uploadFile && newCampaign) {
+          console.log('📤 Upload de leads (nova campanha). ID:', newCampaign.id);
           await handleUploadLeads(newCampaign.id);
         }
 
@@ -223,6 +263,7 @@ export default function Campanhas() {
       resetForm();
       loadCampaigns();
     } catch (error: any) {
+      console.error('❌ Erro ao salvar:', error);
       toast({
         title: editCampaign ? "Erro ao atualizar campanha" : "Erro ao criar campanha",
         description: error.message,
@@ -367,7 +408,6 @@ export default function Campanhas() {
 
   return (
     <div className="space-y-6">
-{/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="border-2 border-blue-500/30 bg-blue-950/20">
           <CardHeader className="pb-3">
@@ -424,7 +464,6 @@ export default function Campanhas() {
         </Card>
       </div>
 
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-xl font-black text-white">Campanhas de Prospecção</h3>
@@ -436,7 +475,6 @@ export default function Campanhas() {
         </Button>
       </div>
 
-      {/* Lista de campanhas */}
       {campaigns.length === 0 ? (
         <div className="text-center py-20 text-gray-500">
           <Rocket className="w-20 h-20 mx-auto mb-4 opacity-20" />
@@ -601,9 +639,7 @@ export default function Campanhas() {
           ))}
         </div>
       )}
-
-      {/* Modal de Criar/Editar */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+<Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="bg-slate-900 border-blue-500 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black flex items-center gap-2">
@@ -627,7 +663,6 @@ export default function Campanhas() {
           </div>
 
           <div className="space-y-4">
-{/* Step 1: Info Básica + Fonte */}
             {currentStep === 1 && (
               <>
                 <div>
@@ -654,7 +689,6 @@ export default function Campanhas() {
                   <Label className="text-gray-400 text-xs uppercase mb-3 block">Fonte dos Leads *</Label>
                   
                   <div className="space-y-3">
-                    {/* Opção: CRM */}
                     <div
                       onClick={() => setLeadSource('crm')}
                       className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
@@ -722,7 +756,6 @@ export default function Campanhas() {
                       )}
                     </div>
 
-                    {/* Opção: Upload */}
                     <div
                       onClick={() => setLeadSource('upload')}
                       className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
@@ -794,7 +827,7 @@ export default function Campanhas() {
                 </Button>
               </>
             )}
-{/* Step 2: Mensagens */}
+
             {currentStep === 2 && (
               <>
                 <div>
@@ -864,7 +897,6 @@ export default function Campanhas() {
               </>
             )}
 
-            {/* Step 3: Configurações */}
             {currentStep === 3 && (
               <>
                 <div className="grid grid-cols-2 gap-4">
@@ -974,7 +1006,7 @@ export default function Campanhas() {
                 </div>
               </>
             )}
-</div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
