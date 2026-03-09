@@ -12,7 +12,7 @@ import Logs from "./Logs";
 import Rework from "./Rework";
 import Webhooks from "./Webhooks";
 import Premios from "./Premios";
-import { IaBuilder } from "./IaBuilder";
+import IaBuilder from "./IaBuilder";  // SEM chaves!
 import { Prospeccao } from "./Prospeccao";
 import UserManagement from "@/pages/UserManagement";
 
@@ -99,13 +99,6 @@ const ALL_TABS = [
     roles: ["ADMIN", "SUPERINTENDENT"],
   },
 
-  {
-    value: "usuarios",
-    label: "Usuários",
-    icon: UserCog,
-    color: "blue",
-    roles: ["ADMIN", "SUPERINTENDENT"],
-  },
 ];
 
 const COLOR_MAP: Record<string, string> = {
@@ -237,7 +230,6 @@ export default function AdminLayout() {
         {visibleTabs.find(t => t.value === "prospeccao") && <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>}
         {visibleTabs.find(t => t.value === "ia-builder") && <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>}
         {visibleTabs.find(t => t.value === "premios")    && <TabsContent value="premios">    <Premios />    </TabsContent>}
-        {visibleTabs.find(t => t.value === "usuarios")   && <TabsContent value="usuarios">   <UserManagement /> </TabsContent>}
       </Tabs>
     </div>
   );

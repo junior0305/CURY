@@ -1,709 +1,749 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/utils";
-import {
-  Bot, Plus, Pencil, Trash2, Zap, Clock, MessageSquare,
-  Shield, AlertTriangle, CheckCircle2, Send, Eye,
-  ChevronRight, Activity, Settings, X, Save, FlaskConical,
-  Radio, Pause, BookOpen, Coins, ChevronDown,
-} from "lucide-react";
+import { Bot, Plus, Pencil, Trash2, Save, MessageSquare, Brain, Video, Mic, Image, FileText, Play, Clock, ArrowRight, Hand } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
-// ── Tipos ─────────────────────────────────────────────────────────────────────
-interface AiAgent {
+interface AIProfile {
   id: string;
   name: string;
-  trigger_type: string;
-  trigger_hours: number;
-  trigger_status: string | null;
-  broker_personality: string;
-  message_objective: string;
-  max_attempts: number;
-  interval_hours: number;
-  require_approval: boolean;
-  silence_after_reply_hours: number;
-  silence_after_broker_activity_hours: number;
+  description: string | null;
+  system_prompt: string;
   is_active: boolean;
   created_at: string;
 }
 
-interface KnowledgeItem {
+interface CadenceTemplate {
   id: string;
-  agent_id: string;
-  title: string;
-  content: string;
-  category: string | null;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  cadence_steps?: CadenceStep[];
+}
+
+interface CadenceStep {
+  id: string;
+  cadence_id: string;
+  step_number: number;
+  delay_days: number;
+  media_type: string;
+  content: string | null;
+  media_url: string | null;
+  caption: string | null;
+}
+
+interface WelcomeTemplate {
+  id: string;
+  name: string;
+  message: string;
+  is_active: boolean;
+  usage_count: number;
   created_at: string;
 }
 
-interface Dispatch {
-  id: string;
-  lead_id: string;
-  broker_id: string;
-  message_generated: string;
-  status: string;
-  attempt_number: number;
-  blocked_reason: string | null;
-  sent_at: string | null;
-  created_at: string;
-  ai_agents?: { name: string };
-  leads?: { name: string; phone: string };
-  profiles?: { first_name: string; last_name: string };
-}
+type Tab = "profiles" | "cadence" | "welcome";
 
-const TRIGGER_LABELS: Record<string, { label: string; icon: string; color: string }> = {
-  INACTIVITY:     { label: "Inatividade",      icon: "⏳", color: "text-amber-400"  },
-  STATUS_CHANGE:  { label: "Mudança de Status", icon: "🔄", color: "text-blue-400"   },
-  POST_VISIT:     { label: "Pós-Visita",        icon: "🏠", color: "text-emerald-400"},
-  DOCS_REMINDER:  { label: "Docs Pendentes",    icon: "📄", color: "text-purple-400" },
-};
+export default function IaBuilder() {
+  const { toast } = useToast();
+  const [tab, setTab] = useState<Tab>("profiles");
+  const [profiles, setProfiles] = useState<AIProfile[]>([]);
+  const [cadences, setCadences] = useState<CadenceTemplate[]>([]);
+  const [welcomeTemplates, setWelcomeTemplates] = useState<WelcomeTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [cadenceModalOpen, setCadenceModalOpen] = useState(false);
+  const [welcomeModalOpen, setWelcomeModalOpen] = useState(false);
+  const [editProfile, setEditProfile] = useState<AIProfile | null>(null);
+  const [editCadence, setEditCadence] = useState<CadenceTemplate | null>(null);
+  const [editWelcome, setEditWelcome] = useState<WelcomeTemplate | null>(null);
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  PENDING:  { label: "Pendente", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20" },
-  SENT:     { label: "Enviado",  color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
-  BLOCKED:  { label: "Bloqueado", color: "text-rose-400",  bg: "bg-rose-500/10 border-rose-500/20"     },
-  APPROVED: { label: "Aprovado", color: "text-blue-400",   bg: "bg-blue-500/10 border-blue-500/20"     },
-  FAILED:   { label: "Falhou",   color: "text-gray-500",   bg: "bg-gray-500/10 border-gray-500/20"     },
-};
-
-// ── Formulário de agente ───────────────────────────────────────────────────────
-const EMPTY_AGENT = {
-  name: "",
-  trigger_type: "INACTIVITY",
-  trigger_hours: 8,
-  trigger_status: "",
-  broker_personality: "",
-  message_objective: "",
-  max_attempts: 3,
-  interval_hours: 24,
-  require_approval: false,
-  silence_after_reply_hours: 4,
-  silence_after_broker_activity_hours: 2,
-  is_active: true,
-};
-
-function AgentForm({
-  initial,
-  onSave,
-  onCancel,
-}: {
-  initial: typeof EMPTY_AGENT & { id?: string };
-  onSave: (data: typeof EMPTY_AGENT & { id?: string }) => void;
-  onCancel: () => void;
-}) {
-  const [form, setForm] = useState(initial);
-  const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
-
-  return (
-    <div className="bg-slate-800/60 border border-gray-700/50 rounded-2xl p-6 space-y-6">
-      {/* Nome */}
-      <div>
-        <label className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 block">
-          Nome do Agente
-        </label>
-        <input
-          value={form.name}
-          onChange={e => set("name", e.target.value)}
-          placeholder="Ex: Follow-up Frio, Reaquecimento 7 dias..."
-          className="w-full bg-slate-900 border border-gray-700/60 rounded-xl px-4 py-3 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-indigo-500/60 transition-colors"
-        />
-      </div>
-
-      {/* Gatilho */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div>
-          <label className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 block">
-            Tipo de Gatilho
-          </label>
-          <select
-            value={form.trigger_type}
-            onChange={e => set("trigger_type", e.target.value)}
-            className="w-full bg-slate-900 border border-gray-700/60 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500/60 transition-colors"
-          >
-            {Object.entries(TRIGGER_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v.icon} {v.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {form.trigger_type === "INACTIVITY" && (
-          <div>
-            <label className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 block">
-              Horas de Inatividade
-            </label>
-            <input
-              type="number" min={1} max={168}
-              value={form.trigger_hours}
-              onChange={e => set("trigger_hours", Number(e.target.value))}
-              className="w-full bg-slate-900 border border-gray-700/60 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500/60 transition-colors"
-            />
-          </div>
-        )}
-
-        <div>
-          <label className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 block">
-            Máx. Tentativas
-          </label>
-          <input
-            type="number" min={1} max={10}
-            value={form.max_attempts}
-            onChange={e => set("max_attempts", Number(e.target.value))}
-            className="w-full bg-slate-900 border border-gray-700/60 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500/60 transition-colors"
-          />
-        </div>
-
-        <div>
-          <label className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 block">
-            Intervalo entre Tentativas (h)
-          </label>
-          <input
-            type="number" min={1} max={168}
-            value={form.interval_hours}
-            onChange={e => set("interval_hours", Number(e.target.value))}
-            className="w-full bg-slate-900 border border-gray-700/60 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500/60 transition-colors"
-          />
-        </div>
-      </div>
-
-      {/* Personalidade do corretor */}
-      <div>
-        <label className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 block flex items-center gap-2">
-          <Bot className="w-3.5 h-3.5 text-indigo-400" />
-          Personalidade do Corretor
-          <span className="text-gray-600 font-normal normal-case tracking-normal">
-            — como ele fala, tom, expressões típicas
-          </span>
-        </label>
-        <textarea
-          rows={3}
-          value={form.broker_personality}
-          onChange={e => set("broker_personality", e.target.value)}
-          placeholder="Ex: Sou um corretor descontraído e direto. Falo de forma natural, sem formalidade. Uso expressões como 'cara', 'show', 'tranquilo'. Nunca pareço desesperado para vender..."
-          className="w-full bg-slate-900 border border-gray-700/60 rounded-xl px-4 py-3 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-indigo-500/60 transition-colors resize-none"
-        />
-        <p className="text-[11px] text-gray-600 mt-1.5">
-          💡 Escreva na primeira pessoa. Esse texto vai direto para a IA como instrução de como ela deve se comportar.
-        </p>
-      </div>
-
-      {/* Objetivo da mensagem */}
-      <div>
-        <label className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 block flex items-center gap-2">
-          <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-          Objetivo da Mensagem
-          <span className="text-gray-600 font-normal normal-case tracking-normal">
-            — o que essa mensagem precisa fazer
-          </span>
-        </label>
-        <textarea
-          rows={3}
-          value={form.message_objective}
-          onChange={e => set("message_objective", e.target.value)}
-          placeholder="Ex: Reengajar o lead que parou de responder. Ser natural, trazer uma razão para retomar a conversa. Terminar sempre com uma pergunta aberta para forçar resposta. Nunca mais de 3 parágrafos curtos..."
-          className="w-full bg-slate-900 border border-gray-700/60 rounded-xl px-4 py-3 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-indigo-500/60 transition-colors resize-none"
-        />
-      </div>
-
-      {/* Janelas de silêncio */}
-      <div>
-        <label className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3 block flex items-center gap-2">
-          <Shield className="w-3.5 h-3.5 text-rose-400" />
-          Proteção de Interferência
-        </label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="bg-slate-900/60 border border-gray-700/40 rounded-xl p-4">
-            <p className="text-xs font-bold text-gray-400 mb-1">
-              Silêncio após lead responder
-            </p>
-            <div className="flex items-center gap-3">
-              <input
-                type="number" min={1} max={48}
-                value={form.silence_after_reply_hours}
-                onChange={e => set("silence_after_reply_hours", Number(e.target.value))}
-                className="w-20 bg-slate-800 border border-gray-700/60 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500/60"
-              />
-              <span className="text-xs text-gray-500">horas de pausa</span>
-            </div>
-          </div>
-          <div className="bg-slate-900/60 border border-gray-700/40 rounded-xl p-4">
-            <p className="text-xs font-bold text-gray-400 mb-1">
-              Silêncio após corretor enviar WhatsApp
-            </p>
-            <div className="flex items-center gap-3">
-              <input
-                type="number" min={1} max={48}
-                value={form.silence_after_broker_activity_hours}
-                onChange={e => set("silence_after_broker_activity_hours", Number(e.target.value))}
-                className="w-20 bg-slate-800 border border-gray-700/60 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500/60"
-              />
-              <span className="text-xs text-gray-500">horas de pausa</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Opções extras */}
-      <div className="flex items-center justify-between bg-slate-900/60 border border-gray-700/40 rounded-xl px-4 py-3">
-        <div>
-          <p className="text-sm font-bold text-white">Exigir aprovação antes de enviar</p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Cada mensagem gerada ficará pendente até um admin aprovar
-          </p>
-        </div>
-        <Switch
-          checked={form.require_approval}
-          onCheckedChange={v => set("require_approval", v)}
-        />
-      </div>
-
-      {/* Ações */}
-      <div className="flex justify-end gap-3 pt-2 border-t border-gray-700/40">
-        <Button variant="ghost" onClick={onCancel}
-          className="text-gray-400 hover:text-white border border-gray-700/40 hover:bg-slate-700/40">
-          <X className="w-4 h-4 mr-2" /> Cancelar
-        </Button>
-        <Button onClick={() => onSave(form)}
-          disabled={!form.name || !form.broker_personality || !form.message_objective}
-          className="bg-indigo-600 hover:bg-indigo-500 font-bold shadow-lg shadow-indigo-900/40">
-          <Save className="w-4 h-4 mr-2" /> Salvar Agente
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ── Componente principal ───────────────────────────────────────────────────────
-export function IaBuilder() {
-  const qc = useQueryClient();
-  const [view, setView] = useState<"agents" | "dispatches" | "knowledge">("agents");
-  const [selectedAgentForKnowledge, setSelectedAgentForKnowledge] = useState<string>("");
-  const [editingKnowledge, setEditingKnowledge] = useState<Partial<KnowledgeItem> | null>(null);
-  const [showKnowledgeForm, setShowKnowledgeForm] = useState(false);
-  const [editing, setEditing] = useState<(typeof EMPTY_AGENT & { id?: string }) | null>(null);
-  const [previewAgent, setPreviewAgent] = useState<AiAgent | null>(null);
-
-  // Queries
-  const { data: agents = [], isLoading } = useQuery<AiAgent[]>({
-    queryKey: ["ai-agents"],
-    queryFn: async () => {
-      const { data } = await supabase.from("ai_agents").select("*").order("created_at");
-      return data || [];
-    },
+  const [profileFormData, setProfileFormData] = useState({
+    name: "",
+    description: "",
+    system_prompt: "",
+    is_active: true,
   });
 
-  const { data: dispatches = [] } = useQuery<Dispatch[]>({
-    queryKey: ["ai-dispatches"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("ai_agent_dispatches")
-        .select("*, ai_agents(name), leads(name, phone), profiles(first_name, last_name)")
-        .order("created_at", { ascending: false })
-        .limit(50);
-      return data || [];
-    },
-    enabled: view === "dispatches",
+  const [cadenceFormData, setCadenceFormData] = useState({
+    name: "",
+    description: "",
+    is_active: true,
   });
 
-  const { data: knowledgeItems = [] } = useQuery<KnowledgeItem[]>({
-    queryKey: ["knowledge-base", selectedAgentForKnowledge],
-    queryFn: async () => {
-      if (!selectedAgentForKnowledge) return [];
-      const { data } = await supabase.from("knowledge_base").select("*").eq("agent_id", selectedAgentForKnowledge).order("category").order("created_at");
-      return data || [];
-    },
-    enabled: view === "knowledge" && !!selectedAgentForKnowledge,
+  const [welcomeFormData, setWelcomeFormData] = useState({
+    name: "",
+    message: "",
+    is_active: true,
   });
 
-  const saveKnowledge = useMutation({
-    mutationFn: async (item: Partial<KnowledgeItem>) => {
-      const payload = { agent_id: selectedAgentForKnowledge, title: item.title, content: item.content, category: item.category || null };
-      if (item.id) await supabase.from("knowledge_base").update(payload).eq("id", item.id);
-      else await supabase.from("knowledge_base").insert(payload);
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["knowledge-base", selectedAgentForKnowledge] }); setEditingKnowledge(null); setShowKnowledgeForm(false); },
-  });
+  const [cadenceSteps, setCadenceSteps] = useState<Partial<CadenceStep>[]>([
+    { step_number: 1, delay_days: 0, media_type: "text", content: "" },
+  ]);
 
-  const deleteKnowledge = useMutation({
-    mutationFn: async (id: string) => { await supabase.from("knowledge_base").delete().eq("id", id); },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["knowledge-base", selectedAgentForKnowledge] }),
-  });
+  const loadProfiles = async () => {
+    const { data, error } = await supabase
+      .from("ai_profiles")
+      .select("*")
+      .order("created_at", { ascending: false });
+    
+    if (error) {
+      toast({ title: "Erro ao carregar perfis", description: error.message, variant: "destructive" });
+    } else {
+      setProfiles(data || []);
+    }
+  };
 
-  // Mutations
-  const saveMutation = useMutation({
-    mutationFn: async (data: typeof EMPTY_AGENT & { id?: string }) => {
-      const payload = {
-        name: data.name,
-        trigger_type: data.trigger_type,
-        trigger_hours: data.trigger_hours,
-        trigger_status: data.trigger_status || null,
-        broker_personality: data.broker_personality,
-        message_objective: data.message_objective,
-        max_attempts: data.max_attempts,
-        interval_hours: data.interval_hours,
-        require_approval: data.require_approval,
-        silence_after_reply_hours: data.silence_after_reply_hours,
-        silence_after_broker_activity_hours: data.silence_after_broker_activity_hours,
-        is_active: data.is_active,
-        updated_at: new Date().toISOString(),
-      };
-      if (data.id) {
-        await supabase.from("ai_agents").update(payload).eq("id", data.id);
+  const loadCadences = async () => {
+    const { data, error } = await supabase
+      .from("cadence_templates")
+      .select("*, cadence_steps(*)")
+      .order("created_at", { ascending: false });
+    
+    if (error) {
+      toast({ title: "Erro ao carregar cadências", description: error.message, variant: "destructive" });
+    } else {
+      setCadences(data || []);
+    }
+  };
+
+  const loadWelcomeTemplates = async () => {
+    const { data, error } = await supabase
+      .from("welcome_templates")
+      .select("*")
+      .order("created_at", { ascending: false });
+    
+    if (error) {
+      toast({ title: "Erro ao carregar templates", description: error.message, variant: "destructive" });
+    } else {
+      setWelcomeTemplates(data || []);
+    }
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([loadProfiles(), loadCadences(), loadWelcomeTemplates()]).finally(() => setLoading(false));
+  }, []);
+
+  const handleSaveProfile = async () => {
+    if (!profileFormData.name || !profileFormData.system_prompt) {
+      toast({ title: "Preencha todos os campos obrigatórios", variant: "destructive" });
+      return;
+    }
+
+    try {
+      if (editProfile) {
+        const { error } = await supabase.from("ai_profiles").update(profileFormData).eq("id", editProfile.id);
+        if (error) throw error;
+        toast({ title: "✅ Perfil atualizado!" });
       } else {
-        await supabase.from("ai_agents").insert(payload);
+        const { error } = await supabase.from("ai_profiles").insert(profileFormData);
+        if (error) throw error;
+        toast({ title: "✅ Perfil criado!" });
       }
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["ai-agents"] }); setEditing(null); },
-  });
+      
+      setProfileModalOpen(false);
+      resetProfileForm();
+      loadProfiles();
+    } catch (error: any) {
+      toast({ title: "❌ Erro ao salvar", description: error.message, variant: "destructive" });
+    }
+  };
 
-  const toggleMutation = useMutation({
-    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      await supabase.from("ai_agents").update({ is_active }).eq("id", id);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-agents"] }),
-  });
+  const handleSaveCadence = async () => {
+    if (!cadenceFormData.name || cadenceSteps.length === 0) {
+      toast({ title: "Adicione pelo menos 1 passo", variant: "destructive" });
+      return;
+    }
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await supabase.from("ai_agents").delete().eq("id", id);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-agents"] }),
-  });
+    try {
+      let cadenceId = editCadence?.id;
 
-  const approveDispatch = useMutation({
-    mutationFn: async (id: string) => {
-      await supabase.from("ai_agent_dispatches").update({ status: "APPROVED" }).eq("id", id);
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-dispatches"] }),
-  });
+      if (editCadence) {
+        const { error } = await supabase.from("cadence_templates").update(cadenceFormData).eq("id", editCadence.id);
+        if (error) throw error;
+        await supabase.from("cadence_steps").delete().eq("cadence_id", editCadence.id);
+      } else {
+        const { data, error } = await supabase.from("cadence_templates").insert(cadenceFormData).select().single();
+        if (error) throw error;
+        cadenceId = data.id;
+      }
 
-  const pendingApprovals = dispatches.filter(d => d.status === "PENDING").length;
+      const stepsToInsert = cadenceSteps.map(step => ({
+        cadence_id: cadenceId,
+        step_number: step.step_number,
+        delay_days: step.delay_days,
+        media_type: step.media_type,
+        content: step.content,
+        media_url: step.media_url,
+        caption: step.caption,
+      }));
+
+      const { error: stepsError } = await supabase.from("cadence_steps").insert(stepsToInsert);
+      if (stepsError) throw stepsError;
+
+      toast({ title: editCadence ? "✅ Cadência atualizada!" : "✅ Cadência criada!" });
+      setCadenceModalOpen(false);
+      resetCadenceForm();
+      loadCadences();
+    } catch (error: any) {
+      toast({ title: "❌ Erro ao salvar", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleSaveWelcome = async () => {
+    if (!welcomeFormData.name || !welcomeFormData.message) {
+      toast({ title: "Preencha todos os campos", variant: "destructive" });
+      return;
+    }
+
+    try {
+      if (editWelcome) {
+        const { error } = await supabase.from("welcome_templates").update(welcomeFormData).eq("id", editWelcome.id);
+        if (error) throw error;
+        toast({ title: "✅ Template atualizado!" });
+      } else {
+        const { error } = await supabase.from("welcome_templates").insert(welcomeFormData);
+        if (error) throw error;
+        toast({ title: "✅ Template criado!" });
+      }
+      
+      setWelcomeModalOpen(false);
+      resetWelcomeForm();
+      loadWelcomeTemplates();
+    } catch (error: any) {
+      toast({ title: "❌ Erro ao salvar", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteProfile = async (id: string) => {
+    if (!confirm("Desativar este perfil?")) return;
+    const { error } = await supabase.from("ai_profiles").update({ is_active: false }).eq("id", id);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "🗑️ Perfil desativado" });
+      loadProfiles();
+    }
+  };
+
+  const handleDeleteCadence = async (id: string) => {
+    if (!confirm("Desativar esta cadência?")) return;
+    const { error } = await supabase.from("cadence_templates").update({ is_active: false }).eq("id", id);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "🗑️ Cadência desativada" });
+      loadCadences();
+    }
+  };
+
+  const handleDeleteWelcome = async (id: string) => {
+    if (!confirm("Desativar este template?")) return;
+    const { error } = await supabase.from("welcome_templates").update({ is_active: false }).eq("id", id);
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "🗑️ Template desativado" });
+      loadWelcomeTemplates();
+    }
+  };
+
+  const resetProfileForm = () => {
+    setProfileFormData({ name: "", description: "", system_prompt: "", is_active: true });
+    setEditProfile(null);
+  };
+
+  const resetCadenceForm = () => {
+    setCadenceFormData({ name: "", description: "", is_active: true });
+    setCadenceSteps([{ step_number: 1, delay_days: 0, media_type: "text", content: "" }]);
+    setEditCadence(null);
+  };
+
+  const resetWelcomeForm = () => {
+    setWelcomeFormData({ name: "", message: "", is_active: true });
+    setEditWelcome(null);
+  };
+
+  const openEditProfile = (profile: AIProfile) => {
+    setEditProfile(profile);
+    setProfileFormData({ name: profile.name, description: profile.description || "", system_prompt: profile.system_prompt, is_active: profile.is_active });
+    setProfileModalOpen(true);
+  };
+
+  const openEditCadence = (cadence: CadenceTemplate) => {
+    setEditCadence(cadence);
+    setCadenceFormData({ name: cadence.name, description: cadence.description || "", is_active: cadence.is_active });
+    setCadenceSteps(cadence.cadence_steps || []);
+    setCadenceModalOpen(true);
+  };
+
+  const openEditWelcome = (welcome: WelcomeTemplate) => {
+    setEditWelcome(welcome);
+    setWelcomeFormData({ name: welcome.name, message: welcome.message, is_active: welcome.is_active });
+    setWelcomeModalOpen(true);
+  };
+
+  const addCadenceStep = () => {
+    setCadenceSteps([...cadenceSteps, { step_number: cadenceSteps.length + 1, delay_days: 3, media_type: "text", content: "" }]);
+  };
+
+  const removeCadenceStep = (index: number) => {
+    const newSteps = cadenceSteps.filter((_, i) => i !== index);
+    setCadenceSteps(newSteps.map((step, i) => ({ ...step, step_number: i + 1 })));
+  };
+
+  const updateCadenceStep = (index: number, field: string, value: any) => {
+    const newSteps = [...cadenceSteps];
+    newSteps[index] = { ...newSteps[index], [field]: value };
+    setCadenceSteps(newSteps);
+  };
+
+  const getMediaIcon = (type: string) => {
+    switch (type) {
+      case "text": return <FileText className="w-4 h-4" />;
+      case "audio": return <Mic className="w-4 h-4" />;
+      case "video": return <Video className="w-4 h-4" />;
+      case "image": return <Image className="w-4 h-4" />;
+      default: return <MessageSquare className="w-4 h-4" />;
+    }
+  };
 
   return (
     <div className="space-y-6">
-
-      {/* Header da aba */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-3">
-            <div className="p-2 bg-indigo-600/20 border border-indigo-500/20 rounded-xl">
-              <Bot className="w-5 h-5 text-indigo-400" />
-            </div>
+          <h3 className="text-xl font-black text-white flex items-center gap-2">
+            <Brain className="w-6 h-6 text-purple-400" />
             IA Builder
-          </h2>
-          <p className="text-sm text-gray-500 mt-1 ml-14">
-            Configure agentes de mensagem automática por corretor
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {pendingApprovals > 0 && (
-            <button onClick={() => setView("dispatches")}
-              className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-yellow-400 text-sm font-bold hover:bg-yellow-500/20 transition-colors">
-              <AlertTriangle className="w-4 h-4" />
-              {pendingApprovals} aguardando aprovação
-            </button>
-          )}
-          <Button
-            onClick={() => setEditing({ ...EMPTY_AGENT })}
-            className="bg-indigo-600 hover:bg-indigo-500 font-bold shadow-lg shadow-indigo-900/30">
-            <Plus className="w-4 h-4 mr-2" /> Novo Agente
-          </Button>
+          </h3>
+          <p className="text-sm text-gray-500">Configure perfis de IA, mensagens de boas-vindas e fluxos de cadência</p>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-slate-800/60 border border-gray-700/40 rounded-xl p-1 w-fit">
-        {[
-          { key: "agents",     label: "Agentes",    icon: Bot      },
-          { key: "dispatches", label: "Disparos",   icon: Activity },
-          { key: "knowledge",  label: "Base IA",    icon: BookOpen },
-        ].map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setView(key as any)}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all",
-              view === key
-                ? "bg-slate-700 text-white shadow"
-                : "text-gray-500 hover:text-gray-300"
-            )}>
-            <Icon className="w-4 h-4" /> {label}
-          </button>
-        ))}
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={() => setTab("profiles")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "profiles" ? "bg-purple-900/40 text-purple-300 border border-purple-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
+          <Brain className="w-4 h-4" /> Perfis de IA
+          <span className="text-xs bg-slate-700 rounded px-1.5">{profiles.filter(p => p.is_active).length}</span>
+        </button>
+        <button onClick={() => setTab("welcome")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "welcome" ? "bg-green-900/40 text-green-300 border border-green-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
+          <Hand className="w-4 h-4" /> Boas-vindas
+          <span className="text-xs bg-slate-700 rounded px-1.5">{welcomeTemplates.filter(w => w.is_active).length}</span>
+        </button>
+        <button onClick={() => setTab("cadence")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "cadence" ? "bg-blue-900/40 text-blue-300 border border-blue-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
+          <Play className="w-4 h-4" /> Cadência Follow-up
+          <span className="text-xs bg-slate-700 rounded px-1.5">{cadences.filter(c => c.is_active).length}</span>
+        </button>
       </div>
-
-      {/* ── VIEW: AGENTES ─────────────────────────────────────────────────── */}
-      {view === "agents" && (
+      {tab === "profiles" ? (
         <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={() => { resetProfileForm(); setProfileModalOpen(true); }} className="bg-purple-600 hover:bg-purple-500 gap-2">
+              <Plus className="w-4 h-4" />
+              Novo Perfil
+            </Button>
+          </div>
 
-          {/* Formulário de edição / criação */}
-          {editing && (
-            <AgentForm
-              initial={editing}
-              onSave={(data) => saveMutation.mutate(data)}
-              onCancel={() => setEditing(null)}
-            />
-          )}
-
-          {/* Lista de agentes */}
-          {isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <Radio className="w-6 h-6 text-indigo-400 animate-pulse" />
-            </div>
-          ) : agents.length === 0 && !editing ? (
-            <div className="flex flex-col items-center justify-center py-20 bg-slate-800/20 border border-gray-700/20 border-dashed rounded-2xl text-gray-600">
-              <Bot className="w-12 h-12 mb-3 opacity-20" />
-              <p className="font-bold">Nenhum agente configurado ainda.</p>
-              <p className="text-sm mt-1">Crie seu primeiro agente de Follow-up.</p>
+          {profiles.filter(p => p.is_active).length === 0 ? (
+            <div className="text-center py-20 text-gray-500">
+              <Brain className="w-20 h-20 mx-auto mb-4 opacity-20" />
+              <h3 className="text-xl font-bold mb-2">Nenhum perfil criado</h3>
+              <p className="text-sm mb-4">Crie perfis de IA reutilizáveis para conversação automática</p>
+              <Button onClick={() => { resetProfileForm(); setProfileModalOpen(true); }} className="bg-purple-600 hover:bg-purple-500">
+                <Plus className="w-4 h-4 mr-2" />
+                Criar Primeiro Perfil
+              </Button>
             </div>
           ) : (
-            <div className="grid gap-4">
-              {agents.map(agent => {
-                const trig = TRIGGER_LABELS[agent.trigger_type];
-                return (
-                  <div key={agent.id}
-                    className={cn(
-                      "rounded-2xl border transition-all",
-                      agent.is_active
-                        ? "bg-slate-800/50 border-gray-700/40"
-                        : "bg-slate-900/30 border-gray-800/40 opacity-60"
-                    )}>
-                    <div className="p-5">
-                      <div className="flex items-start justify-between gap-4">
-                        {/* Info principal */}
-                        <div className="flex items-start gap-4 flex-1 min-w-0">
-                          <div className={cn(
-                            "p-3 rounded-xl border shrink-0",
-                            agent.is_active
-                              ? "bg-indigo-500/10 border-indigo-500/20"
-                              : "bg-slate-700/40 border-gray-700/40"
-                          )}>
-                            <span className="text-xl">{trig?.icon || "🤖"}</span>
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="font-black text-white">{agent.name}</h3>
-                              <Badge className={cn(
-                                "text-[10px] border",
-                                agent.is_active
-                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                  : "bg-gray-500/10 text-gray-500 border-gray-500/20"
-                              )}>
-                                {agent.is_active ? "● Ativo" : "○ Inativo"}
-                              </Badge>
-                              {agent.require_approval && (
-                                <Badge className="text-[10px] border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">
-                                  ⏳ Requer Aprovação
-                                </Badge>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-4 mt-2 flex-wrap">
-                              <span className={cn("text-xs font-bold flex items-center gap-1", trig?.color || "text-gray-400")}>
-                                <Clock className="w-3 h-3" />
-                                {trig?.label}
-                                {agent.trigger_type === "INACTIVITY" && ` — ${agent.trigger_hours}h sem resposta`}
-                              </span>
-                              <span className="text-xs text-gray-600 flex items-center gap-1">
-                                <Zap className="w-3 h-3" />
-                                {agent.max_attempts}x · {agent.interval_hours}h de intervalo
-                              </span>
-                              <span className="text-xs text-gray-600 flex items-center gap-1">
-                                <Shield className="w-3 h-3" />
-                                Silêncio: {agent.silence_after_reply_hours}h pós-resposta
-                              </span>
-                            </div>
-
-                            <p className="text-xs text-gray-500 mt-2 line-clamp-1">
-                              <span className="text-gray-600 font-bold">Objetivo:</span> {agent.message_objective}
-                            </p>
-                          </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {profiles.filter(p => p.is_active).map(profile => (
+                <Card key={profile.id} className="border-2 border-gray-700/50 bg-slate-800/40 hover:border-purple-500/50 transition-all">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Brain className="w-5 h-5 text-purple-400 shrink-0" />
+                          <h4 className="text-white font-bold text-base truncate">{profile.name}</h4>
                         </div>
-
-                        {/* Ações */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Switch
-                            checked={agent.is_active}
-                            onCheckedChange={v => toggleMutation.mutate({ id: agent.id, is_active: v })}
-                          />
-                          <button onClick={() => setPreviewAgent(previewAgent?.id === agent.id ? null : agent)}
-                            className="p-2 rounded-lg text-gray-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors">
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setEditing({
-                              id: agent.id, name: agent.name, trigger_type: agent.trigger_type,
-                              trigger_hours: agent.trigger_hours, trigger_status: agent.trigger_status || "",
-                              broker_personality: agent.broker_personality, message_objective: agent.message_objective,
-                              max_attempts: agent.max_attempts, interval_hours: agent.interval_hours,
-                              require_approval: agent.require_approval,
-                              silence_after_reply_hours: agent.silence_after_reply_hours,
-                              silence_after_broker_activity_hours: agent.silence_after_broker_activity_hours,
-                              is_active: agent.is_active,
-                            })}
-                            className="p-2 rounded-lg text-gray-500 hover:text-white hover:bg-slate-700/60 transition-colors">
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => { if (confirm("Deletar este agente?")) deleteMutation.mutate(agent.id); }}
-                            className="p-2 rounded-lg text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        {profile.description && <p className="text-sm text-gray-500 line-clamp-2">{profile.description}</p>}
                       </div>
                     </div>
-
-                    {/* Preview expandido */}
-                    {previewAgent?.id === agent.id && (
-                      <div className="border-t border-gray-700/40 p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="bg-slate-900/60 rounded-xl p-4 border border-gray-700/30">
-                          <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">
-                            Personalidade
-                          </p>
-                          <p className="text-sm text-gray-400 leading-relaxed">{agent.broker_personality}</p>
-                        </div>
-                        <div className="bg-slate-900/60 rounded-xl p-4 border border-gray-700/30">
-                          <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">
-                            Objetivo da Mensagem
-                          </p>
-                          <p className="text-sm text-gray-400 leading-relaxed">{agent.message_objective}</p>
-                        </div>
-
-                        {/* Como configurar no n8n */}
-                        <div className="sm:col-span-2 bg-indigo-500/5 border border-indigo-500/15 rounded-xl p-4">
-                          <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                            <Settings className="w-3.5 h-3.5" /> Configuração n8n
-                          </p>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <ConfigItem label="Webhook URL" value="/webhook/ai-followup" mono />
-                            <ConfigItem label="Agent ID" value={agent.id} mono />
-                            <ConfigItem
-                              label="Trigger"
-                              value={`${agent.trigger_type} · ${agent.trigger_hours}h`}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="bg-slate-900/60 rounded p-3 max-h-32 overflow-y-auto">
+                      <p className="text-xs text-gray-400 whitespace-pre-wrap">{profile.system_prompt.substring(0, 200)}...</p>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button onClick={() => openEditProfile(profile)} variant="outline" size="sm" className="flex-1 border-gray-600 text-gray-300 hover:bg-slate-700">
+                        <Pencil className="w-3.5 h-3.5 mr-1" />
+                        Editar
+                      </Button>
+                      <Button onClick={() => handleDeleteProfile(profile.id)} variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-900/20">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
+        </div>
+      ) : tab === "welcome" ? (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={() => { resetWelcomeForm(); setWelcomeModalOpen(true); }} className="bg-green-600 hover:bg-green-500 gap-2">
+              <Plus className="w-4 h-4" />
+              Novo Template
+            </Button>
+          </div>
 
-          {/* Card explicativo do n8n */}
-          {agents.length > 0 && !editing && (
-            <div className="bg-slate-800/20 border border-gray-700/20 rounded-2xl p-6">
-              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <FlaskConical className="w-4 h-4 text-indigo-400" /> Como o sistema funciona
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                {[
-                  { icon: "⏰", label: "Supabase", desc: "Detecta lead inativo pelo campo last_interaction_at" },
-                  { icon: "📡", label: "Webhook n8n", desc: "Recebe o evento com dados do lead e do agente" },
-                  { icon: "🤖", label: "Anthropic IA", desc: "Gera mensagem personalizada com a voz do corretor" },
-                  { icon: "📱", label: "EvolutionAPI", desc: "Dispara no WhatsApp pela instância do corretor" },
-                ].map(({ icon, label, desc }) => (
-                  <div key={label} className="flex items-start gap-3 bg-slate-800/40 border border-gray-700/30 rounded-xl p-3">
-                    <span className="text-xl shrink-0">{icon}</span>
-                    <div>
-                      <p className="text-xs font-black text-white">{label}</p>
-                      <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{desc}</p>
+          <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4 mb-4">
+            <div className="flex items-start gap-3">
+              <Hand className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="text-green-300 font-bold text-sm mb-1">📝 Mensagens de Boas-vindas</h4>
+                <p className="text-xs text-green-200/80">Estas mensagens são enviadas automaticamente quando um lead é criado. Use <code className="bg-green-900/40 px-1 rounded">{"{nome}"}</code> e <code className="bg-green-900/40 px-1 rounded">{"{broker}"}</code> para personalizar.</p>
+                <p className="text-xs text-green-200/80 mt-2">✅ <strong>Vantagem:</strong> Não consome tokens da IA - mensagens prontas e otimizadas!</p>
+              </div>
+            </div>
+          </div>
+
+          {welcomeTemplates.filter(w => w.is_active).length === 0 ? (
+            <div className="text-center py-20 text-gray-500">
+              <Hand className="w-20 h-20 mx-auto mb-4 opacity-20" />
+              <h3 className="text-xl font-bold mb-2">Nenhum template criado</h3>
+              <p className="text-sm mb-4">Crie templates de boas-vindas para primeira mensagem</p>
+              <Button onClick={() => { resetWelcomeForm(); setWelcomeModalOpen(true); }} className="bg-green-600 hover:bg-green-500">
+                <Plus className="w-4 h-4 mr-2" />
+                Criar Primeiro Template
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+              {welcomeTemplates.filter(w => w.is_active).map(template => (
+                <Card key={template.id} className="border-2 border-gray-700/50 bg-slate-800/40 hover:border-green-500/50 transition-all">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Hand className="w-5 h-5 text-green-400 shrink-0" />
+                          <h4 className="text-white font-bold text-sm truncate">{template.name}</h4>
+                        </div>
+                        <Badge className="bg-green-900/40 text-green-300 border-green-500/30 text-xs">
+                          Usado {template.usage_count}x
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="bg-slate-900/60 rounded p-3 min-h-[100px] max-h-32 overflow-y-auto">
+                      <p className="text-xs text-gray-300 whitespace-pre-wrap">{template.message}</p>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button onClick={() => openEditWelcome(template)} variant="outline" size="sm" className="flex-1 border-gray-600 text-gray-300 hover:bg-slate-700">
+                        <Pencil className="w-3.5 h-3.5 mr-1" />
+                        Editar
+                      </Button>
+                      <Button onClick={() => handleDeleteWelcome(template.id)} variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-900/20">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={() => { resetCadenceForm(); setCadenceModalOpen(true); }} className="bg-blue-600 hover:bg-blue-500 gap-2">
+              <Plus className="w-4 h-4" />
+              Nova Cadência
+            </Button>
+          </div>
+
+          {cadences.filter(c => c.is_active).length === 0 ? (
+            <div className="text-center py-20 text-gray-500">
+              <Play className="w-20 h-20 mx-auto mb-4 opacity-20" />
+              <h3 className="text-xl font-bold mb-2">Nenhuma cadência criada</h3>
+              <p className="text-sm mb-4">Crie fluxos de follow-up com texto, áudio e vídeo</p>
+              <Button onClick={() => { resetCadenceForm(); setCadenceModalOpen(true); }} className="bg-blue-600 hover:bg-blue-500">
+                <Plus className="w-4 h-4 mr-2" />
+                Criar Primeira Cadência
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {cadences.filter(c => c.is_active).map(cadence => (
+                <Card key={cadence.id} className="border-2 border-gray-700/50 bg-slate-800/40 hover:border-blue-500/50 transition-all">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Play className="w-5 h-5 text-blue-400 shrink-0" />
+                          <h4 className="text-white font-bold text-base">{cadence.name}</h4>
+                          <Badge className="bg-blue-900/40 text-blue-300 border-blue-500/30 text-xs">
+                            {cadence.cadence_steps?.length || 0} passos
+                          </Badge>
+                        </div>
+                        {cadence.description && <p className="text-sm text-gray-500">{cadence.description}</p>}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button onClick={() => openEditCadence(cadence)} variant="outline" size="sm" className="border-gray-600 text-gray-300 hover:bg-slate-700">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button onClick={() => handleDeleteCadence(cadence.id)} variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-900/20">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                      {cadence.cadence_steps?.sort((a, b) => a.step_number - b.step_number).map((step, idx) => (
+                        <div key={step.id} className="flex items-center gap-2 shrink-0">
+                          <div className="bg-slate-900/60 rounded-lg p-3 min-w-[140px] border border-gray-700/50">
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                step.media_type === 'text' ? 'bg-green-900/40 text-green-300' :
+                                step.media_type === 'audio' ? 'bg-purple-900/40 text-purple-300' :
+                                step.media_type === 'video' ? 'bg-red-900/40 text-red-300' :
+                                'bg-blue-900/40 text-blue-300'
+                              }`}>
+                                {getMediaIcon(step.media_type)}
+                              </div>
+                              <span className="text-xs text-gray-400">Dia {step.delay_days}</span>
+                            </div>
+                            <div className="text-xs text-white font-semibold capitalize">{step.media_type}</div>
+                          </div>
+                          {idx < (cadence.cadence_steps?.length || 0) - 1 && (
+                            <ArrowRight className="w-4 h-4 text-gray-600" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MODAL PERFIL */}
+      <Dialog open={profileModalOpen} onOpenChange={setProfileModalOpen}>
+        <DialogContent className="bg-slate-900 border-purple-500 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black flex items-center gap-2">
+              <Brain className="w-6 h-6 text-purple-400" />
+              {editProfile ? "Editar Perfil" : "Novo Perfil de IA"}
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">Configure a personalidade para conversação automática</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label className="text-gray-400 text-xs uppercase">Nome do Perfil *</Label>
+              <Input value={profileFormData.name} onChange={e => setProfileFormData({ ...profileFormData, name: e.target.value })} placeholder="Ex: MCMV - Minha Casa Minha Vida" className="bg-slate-800 border-gray-600 text-white" />
+            </div>
+
+            <div>
+              <Label className="text-gray-400 text-xs uppercase">Descrição</Label>
+              <Textarea value={profileFormData.description} onChange={e => setProfileFormData({ ...profileFormData, description: e.target.value })} placeholder="Breve descrição do perfil..." className="bg-slate-800 border-gray-600 text-white min-h-[60px]" />
+            </div>
+
+            <div>
+              <Label className="text-gray-400 text-xs uppercase">System Prompt (Instruções Completas) *</Label>
+              <Textarea value={profileFormData.system_prompt} onChange={e => setProfileFormData({ ...profileFormData, system_prompt: e.target.value })} placeholder="Você é um especialista em MCMV que ajuda leads a conseguir financiamento..." className="bg-slate-800 border-gray-600 text-white min-h-[300px] font-mono text-sm" />
+              <p className="text-xs text-gray-500 mt-1">Defina a personalidade, tom, objetivos e regras da IA</p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Switch checked={profileFormData.is_active} onCheckedChange={checked => setProfileFormData({ ...profileFormData, is_active: checked })} />
+              <Label className="text-gray-300">Perfil ativo</Label>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button onClick={() => setProfileModalOpen(false)} variant="outline" className="flex-1 border-gray-600 text-gray-300">Cancelar</Button>
+              <Button onClick={handleSaveProfile} className="flex-1 bg-purple-600 hover:bg-purple-500 font-bold">
+                <Save className="w-4 h-4 mr-2" />
+                {editProfile ? "Salvar Alterações" : "Criar Perfil"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL BOAS-VINDAS */}
+      <Dialog open={welcomeModalOpen} onOpenChange={setWelcomeModalOpen}>
+        <DialogContent className="bg-slate-900 border-green-500 text-white max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black flex items-center gap-2">
+              <Hand className="w-6 h-6 text-green-400" />
+              {editWelcome ? "Editar Template" : "Novo Template de Boas-vindas"}
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">Mensagem enviada automaticamente ao criar lead</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label className="text-gray-400 text-xs uppercase">Nome do Template *</Label>
+              <Input value={welcomeFormData.name} onChange={e => setWelcomeFormData({ ...welcomeFormData, name: e.target.value })} placeholder="Ex: Boas-vindas Casual" className="bg-slate-800 border-gray-600 text-white" />
+            </div>
+
+            <div>
+              <Label className="text-gray-400 text-xs uppercase">Mensagem *</Label>
+              <Textarea value={welcomeFormData.message} onChange={e => setWelcomeFormData({ ...welcomeFormData, message: e.target.value })} placeholder="Olá {nome}! 👋 Seja bem-vindo(a)! Sou {broker}..." className="bg-slate-800 border-gray-600 text-white min-h-[150px]" />
+              <p className="text-xs text-gray-500 mt-1">Use <code className="bg-slate-700 px-1 rounded">{"{nome}"}</code> e <code className="bg-slate-700 px-1 rounded">{"{broker}"}</code> para personalizar</p>
+            </div>
+
+            <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 text-xs text-blue-300">
+              💡 <strong>Preview:</strong>
+              <div className="mt-2 bg-slate-900 p-2 rounded text-white text-sm">
+                {welcomeFormData.message.replace(/{nome}/g, 'João Silva').replace(/{broker}/g, 'Carlos')}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Switch checked={welcomeFormData.is_active} onCheckedChange={checked => setWelcomeFormData({ ...welcomeFormData, is_active: checked })} />
+              <Label className="text-gray-300">Template ativo</Label>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button onClick={() => setWelcomeModalOpen(false)} variant="outline" className="flex-1 border-gray-600 text-gray-300">Cancelar</Button>
+              <Button onClick={handleSaveWelcome} className="flex-1 bg-green-600 hover:bg-green-500 font-bold">
+                <Save className="w-4 h-4 mr-2" />
+                {editWelcome ? "Salvar Alterações" : "Criar Template"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* MODAL CADÊNCIA */}
+      <Dialog open={cadenceModalOpen} onOpenChange={setCadenceModalOpen}>
+        <DialogContent className="bg-slate-900 border-blue-500 text-white max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black flex items-center gap-2">
+              <Play className="w-6 h-6 text-blue-400" />
+              {editCadence ? "Editar Cadência" : "Nova Cadência de Follow-up"}
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">Configure o fluxo automático com texto, áudio e vídeo</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-gray-400 text-xs uppercase">Nome da Cadência *</Label>
+                <Input value={cadenceFormData.name} onChange={e => setCadenceFormData({ ...cadenceFormData, name: e.target.value })} placeholder="Ex: Cadência MCMV Completa" className="bg-slate-800 border-gray-600 text-white" />
+              </div>
+              <div>
+                <Label className="text-gray-400 text-xs uppercase">Descrição</Label>
+                <Input value={cadenceFormData.description} onChange={e => setCadenceFormData({ ...cadenceFormData, description: e.target.value })} placeholder="Sequência otimizada para leads..." className="bg-slate-800 border-gray-600 text-white" />
+              </div>
+            </div>
+
+            <div className="border-2 border-blue-500/30 bg-blue-950/20 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-blue-400" />
+                  <Label className="text-gray-200 font-bold">Passos da Cadência</Label>
+                </div>
+                <Button onClick={addCadenceStep} size="sm" variant="outline" className="border-blue-500/30 text-blue-400 hover:bg-blue-900/20">
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Adicionar Passo
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {cadenceSteps.map((step, index) => (
+                  <div key={index} className="bg-slate-800/60 rounded-lg p-4 border border-gray-700/50">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-blue-900/40 text-blue-300 flex items-center justify-center font-bold text-sm shrink-0">
+                        {index + 1}
+                      </div>
+                      
+                      <div className="flex-1 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-gray-400 text-xs">Tipo de Mensagem</Label>
+                            <Select value={step.media_type} onValueChange={value => updateCadenceStep(index, 'media_type', value)}>
+                              <SelectTrigger className="bg-slate-900 border-gray-600 text-white">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="bg-slate-800 border-gray-600">
+                                <SelectItem value="text">📝 Texto</SelectItem>
+                                <SelectItem value="audio">🎤 Áudio</SelectItem>
+                                <SelectItem value="video">🎥 Vídeo</SelectItem>
+                                <SelectItem value="image">🖼️ Imagem</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-gray-400 text-xs">Delay (dias após anterior)</Label>
+                            <Input type="number" min={0} value={step.delay_days} onChange={e => updateCadenceStep(index, 'delay_days', parseInt(e.target.value))} className="bg-slate-900 border-gray-600 text-white" />
+                          </div>
+                        </div>
+
+                        {step.media_type === 'text' ? (
+                          <div>
+                            <Label className="text-gray-400 text-xs">Mensagem</Label>
+                            <Textarea value={step.content || ""} onChange={e => updateCadenceStep(index, 'content', e.target.value)} placeholder="Use {nome} e {broker} para personalizar..." className="bg-slate-900 border-gray-600 text-white min-h-[80px]" />
+                            <p className="text-xs text-gray-500 mt-1">Variáveis: {"{nome}"}, {"{broker}"}</p>
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <Label className="text-gray-400 text-xs">URL da Mídia ({step.media_type})</Label>
+                              <Input value={step.media_url || ""} onChange={e => updateCadenceStep(index, 'media_url', e.target.value)} placeholder="https://exemplo.com/arquivo.mp3" className="bg-slate-900 border-gray-600 text-white" />
+                              <p className="text-xs text-gray-500 mt-1">URL pública do arquivo de {step.media_type}</p>
+                            </div>
+                            <div>
+                              <Label className="text-gray-400 text-xs">Legenda/Caption</Label>
+                              <Textarea value={step.caption || ""} onChange={e => updateCadenceStep(index, 'caption', e.target.value)} placeholder="Texto que acompanha a mídia..." className="bg-slate-900 border-gray-600 text-white min-h-[60px]" />
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {cadenceSteps.length > 1 && (
+                        <Button onClick={() => removeCadenceStep(index)} variant="ghost" size="sm" className="text-red-400 hover:bg-red-900/20 shrink-0">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
+
+              <div className="mt-4 bg-blue-900/20 border border-blue-500/30 rounded p-3 text-xs text-blue-300">
+                💡 <strong>Dica:</strong> Comece com texto, depois áudio pessoal, e finalize com vídeo tour. Deixe 3-5 dias entre cada passo.
+              </div>
             </div>
-          )}
-        </div>
-      )}
 
-      {/* ── VIEW: DISPAROS ────────────────────────────────────────────────── */}
-      {view === "dispatches" && (
-        <div className="space-y-3">
-          {dispatches.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 bg-slate-800/20 border border-gray-700/20 border-dashed rounded-2xl text-gray-600">
-              <Send className="w-12 h-12 mb-3 opacity-20" />
-              <p className="font-bold">Nenhum disparo registrado ainda.</p>
+            <div className="flex items-center gap-2">
+              <Switch checked={cadenceFormData.is_active} onCheckedChange={checked => setCadenceFormData({ ...cadenceFormData, is_active: checked })} />
+              <Label className="text-gray-300">Cadência ativa</Label>
             </div>
-          ) : (
-            dispatches.map(dispatch => {
-              const sc = STATUS_CONFIG[dispatch.status] || STATUS_CONFIG.PENDING;
-              return (
-                <div key={dispatch.id}
-                  className="bg-slate-800/40 border border-gray-700/40 rounded-xl p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-2">
-                        <span className="text-sm font-black text-white">
-                          {(dispatch.leads as any)?.name || "Lead"}
-                        </span>
-                        <ChevronRight className="w-3 h-3 text-gray-600" />
-                        <span className="text-xs text-gray-500">
-                          {(dispatch.profiles as any)?.first_name} {(dispatch.profiles as any)?.last_name}
-                        </span>
-                        <Badge className={cn("text-[10px] border", sc.bg, sc.color)}>
-                          {sc.label}
-                        </Badge>
-                        <span className="text-[10px] text-gray-600">
-                          Tentativa {dispatch.attempt_number}
-                        </span>
-                      </div>
 
-                      <div className="bg-slate-900/60 border border-gray-700/30 rounded-lg px-4 py-3 text-sm text-gray-300 leading-relaxed">
-                        {dispatch.message_generated}
-                      </div>
-
-                      {dispatch.blocked_reason && (
-                        <p className="text-xs text-rose-400 mt-2 flex items-center gap-1.5">
-                          <Pause className="w-3 h-3" />
-                          Bloqueado: {dispatch.blocked_reason}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-3 mt-2">
-                        <span className="text-[10px] text-gray-600">
-                          Agente: {(dispatch.ai_agents as any)?.name}
-                        </span>
-                        <span className="text-[10px] text-gray-700">
-                          {new Date(dispatch.created_at).toLocaleString("pt-BR")}
-                        </span>
-                      </div>
-                    </div>
-
-                    {dispatch.status === "PENDING" && (
-                      <div className="flex flex-col gap-2 shrink-0">
-                        <Button size="sm"
-                          onClick={() => approveDispatch.mutate(dispatch.id)}
-                          className="h-8 px-3 bg-emerald-600 hover:bg-emerald-500 text-xs font-bold">
-                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Aprovar
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Helper ─────────────────────────────────────────────────────────────────────
-function ConfigItem({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div>
-      <p className="text-[10px] text-gray-600 font-bold mb-1">{label}</p>
-      <p className={cn(
-        "text-xs text-indigo-300 bg-slate-900/60 px-2 py-1.5 rounded-lg border border-indigo-500/10 truncate",
-        mono && "font-mono"
-      )}>
-        {value}
-      </p>
+            <div className="flex gap-2 pt-2">
+              <Button onClick={() => setCadenceModalOpen(false)} variant="outline" className="flex-1 border-gray-600 text-gray-300">Cancelar</Button>
+              <Button onClick={handleSaveCadence} className="flex-1 bg-blue-600 hover:bg-blue-500 font-bold">
+                <Save className="w-4 h-4 mr-2" />
+                {editCadence ? "Salvar Alterações" : "Criar Cadência"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

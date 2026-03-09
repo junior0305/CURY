@@ -13,11 +13,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   DollarSign, Plus, Pencil, Trash2, Trophy, Target,
-  TrendingUp, Clock, CheckCircle2, XCircle, Award,
+  TrendingUp, Clock, CheckCircle2, XCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import Gamificacao from "./Gamificacao";
-
 
 interface Campaign {
   id: string;
@@ -54,7 +52,7 @@ const TARGET_ACTIONS = [
 
 const CATEGORIES = ["Marketing", "Treinamento", "Infraestrutura", "Bonificação", "Outros"];
 
-type Tab = "campaigns" | "investments" | "gamification";
+type Tab = "campaigns" | "investments";
 
 export default function Economia() {
   const { toast } = useToast();
@@ -210,16 +208,14 @@ export default function Economia() {
             <DollarSign className="w-7 h-7 text-yellow-400" />
             Economia de Guerra
           </h2>
-          <p className="text-gray-500 text-sm mt-1">Campanhas de incentivo, espólios e gamificação</p>
+          <p className="text-gray-500 text-sm mt-1">Campanhas de incentivo e espólios por equipe</p>
         </div>
-        {tab !== "gamification" && (
-  <Button onClick={tab === "campaigns" ? openCreateCamp : openCreateInv}
-    className="bg-yellow-600 hover:bg-yellow-500 font-bold gap-2 text-black">
-    <Plus className="w-4 h-4" />
-    {tab === "campaigns" ? "Nova Campanha" : "Registrar Investimento"}
-  </Button>
-  )}
-</div>
+        <Button onClick={tab === "campaigns" ? openCreateCamp : openCreateInv}
+          className="bg-yellow-600 hover:bg-yellow-500 font-bold gap-2 text-black">
+          <Plus className="w-4 h-4" />
+          {tab === "campaigns" ? "Nova Campanha" : "Registrar Investimento"}
+        </Button>
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
@@ -248,13 +244,8 @@ export default function Economia() {
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "investments" ? "bg-green-900/40 text-green-300 border border-green-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
           <TrendingUp className="w-4 h-4" /> Espólios ({investments.length})
         </button>
-        <button onClick={() => setTab("gamification")}
-  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "gamification" ? "bg-purple-900/40 text-purple-300 border border-purple-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
-  <Award className="w-4 h-4" /> Gamificação
-</button>
       </div>
-{/* ─── Gamificação ────────────────────────────────────────────────────── */}
-{tab === "gamification" && <Gamificacao />}
+
       {/* ─── Campanhas ─────────────────────────────────────────────────────── */}
       {tab === "campaigns" && (
         <div className="space-y-3">

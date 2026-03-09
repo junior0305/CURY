@@ -1,27 +1,47 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ChevronDown, ChevronRight, Plus, Shield, Users, Swords, Target, BrainCircuit, Pencil, Trash2, AlertTriangle } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Users, Plus, Pencil, Trash2, Phone, Mail, Shield, Bot, MessageSquare, RefreshCw, Smartphone, Settings, Bell, Save, UserCheck, Building } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Profile {
   id: string;
   email: string;
   first_name: string | null;
-  last_name: string | null;
+  full_name: string | null;
+  phone: string | null;
   role: string;
+  is_active: boolean;
   team_id: string | null;
   manager_id: string | null;
   lead_assignment_enabled: boolean;
-  phone: string | null;
-  qualification_ai_enabled: boolean;
-  qualification_agent_id: string | null;
   evolution_instance: string | null;
+  qualification_ai_enabled: boolean;
+  bot_instance_id: string | null;
+  automation_settings: {
+    welcome_enabled: boolean;
+    follow_up_enabled: boolean;
+    ai_assist_enabled: boolean;
+  };
+  created_at: string;
+  bot_instances?: BotInstance;
+  teams?: Team;
+  managers?: Profile;
+}
+
+interface BotInstance {
+  id: string;
+  name: string;
+  phone: string;
+  instance_name: string;
+  status: string;
 }
 
 interface Team {
@@ -29,615 +49,680 @@ interface Team {
   name: string;
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  ADMIN: "👑 General",
-  SUPERINTENDENT: "👑 Superintendente",
-  MANAGER: "🎖️ Capitão",
-  BROKER: "⚔️ Soldado",
-};
+type Tab = "users" | "bots" | "settings";
 
 export default function Tropas() {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [leadCounts, setLeadCounts] = useState<Record<string, number>>({});
-  const [expandedManagers, setExpandedManagers] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
-  const [createUserOpen, setCreateUserOpen] = useState(false);
-  const [newUser, setNewUser] = useState({
-    email: "",
-    password: "",
-    firstName: "",
-    lastName: "",
-    phone: "",
-    role: "BROKER",
-    teamId: "",
-    managerId: ""
-  });
-  const [qualAgents, setQualAgents] = useState<{id: string; name: string}[]>([]);
-
-  // Edit
-  const [editingUser, setEditingUser] = useState<Profile | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  // Delete
-  const [deletingUser, setDeletingUser] = useState<Profile | null>(null);
-  const [redirectTo, setRedirectTo] = useState("");
-  const [deleting, setDeleting] = useState(false);
-
-  const navigate = useNavigate();
   const { toast } = useToast();
+  const [tab, setTab] = useState<Tab>("users");
+  const [users, setUsers] = useState<Profile[]>([]);
+  const [bots, setBots] = useState<BotInstance[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [managers, setManagers] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [botModalOpen, setBotModalOpen] = useState(false);
+  const [editUser, setEditUser] = useState<Profile | null>(null);
+  
+  const [notificationBotId, setNotificationBotId] = useState<string>("");
+  const [notifyManagers, setNotifyManagers] = useState(true);
+  const [notifyBrokers, setNotifyBrokers] = useState(true);
+  const [savingSettings, setSavingSettings] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    email: "",
+    first_name: "",
+    full_name: "",
+    phone: "",
+    role: "broker",
+    is_active: true,
+    team_id: null as string | null,
+    manager_id: null as string | null,
+    lead_assignment_enabled: false,
+    evolution_instance: "",
+    qualification_ai_enabled: false,
+    bot_instance_id: null as string | null,
+    automation_settings: {
+      welcome_enabled: false,
+      follow_up_enabled: true,
+      ai_assist_enabled: true,
+    },
+  });
+
+  const [botFormData, setBotFormData] = useState({
+    name: "",
+    phone: "",
+    evolution_api_url: "https://api.ape77.com.br",
+    evolution_api_key: "",
+    instance_name: "",
+    status: "active",
+  });
+
+  const loadUsers = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*, bot_instances(*), teams(id, name), managers:profiles!manager_id(id, email, first_name, full_name)")
+      .order("email", { ascending: true });
+    
+    if (error) {
+      toast({ title: "Erro ao carregar usuários", description: error.message, variant: "destructive" });
+    } else {
+      setUsers(data || []);
+    }
+    setLoading(false);
+  };
+
+  const loadBots = async () => {
+    const { data } = await supabase.from("bot_instances").select("*").order("name");
+    if (data) setBots(data);
+  };
+
+  const loadTeams = async () => {
+    const { data } = await supabase.from("teams").select("id, name").order("name");
+    if (data) setTeams(data);
+  };
+
+  const loadManagers = async () => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, email, first_name, full_name")
+      .in("role", ["manager", "admin"])
+      .eq("is_active", true)
+      .order("email");
+    if (data) setManagers(data);
+  };
+
+  const loadSystemSettings = async () => {
+    const { data: botSetting } = await supabase.from("system_settings").select("value").eq("key", "notification_bot_instance_id").single();
+    if (botSetting?.value) setNotificationBotId(botSetting.value);
+    
+    const { data: managerSetting } = await supabase.from("system_settings").select("value").eq("key", "notify_managers_enabled").single();
+    if (managerSetting?.value !== undefined) setNotifyManagers(managerSetting.value);
+    
+    const { data: brokerSetting } = await supabase.from("system_settings").select("value").eq("key", "notify_brokers_enabled").single();
+    if (brokerSetting?.value !== undefined) setNotifyBrokers(brokerSetting.value);
+  };
 
   useEffect(() => {
-    loadData();
+    loadUsers();
+    loadBots();
+    loadTeams();
+    loadManagers();
+    loadSystemSettings();
   }, []);
 
-  const loadData = async () => {
-    try {
-      const { data: profilesData } = await supabase.from("profiles").select("*").order("role", { ascending: false });
-      const { data: teamsData } = await supabase.from("teams").select("*").order("name");
-      const { data: agentsData } = await supabase.from("ai_agents").select("id, name").eq("trigger_type", "QUALIFICATION").eq("is_active", true);
-      const { data: leadsData } = await supabase.from("leads").select("broker_id").not("broker_id", "is", null);
-
-      setProfiles(profilesData || []);
-      setTeams(teamsData || []);
-      setQualAgents(agentsData || []);
-
-      if (leadsData) {
-        const map: Record<string, number> = {};
-        leadsData.forEach((l: { broker_id: string }) => {
-          map[l.broker_id] = (map[l.broker_id] || 0) + 1;
-        });
-        setLeadCounts(map);
-      }
-
-      setLoading(false);
-    } catch (error) {
-      console.error("Erro:", error);
-      setLoading(false);
-    }
-  };
-
-  const toggleQualification = async (profileId: string, currentEnabled: boolean, agentId?: string) => {
-    try {
-      if (!currentEnabled && qualAgents.length === 0) {
-        toast({ title: "Nenhum agente de qualificação disponível", variant: "destructive" });
-        return;
-      }
-      const agent = agentId || (qualAgents[0]?.id);
-      await supabase.from("profiles").update({
-        qualification_ai_enabled: !currentEnabled,
-        qualification_agent_id: !currentEnabled ? agent : null,
-      }).eq("id", profileId);
-      toast({ title: !currentEnabled ? "IA de Qualificação ativada!" : "IA de Qualificação desativada" });
-      loadData();
-    } catch {
-      toast({ title: "Erro ao atualizar", variant: "destructive" });
-    }
-  };
-
-  const toggleManager = (managerId: string) => {
-    const newExpanded = new Set(expandedManagers);
-    if (newExpanded.has(managerId)) {
-      newExpanded.delete(managerId);
-    } else {
-      newExpanded.add(managerId);
-    }
-    setExpandedManagers(newExpanded);
-  };
-
-  const handleCreateUser = async () => {
-    try {
-      const session = await supabase.auth.getSession();
-      const response = await fetch(`${supabase.supabaseUrl}/functions/v1/create-user`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.data.session?.access_token}`
-        },
-        body: JSON.stringify({
-          email: newUser.email,
-          password: newUser.password,
-          firstName: newUser.firstName,
-          lastName: newUser.lastName,
-          phone: newUser.phone,
-          role: newUser.role,
-          teamId: newUser.teamId || null,
-          managerId: newUser.managerId || null
-        })
-      });
-      const result = await response.json();
-      if (response.ok) {
-        toast({ title: "✅ Sucesso!", description: `${newUser.firstName} foi recrutado!` });
-        setCreateUserOpen(false);
-        setNewUser({ email: "", password: "", firstName: "", lastName: "", phone: "", role: "BROKER", teamId: "", managerId: "" });
-        loadData();
-      } else {
-        toast({ title: "❌ Erro", description: result.error || result.details || "Falha ao criar", variant: "destructive" });
-      }
-    } catch (error) {
-      toast({ title: "❌ Erro", description: "Falha no servidor", variant: "destructive" });
-    }
-  };
-
-  const handleSave = async () => {
-    if (!editingUser) return;
-    setSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        first_name: editingUser.first_name,
-        last_name: editingUser.last_name,
-        role: editingUser.role,
-        evolution_instance: editingUser.evolution_instance,
-        qualification_ai_enabled: editingUser.qualification_ai_enabled,
-        lead_assignment_enabled: editingUser.lead_assignment_enabled,
-        phone: editingUser.phone,
-      })
-      .eq("id", editingUser.id);
-    setSaving(false);
-    if (error) {
-      toast({ title: "❌ Erro", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "✅ Salvo!", description: "Usuário atualizado com sucesso." });
-      setEditingUser(null);
-      loadData();
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deletingUser) return;
-    const count = leadCounts[deletingUser.id] || 0;
-    if (count > 0 && !redirectTo) {
-      toast({ title: "⚠️ Atenção", description: "Selecione para quem redirecionar os leads.", variant: "destructive" });
+  const handleSaveUser = async () => {
+    if (!formData.email.trim()) {
+      toast({ title: "Email obrigatório", variant: "destructive" });
       return;
     }
-    setDeleting(true);
-    if (count > 0 && redirectTo) {
-      const { error } = await supabase.from("leads").update({ broker_id: redirectTo }).eq("broker_id", deletingUser.id);
-      if (error) {
-        toast({ title: "❌ Erro ao redirecionar leads", description: error.message, variant: "destructive" });
-        setDeleting(false);
-        return;
+
+    try {
+      if (editUser) {
+        const { error } = await supabase.from("profiles").update({
+          first_name: formData.first_name,
+          full_name: formData.full_name,
+          phone: formData.phone,
+          role: formData.role,
+          is_active: formData.is_active,
+          team_id: formData.team_id,
+          manager_id: formData.manager_id,
+          lead_assignment_enabled: formData.lead_assignment_enabled,
+          evolution_instance: formData.evolution_instance,
+          qualification_ai_enabled: formData.qualification_ai_enabled,
+          bot_instance_id: formData.bot_instance_id,
+          automation_settings: formData.automation_settings,
+        }).eq("id", editUser.id);
+        
+        if (error) throw error;
+        toast({ title: "✅ Usuário atualizado!" });
+      } else {
+        const { error } = await supabase.auth.admin.createUser({
+          email: formData.email,
+          email_confirm: true,
+        });
+        
+        if (error) throw error;
+        
+        const { data: profile } = await supabase.from("profiles").select("id").eq("email", formData.email).single();
+        
+        if (profile) {
+          await supabase.from("profiles").update({
+            first_name: formData.first_name,
+            full_name: formData.full_name,
+            phone: formData.phone,
+            role: formData.role,
+            team_id: formData.team_id,
+            manager_id: formData.manager_id,
+            lead_assignment_enabled: formData.lead_assignment_enabled,
+            evolution_instance: formData.evolution_instance,
+            qualification_ai_enabled: formData.qualification_ai_enabled,
+            bot_instance_id: formData.bot_instance_id,
+            automation_settings: formData.automation_settings,
+          }).eq("id", profile.id);
+        }
+        
+        toast({ title: "✅ Usuário criado!" });
       }
-    }
-    const { error } = await supabase.rpc("delete_profile_cascade", { profile_id: deletingUser.id });
-    setDeleting(false);
-    if (error) {
-      toast({ title: "❌ Erro ao excluir", description: error.message, variant: "destructive" });
-    } else {
-      toast({
-        title: "✅ Excluído!",
-        description: count > 0 ? `Usuário excluído e ${count} lead(s) redirecionado(s).` : "Usuário excluído com sucesso.",
-      });
-      setDeletingUser(null);
-      setRedirectTo("");
-      loadData();
+      
+      setModalOpen(false);
+      resetForm();
+      loadUsers();
+    } catch (error: any) {
+      toast({ title: "❌ Erro ao salvar", description: error.message, variant: "destructive" });
     }
   };
 
-  // Botões de ação reutilizáveis
-  const ActionButtons = ({ profile }: { profile: Profile }) => (
-    <div className="flex items-center gap-1">
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={(e) => { e.stopPropagation(); setEditingUser({ ...profile }); }}
-        className="text-blue-400 hover:text-blue-300 hover:bg-blue-950/30 h-7 w-7 p-0"
-      >
-        <Pencil className="w-3.5 h-3.5" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={(e) => { e.stopPropagation(); setDeletingUser(profile); setRedirectTo(""); }}
-        className="text-red-500 hover:text-red-400 hover:bg-red-950/30 h-7 w-7 p-0"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </Button>
-    </div>
-  );
+  const handleSaveBot = async () => {
+    if (!botFormData.name || !botFormData.phone || !botFormData.instance_name) {
+      toast({ title: "Preencha todos os campos", variant: "destructive" });
+      return;
+    }
 
-  const generals = profiles.filter(p => ["ADMIN", "SUPERINTENDENT"].includes(p.role));
-  const managers = profiles.filter(p => p.role === "MANAGER");
-  const orphanSoldiers = profiles.filter(p => p.role === "BROKER" && !p.manager_id);
-  const getSoldiersByManager = (managerId: string) => profiles.filter(p => p.role === "BROKER" && p.manager_id === managerId);
-  const otherUsers = profiles.filter(u => u.id !== deletingUser?.id);
+    try {
+      const { error } = await supabase.from("bot_instances").insert({
+        name: botFormData.name,
+        phone: botFormData.phone,
+        evolution_api_url: botFormData.evolution_api_url,
+        evolution_api_key: botFormData.evolution_api_key,
+        instance_name: botFormData.instance_name,
+        status: botFormData.status,
+        health_score: 100,
+        persona_name: botFormData.name,
+        persona_style: "casual",
+        daily_limit: 200,
+        weight: 10,
+        priority: 5,
+      });
+      
+      if (error) throw error;
+      toast({ title: "✅ Bot cadastrado!" });
+      setBotModalOpen(false);
+      resetBotForm();
+      loadBots();
+    } catch (error: any) {
+      toast({ title: "❌ Erro ao cadastrar bot", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    try {
+      await supabase.from("system_settings").upsert({ key: "notification_bot_instance_id", value: notificationBotId, description: "ID da instância usada para notificações do sistema" }, { onConflict: "key" });
+      await supabase.from("system_settings").upsert({ key: "notify_managers_enabled", value: notifyManagers, description: "Ativar notificações para managers" }, { onConflict: "key" });
+      await supabase.from("system_settings").upsert({ key: "notify_brokers_enabled", value: notifyBrokers, description: "Ativar notificações para brokers" }, { onConflict: "key" });
+      toast({ title: "✅ Configurações salvas!" });
+    } catch (error: any) {
+      toast({ title: "❌ Erro ao salvar", description: error.message, variant: "destructive" });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const testNotification = async () => {
+    if (!notificationBotId) {
+      toast({ title: "⚠️ Selecione uma instância primeiro", variant: "destructive" });
+      return;
+    }
+
+    try {
+      toast({ title: "🧪 Enviando teste..." });
+      const { data: bot } = await supabase.from("bot_instances").select("phone").eq("id", notificationBotId).single();
+      
+      if (!bot?.phone) {
+        toast({ title: "❌ Bot sem telefone", variant: "destructive" });
+        return;
+      }
+
+      const { error } = await supabase.functions.invoke("send_whatsapp_message", {
+        body: { botId: notificationBotId, phone: bot.phone, message: "🧪 Teste de notificação do sistema!\n\nSe você recebeu esta mensagem, as notificações estão funcionando corretamente. ✅", conversationId: null },
+      });
+
+      if (error) throw error;
+      toast({ title: "✅ Teste enviado!", description: `Verifique o WhatsApp ${bot.phone}` });
+    } catch (error: any) {
+      toast({ title: "❌ Erro no teste", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Desativar este usuário?")) return;
+    const { error } = await supabase.from("profiles").update({ is_active: false }).eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao desativar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "🗑️ Usuário desativado" });
+      loadUsers();
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      email: "", first_name: "", full_name: "", phone: "", role: "broker", is_active: true,
+      team_id: null, manager_id: null, lead_assignment_enabled: false, evolution_instance: "",
+      qualification_ai_enabled: false, bot_instance_id: null,
+      automation_settings: { welcome_enabled: false, follow_up_enabled: true, ai_assist_enabled: true },
+    });
+    setEditUser(null);
+  };
+
+  const resetBotForm = () => {
+    setBotFormData({ name: "", phone: "", evolution_api_url: "https://api.ape77.com.br", evolution_api_key: "", instance_name: "", status: "active" });
+  };
+
+  const openEdit = (user: Profile) => {
+    setEditUser(user);
+    setFormData({
+      email: user.email, first_name: user.first_name || "", full_name: user.full_name || "", phone: user.phone || "",
+      role: user.role, is_active: user.is_active, team_id: user.team_id, manager_id: user.manager_id,
+      lead_assignment_enabled: user.lead_assignment_enabled, evolution_instance: user.evolution_instance || "",
+      qualification_ai_enabled: user.qualification_ai_enabled, bot_instance_id: user.bot_instance_id,
+      automation_settings: user.automation_settings || { welcome_enabled: false, follow_up_enabled: true, ai_assist_enabled: true },
+    });
+    setModalOpen(true);
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setModalOpen(true);
+  };
+
+  const getRoleBadge = (role: string) => {
+    const styles = {
+      admin: { bg: "bg-red-900/40", text: "text-red-300", border: "border-red-500/30", label: "Admin" },
+      manager: { bg: "bg-blue-900/40", text: "text-blue-300", border: "border-blue-500/30", label: "Manager" },
+      broker: { bg: "bg-green-900/40", text: "text-green-300", border: "border-green-500/30", label: "Corretor" },
+      user: { bg: "bg-gray-900/40", text: "text-gray-400", border: "border-gray-500/30", label: "Usuário" },
+    };
+    const style = styles[role as keyof typeof styles] || styles.user;
+    return <Badge className={`${style.bg} ${style.text} border ${style.border}`}>{style.label}</Badge>;
+  };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <div className="text-white text-2xl font-black animate-pulse">⚔️ CARREGANDO TROPAS...</div>
+        <RefreshCw className="w-10 h-10 text-blue-400 animate-pulse" />
       </div>
     );
   }
-
   return (
     <div className="space-y-6">
-      {/* Topbar */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-black text-white flex items-center gap-2">
-            <Users className="w-7 h-7 text-red-400" />
-            Hierarquia de Tropas
-          </h2>
-          <p className="text-gray-500 text-sm mt-1">{profiles.length} combatentes no total</p>
+          <h3 className="text-xl font-black text-white">Gerenciar Usuários e Sistema</h3>
+          <p className="text-sm text-gray-500">Configure corretores, bots e notificações</p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={() => navigate("/command-center")}
-            variant="outline"
-            className="border-purple-500/50 text-purple-400 hover:bg-purple-900/20"
-          >
-            <Target className="w-4 h-4 mr-2" />
-            Centro de Comando
-          </Button>
-          <Button
-            onClick={() => setCreateUserOpen(true)}
-            className="bg-red-600 hover:bg-red-500 font-bold gap-2"
-          >
+        {tab === "users" && (
+          <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-500 font-bold gap-2">
             <Plus className="w-4 h-4" />
-            Recrutar
+            Novo Usuário
           </Button>
-        </div>
+        )}
+        {tab === "bots" && (
+          <Button onClick={() => setBotModalOpen(true)} variant="outline" className="border-purple-500/30 text-purple-400 hover:bg-purple-900/20 gap-2">
+            <Smartphone className="w-4 h-4" />
+            Cadastrar Bot
+          </Button>
+        )}
       </div>
 
-      {/* Modal Recrutamento */}
-      <Dialog open={createUserOpen} onOpenChange={setCreateUserOpen}>
-        <DialogContent className="bg-slate-900 border-2 border-red-500 max-h-[90vh] overflow-y-auto">
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={() => setTab("users")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "users" ? "bg-blue-900/40 text-blue-300 border border-blue-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
+          <Users className="w-4 h-4" /> Usuários
+          <span className="text-xs bg-slate-700 rounded px-1.5">{users.filter(u => u.is_active).length}</span>
+        </button>
+        <button onClick={() => setTab("bots")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "bots" ? "bg-purple-900/40 text-purple-300 border border-purple-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
+          <Bot className="w-4 h-4" /> Bots
+          <span className="text-xs bg-slate-700 rounded px-1.5">{bots.filter(b => b.status === 'active').length}</span>
+        </button>
+        <button onClick={() => setTab("settings")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "settings" ? "bg-green-900/40 text-green-300 border border-green-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
+          <Settings className="w-4 h-4" /> Configurações
+        </button>
+      </div>
+
+      {tab === "users" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+          {users.filter(u => u.is_active).map(user => (
+            <Card key={user.id} className="border-2 border-gray-700/50 bg-slate-800/40 hover:border-blue-500/50 transition-all">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Users className="w-5 h-5 text-blue-400 shrink-0" />
+                      <h4 className="text-white font-bold text-base truncate">{user.first_name || user.full_name || user.email}</h4>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {getRoleBadge(user.role)}
+                      {user.team_id && user.teams && (
+                        <Badge className="bg-orange-900/40 text-orange-300 border-orange-500/30 text-xs">
+                          <Building className="w-3 h-3 mr-1" />
+                          {user.teams.name}
+                        </Badge>
+                      )}
+                      {user.bot_instance_id && (
+                        <Badge className="bg-purple-900/40 text-purple-300 border-purple-500/30 text-xs">
+                          <Bot className="w-3 h-3 mr-1" />
+                          Bot
+                        </Badge>
+                      )}
+                      {user.lead_assignment_enabled && (
+                        <Badge className="bg-green-900/40 text-green-300 border-green-500/30 text-xs">
+                          <UserCheck className="w-3 h-3 mr-1" />
+                          Auto
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <Mail className="w-3.5 h-3.5" />
+                    <span className="text-white truncate">{user.email}</span>
+                  </div>
+                  {user.phone && (
+                    <div className="flex items-center gap-2 text-gray-400">
+                      <Phone className="w-3.5 h-3.5" />
+                      <span className="text-white">{user.phone}</span>
+                    </div>
+                  )}
+                  {user.manager_id && user.managers && (
+                    <div className="flex items-center gap-2 text-gray-400">
+                      <Shield className="w-3.5 h-3.5" />
+                      <span className="text-white text-xs">Manager: {user.managers.first_name || user.managers.email}</span>
+                    </div>
+                  )}
+                </div>
+
+                {user.role === 'broker' && (
+                  <div className="pt-2 border-t border-gray-700/50">
+                    <div className="text-xs font-bold text-gray-400 mb-2">Status:</div>
+                    <div className="space-y-1.5 text-xs">
+                      {user.qualification_ai_enabled && (
+                        <div className="flex items-center gap-1">
+                          <Bot className="w-3 h-3 text-purple-400" />
+                          <span className="text-purple-300">IA Autônoma</span>
+                        </div>
+                      )}
+                      {user.automation_settings?.welcome_enabled && (
+                        <div className="flex items-center gap-1">
+                          <MessageSquare className="w-3 h-3 text-green-400" />
+                          <span className="text-green-300">Boas-vindas ativo</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <Button onClick={() => openEdit(user)} variant="outline" size="sm" className="flex-1 border-gray-600 text-gray-300 hover:bg-slate-700">
+                    <Pencil className="w-3.5 h-3.5 mr-1" />
+                    Editar
+                  </Button>
+                  <Button onClick={() => handleDelete(user.id)} variant="outline" size="sm" className="border-red-500/30 text-red-400 hover:bg-red-900/20">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : tab === "bots" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {bots.filter(b => b.status === 'active').map(bot => (
+            <Card key={bot.id} className="border-2 border-gray-700/50 bg-slate-800/40 hover:border-purple-500/50 transition-all">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Bot className="w-5 h-5 text-purple-400" />
+                  <h4 className="text-white font-bold">{bot.name}</h4>
+                  <Badge className="bg-purple-900/40 text-purple-300 border-purple-500/30 text-xs ml-auto">{bot.instance_name}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-sm space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Telefone:</span>
+                    <span className="text-white font-mono">{bot.phone}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <Card className="border-2 border-gray-700/50 bg-slate-800/40">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Settings className="w-5 h-5 text-green-400" />
+                <h4 className="text-white font-bold">Configurações de Notificações</h4>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-gray-400 text-xs uppercase mb-2 block">Instância para Notificações</Label>
+                <Select value={notificationBotId} onValueChange={setNotificationBotId}>
+                  <SelectTrigger className="bg-slate-900 border-gray-600 text-white">
+                    <SelectValue placeholder="Escolha uma instância" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-gray-600">
+                    {bots.filter(b => b.status === 'active').map(bot => (
+                      <SelectItem key={bot.id} value={bot.id}>{bot.name} ({bot.phone})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="pt-4 border-t border-gray-700/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-white flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-blue-400" />
+                      Notificar Managers
+                    </div>
+                    <div className="text-xs text-gray-400">Resumo diário de leads sem resposta (9h)</div>
+                  </div>
+                  <Switch checked={notifyManagers} onCheckedChange={setNotifyManagers} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-white flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-green-400" />
+                      Notificar Brokers
+                    </div>
+                    <div className="text-xs text-gray-400">Avisar quando lead é atribuído</div>
+                  </div>
+                  <Switch checked={notifyBrokers} onCheckedChange={setNotifyBrokers} />
+                </div>
+              </div>
+              <div className="pt-4 border-t border-gray-700/50 flex gap-2">
+                <Button onClick={testNotification} variant="outline" className="flex-1 border-purple-500/30 text-purple-400 hover:bg-purple-900/20">
+                  🧪 Teste
+                </Button>
+                <Button onClick={handleSaveSettings} disabled={savingSettings} className="flex-1 bg-green-600 hover:bg-green-500">
+                  {savingSettings ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  Salvar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="bg-slate-900 border-blue-500 text-white max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-white text-2xl font-black">🎖️ Recrutar Guerreiro</DialogTitle>
+            <DialogTitle className="text-2xl font-black flex items-center gap-2">
+              <Users className="w-6 h-6 text-blue-400" />
+              {editUser ? "Editar Usuário" : "Novo Usuário"}
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 p-4">
-            <div>
-              <label className="text-white text-sm mb-2 block">Email *</label>
-              <Input placeholder="email@exemplo.com" type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
-            </div>
-            <div>
-              <label className="text-white text-sm mb-2 block">Senha *</label>
-              <Input placeholder="Senha forte" type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-white text-sm mb-2 block">Nome *</label>
-                <Input placeholder="Nome" value={newUser.firstName} onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
+                <Label className="text-gray-400 text-xs uppercase">Nome *</Label>
+                <Input value={formData.first_name} onChange={e => setFormData({ ...formData, first_name: e.target.value })} placeholder="João" className="bg-slate-800 border-gray-600 text-white" />
               </div>
               <div>
-                <label className="text-white text-sm mb-2 block">Sobrenome *</label>
-                <Input placeholder="Sobrenome" value={newUser.lastName} onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
+                <Label className="text-gray-400 text-xs uppercase">Email *</Label>
+                <Input value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} disabled={!!editUser} placeholder="joao@email.com" className="bg-slate-800 border-gray-600 text-white" />
               </div>
             </div>
-            <div>
-              <label className="text-white text-sm mb-2 block">Telefone</label>
-              <Input placeholder="(00) 00000-0000" value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
-            </div>
-            <div>
-              <label className="text-white text-sm mb-2 block">Patente *</label>
-              <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value, managerId: "", teamId: "" })} className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2">
-                <option value="BROKER">⚔️ SOLDADO (Corretor)</option>
-                <option value="MANAGER">🎖️ CAPITÃO (Gerente)</option>
-                <option value="SUPERINTENDENT">👑 SUPERINTENDENTE</option>
-                <option value="ADMIN">👑 GENERAL (Admin)</option>
-              </select>
-            </div>
-            {teams.length > 0 && (newUser.role === "BROKER" || newUser.role === "MANAGER") && (
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-white text-sm mb-2 block">Esquadrão (Equipe) {newUser.role === "BROKER" ? "*" : ""}</label>
-                <select value={newUser.teamId} onChange={(e) => setNewUser({ ...newUser, teamId: e.target.value })} className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2">
-                  <option value="">Selecione uma equipe</option>
-                  {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
+                <Label className="text-gray-400 text-xs uppercase">Telefone</Label>
+                <Input value={formData.phone || ""} onChange={e => setFormData({ ...formData, phone: e.target.value })} placeholder="11999999999" className="bg-slate-800 border-gray-600 text-white" />
               </div>
+              <div>
+                <Label className="text-gray-400 text-xs uppercase">Função</Label>
+                <Select value={formData.role} onValueChange={value => setFormData({ ...formData, role: value })}>
+                  <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-gray-600">
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="manager">Manager</SelectItem>
+                    <SelectItem value="broker">Corretor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-gray-400 text-xs uppercase">Equipe</Label>
+                <Select value={formData.team_id || "none"} onValueChange={value => setFormData({ ...formData, team_id: value === "none" ? null : value })}>
+                  <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-gray-600">
+                    <SelectItem value="none">Nenhuma</SelectItem>
+                    {teams.map(team => (
+                      <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-gray-400 text-xs uppercase">Manager</Label>
+                <Select value={formData.manager_id || "none"} onValueChange={value => setFormData({ ...formData, manager_id: value === "none" ? null : value })}>
+                  <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-gray-600">
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {managers.map(mgr => (
+                      <SelectItem key={mgr.id} value={mgr.id}>{mgr.first_name || mgr.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {formData.role === 'broker' && (
+              <>
+                <div>
+                  <Label className="text-gray-400 text-xs uppercase">Bot/Instância</Label>
+                  <Select value={formData.bot_instance_id || "none"} onValueChange={value => setFormData({ ...formData, bot_instance_id: value === "none" ? null : value })}>
+                    <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-gray-600">
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {bots.map(bot => (
+                        <SelectItem key={bot.id} value={bot.id}>{bot.name} ({bot.phone})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-gray-400 text-xs uppercase">Nome da Instância Evolution</Label>
+                  <Input value={formData.evolution_instance} onChange={e => setFormData({ ...formData, evolution_instance: e.target.value })} placeholder="ex: joao_silva" className="bg-slate-800 border-gray-600 text-white" />
+                  <p className="text-xs text-gray-500 mt-1">Nome exato da instância no Evolution API</p>
+                </div>
+
+                <div className="border-2 border-purple-500/30 bg-purple-950/20 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-white">Recebe Leads Automaticamente</div>
+                      <div className="text-xs text-gray-400">Sistema distribui leads para este corretor</div>
+                    </div>
+                    <Switch checked={formData.lead_assignment_enabled} onCheckedChange={checked => setFormData({ ...formData, lead_assignment_enabled: checked })} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-white">IA Atende Sozinha</div>
+                      <div className="text-xs text-gray-400">IA responde sem precisar do corretor</div>
+                    </div>
+                    <Switch checked={formData.qualification_ai_enabled} onCheckedChange={checked => setFormData({ ...formData, qualification_ai_enabled: checked })} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold text-white">Boas-vindas</div>
+                    <Switch checked={formData.automation_settings.welcome_enabled} onCheckedChange={checked => setFormData({ ...formData, automation_settings: { ...formData.automation_settings, welcome_enabled: checked } })} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold text-white">Follow-up</div>
+                    <Switch checked={formData.automation_settings.follow_up_enabled} onCheckedChange={checked => setFormData({ ...formData, automation_settings: { ...formData.automation_settings, follow_up_enabled: checked } })} />
+                  </div>
+                </div>
+              </>
             )}
-            {newUser.role === "BROKER" && managers.length > 0 && (
-              <div>
-                <label className="text-white text-sm mb-2 block">Capitão (Gerente) *</label>
-                <select value={newUser.managerId} onChange={(e) => setNewUser({ ...newUser, managerId: e.target.value })} className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2">
-                  <option value="">Selecione um capitão</option>
-                  {managers.map(m => <option key={m.id} value={m.id}>🎖️ {m.first_name} {m.last_name}</option>)}
-                </select>
-              </div>
-            )}
-            {newUser.role === "MANAGER" && generals.filter(g => g.role === "SUPERINTENDENT").length > 0 && (
-              <div>
-                <label className="text-white text-sm mb-2 block">Superior (Superintendente)</label>
-                <select value={newUser.managerId} onChange={(e) => setNewUser({ ...newUser, managerId: e.target.value })} className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2">
-                  <option value="">Sem superior direto</option>
-                  {generals.filter(g => g.role === "SUPERINTENDENT").map(g => <option key={g.id} value={g.id}>👑 {g.first_name} {g.last_name}</option>)}
-                </select>
-              </div>
-            )}
-            <div className="pt-2">
-              <Button
-                onClick={handleCreateUser}
-                className="w-full bg-red-600 hover:bg-red-500 font-bold"
-                disabled={!newUser.email || !newUser.password || !newUser.firstName || !newUser.lastName || (newUser.role === "BROKER" && !newUser.managerId) || (newUser.role === "BROKER" && !newUser.teamId)}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Recrutar Agora
-              </Button>
+
+            <div className="flex items-center gap-2">
+              <Switch checked={formData.is_active} onCheckedChange={checked => setFormData({ ...formData, is_active: checked })} />
+              <Label className="text-gray-300">Usuário ativo</Label>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button onClick={() => setModalOpen(false)} variant="outline" className="flex-1 border-gray-600">Cancelar</Button>
+              <Button onClick={handleSaveUser} className="flex-1 bg-blue-600">{editUser ? "Salvar" : "Criar"}</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Modal Editar */}
-      <Dialog open={!!editingUser} onOpenChange={(o) => !o && setEditingUser(null)}>
-        <DialogContent className="bg-slate-900 border-2 border-blue-500 max-h-[90vh] overflow-y-auto">
+      <Dialog open={botModalOpen} onOpenChange={setBotModalOpen}>
+        <DialogContent className="bg-slate-900 border-purple-500 text-white max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="text-white text-2xl font-black">✏️ Editar Usuário</DialogTitle>
+            <DialogTitle className="text-2xl font-black flex items-center gap-2">
+              <Smartphone className="w-6 h-6 text-purple-400" />
+              Cadastrar Bot
+            </DialogTitle>
           </DialogHeader>
-          {editingUser && (
-            <div className="space-y-4 p-2">
-              <div className="text-xs text-gray-500">{editingUser.email}</div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-white text-xs mb-1.5 block font-semibold">Nome</label>
-                  <Input value={editingUser.first_name || ""} onChange={(e) => setEditingUser({ ...editingUser, first_name: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
-                </div>
-                <div>
-                  <label className="text-white text-xs mb-1.5 block font-semibold">Sobrenome</label>
-                  <Input value={editingUser.last_name || ""} onChange={(e) => setEditingUser({ ...editingUser, last_name: e.target.value })} className="bg-slate-800 text-white border-gray-600" />
-                </div>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-gray-400 text-xs uppercase">Nome</Label>
+                <Input value={botFormData.name} onChange={e => setBotFormData({ ...botFormData, name: e.target.value })} placeholder="Dudu" className="bg-slate-800 border-gray-600 text-white" />
               </div>
               <div>
-                <label className="text-white text-xs mb-1.5 block font-semibold">Telefone</label>
-                <Input value={editingUser.phone || ""} onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })} placeholder="5511999999999" className="bg-slate-800 text-white border-gray-600" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-white text-xs mb-1.5 block font-semibold">Cargo</label>
-                  <select value={editingUser.role} onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })} className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2 text-sm">
-                    <option value="ADMIN">👑 General (Admin)</option>
-                    <option value="SUPERINTENDENT">👑 Superintendente</option>
-                    <option value="MANAGER">🎖️ Capitão (Gerente)</option>
-                    <option value="BROKER">⚔️ Soldado (Corretor)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-white text-xs mb-1.5 block font-semibold">Instância Evolution</label>
-                  <Input value={editingUser.evolution_instance || ""} onChange={(e) => setEditingUser({ ...editingUser, evolution_instance: e.target.value })} placeholder="NomeInstancia" className="bg-slate-800 text-white border-gray-600" />
-                </div>
-              </div>
-              <div className="flex gap-6 pt-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={editingUser.qualification_ai_enabled} onChange={(e) => setEditingUser({ ...editingUser, qualification_ai_enabled: e.target.checked })} className="w-4 h-4 accent-blue-500" />
-                  <span className="text-sm text-gray-300">Qualificação IA</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={editingUser.lead_assignment_enabled} onChange={(e) => setEditingUser({ ...editingUser, lead_assignment_enabled: e.target.checked })} className="w-4 h-4 accent-blue-500" />
-                  <span className="text-sm text-gray-300">Receber leads</span>
-                </label>
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="ghost" onClick={() => setEditingUser(null)} className="text-gray-400">Cancelar</Button>
-                <Button onClick={handleSave} disabled={saving} className="bg-blue-600 hover:bg-blue-700">
-                  {saving ? "Salvando..." : "Salvar alterações"}
-                </Button>
+                <Label className="text-gray-400 text-xs uppercase">Telefone</Label>
+                <Input value={botFormData.phone} onChange={e => setBotFormData({ ...botFormData, phone: e.target.value })} placeholder="5511999999999" className="bg-slate-800 border-gray-600 text-white" />
               </div>
             </div>
-          )}
+            <div>
+              <Label className="text-gray-400 text-xs uppercase">Nome da Instância</Label>
+              <Input value={botFormData.instance_name} onChange={e => setBotFormData({ ...botFormData, instance_name: e.target.value })} placeholder="Dudu" className="bg-slate-800 border-gray-600 text-white" />
+              <p className="text-xs text-gray-500 mt-1">Nome exato da instância no Evolution API</p>
+            </div>
+            <div>
+              <Label className="text-gray-400 text-xs uppercase">API Key Evolution</Label>
+              <Input value={botFormData.evolution_api_key} onChange={e => setBotFormData({ ...botFormData, evolution_api_key: e.target.value })} type="password" placeholder="sua-api-key" className="bg-slate-800 border-gray-600 text-white" />
+            </div>
+            <div className="bg-blue-900/20 border border-blue-500/30 rounded p-3 text-xs text-blue-300">
+              ℹ️ <strong>Webhook URL:</strong> Configure no Evolution API:
+              <code className="block mt-1 bg-slate-900/60 p-2 rounded text-xs">
+                https://dcimeuefnhaiemrfiklj.supabase.co/functions/v1/webhook_receiver
+              </code>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button onClick={() => setBotModalOpen(false)} variant="outline" className="flex-1 border-gray-600">Cancelar</Button>
+              <Button onClick={handleSaveBot} className="flex-1 bg-purple-600">Cadastrar</Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
-
-      {/* Modal Excluir */}
-      <Dialog open={!!deletingUser} onOpenChange={(o) => !o && setDeletingUser(null)}>
-        <DialogContent className="bg-slate-900 border-2 border-red-500">
-          <DialogHeader>
-            <DialogTitle className="text-white text-2xl font-black">🗑️ Excluir Usuário</DialogTitle>
-          </DialogHeader>
-          {deletingUser && (
-            <div className="p-2 space-y-4">
-              <p className="text-gray-300 text-sm">
-                Tem certeza que deseja excluir{" "}
-                <span className="font-bold text-white">{deletingUser.first_name} {deletingUser.last_name || ""}</span>?
-              </p>
-              {(leadCounts[deletingUser.id] || 0) > 0 ? (
-                <div className="p-4 bg-amber-950/40 border-2 border-amber-500 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertTriangle className="w-5 h-5 text-amber-400" />
-                    <span className="text-amber-400 font-bold text-sm">
-                      {leadCounts[deletingUser.id]} lead(s) precisam ser redirecionados!
-                    </span>
-                  </div>
-                  <p className="text-xs text-amber-300 mb-3">Selecione quem vai receber os leads deste usuário:</p>
-                  <select value={redirectTo} onChange={(e) => setRedirectTo(e.target.value)} className="w-full bg-slate-800 text-white border border-amber-500 rounded-md p-2 text-sm">
-                    <option value="">— Selecionar usuário —</option>
-                    {otherUsers.map((u) => (
-                      <option key={u.id} value={u.id}>{ROLE_LABELS[u.role] || u.role} — {u.first_name} {u.last_name || ""}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <p className="text-xs text-gray-500">Este usuário não possui leads vinculados.</p>
-              )}
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="ghost" onClick={() => { setDeletingUser(null); setRedirectTo(""); }} className="text-gray-400">Cancelar</Button>
-                <Button onClick={handleDelete} disabled={deleting || ((leadCounts[deletingUser.id] || 0) > 0 && !redirectTo)} className="bg-red-600 hover:bg-red-700 disabled:opacity-40">
-                  {deleting ? "Excluindo..." : "Confirmar exclusão"}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-2 border-yellow-500 bg-yellow-950/20">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-white flex items-center gap-2"><Shield className="w-5 h-5 text-yellow-500" />Generais</CardTitle>
-          </CardHeader>
-          <CardContent><div className="text-4xl font-black text-white">{generals.length}</div></CardContent>
-        </Card>
-        <Card className="border-2 border-blue-500 bg-blue-950/20">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-white flex items-center gap-2"><Users className="w-5 h-5 text-blue-500" />Capitães</CardTitle>
-          </CardHeader>
-          <CardContent><div className="text-4xl font-black text-white">{managers.length}</div></CardContent>
-        </Card>
-        <Card className="border-2 border-green-500 bg-green-950/20">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-white flex items-center gap-2"><Swords className="w-5 h-5 text-green-500" />Soldados</CardTitle>
-          </CardHeader>
-          <CardContent><div className="text-4xl font-black text-white">{profiles.filter(p => p.role === "BROKER").length}</div></CardContent>
-        </Card>
-      </div>
-
-      {/* Generais */}
-      {generals.length > 0 && (
-        <Card className="border-2 border-yellow-500 bg-slate-900/50">
-          <CardHeader>
-            <CardTitle className="text-white text-xl font-black flex items-center gap-2">
-              <Shield className="w-6 h-6 text-yellow-500" />GENERAIS ({generals.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {generals.map(g => (
-                <div key={g.id} className="flex items-center justify-between p-4 rounded-lg border-2 border-yellow-500 bg-yellow-950/20">
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl">👑</span>
-                    <div>
-                      <div className="text-white font-bold">{g.first_name} {g.last_name}</div>
-                      <div className="text-sm text-yellow-400">{g.role === "SUPERINTENDENT" ? "SUPERINTENDENTE" : "GENERAL"}</div>
-                      <div className="text-xs text-gray-500">{g.email}</div>
-                      {g.phone && <div className="text-xs text-gray-500">{g.phone}</div>}
-                    </div>
-                  </div>
-                  <ActionButtons profile={g} />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Capitães */}
-      {managers.length > 0 && (
-        <Card className="border-2 border-blue-500 bg-slate-900/50">
-          <CardHeader>
-            <CardTitle className="text-white text-xl font-black flex items-center gap-2">
-              <Users className="w-6 h-6 text-blue-500" />CAPITÃES ({managers.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {managers.map(m => {
-                const soldiers = getSoldiersByManager(m.id);
-                const isExpanded = expandedManagers.has(m.id);
-                const superior = m.manager_id ? profiles.find(p => p.id === m.manager_id) : null;
-                const team = m.team_id ? teams.find(t => t.id === m.team_id) : null;
-                return (
-                  <div key={m.id} className="border-2 border-blue-500 rounded-lg bg-blue-950/20">
-                    <div className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-3 flex-1 cursor-pointer" onClick={() => toggleManager(m.id)}>
-                        <span className="text-3xl">🎖️</span>
-                        <div className="flex-1">
-                          <div className="text-white font-bold">{m.first_name} {m.last_name}</div>
-                          <div className="text-sm text-blue-400">CAPITÃO</div>
-                          <div className="text-xs text-gray-500">{m.email}</div>
-                          {m.phone && <div className="text-xs text-gray-500">{m.phone}</div>}
-                          {team && <div className="text-xs text-blue-300">Equipe: {team.name}</div>}
-                          {superior && <div className="text-xs text-yellow-300">Superior: {superior.first_name} {superior.last_name}</div>}
-                        </div>
-                        <Badge variant="secondary">{soldiers.length} soldados</Badge>
-                      </div>
-                      <div className="flex items-center gap-1 ml-2">
-                        <ActionButtons profile={m} />
-                        <Button variant="ghost" size="sm" onClick={() => toggleManager(m.id)} className="text-blue-400">
-                          {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-                        </Button>
-                      </div>
-                    </div>
-                    {isExpanded && soldiers.length > 0 && (
-                      <div className="border-t-2 border-blue-500 bg-slate-800/50 p-4 space-y-2">
-                        {soldiers.map(s => {
-                          const soldierTeam = s.team_id ? teams.find(t => t.id === s.team_id) : null;
-                          return (
-                            <div key={s.id} className="flex items-center justify-between p-3 rounded-lg border border-green-600 bg-green-950/20">
-                              <div className="flex items-center gap-3">
-                                <span className="text-2xl">⚔️</span>
-                                <div>
-                                  <div className="text-white font-bold text-sm">{s.first_name} {s.last_name}</div>
-                                  <div className="text-xs text-green-400">SOLDADO</div>
-                                  <div className="text-xs text-gray-500">{s.email}</div>
-                                  {s.phone && <div className="text-xs text-gray-500">{s.phone}</div>}
-                                  {soldierTeam && <div className="text-xs text-green-300">Equipe: {soldierTeam.name}</div>}
-                                </div>
-                              </div>
-                              <div className="flex flex-col items-end gap-1.5">
-                                <div className="flex items-center gap-1">
-                                  <ActionButtons profile={s} />
-                                </div>
-                                <Badge variant={s.lead_assignment_enabled ? "default" : "secondary"} className="text-xs">
-                                  {s.lead_assignment_enabled ? "Ativo" : "Inativo"}
-                                </Badge>
-                                <button
-                                  onClick={() => toggleQualification(s.id, s.qualification_ai_enabled)}
-                                  className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-bold transition-all ${s.qualification_ai_enabled ? "bg-indigo-500/20 border-indigo-500/30 text-indigo-300" : "bg-slate-700/60 border-gray-600/40 text-gray-500 hover:text-indigo-300 hover:border-indigo-500/30"}`}>
-                                  <BrainCircuit className="w-3 h-3" />
-                                  {s.qualification_ai_enabled ? "IA ON" : "IA OFF"}
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {isExpanded && soldiers.length === 0 && (
-                      <div className="border-t-2 border-blue-500 bg-slate-800/50 p-4 text-center text-gray-400 text-sm">Sem soldados</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Soldados sem capitão */}
-      {orphanSoldiers.length > 0 && (
-        <Card className="border-2 border-green-500 bg-slate-900/50">
-          <CardHeader>
-            <CardTitle className="text-white text-xl font-black flex items-center gap-2">
-              <Swords className="w-6 h-6 text-green-500" />SOLDADOS SEM CAPITÃO ({orphanSoldiers.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {orphanSoldiers.map(s => {
-                const team = s.team_id ? teams.find(t => t.id === s.team_id) : null;
-                return (
-                  <div key={s.id} className="flex items-center justify-between p-4 rounded-lg border-2 border-green-500 bg-green-950/20">
-                    <div className="flex items-center gap-3">
-                      <span className="text-3xl">⚔️</span>
-                      <div>
-                        <div className="text-white font-bold">{s.first_name} {s.last_name}</div>
-                        <div className="text-sm text-green-400">SOLDADO</div>
-                        <div className="text-xs text-gray-500">{s.email}</div>
-                        {s.phone && <div className="text-xs text-gray-500">{s.phone}</div>}
-                        {team && <div className="text-xs text-green-300">Equipe: {team.name}</div>}
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <ActionButtons profile={s} />
-                      <Badge variant={s.lead_assignment_enabled ? "default" : "secondary"}>
-                        {s.lead_assignment_enabled ? "Ativo" : "Inativo"}
-                      </Badge>
-                      <button
-                        onClick={() => toggleQualification(s.id, s.qualification_ai_enabled)}
-                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all ${s.qualification_ai_enabled ? "bg-indigo-500/20 border-indigo-500/30 text-indigo-300" : "bg-slate-700/60 border-gray-600/40 text-gray-500 hover:text-indigo-300 hover:border-indigo-500/30"}`}>
-                        <BrainCircuit className="w-3.5 h-3.5" />
-                        {s.qualification_ai_enabled ? "IA Qualif. ON" : "IA Qualif. OFF"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
