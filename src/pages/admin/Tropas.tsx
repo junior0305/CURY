@@ -126,7 +126,7 @@ export default function Tropas() {
     const { data } = await supabase
       .from("profiles")
       .select("id, email, first_name, full_name")
-      .in("role", ["manager", "admin"])
+      .in("role", ["MANAGER", "ADMIN", "SUPERINTENDENT"])
       .eq("is_active", true)
       .order("email");
     if (data) setManagers(data);
@@ -176,38 +176,52 @@ export default function Tropas() {
         
         if (error) throw error;
         toast({ title: "✅ Usuário atualizado!" });
+    
       } else {
-        const { error } = await supabase.auth.admin.createUser({
-          email: formData.email,
-          email_confirm: true,
-        });
-        
-        if (error) throw error;
-        
-        const { data: profile } = await supabase.from("profiles").select("id").eq("email", formData.email).single();
-        
-        if (profile) {
-          await supabase.from("profiles").update({
+        const { data, error } = await supabase.functions.invoke('create_user_admin', {
+          body: {
+            email: formData.email,
+            password: formData.password || 'senha_temporaria_123',
             first_name: formData.first_name,
-            full_name: formData.full_name,
-            phone: formData.phone,
+            last_name: formData.last_name,
             role: formData.role,
             team_id: formData.team_id,
             manager_id: formData.manager_id,
-            lead_assignment_enabled: formData.lead_assignment_enabled,
-            evolution_instance: formData.evolution_instance,
-            qualification_ai_enabled: formData.qualification_ai_enabled,
-            bot_instance_id: formData.bot_instance_id,
-            automation_settings: formData.automation_settings,
-          }).eq("id", profile.id);
+            phone: formData.phone,
+          }
+        });
+        
+        console.log('Edge Function Response DATA:', JSON.stringify(data, null, 2));
+        console.log('Edge Function Response ERROR:', JSON.stringify(error, null, 2));        
+        if (error) {
+          console.error('Edge Function Error:', error);
+          throw error;
         }
         
-        toast({ title: "✅ Usuário criado!" });
-      }
-      
-      setModalOpen(false);
-      resetForm();
-      loadUsers();
+        // Verificar se data tem erro interno
+        if (data && data.error) {
+          console.error('Edge Function returned error:', data.error);
+          throw new Error(data.error);
+        }
+          
+          // Atualizar campos adicionais que a Edge Function não cobre
+          if (data?.user?.id) {
+            await supabase.from("profiles").update({
+              full_name: formData.full_name,
+              lead_assignment_enabled: formData.lead_assignment_enabled,
+              evolution_instance: formData.evolution_instance,
+              qualification_ai_enabled: formData.qualification_ai_enabled,
+              bot_instance_id: formData.bot_instance_id,
+              automation_settings: formData.automation_settings,
+            }).eq("id", data.user.id);
+          }
+          
+          toast({ title: "✅ Usuário criado!" });
+        }
+        
+        setModalOpen(false);
+        resetForm();
+        loadUsers();
     } catch (error: any) {
       toast({ title: "❌ Erro ao salvar", description: error.message, variant: "destructive" });
     }
@@ -329,15 +343,15 @@ export default function Tropas() {
 
   const getRoleBadge = (role: string) => {
     const styles = {
-      admin: { bg: "bg-red-900/40", text: "text-red-300", border: "border-red-500/30", label: "Admin" },
-      manager: { bg: "bg-blue-900/40", text: "text-blue-300", border: "border-blue-500/30", label: "Manager" },
-      broker: { bg: "bg-green-900/40", text: "text-green-300", border: "border-green-500/30", label: "Corretor" },
+      ADMIN: { bg: "bg-red-900/40", text: "text-red-300", border: "border-red-500/30", label: "Admin" },
+      SUPERINTENDENT: { bg: "bg-purple-900/40", text: "text-purple-300", border: "border-purple-500/30", label: "Super" },
+      MANAGER: { bg: "bg-blue-900/40", text: "text-blue-300", border: "border-blue-500/30", label: "Manager" },
+      BROKER: { bg: "bg-green-900/40", text: "text-green-300", border: "border-green-500/30", label: "Corretor" },
       user: { bg: "bg-gray-900/40", text: "text-gray-400", border: "border-gray-500/30", label: "Usuário" },
     };
     const style = styles[role as keyof typeof styles] || styles.user;
     return <Badge className={`${style.bg} ${style.text} border ${style.border}`}>{style.label}</Badge>;
   };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
@@ -581,10 +595,11 @@ export default function Tropas() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-gray-600">
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
-                    <SelectItem value="broker">Corretor</SelectItem>
-                  </SelectContent>
+  <SelectItem value="ADMIN">Admin</SelectItem>
+  <SelectItem value="SUPERINTENDENT">Super</SelectItem>
+  <SelectItem value="MANAGER">Manager</SelectItem>
+  <SelectItem value="BROKER">Corretor</SelectItem>
+</SelectContent>
                 </Select>
               </div>
             </div>
@@ -725,4 +740,5 @@ export default function Tropas() {
       </Dialog>
     </div>
   );
+}
 }
