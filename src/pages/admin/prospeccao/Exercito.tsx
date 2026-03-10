@@ -70,6 +70,7 @@ export default function Exercito() {
     daily_limit: 200,
     weight: 10,
     priority: 5,
+    is_prospecting: false,
   });
 
   const loadBots = async () => {
@@ -111,18 +112,19 @@ export default function Exercito() {
     }
 
     const payload = {
-      name: formData.name,
-      phone: formData.phone,
-      evolution_api_url: formData.evolution_api_url,
-      evolution_api_key: formData.evolution_api_key,
-      persona_name: formData.persona_name,
-      persona_style: formData.persona_style,
-      daily_limit: formData.daily_limit,
-      weight: formData.weight,
-      priority: formData.priority,
-      updated_at: new Date().toISOString(),
-    };
-
+          name: formData.name,
+          phone: formData.phone,
+          evolution_api_url: formData.evolution_api_url,
+          evolution_api_key: formData.evolution_api_key,
+          persona_name: formData.persona_name,
+          persona_style: formData.persona_style,
+          daily_limit: formData.daily_limit,
+          weight: formData.weight,
+          priority: formData.priority,
+          is_prospecting: formData.is_prospecting,
+          updated_at: new Date().toISOString(),
+        };
+    
     if (editBot) {
       const { error } = await supabase.from("bot_instances").update(payload).eq("id", editBot.id);
       if (error) {
@@ -532,6 +534,13 @@ export default function Exercito() {
                   className="bg-slate-800 border-gray-600 text-white"
                 />
               </div>
+            </div>
+
+            <div className="mt-3">
+              <label className="flex items-center gap-3">
+                <input type="checkbox" checked={formData.is_prospecting} onChange={e => setFormData({ ...formData, is_prospecting: e.target.checked })} />
+                <span className="text-sm text-gray-300">Usar esta instância para prospecção (pool de disparo)</span>
+              </label>
             </div>
 
             <div className="flex gap-3 pt-4">

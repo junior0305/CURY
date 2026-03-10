@@ -71,6 +71,7 @@ export default function Campanhas() {
   const { toast } = useToast();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [aiProfiles, setAiProfiles] = useState<AIProfile[]>([]);
+  const [botOptions, setBotOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editCampaign, setEditCampaign] = useState<Campaign | null>(null);
@@ -84,6 +85,7 @@ export default function Campanhas() {
     description: "",
     status: "draft",
     ai_profile_id: null as string | null,
+    bot_instance_id: null as string | null,
     target_audience: {
       lead_status: [],
       days_without_contact: 3,
@@ -125,6 +127,12 @@ export default function Campanhas() {
   useEffect(() => {
     loadCampaigns();
     loadAIProfiles();
+    // load available prospecting bots for selection
+    (async () => {
+      const { data } = await supabase.from('bot_instances').select('*').eq('is_prospecting', true).eq('status', 'active').order('priority', { ascending: false });
+      setBotOptions(data || []);
+    })();
+
     const channel = supabase.channel("ia_campaigns_changes").on("postgres_changes", { event: "*", schema: "public", table: "ia_campaigns" }, loadCampaigns).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -375,6 +383,23 @@ export default function Campanhas() {
                       ))}
                     </SelectContent>
                   </Select>
+
+                  <div className="mt-4">
+                    <Label className="text-gray-200 font-bold">Instância de Envio (opcional)</Label>
+                    <Select value={formData.bot_instance_id || "none"} onValueChange={value => setFormData({ ...formData, bot_instance_id: value === "none" ? null : value })}>
+                      <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
+                        <SelectValue placeholder="Selecione uma instância (opcional)" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-gray-600">
+                        <SelectItem value="none">Usar pool de prospecção (recomendado)</SelectItem>
+                        {botOptions.map(bot => (
+                          <SelectItem key={bot.id} value={bot.id}>{bot.name} — {bot.phone}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-500 mt-2">Se você escolher uma instância específica, a campanha usará apenas essa instância. Caso contrário, o sistema fará round-robin entre as instâncias marcadas como "Usar para prospecção".</p>
+                  </div>
+
                   {formData.ai_profile_id && aiProfiles.find(p => p.id === formData.ai_profile_id)?.description && (
                     <div className="mt-2 p-2 bg-purple-900/20 rounded border border-purple-500/30">
                       <p className="text-xs text-purple-300">{aiProfiles.find(p => p.id === formData.ai_profile_id)?.description}</p>
