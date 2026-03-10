@@ -86,6 +86,7 @@ export default function Campanhas() {
     status: "draft",
     ai_profile_id: null as string | null,
     bot_instance_id: null as string | null,
+    prospect_instance_ids: [] as string[],
     target_audience: {
       lead_status: [],
       days_without_contact: 3,
@@ -386,18 +387,26 @@ export default function Campanhas() {
 
                   <div className="mt-4">
                     <Label className="text-gray-200 font-bold">Instância de Envio (opcional)</Label>
-                    <Select value={formData.bot_instance_id || "none"} onValueChange={value => setFormData({ ...formData, bot_instance_id: value === "none" ? null : value })}>
-                      <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
-                        <SelectValue placeholder="Selecione uma instância (opcional)" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-slate-800 border-gray-600">
-                        <SelectItem value="none">Usar pool de prospecção (recomendado)</SelectItem>
+                    <div>
+                      <Label className="text-gray-200 font-bold mb-2">Instâncias de Envio (selecione 0, 1 ou várias)</Label>
+                      <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto p-2 bg-slate-800 rounded">
+                        <label className="text-xs text-gray-400 mb-1">Opções selecionadas: {formData.prospect_instance_ids.length || 0}</label>
                         {botOptions.map(bot => (
-                          <SelectItem key={bot.id} value={bot.id}>{bot.name} — {bot.phone}</SelectItem>
+                          <label key={bot.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" checked={formData.prospect_instance_ids.includes(bot.id)} onChange={e => {
+                              const checked = e.target.checked;
+                              setFormData(fd => {
+                                const cur = new Set(fd.prospect_instance_ids || []);
+                                if (checked) cur.add(bot.id); else cur.delete(bot.id);
+                                return { ...fd, prospect_instance_ids: Array.from(cur) };
+                              });
+                            }} />
+                            <span className="text-white ml-1">{bot.name} — {bot.phone}</span>
+                          </label>
                         ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-gray-500 mt-2">Se você escolher uma instância específica, a campanha usará apenas essa instância. Caso contrário, o sistema fará round-robin entre as instâncias marcadas como "Usar para prospecção".</p>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">Se você escolher 0 instâncias, o sistema usará o pool de prospecção. Se escolher 1 instância, a campanha usará somente ela. Se escolher várias, o sistema fará round-robin entre elas.</p>
+                    </div>
                   </div>
 
                   {formData.ai_profile_id && aiProfiles.find(p => p.id === formData.ai_profile_id)?.description && (

@@ -37,9 +37,15 @@ serve(async (req) => {
     const messageTemplates = campaign.message_templates || [];
     console.log('💬 Variações disponíveis:', messageTemplates.length);
 
-    // Determine bot pool: if campaign specifies a bot_instance_id, use it exclusively; otherwise use prospecting pool
+    // Determine bot pool: priority -> prospect_instance_ids (explicit list) -> bot_instance_id (single) -> pool is_prospecting
     let bots: any[] = [];
-    if (campaign.bot_instance_id) {
+    if (campaign.prospect_instance_ids && Array.isArray(campaign.prospect_instance_ids) && campaign.prospect_instance_ids.length > 0) {
+      const { data: listedBots } = await supabaseClient.from('bot_instances').select('*').in('id', campaign.prospect_instance_ids).eq('status', 'active').gte('health_score', 50);
+      bots = listedBots || [];
+      if (!bots || bots.length === 0) {
+        return new Response(JSON.stringify({ error: 'No specified prospecting bots available' }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    } else if (campaign.bot_instance_id) {
       const { data: singleBot, error: singleErr } = await supabaseClient.from('bot_instances').select('*').eq('id', campaign.bot_instance_id).single();
       if (singleErr || !singleBot) {
         return new Response(JSON.stringify({ error: 'Specified bot instance not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
