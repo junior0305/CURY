@@ -101,7 +101,7 @@ export default function Tropas() {
     setLoading(true);
     const { data, error } = await supabase
       .from("profiles")
-      .select("*, bot_instances(*), teams(id, name), managers:profiles!manager_id(id, email, first_name, full_name)")
+      .select("*, bot_instances(*), teams:team_id(id, name), managers:profiles!manager_id(id, email, first_name, full_name)")
       .order("email", { ascending: true });
     
     if (error) {
@@ -635,7 +635,7 @@ export default function Tropas() {
               </div>
             </div>
 
-            {formData.role === 'broker' && (
+            {formData.role === 'BROKER' && (
               <>
                 <div>
                   <Label className="text-gray-400 text-xs uppercase">Bot/Instância</Label>
