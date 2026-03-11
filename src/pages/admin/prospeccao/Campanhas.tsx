@@ -392,7 +392,7 @@ export default function Campanhas() {
                     <div>
                       <Label className="text-gray-200 font-bold mb-2">Instâncias de Envio (selecione 0, 1 ou várias)</Label>
                       <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto p-2 bg-slate-800 rounded">
-                        <label className="text-xs text-gray-400 mb-1">Opções selecionadas: {formData.prospect_instance_ids.length || 0}</label>
+                        <label className="text-xs text-gray-400 mb-1">Opções selecionadas: {Array.isArray(formData.prospect_instance_ids) ? formData.prospect_instance_ids.length : 0}</label>
                         {botOptions.map(bot => (
                                                   <label key={bot.id} className="flex items-center gap-2 text-sm cursor-pointer">
                                                     <input type="checkbox" checked={Array.isArray(formData.prospect_instance_ids) && formData.prospect_instance_ids.includes(bot.id)} onChange={e => {
