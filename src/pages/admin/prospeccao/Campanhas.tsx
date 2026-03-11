@@ -71,6 +71,7 @@ export default function Campanhas() {
   const { toast } = useToast();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [aiProfiles, setAiProfiles] = useState<AIProfile[]>([]);
+  const [botOptions, setBotOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editCampaign, setEditCampaign] = useState<Campaign | null>(null);
@@ -84,6 +85,8 @@ export default function Campanhas() {
     description: "",
     status: "draft",
     ai_profile_id: null as string | null,
+    bot_instance_id: null as string | null,
+    prospect_instance_ids: [] as string[],
     target_audience: {
       lead_status: [],
       days_without_contact: 3,
@@ -125,6 +128,12 @@ export default function Campanhas() {
   useEffect(() => {
     loadCampaigns();
     loadAIProfiles();
+    // load available prospecting bots for selection
+    (async () => {
+      const { data } = await supabase.from('bot_instances').select('*').eq('is_prospecting', true).eq('status', 'active').order('priority', { ascending: false });
+      setBotOptions(data || []);
+    })();
+
     const channel = supabase.channel("ia_campaigns_changes").on("postgres_changes", { event: "*", schema: "public", table: "ia_campaigns" }, loadCampaigns).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -244,6 +253,8 @@ export default function Campanhas() {
     setFormData({
       name: campaign.name, description: campaign.description || "", status: campaign.status,
       ai_profile_id: campaign.ai_profile_id,
+      bot_instance_id: campaign.bot_instance_id || null,
+      prospect_instance_ids: campaign.prospect_instance_ids || [],
       target_audience: campaign.target_audience, message_templates: campaign.message_templates,
       ai_instructions: campaign.ai_instructions || "", scheduled_start: campaign.scheduled_start || "",
       scheduled_end: campaign.scheduled_end || "", working_hours: campaign.working_hours,
@@ -256,7 +267,7 @@ export default function Campanhas() {
   };
 
   const openCreate = () => { resetForm(); setModalOpen(true); };
-  const addMessageTemplate = () => setFormData({ ...formData, message_templates: [...formData.message_templates, { id: formData.message_templates.length + 1, text: "" }] });
+  const addMessageTemplate = () => setFormData({ ...formData, message_templates: [...(formData.message_templates || []), { id: (formData.message_templates || []).length + 1, text: "" }] });
   const removeMessageTemplate = (id: number) => setFormData({ ...formData, message_templates: formData.message_templates.filter(t => t.id !== id) });
   const updateMessageTemplate = (id: number, text: string) => setFormData({ ...formData, message_templates: formData.message_templates.map(t => t.id === id ? { ...t, text } : t) });
 
@@ -375,6 +386,31 @@ export default function Campanhas() {
                       ))}
                     </SelectContent>
                   </Select>
+
+                  <div className="mt-4">
+                    <Label className="text-gray-200 font-bold">Instância de Envio (opcional)</Label>
+                    <div>
+                      <Label className="text-gray-200 font-bold mb-2">Instâncias de Envio (selecione 0, 1 ou várias)</Label>
+                      <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto p-2 bg-slate-800 rounded">
+                        <label className="text-xs text-gray-400 mb-1">Opções selecionadas: {Array.isArray(formData.prospect_instance_ids) ? formData.prospect_instance_ids.length : 0}</label>
+                        {botOptions.map(bot => (
+                                                  <label key={bot.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                                                    <input type="checkbox" checked={Array.isArray(formData.prospect_instance_ids) && formData.prospect_instance_ids.includes(bot.id)} onChange={e => {
+                                                      const checked = e.target.checked;
+                                                      setFormData(fd => {
+                                                        const cur = new Set(Array.isArray(fd.prospect_instance_ids) ? fd.prospect_instance_ids : []);
+                                                        if (checked) cur.add(bot.id); else cur.delete(bot.id);
+                                                        return { ...fd, prospect_instance_ids: Array.from(cur) };
+                                                      });
+                                                    }} />
+                                                    <span className="text-white ml-1">{bot.name} — {bot.phone}</span>
+                                                  </label>
+                                                ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">Se você escolher 0 instâncias, o sistema usará o pool de prospecção. Se escolher 1 instância, a campanha usará somente ela. Se escolher várias, o sistema fará round-robin entre elas.</p>
+                    </div>
+                  </div>
+
                   {formData.ai_profile_id && aiProfiles.find(p => p.id === formData.ai_profile_id)?.description && (
                     <div className="mt-2 p-2 bg-purple-900/20 rounded border border-purple-500/30">
                       <p className="text-xs text-purple-300">{aiProfiles.find(p => p.id === formData.ai_profile_id)?.description}</p>
