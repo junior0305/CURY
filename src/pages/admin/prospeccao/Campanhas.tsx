@@ -253,6 +253,8 @@ export default function Campanhas() {
     setFormData({
       name: campaign.name, description: campaign.description || "", status: campaign.status,
       ai_profile_id: campaign.ai_profile_id,
+      bot_instance_id: campaign.bot_instance_id || null,
+      prospect_instance_ids: campaign.prospect_instance_ids || [],
       target_audience: campaign.target_audience, message_templates: campaign.message_templates,
       ai_instructions: campaign.ai_instructions || "", scheduled_start: campaign.scheduled_start || "",
       scheduled_end: campaign.scheduled_end || "", working_hours: campaign.working_hours,
@@ -265,7 +267,7 @@ export default function Campanhas() {
   };
 
   const openCreate = () => { resetForm(); setModalOpen(true); };
-  const addMessageTemplate = () => setFormData({ ...formData, message_templates: [...formData.message_templates, { id: formData.message_templates.length + 1, text: "" }] });
+  const addMessageTemplate = () => setFormData({ ...formData, message_templates: [...(formData.message_templates || []), { id: (formData.message_templates || []).length + 1, text: "" }] });
   const removeMessageTemplate = (id: number) => setFormData({ ...formData, message_templates: formData.message_templates.filter(t => t.id !== id) });
   const updateMessageTemplate = (id: number, text: string) => setFormData({ ...formData, message_templates: formData.message_templates.map(t => t.id === id ? { ...t, text } : t) });
 
@@ -392,18 +394,18 @@ export default function Campanhas() {
                       <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto p-2 bg-slate-800 rounded">
                         <label className="text-xs text-gray-400 mb-1">Opções selecionadas: {formData.prospect_instance_ids.length || 0}</label>
                         {botOptions.map(bot => (
-                          <label key={bot.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                            <input type="checkbox" checked={formData.prospect_instance_ids.includes(bot.id)} onChange={e => {
-                              const checked = e.target.checked;
-                              setFormData(fd => {
-                                const cur = new Set(fd.prospect_instance_ids || []);
-                                if (checked) cur.add(bot.id); else cur.delete(bot.id);
-                                return { ...fd, prospect_instance_ids: Array.from(cur) };
-                              });
-                            }} />
-                            <span className="text-white ml-1">{bot.name} — {bot.phone}</span>
-                          </label>
-                        ))}
+                                                  <label key={bot.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                                                    <input type="checkbox" checked={Array.isArray(formData.prospect_instance_ids) && formData.prospect_instance_ids.includes(bot.id)} onChange={e => {
+                                                      const checked = e.target.checked;
+                                                      setFormData(fd => {
+                                                        const cur = new Set(Array.isArray(fd.prospect_instance_ids) ? fd.prospect_instance_ids : []);
+                                                        if (checked) cur.add(bot.id); else cur.delete(bot.id);
+                                                        return { ...fd, prospect_instance_ids: Array.from(cur) };
+                                                      });
+                                                    }} />
+                                                    <span className="text-white ml-1">{bot.name} — {bot.phone}</span>
+                                                  </label>
+                                                ))}
                       </div>
                       <p className="text-xs text-gray-500 mt-2">Se você escolher 0 instâncias, o sistema usará o pool de prospecção. Se escolher 1 instância, a campanha usará somente ela. Se escolher várias, o sistema fará round-robin entre elas.</p>
                     </div>
