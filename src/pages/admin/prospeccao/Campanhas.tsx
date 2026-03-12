@@ -180,6 +180,8 @@ export default function Campanhas() {
       description: formData.description || null,
       status: formData.status,
       ai_profile_id: formData.ai_profile_id,
+      bot_instance_id: formData.bot_instance_id || null,
+      prospect_instance_ids: Array.isArray(formData.prospect_instance_ids) ? formData.prospect_instance_ids : [],
       target_audience: { ...formData.target_audience, source: leadSource },
       message_templates: formData.message_templates,
       ai_instructions: formData.ai_instructions || null,
