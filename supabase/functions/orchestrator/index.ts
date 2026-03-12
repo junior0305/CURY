@@ -10,6 +10,14 @@ function getRandomInt(max: number): number {
   return Math.floor(Math.random() * max);
 }
 
+function randomBetween(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -22,7 +30,7 @@ serve(async (req) => {
     );
 
     const { campaignId } = await req.json();
-    console.log('🚀 Orchestrator iniciado para campanha:', campaignId);
+    console.log('[orchestrator] 🚀 Orchestrator iniciado para campanha:', campaignId);
 
     if (!campaignId) {
       return new Response(JSON.stringify({ error: 'Campaign ID required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -33,9 +41,9 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Campaign not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log('✅ Campanha:', campaign.name);
+    console.log('[orchestrator] ✅ Campanha:', campaign.name);
     const messageTemplates = campaign.message_templates || [];
-    console.log('💬 Variações disponíveis:', messageTemplates.length);
+    console.log('[orchestrator] 💬 Variações disponíveis:', messageTemplates.length);
 
     // Determine bot pool: priority -> prospect_instance_ids (explicit list) -> bot_instance_id (single) -> pool is_prospecting
     let bots: any[] = [];
@@ -58,6 +66,14 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: 'No prospecting bots available' }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
     }
+
+    // Determine delays (in seconds) from campaign settings; provide sensible defaults
+    const minDelaySec = (campaign.delay_between_messages_min && Number(campaign.delay_between_messages_min)) || 120;
+    const maxDelaySec = (campaign.delay_between_messages_max && Number(campaign.delay_between_messages_max)) || 480;
+    const minDelayMs = Math.max(0, Math.floor(minDelaySec) * 1000);
+    const maxDelayMs = Math.max(minDelayMs, Math.floor(maxDelaySec) * 1000);
+
+    console.log(`[orchestrator] ⏱️ Delay entre envios: ${minDelaySec}s - ${maxDelaySec}s`);
 
     let leads: any[] = [];
     const source = campaign.target_audience?.source || 'crm';
@@ -85,23 +101,36 @@ serve(async (req) => {
     const assignments: any[] = [];
     let botIndex = 0;
 
-    for (const lead of leads) {
+    for (const [i, lead] of leads.entries()) {
       const bot = bots[botIndex % bots.length];
       botIndex++;
 
+      console.log(`[orchestrator] 🧾 Processando lead ${i + 1}/${leads.length} -> ${lead.name || lead.phone} via bot ${bot.name}`);
+
       const { data: conversation } = await supabaseClient.from('ia_conversations').insert({ campaign_id: campaignId, bot_instance_id: bot.id, lead_id: lead.source === 'crm' ? lead.id : null, lead_name: lead.name, lead_phone: lead.phone, status: 'active', sentiment: 'unknown' }).select().single();
-      if (!conversation) continue;
+      if (!conversation) {
+        console.warn('[orchestrator] ⚠️ Falha ao criar conversa, pulando lead');
+        continue;
+      }
 
       const randomIndex = getRandomInt(messageTemplates.length);
       const selectedTemplate = messageTemplates[randomIndex];
-      console.log('🎲 Lead:', lead.name, '| Mensagem:', randomIndex + 1, 'de', messageTemplates.length);
+      console.log('[orchestrator] 🎲 Mensagem selecionada index:', randomIndex + 1);
       
       if (selectedTemplate?.text) {
         let message = selectedTemplate.text.replace(/\{nome\}/gi, lead.name || 'amigo').replace(/\{name\}/gi, lead.name || 'amigo');
-        console.log('📨 Enviando:', message.substring(0, 60));
+        console.log('[orchestrator] 📨 Enviando (preview):', message.substring(0, 80));
 
+        // Invoke the sender function
         await supabaseClient.functions.invoke('send_whatsapp_message', { body: { botId: bot.id, phone: lead.phone, message, conversationId: conversation.id } });
         assignments.push({ lead, bot });
+
+        // After sending, if this is not the last lead, await a randomized delay between min and max
+        if (i < leads.length - 1) {
+          const delayMs = minDelayMs === maxDelayMs ? minDelayMs : randomBetween(minDelayMs, maxDelayMs);
+          console.log(`[orchestrator] ⏳ Aguardando ${Math.round(delayMs / 1000)}s antes do próximo envio`);
+          await sleep(delayMs);
+        }
       }
 
       if (lead.source === 'upload') {
@@ -110,9 +139,10 @@ serve(async (req) => {
     }
 
     await supabaseClient.from('ia_campaigns').update({ leads_contacted: campaign.leads_contacted + assignments.length }).eq('id', campaignId);
+    console.log('[orchestrator] ✅ Finalizado. Processados:', assignments.length, 'botsUsed:', bots.length);
     return new Response(JSON.stringify({ success: true, processed: assignments.length, botsUsed: bots.length }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error: any) {
-    console.error('❌ Erro:', error);
+    console.error('[orchestrator] ❌ Erro:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
