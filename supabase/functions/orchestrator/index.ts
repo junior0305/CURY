@@ -108,10 +108,7 @@ serve(async (req) => {
       console.log(`[orchestrator] 🧾 Processando lead ${i + 1}/${leads.length} -> ${lead.name || lead.phone} via bot ${bot.name}`);
 
       const { data: conversation } = await supabaseClient.from('ia_conversations').insert({ campaign_id: campaignId, bot_instance_id: bot.id, lead_id: lead.source === 'crm' ? lead.id : null, lead_name: lead.name, lead_phone: lead.phone, status: 'active', sentiment: 'unknown' }).select().single();
-      if (!conversation) {
-        console.warn('[orchestrator] ⚠️ Falha ao criar conversa, pulando lead');
-        continue;
-      }
+      if (!conversation) continue;
 
       const randomIndex = getRandomInt(messageTemplates.length);
       const selectedTemplate = messageTemplates[randomIndex];
@@ -121,8 +118,8 @@ serve(async (req) => {
         let message = selectedTemplate.text.replace(/\{nome\}/gi, lead.name || 'amigo').replace(/\{name\}/gi, lead.name || 'amigo');
         console.log('[orchestrator] 📨 Enviando (preview):', message.substring(0, 80));
 
-        // Invoke the sender function
-        await supabaseClient.functions.invoke('send_whatsapp_message', { body: { botId: bot.id, phone: lead.phone, message, conversationId: conversation.id } });
+        // Invoke the sender function with explicit instanceName to avoid DB mismatch
+        await supabaseClient.functions.invoke('send_whatsapp_message', { body: { botId: bot.id, phone: lead.phone, message, conversationId: conversation.id, instanceName: bot.instance_name } });
         assignments.push({ lead, bot });
 
         // After sending, if this is not the last lead, await a randomized delay between min and max

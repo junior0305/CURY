@@ -19,11 +19,14 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { botId, phone, message, conversationId } = await req.json();
+    const body = await req.json();
+    const { botId, phone, message, conversationId, instanceName: overrideInstanceName } = body || {};
+
     console.log('📝 Parâmetros recebidos');
     console.log('Bot ID:', botId);
     console.log('Phone:', phone);
     console.log('Conversation ID:', conversationId);
+    if (overrideInstanceName) console.log('Override instanceName provided:', overrideInstanceName);
 
     if (!botId || !phone || !message) {
       console.error('❌ Parâmetros faltando');
@@ -49,18 +52,32 @@ serve(async (req) => {
     }
 
     console.log('✅ Bot encontrado:', bot.name);
-    console.log('🔗 Evolution URL:', bot.evolution_api_url);
-    console.log('📛 Instance Name:', bot.instance_name);
+    console.log('🔗 Evolution URL (raw):', bot.evolution_api_url);
+    console.log('📛 Bot.instance_name (DB):', bot.instance_name);
     console.log('🔑 API Key presente:', !!bot.evolution_api_key);
 
-    const cleanPhone = phone.replace(/\D/g, '');
-    
-    const payload = {
-      number: cleanPhone,
-      text: message
-    };
+    // determine effective instance name: priority overrideInstanceName -> bot.instance_name -> bot.name
+    const rawInstance = (overrideInstanceName || bot.instance_name || bot.name || '').toString();
+    const instanceTrim = rawInstance.trim();
+    const instance = encodeURIComponent(instanceTrim);
 
-    const url = `${bot.evolution_api_url}/message/sendText/${bot.instance_name}`;
+    // normalize base URL (remove trailing slashes)
+    const base = (bot.evolution_api_url || '').toString().replace(/\/+$/g, '');
+
+    if (!base) {
+      console.error('❌ evolution_api_url vazio no bot');
+      return new Response(JSON.stringify({ error: 'Bot has no evolution_api_url configured' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (!instance) {
+      console.error('❌ instance name vazio após resolução');
+      return new Response(JSON.stringify({ error: 'Instance name could not be resolved' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const cleanPhone = phone.replace(/\D/g, '');
+    const payload = { number: cleanPhone, text: message };
+
+    const url = `${base}/message/sendText/${instance}`;
     console.log('🚀 URL completa:', url);
     console.log('📦 Payload:', JSON.stringify(payload));
 
@@ -69,7 +86,7 @@ serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': bot.evolution_api_key.trim(),
+        'apikey': (bot.evolution_api_key || '').toString().trim(),
       },
       body: JSON.stringify(payload),
     });
@@ -122,8 +139,8 @@ serve(async (req) => {
     await supabaseClient
       .from('bot_instances')
       .update({
-        messages_today: bot.messages_today + 1,
-        total_messages_sent: bot.total_messages_sent + 1,
+        messages_today: (bot.messages_today || 0) + 1,
+        total_messages_sent: (bot.total_messages_sent || 0) + 1,
         last_message_at: new Date().toISOString(),
       })
       .eq('id', botId);
@@ -135,7 +152,8 @@ serve(async (req) => {
       JSON.stringify({ 
         success: evolutionResponse.ok, 
         result,
-        status: evolutionResponse.status 
+        status: evolutionResponse.status,
+        used_instance: instanceTrim,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
