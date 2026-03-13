@@ -43,14 +43,17 @@ serve(async (req) => {
 
     for (const [brokerId, items] of Object.entries(byBroker)) {
       try {
+        // only take a small sample per broker (3 conversations)
+        const sampleItems = items.slice(0, 3);
+
         // mark processing
-        await supabaseClient.from('ai_coach_queue').update({ status: 'processing' }).in('id', items.map(i => i.id));
+        await supabaseClient.from('ai_coach_queue').update({ status: 'processing' }).in('id', sampleItems.map(i => i.id));
 
         const { data: broker } = await supabaseClient.from('profiles').select('first_name, full_name, email').eq('id', brokerId).single();
         const brokerName = broker?.first_name || broker?.full_name || 'Corretor';
 
-        // Load conversation and messages
-        const convIds = items.slice(0, 5).map(i => i.conversation_id);
+        // Load conversation and messages for the sample
+        const convIds = sampleItems.map(i => i.conversation_id);
         const { data: convs } = await supabaseClient.from('ia_conversations').select('*').in('id', convIds);
         const { data: messages } = await supabaseClient.from('ia_messages').select('*').in('conversation_id', convIds).order('created_at', { ascending: true });
 
@@ -60,10 +63,42 @@ serve(async (req) => {
           messagesByConv[m.conversation_id].push(m);
         });
 
-        // Build prompt content
-        const failedTexts = (convs || []).map(conv => {
+        // Build prompt content but filter out conversations that appear to be private (mostly broker messages)
+        const brokerTypes = ['human', 'broker', 'agent'];
+        const validConvs: any[] = [];
+        for (const conv of (convs || [])) {
+          const convMessagesAll = messagesByConv[conv.id] || [];
+          const leadCount = convMessagesAll.filter(m => (m.sender_type || '').toLowerCase() === 'lead').length;
+          const brokerCount = convMessagesAll.filter(m => brokerTypes.includes(((m.sender_type||'').toLowerCase()))).length;
+
+          // Skip if no lead messages or if broker messages dominate (likely private)
+          if (leadCount === 0) {
+            // mark corresponding queue item as skipped
+            await supabaseClient.from('ai_coach_queue').update({ status: 'skipped', processed_at: new Date().toISOString(), error_message: 'No lead messages' }).eq('conversation_id', conv.id).eq('broker_id', brokerId);
+            continue;
+          }
+
+          if (brokerCount > leadCount * 3) {
+            await supabaseClient.from('ai_coach_queue').update({ status: 'skipped', processed_at: new Date().toISOString(), error_message: 'Likely private conversation (broker-dominant)' }).eq('conversation_id', conv.id).eq('broker_id', brokerId);
+            continue;
+          }
+
+          validConvs.push(conv);
+        }
+
+        if (validConvs.length === 0) {
+          // nothing to analyze for this broker in this sample
+          continue;
+        }
+
+        const failedTexts = validConvs.map(conv => {
           const convMessages = messagesByConv[conv.id] || [];
-          const transcript = convMessages.map(m => `${m.sender_type === 'ia' ? brokerName : conv.lead_name}: ${m.message_text}`).join('\n');
+          // Only include lead and broker messages relevant to the interaction
+          const filtered = convMessages.filter(m => {
+            const t = (m.sender_type || '').toLowerCase();
+            return t === 'lead' || t === 'ia' || t === 'human' || t === 'broker' || t === 'agent';
+          });
+          const transcript = filtered.map(m => `${(m.sender_type || '').toLowerCase() === 'lead' ? conv.lead_name : brokerName}: ${m.message_text}`).join('\n');
           return `CONVERSA:\nLead: ${conv.lead_name}\nOrigem: ${conv.conversation_origin || 'N/A'}\n${transcript}\n---`;
         }).join('\n\n');
 
@@ -92,8 +127,21 @@ serve(async (req) => {
         const analysis = JSON.parse(jsonMatch[0]);
 
         // Insert analysis per conversation
-        for (const item of items.slice(0, 5)) {
+        for (const item of sampleItems) {
           const conv = (convs || []).find((c: any) => c.id === item.conversation_id);
+          if (!conv) {
+            // mark as failed if conversation not loaded
+            await supabaseClient.from('ai_coach_queue').update({ status: 'failed', error_message: 'Conversation not found', processed_at: new Date().toISOString() }).eq('id', item.id);
+            errors++;
+            continue;
+          }
+
+          // Only record analysis if conv was in validConvs
+          if (!validConvs.find(vc => vc.id === conv.id)) {
+            // was skipped earlier
+            continue;
+          }
+
           await supabaseClient.from('ai_coach_analysis').insert({
             conversation_id: item.conversation_id,
             broker_id: brokerId,
@@ -106,10 +154,11 @@ serve(async (req) => {
           });
 
           await supabaseClient.from('ia_conversations').update({ coach_analyzed_at: new Date().toISOString(), coach_score: analysis.quality_score || null }).eq('id', item.conversation_id);
-        }
 
-        await supabaseClient.from('ai_coach_queue').update({ status: 'completed', processed_at: new Date().toISOString() }).in('id', items.map(i => i.id));
-        processed += items.length;
+          // mark this queue item completed
+          await supabaseClient.from('ai_coach_queue').update({ status: 'completed', processed_at: new Date().toISOString() }).eq('id', item.id);
+          processed++;
+        }
       } catch (error: any) {
         console.error('[ai_coach_processor] error for broker', brokerId, error.message);
         await supabaseClient.from('ai_coach_queue').update({ status: 'failed', error_message: error.message, processed_at: new Date().toISOString() }).in('id', items.map(i => i.id));
