@@ -55,7 +55,7 @@ serve(async (req) => {
     // que tenham a flag lead_assignment_enabled ativa.
     const { data: brokers, error: brokerError } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name')
+      .select('id, first_name, last_name, automation_settings, bot_instance_id')
       .eq('lead_assignment_enabled', true);
 
     if (brokerError) {
@@ -110,6 +110,58 @@ serve(async (req) => {
       queue_name: origin || 'Make/Webhook',
       status: 'SUCCESS'
     });
+
+    // 8. Enviar boa-vinda via templates do IA Builder (round-robin por corretor)
+    try {
+      const automationSettings = chosenBroker.automation_settings || {};
+      if (automationSettings.welcome_enabled) {
+        // Fetch active welcome templates for this broker, fallback to global (broker_id is null)
+        let { data: templates } = await supabase
+          .from('welcome_templates')
+          .select('*')
+          .eq('is_active', true)
+          .in('broker_id', [chosenBroker.id, null]);
+
+        templates = templates || [];
+        if (templates.length > 0) {
+          // Determine index using count of existing leads for this broker to distribute templates round-robin
+          const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('broker_id', chosenBroker.id);
+          const idx = (typeof count === 'number' ? count : 0) % templates.length;
+          const chosenTemplate = templates[idx];
+
+          // Replace placeholders
+          const brokerName = `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() || 'Corretor';
+          const text = (chosenTemplate.message || '').replace(/\{nome\}/gi, name).replace(/\{broker\}/gi, brokerName);
+
+          // Send via send_whatsapp_message with explicit instanceName
+          // First resolve bot of broker
+          if (chosenBroker.bot_instance_id) {
+            const { data: bot } = await supabase.from('bot_instances').select('*').eq('id', chosenBroker.bot_instance_id).maybeSingle();
+            if (bot) {
+              const { error: sendError } = await supabase.functions.invoke('send_whatsapp_message', {
+                body: { botId: bot.id, phone: phone, message: text, conversationId: null, instanceName: bot.instance_name }
+              });
+
+              // Log send result in automation_logs for analytics (store template id)
+              await supabase.from('automation_logs').insert({
+                              rule_id: null,
+                              entity_type: 'welcome',
+                              entity_id: newLead.id,
+                              status: sendError ? 'failed' : 'success',
+                              message_sent: `[template:${chosenTemplate.id}] ${text}`,
+                              recipient_phone: phone
+                            });
+            } else {
+              console.warn('[incoming-lead] broker bot not found for welcome');
+            }
+          } else {
+            console.warn('[incoming-lead] broker has no bot_instance_id, skipping welcome');
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error('[incoming-lead] error sending welcome', e.message);
+    }
 
     return new Response(JSON.stringify({ success: true, lead: newLead }), {
       status: 200,
