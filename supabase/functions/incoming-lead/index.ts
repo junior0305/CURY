@@ -119,8 +119,7 @@ serve(async (req) => {
         let { data: templates } = await supabase
           .from('welcome_templates')
           .select('*')
-          .eq('is_active', true)
-          .in('broker_id', [chosenBroker.id, null]);
+          .eq('is_active', true);
 
         templates = templates || [];
         if (templates.length > 0) {
