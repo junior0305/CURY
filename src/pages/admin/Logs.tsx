@@ -106,38 +106,56 @@ export default function Logs() {
   const loadData = async () => {
     setLoading(true);
     const from = page * PAGE_SIZE;
-    const [{ data: dLogs }, { data: wLogs }, { data: aLogs }, { data: aiLogs }, { data: fMsgs }] = await Promise.all([
+
+    // Load base logs in parallel (distribution, webhook, automation, ai)
+    const [dRes, wRes, aRes, aiRes] = await Promise.all([
       supabase.from("distribution_logs").select("*").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
       supabase.from("webhook_logs").select("*").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
       supabase.from("automation_logs").select("*, automation_rules(name, type)").order("executed_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
       supabase.from("ai_context_analysis").select("*").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
-      // failed outgoing messages
-      supabase
-        .from('ia_messages')
-        .select('ia_messages.id, ia_messages.conversation_id, ia_messages.message_text, ia_messages.failed_at, ia_messages.error_message, ia_conversations.bot_instance_id, bot_instances.name as bot_name, ia_conversations.lead_phone')
-        .eq('ia_messages.direction', 'outgoing')
-        .not('ia_messages.failed_at', 'is', null)
-        .join('ia_conversations','ia_conversations.id','ia_messages.conversation_id')
-        .join('bot_instances','bot_instances.id','ia_conversations.bot_instance_id')
-        .order('ia_messages.failed_at', { ascending: false })
-        .range(from, from + PAGE_SIZE - 1),
     ]);
 
-    setDistLogs(dLogs || []);
-    setWebhookLogs(wLogs || []);
-    setAutomationLogs(aLogs || []);
-    setAiAnalyses(aiLogs || []);
-    // map failed messages
-    const fm = (fMsgs || []).map((r: any) => ({
+    setDistLogs(dRes.data || []);
+    setWebhookLogs(wRes.data || []);
+    setAutomationLogs(aRes.data || []);
+    setAiAnalyses(aiRes.data || []);
+
+    // Fetch failed outgoing messages (separate queries because supabase client doesn't support SQL JOINs that way)
+    const { data: failedRaw } = await supabase
+      .from('ia_messages')
+      .select('id, conversation_id, message_text, failed_at, error_message')
+      .eq('direction', 'outgoing')
+      .not('failed_at', 'is', null)
+      .order('failed_at', { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+
+    const failed = failedRaw || [];
+    const convIds = Array.from(new Set(failed.map((f: any) => f.conversation_id).filter(Boolean)));
+
+    let convMap: Record<string, any> = {};
+    let botMap: Record<string, any> = {};
+
+    if (convIds.length > 0) {
+      const { data: convs } = await supabase.from('ia_conversations').select('id, bot_instance_id, lead_phone').in('id', convIds);
+      convMap = (convs || []).reduce((acc: any, c: any) => { acc[c.id] = c; return acc; }, {});
+      const botIds = Array.from(new Set((convs || []).map((c: any) => c.bot_instance_id).filter(Boolean)));
+      if (botIds.length > 0) {
+        const { data: botsData } = await supabase.from('bot_instances').select('id, name').in('id', botIds);
+        botMap = (botsData || []).reduce((acc: any, b: any) => { acc[b.id] = b; return acc; }, {});
+      }
+    }
+
+    const fm = failed.map((r: any) => ({
       id: r.id,
       conversation_id: r.conversation_id,
       message_text: r.message_text,
       failed_at: r.failed_at,
       error_message: r.error_message,
-      bot_instance_id: r.bot_instance_id,
-      bot_name: r.bot_name,
-      lead_phone: r.lead_phone,
+      bot_instance_id: convMap[r.conversation_id]?.bot_instance_id || null,
+      bot_name: botMap[convMap[r.conversation_id]?.bot_instance_id || '']?.name || null,
+      lead_phone: convMap[r.conversation_id]?.lead_phone || null,
     })) as FailedMessage[];
+
     setFailedMessages(fm || []);
     setLoading(false);
   };
