@@ -37,9 +37,10 @@ serve(async (req) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') || '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+    );
 
     const leadValues: Record<string, string> = {
       tag: (tag || '').toString(),
@@ -59,9 +60,8 @@ serve(async (req) => {
           if (!chosenQueue) chosenQueue = q;
           continue;
         }
-        const field = q.match_field;
         const expected = (q.match_value || '').toString().trim().toUpperCase();
-        const leadVal = (leadValues[field] || '').toString().trim().toUpperCase();
+        const leadVal = (leadValues[q.match_field] || '').toString().trim().toUpperCase();
         if (expected && leadVal && expected === leadVal) {
           chosenQueue = q;
           break;
@@ -69,20 +69,34 @@ serve(async (req) => {
       }
     }
 
+    // Round-robin com retry otimista
     if (chosenQueue) {
-      const { data: freshQ } = await supabase.from('distribution_queues').select('*').eq('id', chosenQueue.id).maybeSingle();
-      if (freshQ && freshQ.broker_ids?.length > 0) {
-        const idx = (freshQ.last_assigned_index || 0) % freshQ.broker_ids.length;
-        const selectedBrokerId = freshQ.broker_ids[idx];
-        await supabase.from('distribution_queues').update({ last_assigned_index: (freshQ.last_assigned_index || 0) + 1 }).eq('id', chosenQueue.id);
-        const { data: brokerProfile } = await supabase.from('profiles').select('*').eq('id', selectedBrokerId).maybeSingle();
-        chosenBroker = brokerProfile;
+      const maxAttempts = 3;
+      for (let i = 0; i < maxAttempts; i++) {
+        const { data: freshQ } = await supabase.from('distribution_queues').select('*').eq('id', chosenQueue.id).maybeSingle();
+        if (freshQ?.broker_ids?.length > 0) {
+          const oldIndex = freshQ.last_assigned_index || 0;
+          const idx = oldIndex % freshQ.broker_ids.length;
+          
+          const { data: updated } = await supabase.from('distribution_queues')
+            .update({ last_assigned_index: oldIndex + 1 })
+            .eq('id', chosenQueue.id)
+            .eq('last_assigned_index', oldIndex)
+            .select()
+            .maybeSingle();
+          
+          if (updated) {
+            const { data: broker } = await supabase.from('profiles').select('*').eq('id', freshQ.broker_ids[idx]).maybeSingle();
+            chosenBroker = broker;
+            break;
+          }
+        }
       }
     }
 
     if (!chosenBroker) {
       const { data: brokers } = await supabase.from('profiles').select('*').eq('lead_assignment_enabled', true).limit(1);
-      if (brokers && brokers.length > 0) chosenBroker = brokers[0];
+      if (brokers?.length > 0) chosenBroker = brokers[0];
     }
 
     const nowIso = new Date().toISOString();
@@ -108,22 +122,66 @@ serve(async (req) => {
       status: 'SUCCESS'
     });
 
-    let welcomeSent = false;
-    if (chosenBroker && chosenBroker.automation_settings?.welcome_enabled && chosenBroker.bot_instance_id) {
-      const { data: brokerBot } = await supabase.from('bot_instances').select('*').eq('id', chosenBroker.bot_instance_id).maybeSingle();
-      if (brokerBot) {
-        let text = `Olá ${name}! 👋\n\nObrigado pelo interesse!`;
-        const { response } = await fetch(`${brokerBot.evolution_api_url}/message/sendText/${brokerBot.instance_name}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': brokerBot.evolution_api_key },
-          body: JSON.stringify({ number: phone, text: text }),
-        }).catch(() => ({ response: { ok: false } }));
-
-        welcomeSent = true; 
+    // 1️⃣ NOTIFICAR CORRETOR
+    let notificationSent = false;
+    if (chosenBroker?.phone) {
+      const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
+      if (setting?.value === true) {
+        const { data: bot } = await supabase.from('bot_instances').select('*').eq('phone', '11988628222').maybeSingle();
+        if (bot) {
+          const msg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${origin}`;
+          try {
+            const res = await fetch(`${bot.evolution_api_url}/message/sendText/${bot.instance_name}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'apikey': bot.evolution_api_key },
+              body: JSON.stringify({ number: chosenBroker.phone, text: msg }),
+            });
+            if (res.ok) notificationSent = true;
+          } catch (e) {}
+        }
       }
     }
 
-    return new Response(JSON.stringify({ success: true, lead: newLead, welcome_sent: welcomeSent }), {
+    // 2️⃣ BOAS-VINDAS PARA LEAD
+    let welcomeSent = false;
+    if (chosenBroker?.automation_settings?.welcome_enabled && chosenBroker.bot_instance_id) {
+      const { data: brokerBot } = await supabase.from('bot_instances').select('*').eq('id', chosenBroker.bot_instance_id).maybeSingle();
+      if (brokerBot) {
+        let text = `Olá ${name}! 👋\n\nObrigado pelo interesse!`;
+        
+        const { data: templates } = await supabase.from('welcome_templates').select('*').eq('is_active', true);
+        if (templates?.length > 0) {
+          const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('assigned_broker_id', chosenBroker.id);
+          const idx = (count || 0) % templates.length;
+          const brokerName = `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() || 'Corretor';
+          text = (templates[idx].message || '').replace(/\{nome\}/gi, name).replace(/\{broker\}/gi, brokerName);
+        }
+
+        try {
+          const res = await fetch(`${brokerBot.evolution_api_url}/message/sendText/${brokerBot.instance_name}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': brokerBot.evolution_api_key },
+            body: JSON.stringify({ number: phone, text }),
+          });
+          welcomeSent = res.ok;
+          
+          await supabase.from('automation_logs').insert({
+            entity_type: 'welcome',
+            entity_id: newLead.id,
+            status: res.ok ? 'success' : 'failed',
+            message_sent: text,
+            recipient_phone: phone
+          });
+        } catch (e) {}
+      }
+    }
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      lead: newLead, 
+      notification_sent: notificationSent,
+      welcome_sent: welcomeSent 
+    }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
