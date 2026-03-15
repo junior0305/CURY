@@ -122,7 +122,7 @@ serve(async (req) => {
       status: 'SUCCESS'
     });
 
-    // 1️⃣ NOTIFICAR CORRETOR
+    // 1️⃣ NOTIFICAR CORRETOR (via instância Junior)
     let notificationSent = false;
     if (chosenBroker?.phone) {
       const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
@@ -142,13 +142,15 @@ serve(async (req) => {
       }
     }
 
-    // 2️⃣ BOAS-VINDAS PARA LEAD
+    // 2️⃣ BOAS-VINDAS PARA O LEAD (via instância do corretor)
     let welcomeSent = false;
     if (chosenBroker?.automation_settings?.welcome_enabled && chosenBroker.bot_instance_id) {
       const { data: brokerBot } = await supabase.from('bot_instances').select('*').eq('id', chosenBroker.bot_instance_id).maybeSingle();
+      
       if (brokerBot) {
         let text = `Olá ${name}! 👋\n\nObrigado pelo interesse!`;
         
+        // Buscar template de boas-vindas
         const { data: templates } = await supabase.from('welcome_templates').select('*').eq('is_active', true);
         if (templates?.length > 0) {
           const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('assigned_broker_id', chosenBroker.id);
@@ -158,17 +160,18 @@ serve(async (req) => {
         }
 
         try {
-          const res = await fetch(`${brokerBot.evolution_api_url}/message/sendText/${brokerBot.instance_name}`, {
+          const response = await fetch(`${brokerBot.evolution_api_url}/message/sendText/${brokerBot.instance_name}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'apikey': brokerBot.evolution_api_key },
             body: JSON.stringify({ number: phone, text }),
           });
-          welcomeSent = res.ok;
+          
+          if (response.ok) welcomeSent = true;
           
           await supabase.from('automation_logs').insert({
             entity_type: 'welcome',
             entity_id: newLead.id,
-            status: res.ok ? 'success' : 'failed',
+            status: response.ok ? 'success' : 'failed',
             message_sent: text,
             recipient_phone: phone
           });
