@@ -69,7 +69,7 @@ serve(async (req) => {
       }
     }
 
-    // Round-robin com retry otimista
+    // Round-robin otimista
     if (chosenQueue) {
       const maxAttempts = 3;
       for (let i = 0; i < maxAttempts; i++) {
@@ -122,61 +122,55 @@ serve(async (req) => {
       status: 'SUCCESS'
     });
 
-    // 1️⃣ NOTIFICAR CORRETOR (via instância Junior)
+    // ✅ NOTIFICAR CORRETOR (via send-whatsapp)
     let notificationSent = false;
     if (chosenBroker?.phone) {
       const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
+      
       if (setting?.value === true) {
-        const { data: bot } = await supabase.from('bot_instances').select('*').eq('phone', '11988628222').maybeSingle();
-        if (bot) {
-          const msg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${origin}`;
-          try {
-            const res = await fetch(`${bot.evolution_api_url}/message/sendText/${bot.instance_name}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'apikey': bot.evolution_api_key },
-              body: JSON.stringify({ number: chosenBroker.phone, text: msg }),
-            });
-            if (res.ok) notificationSent = true;
-          } catch (e) {}
+        const { data: notificationBot } = await supabase.from('bot_instances').select('id').eq('phone', '11988628222').maybeSingle();
+        
+        if (notificationBot) {
+          const notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${origin}`;
+          
+          const { data: result } = await supabase.functions.invoke('send-whatsapp', {
+            body: {
+              instance_id: notificationBot.id,
+              phone: chosenBroker.phone,
+              message: notifMsg,
+              type: 'notification'
+            }
+          });
+          
+          notificationSent = result?.success || false;
         }
       }
     }
 
-    // 2️⃣ BOAS-VINDAS PARA O LEAD (via instância do corretor)
+    // ✅ BOAS-VINDAS PARA LEAD (via send-whatsapp)
     let welcomeSent = false;
     if (chosenBroker?.automation_settings?.welcome_enabled && chosenBroker.bot_instance_id) {
-      const { data: brokerBot } = await supabase.from('bot_instances').select('*').eq('id', chosenBroker.bot_instance_id).maybeSingle();
+      let text = `Olá ${name}! 👋\n\nObrigado pelo interesse!`;
       
-      if (brokerBot) {
-        let text = `Olá ${name}! 👋\n\nObrigado pelo interesse!`;
-        
-        // Buscar template de boas-vindas
-        const { data: templates } = await supabase.from('welcome_templates').select('*').eq('is_active', true);
-        if (templates?.length > 0) {
-          const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('assigned_broker_id', chosenBroker.id);
-          const idx = (count || 0) % templates.length;
-          const brokerName = `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() || 'Corretor';
-          text = (templates[idx].message || '').replace(/\{nome\}/gi, name).replace(/\{broker\}/gi, brokerName);
-        }
-
-        try {
-          const response = await fetch(`${brokerBot.evolution_api_url}/message/sendText/${brokerBot.instance_name}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': brokerBot.evolution_api_key },
-            body: JSON.stringify({ number: phone, text }),
-          });
-          
-          if (response.ok) welcomeSent = true;
-          
-          await supabase.from('automation_logs').insert({
-            entity_type: 'welcome',
-            entity_id: newLead.id,
-            status: response.ok ? 'success' : 'failed',
-            message_sent: text,
-            recipient_phone: phone
-          });
-        } catch (e) {}
+      const { data: templates } = await supabase.from('welcome_templates').select('*').eq('is_active', true);
+      if (templates?.length > 0) {
+        const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('assigned_broker_id', chosenBroker.id);
+        const idx = (count || 0) % templates.length;
+        const brokerName = `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() || 'Corretor';
+        text = (templates[idx].message || '').replace(/\{nome\}/gi, name).replace(/\{broker\}/gi, brokerName);
       }
+
+      const { data: result } = await supabase.functions.invoke('send-whatsapp', {
+        body: {
+          instance_id: chosenBroker.bot_instance_id,
+          phone: phone,
+          message: text,
+          lead_id: newLead.id,
+          type: 'welcome'
+        }
+      });
+      
+      welcomeSent = result?.success || false;
     }
 
     return new Response(JSON.stringify({ 
@@ -190,6 +184,7 @@ serve(async (req) => {
     });
 
   } catch (error: any) {
+    console.error('[incoming-lead] Error:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
