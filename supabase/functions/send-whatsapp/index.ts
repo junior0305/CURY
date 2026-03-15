@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
 const corsHeaders = {
@@ -6,135 +6,98 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+interface SendWhatsAppRequest {
+  instance_id: string;
+  phone: string;
+  message: string;
+  lead_id?: string;
+  type: 'notification' | 'welcome' | 'followup' | 'response';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const supabase = createClient(supabaseUrl, serviceRoleKey);
-
-  let integrationKey = 'WHATSAPP_N8N_URL';
-  let requestBody: any = {};
-
   try {
-    requestBody = await req.json()
-    const { phone, message, overrideUrl, instance_id, instance_name } = requestBody
+    const { instance_id, phone, message, lead_id, type }: SendWhatsAppRequest = await req.json();
 
-    if (!phone || !message) {
-      throw new Error('Phone and message are required')
+    console.log(`[send-whatsapp] Type: ${type}, Phone: ${phone}, Lead: ${lead_id || 'N/A'}`);
+
+    if (!instance_id || !phone || !message) {
+      return new Response(JSON.stringify({ error: 'Missing required fields' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    let WEBHOOK_URL = overrideUrl; // Priority to override
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') || '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+    );
 
-    // Only fetch from DB if no override provided
-    if (!WEBHOOK_URL) {
-      const { data: config, error: configError } = await supabase
-        .from('system_integrations')
-        .select('value')
-        .eq('key', integrationKey)
-        .single();
-      
-      if (configError || !config) {
-         throw new Error('Configuration WHATSAPP_N8N_URL not found in system_integrations table.');
-      }
-      WEBHOOK_URL = config.value;
+    const { data: bot, error: botError } = await supabase
+      .from('bot_instances')
+      .select('*')
+      .eq('id', instance_id)
+      .maybeSingle();
+
+    if (botError || !bot) {
+      console.error('[send-whatsapp] Bot not found:', instance_id);
+      return new Response(JSON.stringify({ error: 'Bot instance not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    let cleanPhone = phone.replace(/\D/g, '')
+    console.log(`[send-whatsapp] Bot: ${bot.instance_name}`);
+    console.log(`[send-whatsapp] URL: ${bot.evolution_api_url}/message/sendText/${bot.instance_name}`);
 
-    // VALIDATION: Ensure phone has content
-    if (!cleanPhone || cleanPhone.length < 8) {
-       throw new Error(`Phone number invalid after cleaning: ${phone} -> ${cleanPhone}`);
-    }
-
-    // INTELLIGENT FORMATTING: Add Brazil Country Code (55) if missing for typical 10/11-digit local numbers
-    if (cleanPhone.length === 10 || cleanPhone.length === 11) {
-      cleanPhone = '55' + cleanPhone;
-    }
-
-    // Resolve evolution instance: prefer instance_id -> instance_name -> undefined
-    let resolvedInstanceName: string | null = null;
-    if (instance_id) {
-      const { data: inst, error: instErr } = await supabase
-        .from('prospect_instances')
-        .select('evolution_instance')
-        .eq('id', instance_id)
-        .single();
-      if (instErr) {
-        console.warn('[WhatsApp] Could not fetch prospect_instances for instance_id', instance_id, instErr.message);
-      }
-      resolvedInstanceName = inst?.evolution_instance || null;
-    }
-    if (!resolvedInstanceName && instance_name) resolvedInstanceName = instance_name;
-
-    console.log(`[WhatsApp] Sending to ${cleanPhone} via ${WEBHOOK_URL} (instance: ${resolvedInstanceName || 'none'})`)
-
-    const startTime = Date.now();
-    let response;
-    let responseText;
-    let statusCode;
-    let fetchError = null;
-
-    try {
-      // Sending JSON payload so n8n can easily read fields like Contato and Instance
-      const payloadToN8n: any = {
-        Contato: cleanPhone,
-        Mensagem: message,
-      };
-      if (resolvedInstanceName) payloadToN8n.Instance = resolvedInstanceName;
-      if (instance_id) payloadToN8n.InstanceId = instance_id;
-
-      response = await fetch(WEBHOOK_URL, {
+    const response = await fetch(
+      `${bot.evolution_api_url}/message/sendText/${bot.instance_name}`,
+      {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'apikey': bot.evolution_api_key
         },
-        body: JSON.stringify(payloadToN8n),
-      })
-      statusCode = response.status;
-      responseText = await response.text();
-    } catch (err) {
-      fetchError = err.message;
-      statusCode = 0;
+        body: JSON.stringify({
+          number: phone,
+          text: message
+        })
+      }
+    );
+
+    const responseText = await response.text();
+    console.log(`[send-whatsapp] Status: ${response.status}`);
+    console.log(`[send-whatsapp] Response: ${responseText}`);
+
+    const success = response.ok;
+
+    if (lead_id) {
+      await supabase.from('automation_logs').insert({
+        entity_type: type,
+        entity_id: lead_id,
+        status: success ? 'success' : 'failed',
+        message_sent: message,
+        recipient_phone: phone
+      });
     }
 
-    // 2. Log Attempt (include instance data)
-    await supabase.from('webhook_logs').insert({
-      integration_key: integrationKey,
-      payload: { phone: cleanPhone, message, instance_id: instance_id || null, instance_name: resolvedInstanceName },
-      status_code: statusCode,
-      response_body: responseText ? responseText.substring(0, 1000) : null,
-      error_message: fetchError || (statusCode >= 400 ? 'HTTP Error' : null)
+    return new Response(JSON.stringify({
+      success,
+      status: response.status,
+      response: responseText
+    }), {
+      status: success ? 200 : 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
-    if (fetchError || !response?.ok) {
-      throw new Error(`Webhook error: ${statusCode} ${fetchError || responseText}`)
-    }
-
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    })
   } catch (error: any) {
-    console.error('[WhatsApp] Error:', error.message)
-    
-    // Log fatal errors too (attempt to include raw request body)
-    try {
-      await supabase.from('webhook_logs').insert({
-        integration_key: integrationKey,
-        payload: requestBody || {},
-        status_code: 500,
-        error_message: error.message
-      });
-    } catch (e) {
-      console.error('[WhatsApp] Failed to log error to webhook_logs:', e.message);
-    }
-
+    console.error('[send-whatsapp] Error:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
-    })
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 })
