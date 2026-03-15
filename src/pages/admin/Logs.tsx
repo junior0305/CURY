@@ -93,6 +93,9 @@ export default function Logs() {
   });
   const [bots, setBots] = useState<any[]>([]);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [retryMap, setRetryMap] = useState<Record<string, { attempts: number; last_error: string | null }>>({});
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportData, setReportData] = useState<any[]>([]);
 
   const loadBotsForTest = async () => {
     const { data } = await supabase
@@ -120,7 +123,7 @@ export default function Logs() {
     setAutomationLogs(aRes.data || []);
     setAiAnalyses(aiRes.data || []);
 
-    // Fetch failed outgoing messages (separate queries because supabase client doesn't support SQL JOINs that way)
+    // Fetch failed outgoing messages
     const { data: failedRaw } = await supabase
       .from('ia_messages')
       .select('id, conversation_id, message_text, failed_at, error_message')
@@ -136,7 +139,7 @@ export default function Logs() {
     let botMap: Record<string, any> = {};
 
     if (convIds.length > 0) {
-      const { data: convs } = await supabase.from('ia_conversations').select('id, bot_instance_id, lead_phone').in('id', convIds);
+      const { data: convs } = await supabase.from('ia_conversations').select('id, bot_instance_id, lead_phone, escalated_to').in('id', convIds);
       convMap = (convs || []).reduce((acc: any, c: any) => { acc[c.id] = c; return acc; }, {});
       const botIds = Array.from(new Set((convs || []).map((c: any) => c.bot_instance_id).filter(Boolean)));
       if (botIds.length > 0) {
@@ -157,6 +160,18 @@ export default function Logs() {
     })) as FailedMessage[];
 
     setFailedMessages(fm || []);
+
+    // Load retry info for these failed messages
+    const failedIds = fm.map(f => f.id).filter(Boolean);
+    if (failedIds.length > 0) {
+      const { data: retries } = await supabase.from('webhook_retry').select('ia_message_id, attempts, last_error').in('ia_message_id', failedIds as string[]);
+      const map: Record<string, any> = {};
+      (retries || []).forEach((r: any) => { map[r.ia_message_id] = { attempts: r.attempts, last_error: r.last_error }; });
+      setRetryMap(map);
+    } else {
+      setRetryMap({});
+    }
+
     setLoading(false);
   };
 
@@ -207,6 +222,7 @@ export default function Logs() {
     }
   };
 
+  // Resend single (unchanged) but now record retry
   const resendFailed = async (msg: FailedMessage) => {
     try {
       setResendingId(msg.id);
@@ -216,7 +232,12 @@ export default function Logs() {
       const { error } = await supabase.functions.invoke('send_whatsapp_message', {
         body: { botId: msg.bot_instance_id, phone, message: msg.message_text || '', conversationId: msg.conversation_id }
       });
-      if (error) throw error;
+      if (error) {
+        // log retry
+        await supabase.from('webhook_retry').insert({ ia_message_id: msg.id, attempts: 1, last_error: error.message, next_try: new Date() });
+        throw error;
+      }
+
       toast({ title: '✅ Reenviado', description: `Mensagem reenviada para ${phone}` });
       // refresh lists
       await loadData();
@@ -225,6 +246,97 @@ export default function Logs() {
     } finally {
       setResendingId(null);
     }
+  };
+
+  // Bulk resend with confirmation and concurrency control
+  const resendAll = async () => {
+    if (!confirm(`Confirmar reenvio de ${failedMessages.length} mensagens não enviadas?`)) return;
+    const toResend = [...failedMessages];
+    const concurrency = 3;
+    let index = 0;
+    const results: { id: string; ok: boolean; error?: any }[] = [];
+
+    const worker = async () => {
+      while (index < toResend.length) {
+        const i = index++;
+        const msg = toResend[i];
+        try {
+          await resendFailed(msg);
+          results.push({ id: msg.id, ok: true });
+        } catch (err) {
+          results.push({ id: msg.id, ok: false, error: err });
+        }
+      }
+    };
+
+    const workers = Array.from({ length: concurrency }).map(() => worker());
+    await Promise.all(workers);
+    toast({ title: 'Reenvio concluído', description: `${results.filter(r => r.ok).length} enviados, ${results.filter(r => !r.ok).length} falharam` });
+    await loadData();
+  };
+
+  // Generate aggregated report per bot / broker
+  const generateReport = async () => {
+    setReportOpen(true);
+    // aggregate from failedMessages and conversation info
+    const mapByBot: Record<string, number> = {};
+    const mapByBroker: Record<string, { name: string; count: number }> = {};
+
+    // fetch conversation -> broker mapping for failed messages
+    const convIds = Array.from(new Set(failedMessages.map(f => f.conversation_id).filter(Boolean)));
+    let convMap: Record<string, any> = {};
+    if (convIds.length > 0) {
+      const { data: convs } = await supabase.from('ia_conversations').select('id, bot_instance_id, escalated_to').in('id', convIds);
+      convMap = (convs || []).reduce((acc: any, c: any) => { acc[c.id] = c; return acc; }, {});
+      const botIds = Array.from(new Set(Object.values(convMap).map((c: any) => c.bot_instance_id).filter(Boolean)));
+      if (botIds.length > 0) {
+        const { data: botsData } = await supabase.from('bot_instances').select('id, name').in('id', botIds);
+        const botNameMap = (botsData || []).reduce((acc: any, b: any) => { acc[b.id] = b.name; return acc; }, {});
+        failedMessages.forEach(f => {
+          const conv = convMap[f.conversation_id];
+          const botId = conv?.bot_instance_id;
+          const botName = botNameMap[botId] || 'Desconhecido';
+          mapByBot[botName] = (mapByBot[botName] || 0) + 1;
+          const brokerId = conv?.escalated_to;
+          if (brokerId) {
+            mapByBroker[brokerId] = mapByBroker[brokerId] || { name: brokerId, count: 0 };
+            mapByBroker[brokerId].count += 1;
+          }
+        });
+      }
+    }
+
+    const botRows = Object.entries(mapByBot).map(([botName, count]) => ({ botName, count }));
+    // resolve broker names
+    const brokerIds = Object.keys(mapByBroker);
+    if (brokerIds.length > 0) {
+      const { data: brokers } = await supabase.from('profiles').select('id, full_name').in('id', brokerIds);
+      (brokers || []).forEach(b => { if (mapByBroker[b.id]) mapByBroker[b.id].name = b.full_name || b.id; });
+    }
+    const brokerRows = Object.entries(mapByBroker).map(([id, v]) => ({ brokerId: id, brokerName: v.name, count: v.count }));
+
+    setReportData([{ title: 'Por Instância', rows: botRows }, { title: 'Por Corretor', rows: brokerRows }]);
+  };
+
+  const exportReportCSV = () => {
+    const parts: string[] = [];
+    reportData.forEach(section => {
+      parts.push(section.title);
+      const rows = section.rows;
+      if (rows.length === 0) return;
+      const headers = Object.keys(rows[0]);
+      parts.push(headers.join(','));
+      rows.forEach((r: any) => parts.push(Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')));
+      parts.push('');
+    });
+    const csv = parts.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `report_failures_${new Date().toISOString()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const fmt = (date: string) => new Date(date).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -590,6 +702,59 @@ export default function Logs() {
                 Enviar Teste
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <div className="flex justify-center gap-3 mt-4">
+        <Button onClick={resendAll} variant="outline" className="border-red-500 text-red-400 hover:bg-red-900/20">
+          <Zap className="w-4 h-4 mr-2" /> Reenviar Tudo
+        </Button>
+        <Button onClick={generateReport} variant="outline" className="border-blue-500 text-blue-400 hover:bg-blue-900/20">
+          <Brain className="w-4 h-4 mr-2" /> Relatório
+        </Button>
+      </div>
+
+      <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+        <DialogContent className="bg-slate-900 border-gray-500 text-white max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black">Relatório de Mensagens Não Enviadas</DialogTitle>
+            <DialogDescription className="text-gray-400">Estatísticas por instância e corretor</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {reportData.map((section, i) => (
+              <div key={i} className="bg-slate-800/40 border border-gray-700/40 rounded-xl p-4">
+                <h3 className="text-lg font-semibold mb-3">{section.title}</h3>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-700/50 bg-slate-800/60">
+                      {section.rows.length > 0 && Object.keys(section.rows[0]).map(h => (
+                        <th key={h} className="text-left px-4 py-3 text-xs text-gray-500 uppercase tracking-wider font-semibold">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {section.rows.map((row, j) => (
+                      <tr key={j} className="border-b border-gray-700/30 hover:bg-slate-800/30">
+                        {section.rows.length > 0 && Object.keys(row).map(h => (
+                          <td key={h} className="px-4 py-3 text-gray-400 text-xs">{row[h]}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button onClick={exportReportCSV} variant="outline" className="border-green-500 text-green-400 hover:bg-green-900/20">
+              Exportar CSV
+            </Button>
+            <Button onClick={() => setReportOpen(false)} variant="outline" className="border-gray-600 text-gray-300 hover:bg-slate-800">
+              Fechar
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
