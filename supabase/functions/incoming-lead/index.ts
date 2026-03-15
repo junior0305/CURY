@@ -54,23 +54,40 @@ serve(async (req) => {
     let chosenBroker: any = null;
     let chosenQueue: any = null;
 
+    console.log('[MATCHING] Lead values:', leadValues);
+    console.log('[MATCHING] Verificando filas...');
+    
     if (queues && queues.length > 0) {
+      console.log(`[MATCHING] Total de filas: ${queues.length}`);
+      
       for (const q of queues) {
+        console.log(`[MATCHING] Fila: ${q.name}, match_field: ${q.match_field}, match_value: ${q.match_value}`);
+        
         if (!q.match_field || q.match_field === '*') {
-          if (!chosenQueue) chosenQueue = q;
+          if (!chosenQueue) {
+            console.log(`[MATCHING] Fila ${q.name} marcada como fallback`);
+            chosenQueue = q;
+          }
           continue;
         }
+        
         const expected = (q.match_value || '').toString().trim().toUpperCase();
         const leadVal = (leadValues[q.match_field] || '').toString().trim().toUpperCase();
+        
+        console.log(`[MATCHING] Comparando campo "${q.match_field}": "${leadVal}" === "${expected}"`);
+        
         if (expected && leadVal && expected === leadVal) {
+          console.log(`[MATCHING] ✅ MATCH! Fila escolhida: ${q.name}`);
           chosenQueue = q;
           break;
         }
       }
     }
 
+    console.log(`[MATCHING] Fila final: ${chosenQueue?.name || 'NENHUMA'}`);
+
     // Round-robin otimista
-    if (chosenQueue) {
+    if (chosenQueue && chosenQueue.broker_ids?.length > 0) {
       const maxAttempts = 3;
       for (let i = 0; i < maxAttempts; i++) {
         const { data: freshQ } = await supabase.from('distribution_queues').select('*').eq('id', chosenQueue.id).maybeSingle();
@@ -88,6 +105,7 @@ serve(async (req) => {
           if (updated) {
             const { data: broker } = await supabase.from('profiles').select('*').eq('id', freshQ.broker_ids[idx]).maybeSingle();
             chosenBroker = broker;
+            console.log(`[DISTRIBUTION] Corretor escolhido via round-robin: ${broker?.first_name}`);
             break;
           }
         }
@@ -95,6 +113,7 @@ serve(async (req) => {
     }
 
     if (!chosenBroker) {
+      console.log('[DISTRIBUTION] Fallback: escolhendo primeiro corretor habilitado');
       const { data: brokers } = await supabase.from('profiles').select('*').eq('lead_assignment_enabled', true).limit(1);
       if (brokers?.length > 0) chosenBroker = brokers[0];
     }
@@ -122,7 +141,7 @@ serve(async (req) => {
       status: 'SUCCESS'
     });
 
-    // ✅ NOTIFICAR CORRETOR (via send-whatsapp)
+    // NOTIFICAR CORRETOR
     let notificationSent = false;
     if (chosenBroker?.phone) {
       const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
@@ -147,7 +166,7 @@ serve(async (req) => {
       }
     }
 
-    // ✅ BOAS-VINDAS PARA LEAD (via send-whatsapp)
+    // BOAS-VINDAS PARA LEAD
     let welcomeSent = false;
     if (chosenBroker?.automation_settings?.welcome_enabled && chosenBroker.bot_instance_id) {
       let text = `Olá ${name}! 👋\n\nObrigado pelo interesse!`;
