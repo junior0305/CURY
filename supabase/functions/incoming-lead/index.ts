@@ -201,56 +201,100 @@ serve(async (req) => {
       status: 'SUCCESS'
     });
 
-    // 8. Enviar boa-vinda via templates do IA Builder (se aplicável)
+    // ✅ NOTIFICAÇÕES E BOAS-VINDAS
+    let notificationSent = false;
+    let welcomeSent = false;
+
+    // 1) NOTIFICAR CORRETOR (via instância de notificação)
     try {
-      if (chosenBroker) {
-        const automationSettings = chosenBroker.automation_settings || {};
-        if (automationSettings.welcome_enabled) {
-          // Fetch active welcome templates for this broker, fallback to global
-          let { data: templates } = await supabase
-            .from('welcome_templates')
-            .select('*')
-            .eq('is_active', true);
+      if (chosenBroker && chosenBroker.phone) {
+        const { data: notifySetting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
 
-          templates = templates || [];
-          if (templates.length > 0) {
-            const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('assigned_broker_id', chosenBroker.id);
-            const idx = (typeof count === 'number' ? count : 0) % templates.length;
-            const chosenTemplate = templates[idx];
+        if (notifySetting?.value === true) {
+          console.log('[incoming-lead] Notificando corretor:', chosenBroker.phone);
 
-            const brokerName = `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() || 'Corretor';
-            const text = (chosenTemplate.message || '').replace(/\{nome\}/gi, name).replace(/\{broker\}/gi, brokerName);
+          const { data: notificationBot } = await supabase.from('bot_instances').select('*').eq('phone', '11988628222').maybeSingle();
 
-            // Send via send_whatsapp_message with explicit instanceName
-            if (chosenBroker.bot_instance_id) {
-              const { data: bot } = await supabase.from('bot_instances').select('*').eq('id', chosenBroker.bot_instance_id).maybeSingle();
-              if (bot) {
-                const { error: sendError } = await supabase.functions.invoke('send_whatsapp_message', {
-                  body: { botId: bot.id, phone: phone, message: text, conversationId: null, instanceName: bot.instance_name }
-                });
+          if (notificationBot) {
+            const notifMsg = `🎯 *Novo Lead Atribuído!*\n\n👤 *Nome:* ${name}\n📞 *Telefone:* ${phone}\n🏷️ *Tag:* ${tag || 'Sem tag'}\n📍 *Origem:* ${origin}`;
 
-                await supabase.from('automation_logs').insert({
-                  rule_id: null,
-                  entity_type: 'welcome',
-                  entity_id: newLead.id,
-                  status: sendError ? 'failed' : 'success',
-                  message_sent: `[template:${chosenTemplate.id}] ${text}`,
-                  recipient_phone: phone
-                });
+            try {
+              const response = await fetch(`${notificationBot.evolution_api_url}/message/sendText/${notificationBot.instance_name}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'apikey': notificationBot.evolution_api_key },
+                body: JSON.stringify({ number: chosenBroker.phone, text: notifMsg }),
+              });
+              if (response.ok) {
+                notificationSent = true;
+                console.log('[incoming-lead] Notificação enviada');
               } else {
-                console.warn('[incoming-lead] broker bot not found for welcome');
+                console.warn('[incoming-lead] notification response not ok', response.status);
               }
-            } else {
-              console.warn('[incoming-lead] broker has no bot_instance_id, skipping welcome');
+            } catch (e: any) {
+              console.error('[incoming-lead] Erro ao notificar:', e.message);
             }
           }
         }
       }
     } catch (e: any) {
-      console.error('[incoming-lead] error sending welcome', e.message);
+      console.error('[incoming-lead] notify broker error', e.message);
     }
 
-    return new Response(JSON.stringify({ success: true, lead: newLead }), {
+    // 2) ENVIAR BOAS-VINDAS (via instância do corretor)
+    try {
+      if (chosenBroker) {
+        const automationSettings = chosenBroker.automation_settings || {};
+        if (automationSettings.welcome_enabled && chosenBroker.bot_instance_id) {
+          console.log('[incoming-lead] Enviando boas-vindas:', phone);
+
+          const { data: brokerBot } = await supabase.from('bot_instances').select('*').eq('id', chosenBroker.bot_instance_id).maybeSingle();
+
+          if (brokerBot) {
+            let { data: templates } = await supabase.from('welcome_templates').select('*').eq('is_active', true);
+            templates = templates || [];
+
+            let text = `Olá ${name}! 👋\n\nObrigado pelo interesse!`;
+
+            if (templates.length > 0) {
+              const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('assigned_broker_id', chosenBroker.id);
+              const idx = (typeof count === 'number' ? count : 0) % templates.length;
+              const chosenTemplate = templates[idx];
+              const brokerName = `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() || 'Corretor';
+              text = (chosenTemplate.message || '').replace(/\{nome\}/gi, name).replace(/\{broker\}/gi, brokerName);
+            }
+
+            try {
+              const response = await fetch(`${brokerBot.evolution_api_url}/message/sendText/${brokerBot.instance_name}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'apikey': brokerBot.evolution_api_key },
+                body: JSON.stringify({ number: phone, text: text }),
+              });
+
+              welcomeSent = response.ok;
+
+              await supabase.from('automation_logs').insert({
+                entity_type: 'welcome',
+                entity_id: newLead.id,
+                status: response.ok ? 'success' : 'failed',
+                message_sent: text,
+                recipient_phone: phone
+              });
+            } catch (e: any) {
+              console.error('[incoming-lead] error sending welcome', e.message);
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error('[incoming-lead] error sending welcome outer', e.message);
+    }
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      lead: newLead,
+      notification_sent: notificationSent,
+      welcome_sent: welcomeSent
+    }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
