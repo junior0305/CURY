@@ -58,7 +58,18 @@ interface AIAnalysis {
   created_at: string;
 }
 
-type Tab = "distribution" | "webhook" | "automation" | "ai";
+interface FailedMessage {
+  id: string;
+  conversation_id: string | null;
+  message_text: string | null;
+  failed_at: string | null;
+  error_message: string | null;
+  bot_instance_id: string | null;
+  bot_name: string | null;
+  lead_phone: string | null;
+}
+
+type Tab = "distribution" | "webhook" | "automation" | "ai" | "failed";
 
 export default function Logs() {
   const { toast } = useToast();
@@ -67,6 +78,7 @@ export default function Logs() {
   const [webhookLogs, setWebhookLogs] = useState<WebhookLog[]>([]);
   const [automationLogs, setAutomationLogs] = useState<AutomationLog[]>([]);
   const [aiAnalyses, setAiAnalyses] = useState<AIAnalysis[]>([]);
+  const [failedMessages, setFailedMessages] = useState<FailedMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
@@ -80,6 +92,7 @@ export default function Logs() {
     name: "Teste Automação",
   });
   const [bots, setBots] = useState<any[]>([]);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const loadBotsForTest = async () => {
     const { data } = await supabase
@@ -93,16 +106,57 @@ export default function Logs() {
   const loadData = async () => {
     setLoading(true);
     const from = page * PAGE_SIZE;
-    const [{ data: dLogs }, { data: wLogs }, { data: aLogs }, { data: aiLogs }] = await Promise.all([
+
+    // Load base logs in parallel (distribution, webhook, automation, ai)
+    const [dRes, wRes, aRes, aiRes] = await Promise.all([
       supabase.from("distribution_logs").select("*").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
       supabase.from("webhook_logs").select("*").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
       supabase.from("automation_logs").select("*, automation_rules(name, type)").order("executed_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
       supabase.from("ai_context_analysis").select("*").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
     ]);
-    setDistLogs(dLogs || []);
-    setWebhookLogs(wLogs || []);
-    setAutomationLogs(aLogs || []);
-    setAiAnalyses(aiLogs || []);
+
+    setDistLogs(dRes.data || []);
+    setWebhookLogs(wRes.data || []);
+    setAutomationLogs(aRes.data || []);
+    setAiAnalyses(aiRes.data || []);
+
+    // Fetch failed outgoing messages (separate queries because supabase client doesn't support SQL JOINs that way)
+    const { data: failedRaw } = await supabase
+      .from('ia_messages')
+      .select('id, conversation_id, message_text, failed_at, error_message')
+      .eq('direction', 'outgoing')
+      .not('failed_at', 'is', null)
+      .order('failed_at', { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+
+    const failed = failedRaw || [];
+    const convIds = Array.from(new Set(failed.map((f: any) => f.conversation_id).filter(Boolean)));
+
+    let convMap: Record<string, any> = {};
+    let botMap: Record<string, any> = {};
+
+    if (convIds.length > 0) {
+      const { data: convs } = await supabase.from('ia_conversations').select('id, bot_instance_id, lead_phone').in('id', convIds);
+      convMap = (convs || []).reduce((acc: any, c: any) => { acc[c.id] = c; return acc; }, {});
+      const botIds = Array.from(new Set((convs || []).map((c: any) => c.bot_instance_id).filter(Boolean)));
+      if (botIds.length > 0) {
+        const { data: botsData } = await supabase.from('bot_instances').select('id, name').in('id', botIds);
+        botMap = (botsData || []).reduce((acc: any, b: any) => { acc[b.id] = b; return acc; }, {});
+      }
+    }
+
+    const fm = failed.map((r: any) => ({
+      id: r.id,
+      conversation_id: r.conversation_id,
+      message_text: r.message_text,
+      failed_at: r.failed_at,
+      error_message: r.error_message,
+      bot_instance_id: convMap[r.conversation_id]?.bot_instance_id || null,
+      bot_name: botMap[convMap[r.conversation_id]?.bot_instance_id || '']?.name || null,
+      lead_phone: convMap[r.conversation_id]?.lead_phone || null,
+    })) as FailedMessage[];
+
+    setFailedMessages(fm || []);
     setLoading(false);
   };
 
@@ -153,6 +207,26 @@ export default function Logs() {
     }
   };
 
+  const resendFailed = async (msg: FailedMessage) => {
+    try {
+      setResendingId(msg.id);
+      if (!msg.bot_instance_id) throw new Error('Bot instance not found for this message');
+      const { data: conv } = await supabase.from('ia_conversations').select('*').eq('id', msg.conversation_id).maybeSingle();
+      const phone = conv?.lead_phone || msg.lead_phone;
+      const { error } = await supabase.functions.invoke('send_whatsapp_message', {
+        body: { botId: msg.bot_instance_id, phone, message: msg.message_text || '', conversationId: msg.conversation_id }
+      });
+      if (error) throw error;
+      toast({ title: '✅ Reenviado', description: `Mensagem reenviada para ${phone}` });
+      // refresh lists
+      await loadData();
+    } catch (e: any) {
+      toast({ title: '❌ Erro ao reenviar', description: e.message, variant: 'destructive' });
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   const fmt = (date: string) => new Date(date).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
   const filteredDist = distLogs.filter(l =>
@@ -172,14 +246,18 @@ export default function Logs() {
     !search || l.ai_reasoning?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const filteredFailed = failedMessages.filter(f =>
+    !search || (f.message_text || '').toLowerCase().includes(search.toLowerCase()) || (f.lead_phone || '').includes(search)
+  );
+
   const statusBadge = (status: string | null) => {
     if (!status) return <Badge variant="secondary">—</Badge>;
     const s = status.toUpperCase();
     if (s === "OK" || s === "SUCCESS" || s === "ASSIGNED")
-      return <Badge className="bg-green-900/40 text-green-300 border-green-500/30 gap-1"><CheckCircle2 className="w-3 h-3" />{status}</Badge>;
+      return <Badge className={`${"bg-green-900/40 text-green-300 border-green-500/30"}`}><CheckCircle2 className="w-3 h-3" />{status}</Badge>;
     if (s === "ERROR" || s === "FAILED")
-      return <Badge className="bg-red-900/40 text-red-300 border-red-500/30 gap-1"><XCircle className="w-3 h-3" />{status}</Badge>;
-    return <Badge className="bg-yellow-900/40 text-yellow-300 border-yellow-500/30 gap-1"><Clock className="w-3 h-3" />{status}</Badge>;
+      return <Badge className={`${"bg-red-900/40 text-red-300 border-red-500/30"}`}><XCircle className="w-3 h-3" />{status}</Badge>;
+    return <Badge className={`${"bg-yellow-900/40 text-yellow-300 border-yellow-500/30"}`}><Clock className="w-3 h-3" />{status}</Badge>;
   };
 
   return (
@@ -222,6 +300,11 @@ export default function Logs() {
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "ai" ? "bg-orange-900/40 text-orange-300 border border-orange-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
           <Brain className="w-4 h-4" /> Análises IA
           <span className="text-xs bg-slate-700 rounded px-1.5">{aiAnalyses.length}</span>
+        </button>
+        <button onClick={() => setTab("failed")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "failed" ? "bg-red-900/40 text-red-300 border border-red-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
+          <XCircle className="w-4 h-4" /> Não Enviadas
+          <span className="text-xs bg-slate-700 rounded px-1.5">{failedMessages.length}</span>
         </button>
       </div>
 
@@ -354,7 +437,7 @@ export default function Logs() {
             </div>
           )}
         </div>
-      ) : (
+      ) : tab === "ai" ? (
         <div>
           {filteredAI.length === 0 ? (
             <div className="text-center py-20 text-gray-500">
@@ -390,6 +473,50 @@ export default function Logs() {
                       <span className="text-white">{new Date(log.scheduled_action).toLocaleString('pt-BR')}</span>
                     </div>
                   )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          {filteredFailed.length === 0 ? (
+            <div className="text-center py-20 text-gray-500">
+              <XCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p>Nenhuma mensagem não enviada encontrada.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredFailed.map(msg => (
+                <div key={msg.id} className="bg-slate-800/40 border border-red-700/40 rounded-xl p-4">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <XCircle className="w-4 h-4 text-red-400" />
+                      <span className="text-white font-semibold text-sm">{msg.bot_name || '—'}</span>
+                      <Badge className="text-xs bg-red-900/40 text-red-300 border-red-500/30">Falhou</Badge>
+                    </div>
+                    <span className="text-gray-500 text-xs">{fmt(msg.failed_at || new Date().toISOString())}</span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-xs text-gray-500">Para</div>
+                      <div className="text-white font-mono">{msg.lead_phone || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">Mensagem</div>
+                      <div className="text-sm text-gray-300 bg-slate-900 p-2 rounded max-h-40 overflow-y-auto">{msg.message_text}</div>
+                    </div>
+                  </div>
+
+                  {msg.error_message && <div className="mt-3 text-xs text-red-400">{msg.error_message}</div>}
+
+                  <div className="mt-3 flex items-center gap-2">
+                    <Button onClick={() => resendFailed(msg)} disabled={!!resendingId} className="bg-red-600 hover:bg-red-500">
+                      {resendingId === msg.id ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Reenviando...</> : 'Reenviar'}
+                    </Button>
+                    <Button variant="outline" onClick={() => navigator.clipboard.writeText(msg.message_text || '')} className="border-gray-600 text-gray-300">Copiar Mensagem</Button>
+                  </div>
                 </div>
               ))}
             </div>
