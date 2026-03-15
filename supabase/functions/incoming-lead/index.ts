@@ -92,7 +92,7 @@ serve(async (req) => {
         email,
         tag: tag || message || origin, // Usamos 'tag' para guardar a mensagem, já que 'message' não existe no banco
         status: 'NEW',
-        broker_id: chosenBroker.id,
+        assigned_broker_id: chosenBroker.id,
         manager_id: chosenBroker.manager_id,
         last_interaction_at: nowIso,
         created_at: nowIso
