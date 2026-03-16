@@ -128,6 +128,7 @@ serve(async (req) => {
       received_at: nowIso,
     };
 
+    // ✅ LINHA 118 - ESTÁ CORRETA!
     if (chosenBroker) insertPayload.assigned_broker_id = chosenBroker.id;
 
     const { data: newLead, error: insertError } = await supabase.from('leads').insert(insertPayload).select().single();
@@ -150,7 +151,7 @@ serve(async (req) => {
         const { data: notificationBot } = await supabase.from('bot_instances').select('id').eq('phone', '11988628222').maybeSingle();
         
         if (notificationBot) {
-          const notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${origin}`;
+          const notifMsg = `🎯 *Novo Lead*\\n\\n👤 ${name}\\n📞 ${phone}\\n🏷️ ${tag || 'Sem tag'}\\n📍 ${origin}`;
           
           const { data: result } = await supabase.functions.invoke('send-whatsapp', {
             body: {
@@ -169,7 +170,7 @@ serve(async (req) => {
     // BOAS-VINDAS PARA LEAD
     let welcomeSent = false;
     if (chosenBroker?.automation_settings?.welcome_enabled && chosenBroker.bot_instance_id) {
-      let text = `Olá ${name}! 👋\n\nObrigado pelo interesse!`;
+      let text = `Olá ${name}! 👋\\n\\nObrigado pelo interesse!`;
       
       const { data: templates } = await supabase.from('welcome_templates').select('*').eq('is_active', true);
       if (templates?.length > 0) {
