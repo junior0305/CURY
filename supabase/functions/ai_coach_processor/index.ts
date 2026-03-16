@@ -12,6 +12,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
+    // DEBUG: Mostrar primeiros caracteres da chave
+    console.log('[DEBUG] API Key status:', ANTHROPIC_API_KEY ? `LOADED (starts: ${ANTHROPIC_API_KEY.substring(0, 10)}...)` : 'EMPTY - NOT LOADED!');
+    
     if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
 
     const supabaseClient = createClient(
@@ -19,7 +22,6 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Load pending queue items
     const { data: queue } = await supabaseClient
       .from('ai_coach_queue')
       .select('*')
@@ -34,7 +36,6 @@ serve(async (req) => {
     let processed = 0;
     let errors = 0;
 
-    // Group by broker to produce a compact report per broker
     const byBroker: Record<string, any[]> = {};
     for (const item of queue) {
       if (!byBroker[item.broker_id]) byBroker[item.broker_id] = [];
@@ -43,16 +44,12 @@ serve(async (req) => {
 
     for (const [brokerId, items] of Object.entries(byBroker)) {
       try {
-        // only take a small sample per broker (3 conversations)
         const sampleItems = items.slice(0, 3);
-
-        // mark processing
         await supabaseClient.from('ai_coach_queue').update({ status: 'processing' }).in('id', sampleItems.map(i => i.id));
 
         const { data: broker } = await supabaseClient.from('profiles').select('first_name, full_name, email').eq('id', brokerId).single();
         const brokerName = broker?.first_name || broker?.full_name || 'Corretor';
 
-        // Load conversation and messages for the sample
         const convIds = sampleItems.map(i => i.conversation_id);
         const { data: convs } = await supabaseClient.from('ia_conversations').select('*').in('id', convIds);
         const { data: messages } = await supabaseClient.from('ia_messages').select('*').in('conversation_id', convIds).order('created_at', { ascending: true });
@@ -63,7 +60,6 @@ serve(async (req) => {
           messagesByConv[m.conversation_id].push(m);
         });
 
-        // Build prompt content but filter out conversations that appear to be private (mostly broker messages)
         const brokerTypes = ['human', 'broker', 'agent'];
         const validConvs: any[] = [];
         for (const conv of (convs || [])) {
@@ -71,9 +67,7 @@ serve(async (req) => {
           const leadCount = convMessagesAll.filter(m => (m.sender_type || '').toLowerCase() === 'lead').length;
           const brokerCount = convMessagesAll.filter(m => brokerTypes.includes(((m.sender_type||'').toLowerCase()))).length;
 
-          // Skip if no lead messages or if broker messages dominate (likely private)
           if (leadCount === 0) {
-            // mark corresponding queue item as skipped
             await supabaseClient.from('ai_coach_queue').update({ status: 'skipped', processed_at: new Date().toISOString(), error_message: 'No lead messages' }).eq('conversation_id', conv.id).eq('broker_id', brokerId);
             continue;
           }
@@ -86,14 +80,10 @@ serve(async (req) => {
           validConvs.push(conv);
         }
 
-        if (validConvs.length === 0) {
-          // nothing to analyze for this broker in this sample
-          continue;
-        }
+        if (validConvs.length === 0) continue;
 
         const failedTexts = validConvs.map(conv => {
           const convMessages = messagesByConv[conv.id] || [];
-          // Only include lead and broker messages relevant to the interaction
           const filtered = convMessages.filter(m => {
             const t = (m.sender_type || '').toLowerCase();
             return t === 'lead' || t === 'ia' || t === 'human' || t === 'broker' || t === 'agent';
@@ -104,7 +94,7 @@ serve(async (req) => {
 
         const prompt = `Você é um coach de vendas. Leia as conversas abaixo e retorne um JSON com: quality_score (0-100), severity (low|medium|high), errors (array de {type, description}), positives (array), summary (string).\n\n${failedTexts}\n\nRetorne apenas o JSON.`;
 
-        // Call Anthropics/Claude
+        console.log('[DEBUG] Calling Claude API...');
         const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -115,8 +105,11 @@ serve(async (req) => {
           body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
         });
 
+        console.log('[DEBUG] Claude API response status:', claudeRes.status);
+
         if (!claudeRes.ok) {
           const text = await claudeRes.text().catch(() => '');
+          console.log('[DEBUG] Claude API error response:', text);
           throw new Error(`Claude API error: ${claudeRes.status} ${text}`);
         }
 
@@ -126,21 +119,15 @@ serve(async (req) => {
         if (!jsonMatch) throw new Error('No JSON found in Claude response');
         const analysis = JSON.parse(jsonMatch[0]);
 
-        // Insert analysis per conversation
         for (const item of sampleItems) {
           const conv = (convs || []).find((c: any) => c.id === item.conversation_id);
           if (!conv) {
-            // mark as failed if conversation not loaded
             await supabaseClient.from('ai_coach_queue').update({ status: 'failed', error_message: 'Conversation not found', processed_at: new Date().toISOString() }).eq('id', item.id);
             errors++;
             continue;
           }
 
-          // Only record analysis if conv was in validConvs
-          if (!validConvs.find(vc => vc.id === conv.id)) {
-            // was skipped earlier
-            continue;
-          }
+          if (!validConvs.find(vc => vc.id === conv.id)) continue;
 
           await supabaseClient.from('ai_coach_analysis').insert({
             conversation_id: item.conversation_id,
@@ -154,8 +141,6 @@ serve(async (req) => {
           });
 
           await supabaseClient.from('ia_conversations').update({ coach_analyzed_at: new Date().toISOString(), coach_score: analysis.quality_score || null }).eq('id', item.conversation_id);
-
-          // mark this queue item completed
           await supabaseClient.from('ai_coach_queue').update({ status: 'completed', processed_at: new Date().toISOString() }).eq('id', item.id);
           processed++;
         }
@@ -165,7 +150,6 @@ serve(async (req) => {
         errors += items.length;
       }
 
-      // brief pause between brokers to avoid rate limits
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
