@@ -38,7 +38,7 @@ export function AchievementTicker() {
           action_type,
           created_at,
           status,
-          profiles (first_name, last_name)
+          profiles:profile_id (first_name, last_name)
         `)
         .eq('status', 'APPROVED')
         .order("created_at", { ascending: false })
