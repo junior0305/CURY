@@ -183,9 +183,17 @@ export const fetchLeadsForAdmin = async (): Promise<Lead[]> => {
 
 export const fetchLeadsForDashboard = async (): Promise<Lead[]> => {
   console.log("[LeadsAPI] Buscando leads para o Dashboard...");
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    console.log("[LeadsAPI] Nenhum usuário logado encontrado.");
+    return [];
+  }
+
   const { data, error } = await supabase
     .from("leads")
     .select("*")
+    .eq('assigned_broker_id', user.id)
     .not("status", "in", '("ABANDONED","EXCLUDED")')
     .order("last_interaction_at", { ascending: true });
 
