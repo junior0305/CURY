@@ -126,7 +126,7 @@ serve(async (req) => {
           const { count } = await supabase
             .from('leads')
             .select('id', { count: 'exact', head: true })
-            .eq('assigned_broker_id', b.id)
+            .eq('broker_id', b.id)
             .gte('created_at', today + 'T00:00:00Z');
           return { broker: b, count: count || 0 };
         }));
@@ -146,7 +146,7 @@ serve(async (req) => {
       received_at: nowIso,
     };
 
-    if (chosenBroker) insertPayload.assigned_broker_id = chosenBroker.id;
+    if (chosenBroker) insertPayload.broker_id = chosenBroker.id;
 
     const { data: newLead, error: insertError } = await supabase.from('leads').insert(insertPayload).select().single();
     if (insertError) throw insertError;
@@ -191,7 +191,7 @@ serve(async (req) => {
       
       const { data: templates } = await supabase.from('welcome_templates').select('*').eq('is_active', true);
       if (templates?.length > 0) {
-        const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('assigned_broker_id', chosenBroker.id);
+        const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('broker_id', chosenBroker.id);
         const idx = (count || 0) % templates.length;
         const brokerName = `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() || 'Corretor';
         text = (templates[idx].message || '').replace(/\{nome\}/gi, name).replace(/\{broker\}/gi, brokerName);
