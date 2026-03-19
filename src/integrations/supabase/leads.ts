@@ -1,304 +1,233 @@
-import { supabase } from "@/integrations/supabase/client";
-import { Lead, ExclusionReason, LeadStatus } from "@/types/lead";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 
-const mapLeadFromDB = (l: any): Lead => ({
-  id: l.id,
-  name: l.name,
-  email: l.email,
-  phone: l.phone,
-  status: l.status,
-  brokerId: l.broker_id,
-  managerId: l.manager_id,
-  tag: l.tag,
-  createdAt: l.created_at,
-  lastInteractionAt: l.last_interaction_at,
-  exclusionReason: l.exclusion_reason as ExclusionReason,
-});
-
-// ─── XP por transição de status ───────────────────────────────────────────────
-// Só ganha XP quando avança no funil — não ao voltar ou excluir
-const XP_BY_STATUS: Partial<Record<LeadStatus, number>> = {
-  IN_PROGRESS:      10,   // Primeiro contato feito
-  VISIT_SCHEDULED:  30,   // Visita agendada
-  DOCS_REQUESTED:   50,   // Documentação solicitada
-  CONCLUDED:        200,  // Venda fechada 🏆
-};
-
-// Missões que devem ser avançadas por transição de status
-const MISSION_ACTION_BY_STATUS: Partial<Record<LeadStatus, string>> = {
-  IN_PROGRESS:      "CONTACT_LEADS",
-  VISIT_SCHEDULED:  "SCHEDULE_VISITS",
-  CONCLUDED:        "CLOSE_SALES",
-};
-
-// ─── Helper: dar XP + avançar missão (fire-and-forget, nunca bloqueia) ────────
-async function applyGamification(
-  brokerId: string,
-  status: LeadStatus,
-  leadId: string,
-  leadName: string
-) {
-  try {
-    const xp = XP_BY_STATUS[status];
-    const missionAction = MISSION_ACTION_BY_STATUS[status];
-    const today = new Date().toISOString().split("T")[0];
-
-    // 1. Dar XP se essa transição de status tiver recompensa
-    if (xp) {
-      await supabase.rpc("add_xp", {
-        p_broker_id: brokerId,
-        p_amount: xp,
-        p_reason: `STATUS_${status}`,
-        p_metadata: { lead_id: leadId, lead_name: leadName },
-      });
-      console.log(`[XP] +${xp} XP para broker ${brokerId} — ${status}`);
-    }
-
-    // 2. Avançar progresso de missão diária correspondente
-    if (missionAction) {
-      const { data: missions } = await supabase
-        .from("daily_missions")
-        .select("id, progress, target, completed, mission_templates(xp_reward, prize_type, prize_value, prize_label)")
-        .eq("broker_id", brokerId)
-        .eq("date", today)
-        .eq("completed", false);
-
-      // Filtrar missões cujo action_type bate com a ação atual
-      const { data: matchingMissions } = await supabase
-        .from("daily_missions")
-        .select(`
-          id, progress, target, completed,
-          mission_templates!inner(xp_reward, prize_type, prize_value, prize_label, action_type)
-        `)
-        .eq("broker_id", brokerId)
-        .eq("date", today)
-        .eq("completed", false)
-        .eq("mission_templates.action_type", missionAction);
-
-      for (const mission of matchingMissions || []) {
-        const newProgress = (mission.progress || 0) + 1;
-        const nowComplete = newProgress >= mission.target;
-        const template = mission.mission_templates as any;
-
-        await supabase
-          .from("daily_missions")
-          .update({
-            progress: newProgress,
-            completed: nowComplete,
-            completed_at: nowComplete ? new Date().toISOString() : null,
-          })
-          .eq("id", mission.id);
-
-        if (nowComplete) {
-          // XP de conclusão de missão
-          if (template?.xp_reward) {
-            await supabase.rpc("add_xp", {
-              p_broker_id: brokerId,
-              p_amount: template.xp_reward,
-              p_reason: "MISSION_COMPLETE",
-              p_metadata: { mission_id: mission.id },
-            });
-          }
-
-          // Criar prize_claim se tiver prêmio real
-          if (template?.prize_type && template?.prize_value > 0) {
-            await supabase.from("prize_claims").insert({
-              broker_id: brokerId,
-              mission_id: mission.id,
-              prize_type: template.prize_type,
-              prize_value: template.prize_value,
-              prize_label: template.prize_label || template.prize_type,
-              status: "PENDING",
-            });
-          }
-
-          console.log(`[Missão] Missão concluída para broker ${brokerId} — ${missionAction}`);
-        }
-      }
-    }
-
-    // 3. XP extra e missão de venda ao fechar negócio
-    if (status === "CONCLUDED") {
-      // Atualizar missão UPDATE_PIPELINE também (fechar uma venda conta como atualizar pipeline)
-      const { data: pipelineMissions } = await supabase
-        .from("daily_missions")
-        .select(`
-          id, progress, target,
-          mission_templates!inner(xp_reward, prize_type, prize_value, prize_label, action_type)
-        `)
-        .eq("broker_id", brokerId)
-        .eq("date", today)
-        .eq("completed", false)
-        .eq("mission_templates.action_type", "UPDATE_PIPELINE");
-
-      for (const mission of pipelineMissions || []) {
-        const newProgress = (mission.progress || 0) + 1;
-        const nowComplete = newProgress >= mission.target;
-        const template = mission.mission_templates as any;
-
-        await supabase
-          .from("daily_missions")
-          .update({
-            progress: newProgress,
-            completed: nowComplete,
-            completed_at: nowComplete ? new Date().toISOString() : null,
-          })
-          .eq("id", mission.id);
-
-        if (nowComplete && template?.xp_reward) {
-          await supabase.rpc("add_xp", {
-            p_broker_id: brokerId,
-            p_amount: template.xp_reward,
-            p_reason: "MISSION_COMPLETE",
-            p_metadata: { mission_id: mission.id },
-          });
-        }
-      }
-    }
-  } catch (err) {
-    // Gamificação nunca bloqueia o fluxo principal
-    console.error("[Gamificação] Falha silenciosa:", err);
-  }
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// ─── Queries ──────────────────────────────────────────────────────────────────
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders })
+  }
 
-export const fetchLeadsForAdmin = async (): Promise<Lead[]> => {
-  const { data, error } = await supabase
-    .from("leads")
-    .select("*")
-    .order("created_at", { ascending: false });
+  try {
+    const clonedReq = req.clone();
+    const payload = await clonedReq.json().catch(() => null);
 
-  if (error) {
-    console.error("[fetchLeadsForAdmin] Error:", error);
-    if ((error as any).code === "PGRST303" || (error as any).message?.includes("JWT")) {
-      window.dispatchEvent(new CustomEvent("supabase-auth-error", { detail: error }));
+    if (!payload) {
+      return new Response(JSON.stringify({ error: 'Invalid or empty JSON' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
-    if ((error as any).code === "42P01") return [];
-    throw error;
-  }
 
-  return (data || []).map(mapLeadFromDB);
-};
+    const sourceData = payload.data?.attributes || payload.attributes || payload;
+    const name = sourceData.name || sourceData.nome || sourceData.fullName || 'Lead Sem Nome';
+    const phone = sourceData.phone || sourceData.telefone || sourceData.cellphone || sourceData.whatsapp || sourceData.contact;
+    const email = sourceData.email || sourceData.mail || '';
+    const origin = sourceData.source || sourceData.origin || sourceData.origem || 'Make/Webhook';
+    const message = sourceData.message || sourceData.mensagem || sourceData.Interesse || '';
+    const tag = sourceData.tag || sourceData.interest || sourceData.source || sourceData.origin || sourceData.origem || '';
 
-export const fetchLeadsForDashboard = async (): Promise<Lead[]> => {
-  console.log("[LeadsAPI] Buscando leads para o Dashboard...");
+    if (!phone) {
+      return new Response(JSON.stringify({ error: 'Phone is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    console.log("[LeadsAPI] Nenhum usuário logado encontrado.");
-    return [];
-  }
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') || '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+    );
 
-  const { data, error } = await supabase
-    .from("leads")
-    .select("*")
-    .eq('broker_id', user.id)
-    .not("status", "in", '("ABANDONED","EXCLUDED")')
-    .order("last_interaction_at", { ascending: true });
+    const leadValues: Record<string, string> = {
+      tag: (tag || '').toString(),
+      source: (origin || '').toString(),
+      product: (sourceData.product || '').toString(),
+      campaign: (sourceData.campaign || '').toString(),
+    };
 
-  if (error) {
-    console.error("[fetchLeadsForDashboard] Error:", error);
-    if ((error as any).code === "42P01") return [];
-    throw error;
-  }
+    const { data: queues } = await supabase.from('distribution_queues').select('*').eq('is_active', true).order('created_at', { ascending: true });
 
-  console.log(`[LeadsAPI] ${data?.length} leads retornados do banco.`);
-  return (data || []).map(mapLeadFromDB);
-};
+    let chosenBroker: any = null;
+    let chosenQueue: any = null;
 
-export const createManualLead = async (leadData: {
-  name: string;
-  email: string;
-  phone: string;
-  tag: string;
-  brokerId: string;
-  managerId: string | null;
-}) => {
-  const { data, error } = await supabase
-    .from("leads")
-    .insert({
-      name: leadData.name,
-      email: leadData.email,
-      phone: leadData.phone,
-      tag: leadData.tag,
-      broker_id: leadData.brokerId,
-      manager_id: leadData.managerId,
-      status: "NEW",
-      last_interaction_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return mapLeadFromDB(data);
-};
-
-export const updateLeadBroker = async (leadId: string, brokerId: string) => {
-  const { error } = await supabase
-    .from("leads")
-    .update({
-      broker_id: brokerId,
-      status: "NEW",
-      last_interaction_at: new Date().toISOString(),
-    })
-    .eq("id", leadId);
-
-  if (error) throw error;
-};
-
-export const updateLeadStatus = async (
-  leadId: string,
-  status: LeadStatus,
-  exclusionReason: ExclusionReason = null
-) => {
-  const payload: any = {
-    status,
-    last_interaction_at: new Date().toISOString(),
-  };
-
-  if (status === "EXCLUDED" || status === "ABANDONED") {
-    payload.exclusion_reason = exclusionReason;
-  }
-
-  // 1. Buscar dados do lead ANTES de atualizar (precisamos do broker_id e nome)
-  const { data: leadBefore } = await supabase
-    .from("leads")
-    .select("broker_id, name, profiles:broker_id(first_name, phone, evolution_instance)")
-    .eq("id", leadId)
-    .single();
-
-  // 2. Atualizar status no banco
-  const { error } = await supabase
-    .from("leads")
-    .update(payload)
-    .eq("id", leadId);
-
-  if (error) throw error;
-
-  const brokerId = leadBefore?.broker_id;
-  const leadName = leadBefore?.name || "";
-  const brokerProfile = leadBefore?.profiles as any;
-
-  // 3. Gamificação: XP + missões (fire-and-forget, não bloqueia)
-  if (brokerId && XP_BY_STATUS[status]) {
-    applyGamification(brokerId, status, leadId, leadName);
-  }
-
-  // 4. WhatsApp automático ao fechar venda
-  if (status === "CONCLUDED") {
-    try {
-      if (brokerProfile?.phone) {
-        const message = `🚀 Parabéns ${brokerProfile.first_name}! O Superintendente viu sua venda do cliente ${leadName}. Excelente trabalho! Mais uma para a conta!`;
-
-        supabase.functions.invoke("send-whatsapp", {
-          body: { phone: brokerProfile.phone, message, instance_name: brokerProfile.evolution_instance || null },
-        });
-
-        console.log(`[Auto-Zap] Parabéns enviado para ${brokerProfile.first_name}`);
+    console.log('[MATCHING] Lead values:', leadValues);
+    console.log('[MATCHING] Verificando filas...');
+    
+    if (queues && queues.length > 0) {
+      console.log(`[MATCHING] Total de filas: ${queues.length}`);
+      
+      for (const q of queues) {
+        console.log(`[MATCHING] Fila: ${q.name}, match_field: ${q.match_field}, match_value: ${q.match_value}`);
+        
+        if (!q.match_field || q.match_field === '*') {
+          if (!chosenQueue) {
+            console.log(`[MATCHING] Fila ${q.name} marcada como fallback`);
+            chosenQueue = q;
+          }
+          continue;
+        }
+        
+        const expected = (q.match_value || '').toString().trim().toUpperCase();
+        const leadVal = (leadValues[q.match_field] || '').toString().trim().toUpperCase();
+        
+        console.log(`[MATCHING] Comparando campo "${q.match_field}": "${leadVal}" === "${expected}"`);
+        
+        if (expected && leadVal && expected === leadVal) {
+          console.log(`[MATCHING] ✅ MATCH! Fila escolhida: ${q.name}`);
+          chosenQueue = q;
+          break;
+        }
       }
-    } catch (err) {
-      console.error("[Auto-Zap] Falha silenciosa:", err);
     }
+
+    console.log(`[MATCHING] Fila final: ${chosenQueue?.name || 'NENHUMA'}`);
+
+    // Round-robin otimista
+    if (chosenQueue && chosenQueue.broker_ids?.length > 0) {
+      const maxAttempts = 3;
+      for (let i = 0; i < maxAttempts; i++) {
+        const { data: freshQ } = await supabase.from('distribution_queues').select('*').eq('id', chosenQueue.id).maybeSingle();
+        if (freshQ?.broker_ids?.length > 0) {
+          const oldIndex = freshQ.last_assigned_index || 0;
+          const idx = oldIndex % freshQ.broker_ids.length;
+          
+          const { data: updated } = await supabase.from('distribution_queues')
+            .update({ last_assigned_index: oldIndex + 1 })
+            .eq('id', chosenQueue.id)
+            .eq('last_assigned_index', oldIndex)
+            .select()
+            .maybeSingle();
+          
+          if (updated) {
+            const { data: broker } = await supabase.from('profiles').select('*').eq('id', freshQ.broker_ids[idx]).maybeSingle();
+            chosenBroker = broker;
+            console.log(`[DISTRIBUTION] Corretor escolhido via round-robin: ${broker?.first_name}`);
+            break;
+          }
+        }
+      }
+    }
+
+    if (!chosenBroker) {
+      console.log('[DISTRIBUTION] Fallback final: distribuindo pelo corretor com menos leads hoje');
+      const today = new Date().toISOString().split('T')[0];
+      const { data: brokers } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, phone, bot_instance_id, automation_settings, evolution_instance')
+        .eq('lead_assignment_enabled', true)
+        .eq('role', 'BROKER');
+
+      if (brokers?.length > 0) {
+        const counts = await Promise.all(brokers.map(async (b) => {
+          const { count } = await supabase
+            .from('leads')
+            .select('id', { count: 'exact', head: true })
+            .eq('broker_id', b.id)
+            .gte('created_at', today + 'T00:00:00Z');
+          return { broker: b, count: count || 0 };
+        }));
+        counts.sort((a, b) => a.count - b.count);
+        chosenBroker = counts[0].broker;
+        console.log(`[DISTRIBUTION] Fallback escolheu ${chosenBroker.first_name} (${counts[0].count} leads hoje)`);
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    const insertPayload: any = {
+      name, phone, email,
+      tag: tag || message || origin,
+      status: 'NEW',
+      last_interaction_at: nowIso,
+      created_at: nowIso,
+      received_at: nowIso,
+    };
+
+    if (chosenBroker) insertPayload.broker_id = chosenBroker.id;
+
+    const { data: newLead, error: insertError } = await supabase.from('leads').insert(insertPayload).select().single();
+    if (insertError) throw insertError;
+
+    await supabase.from('distribution_logs').insert({
+      lead_name: name,
+      lead_phone: phone,
+      assigned_to_name: chosenBroker ? `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() : null,
+      queue_name: chosenQueue ? chosenQueue.name : 'FALLBACK',
+      status: 'SUCCESS'
+    });
+
+    // NOTIFICAR CORRETOR
+    let notificationSent = false;
+    if (chosenBroker?.phone) {
+      const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
+      
+      if (setting?.value === true) {
+        const { data: botSetting } = await supabase.from('system_settings').select('value').eq('key', 'notification_bot_instance_id').maybeSingle();
+        const { data: notificationBot } = botSetting?.value
+          ? await supabase.from('bot_instances').select('id').eq('id', botSetting.value).maybeSingle()
+          : { data: null };
+        
+        if (notificationBot) {
+          const notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${origin}`;
+          
+          const { data: result } = await supabase.functions.invoke('send-whatsapp', {
+            body: {
+              instance_id: notificationBot.id,
+              phone: chosenBroker.phone,
+              message: notifMsg,
+              type: 'notification'
+            }
+          });
+          
+          notificationSent = result?.success || false;
+        }
+      }
+    }
+
+    // BOAS-VINDAS PARA LEAD
+    let welcomeSent = false;
+    if (chosenBroker?.automation_settings?.welcome_enabled && chosenBroker.bot_instance_id) {
+      let text = `Olá ${name}! 👋\n\nObrigado pelo interesse!`;
+      
+      const { data: templates } = await supabase.from('welcome_templates').select('*').eq('is_active', true);
+      if (templates?.length > 0) {
+        const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('broker_id', chosenBroker.id);
+        const idx = (count || 0) % templates.length;
+        const brokerName = `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() || 'Corretor';
+        text = (templates[idx].message || '').replace(/\{nome\}/gi, name).replace(/\{broker\}/gi, brokerName);
+      }
+
+      const { data: result } = await supabase.functions.invoke('send-whatsapp', {
+        body: {
+          instance_id: chosenBroker.bot_instance_id,
+          phone: phone,
+          message: text,
+          lead_id: newLead.id,
+          type: 'welcome'
+        }
+      });
+      
+      welcomeSent = result?.success || false;
+    }
+
+    return new Response(JSON.stringify({ 
+      success: true, 
+      lead: newLead, 
+      notification_sent: notificationSent,
+      welcome_sent: welcomeSent 
+    }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+
+  } catch (error: any) {
+    console.error('[incoming-lead] Error:', error.message);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
-};
+})
