@@ -165,7 +165,10 @@ serve(async (req) => {
       const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
       
       if (setting?.value === true) {
-        const { data: notificationBot } = await supabase.from('bot_instances').select('id').eq('phone', '11988628222').maybeSingle();
+        const { data: botSetting } = await supabase.from('system_settings').select('value').eq('key', 'notification_bot_instance_id').maybeSingle();
+        const { data: notificationBot } = botSetting?.value
+          ? await supabase.from('bot_instances').select('id').eq('id', botSetting.value).maybeSingle()
+          : { data: null };
         
         if (notificationBot) {
           const notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${origin}`;
