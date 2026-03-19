@@ -29,7 +29,7 @@ serve(async (req) => {
         if (!lead) continue;
 
         // Load broker profile (assigned broker)
-        const { data: broker } = await supabase.from('profiles').select('*').eq('id', lead.assigned_broker_id).maybeSingle();
+        const { data: broker } = await supabase.from('profiles').select('*').eq('id', lead.broker_id).maybeSingle();
         if (!broker || !broker.bot_instance_id) {
           console.warn('[followup_scheduler] broker or bot_instance_id missing for lead', lead.id);
           continue;
