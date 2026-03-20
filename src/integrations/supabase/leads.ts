@@ -193,7 +193,7 @@ export const fetchLeadsForDashboard = async (): Promise<Lead[]> => {
   const { data, error } = await supabase
     .from("leads")
     .select("*")
-    .eq('assigned_broker_id', user.id)
+    .eq('broker_id', user.id)
     .not("status", "in", '("ABANDONED","EXCLUDED")')
     .order("last_interaction_at", { ascending: true });
 

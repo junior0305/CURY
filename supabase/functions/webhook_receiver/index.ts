@@ -38,7 +38,7 @@ serve(async (req) => {
     if (!conversation) {
       console.log('[webhook_receiver] no active conversation found for', phoneNumber);
       // Try to find lead to determine broker
-      const { data: lead } = await supabase.from('leads').select('*, profiles!assigned_broker_id(*)').eq('phone', phoneNumber).maybeSingle();
+      const { data: lead } = await supabase.from('leads').select('*, profiles!broker_id(*)').eq('phone', phoneNumber).maybeSingle();
 
       if (lead && lead.profiles) {
         const broker = lead.profiles;

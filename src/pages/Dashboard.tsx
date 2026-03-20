@@ -14,7 +14,7 @@ import LeadDetail from "@/components/broker/LeadDetail";
 import AchievementTicker from "@/components/dashboard/AchievementTicker";
 import CampaignHeroBanner from "@/components/dashboard/CampaignHeroBanner";
 import { MissionToday } from "@/components/broker/MissionToday";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchLeadsForDashboard } from "@/integrations/supabase/leads";
 import { fetchProfiles } from "@/integrations/supabase/profiles";
 import type { Lead, LeadStatus } from "@/types/lead";
@@ -48,6 +48,7 @@ const Dashboard = () => {
 
   // ── UMA única instância de gamificação — passada para GamificationBar como props
   const { xpStats, missions, prizeClaims, loading: gamLoading, reload } = useGamification();
+  const queryClient = useQueryClient();
   const pendingPrizes = prizeClaims.filter(p => p.status === "PENDING").length;
 
   // ── Notificações ──────────────────────────────────────────────────────────────
@@ -145,6 +146,7 @@ const Dashboard = () => {
       }, (payload) => {
         playSound("NEW_LEAD");
         toast.info(`🚀 Novo Lead: ${payload.new.name}`, { description: "Atenda o mais rápido possível!" });
+        queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };

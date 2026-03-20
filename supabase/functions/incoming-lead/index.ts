@@ -28,7 +28,7 @@ serve(async (req) => {
     const email = sourceData.email || sourceData.mail || '';
     const origin = sourceData.source || sourceData.origin || sourceData.origem || 'Make/Webhook';
     const message = sourceData.message || sourceData.mensagem || sourceData.Interesse || '';
-    const tag = sourceData.tag || sourceData.interest || '';
+    const tag = sourceData.tag || sourceData.interest || sourceData.source || sourceData.origin || sourceData.origem || '';
 
     if (!phone) {
       return new Response(JSON.stringify({ error: 'Phone is required' }), {
@@ -113,9 +113,27 @@ serve(async (req) => {
     }
 
     if (!chosenBroker) {
-      console.log('[DISTRIBUTION] Fallback: escolhendo primeiro corretor habilitado');
-      const { data: brokers } = await supabase.from('profiles').select('*').eq('lead_assignment_enabled', true).limit(1);
-      if (brokers?.length > 0) chosenBroker = brokers[0];
+      console.log('[DISTRIBUTION] Fallback final: distribuindo pelo corretor com menos leads hoje');
+      const today = new Date().toISOString().split('T')[0];
+      const { data: brokers } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, phone, bot_instance_id, automation_settings, evolution_instance')
+        .eq('lead_assignment_enabled', true)
+        .eq('role', 'BROKER');
+
+      if (brokers?.length > 0) {
+        const counts = await Promise.all(brokers.map(async (b) => {
+          const { count } = await supabase
+            .from('leads')
+            .select('id', { count: 'exact', head: true })
+            .eq('broker_id', b.id)
+            .gte('created_at', today + 'T00:00:00Z');
+          return { broker: b, count: count || 0 };
+        }));
+        counts.sort((a, b) => a.count - b.count);
+        chosenBroker = counts[0].broker;
+        console.log(`[DISTRIBUTION] Fallback escolheu ${chosenBroker.first_name} (${counts[0].count} leads hoje)`);
+      }
     }
 
     const nowIso = new Date().toISOString();
@@ -128,7 +146,7 @@ serve(async (req) => {
       received_at: nowIso,
     };
 
-    if (chosenBroker) insertPayload.assigned_broker_id = chosenBroker.id;
+    if (chosenBroker) insertPayload.broker_id = chosenBroker.id;
 
     const { data: newLead, error: insertError } = await supabase.from('leads').insert(insertPayload).select().single();
     if (insertError) throw insertError;
@@ -147,7 +165,10 @@ serve(async (req) => {
       const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
       
       if (setting?.value === true) {
-        const { data: notificationBot } = await supabase.from('bot_instances').select('id').eq('phone', '11988628222').maybeSingle();
+        const { data: botSetting } = await supabase.from('system_settings').select('value').eq('key', 'notification_bot_instance_id').maybeSingle();
+        const { data: notificationBot } = botSetting?.value
+          ? await supabase.from('bot_instances').select('id').eq('id', botSetting.value).maybeSingle()
+          : { data: null };
         
         if (notificationBot) {
           const notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${origin}`;
@@ -173,7 +194,7 @@ serve(async (req) => {
       
       const { data: templates } = await supabase.from('welcome_templates').select('*').eq('is_active', true);
       if (templates?.length > 0) {
-        const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('assigned_broker_id', chosenBroker.id);
+        const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('broker_id', chosenBroker.id);
         const idx = (count || 0) % templates.length;
         const brokerName = `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() || 'Corretor';
         text = (templates[idx].message || '').replace(/\{nome\}/gi, name).replace(/\{broker\}/gi, brokerName);
