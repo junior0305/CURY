@@ -1,184 +1,195 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, Clock, CheckCircle, Snowflake, RefreshCw, User, Phone, MessageSquare, BarChart2, Wifi, WifiOff } from "lucide-react";
+import { AlertTriangle, UserX, PhoneOff, Clock, CalendarX, RefreshCw, ChevronDown, ChevronUp, ArrowRightLeft, Phone } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
-type LeadHealth = {
+type Lead = {
   id: string;
   name: string;
   phone: string;
-  tag: string;
+  tag: string | null;
   status: string;
-  health_score: number;
   broker_id: string | null;
   created_at: string;
   last_broker_whatsapp_at: string | null;
   last_lead_response_at: string | null;
   welcome_responded_at: string | null;
   next_action_date: string | null;
-  broker: { first_name: string } | null;
+  broker: { first_name: string; last_name: string | null } | null;
 };
 
-type TemplateStats = {
-  template_id: string;
-  total_sent: number;
-  total_responded: number;
-  response_rate: number;
-  template: { message: string } | null;
-};
-
-type Column = {
-  key: string;
-  label: string;
-  icon: React.ElementType;
-  color: string;
-  bg: string;
-  border: string;
-  leads: LeadHealth[];
-};
-
-function timeAgo(date: string | null) {
-  if (!date) return "nunca";
+function ago(date: string | null) {
+  if (!date) return "—";
   return formatDistanceToNow(new Date(date), { locale: ptBR, addSuffix: true });
 }
 
-function LeadCard({ lead, onReassign }: { lead: LeadHealth; onReassign: (id: string) => void }) {
+// ─── Linha da fila ────────────────────────────────────────────────────────────
+
+function QueueRow({ lead, onReassign, highlight }: {
+  lead: Lead;
+  onReassign: (id: string) => void;
+  highlight?: string; // texto de destaque (motivo)
+}) {
+  const brokerName = lead.broker
+    ? `${lead.broker.first_name} ${lead.broker.last_name ?? ""}`.trim()
+    : "Sem corretor";
+
   return (
-    <div className="bg-slate-800/60 border border-gray-700/40 rounded-lg p-3 space-y-2 hover:border-gray-600/60 transition-colors">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-white text-sm font-semibold truncate">{lead.name}</p>
-          <p className="text-gray-500 text-xs flex items-center gap-1">
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-700/30 hover:bg-slate-800/40 transition-colors group">
+      {/* Lead */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-bold text-white text-sm truncate">{lead.name}</span>
+          {lead.tag && (
+            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-700/60 text-gray-400 border border-gray-700/40 uppercase">
+              {lead.tag}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 mt-0.5">
+          <span className="text-[11px] text-gray-500 flex items-center gap-1">
             <Phone className="w-3 h-3" />{lead.phone}
-          </p>
+          </span>
+          <span className="text-[11px] text-gray-600">{brokerName}</span>
         </div>
-        <Badge className="shrink-0 text-xs bg-slate-700/50 text-gray-400 border-gray-600/40">
-          {lead.tag || "—"}
-        </Badge>
       </div>
 
-      <div className="space-y-1 text-xs text-gray-500">
-        <div className="flex items-center gap-1">
-          <User className="w-3 h-3" />
-          <span>{lead.broker?.first_name || "Sem corretor"}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <MessageSquare className="w-3 h-3" />
-          <span>Corretor: {timeAgo(lead.last_broker_whatsapp_at)}</span>
-        </div>
-        {lead.welcome_responded_at && (
-          <div className="flex items-center gap-1 text-orange-400">
-            <AlertTriangle className="w-3 h-3" />
-            <span>Lead respondeu {timeAgo(lead.welcome_responded_at)}</span>
-          </div>
-        )}
-        {lead.next_action_date && (
-          <div className="flex items-center gap-1 text-blue-400">
-            <Clock className="w-3 h-3" />
-            <span>Retorno: {timeAgo(lead.next_action_date)}</span>
-          </div>
-        )}
-      </div>
+      {/* Motivo */}
+      {highlight && (
+        <span className="text-[11px] font-bold text-amber-400 shrink-0 hidden sm:block max-w-[160px] text-right leading-tight">
+          {highlight}
+        </span>
+      )}
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          <div className={`w-2 h-2 rounded-full ${
-            lead.health_score >= 70 ? "bg-green-400" :
-            lead.health_score >= 40 ? "bg-yellow-400" : "bg-red-400"
-          }`} />
-          <span className="text-xs text-gray-500">Score: {lead.health_score}</span>
-        </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => onReassign(lead.id)}
-          className="text-xs text-indigo-400 hover:text-indigo-300 hover:bg-indigo-900/20 h-6 px-2"
-        >
-          Redistribuir
-        </Button>
-      </div>
+      {/* Ação */}
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => onReassign(lead.id)}
+        className="shrink-0 h-7 px-2.5 text-[11px] font-bold text-indigo-400 hover:text-white hover:bg-indigo-600 border border-indigo-500/20 hover:border-indigo-500 gap-1 transition-all"
+      >
+        <ArrowRightLeft className="w-3 h-3" /> Redistribuir
+      </Button>
     </div>
   );
 }
 
+// ─── Seção colapsável ─────────────────────────────────────────────────────────
+
+function QueueSection({ title, count, icon: Icon, color, leads, onReassign, getHighlight, defaultOpen = false }: {
+  title: string;
+  count: number;
+  icon: React.ElementType;
+  color: "red" | "orange" | "amber" | "slate";
+  leads: Lead[];
+  onReassign: (id: string) => void;
+  getHighlight?: (l: Lead) => string;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [showAll, setShowAll] = useState(false);
+
+  if (count === 0) return null;
+
+  const colors = {
+    red:    { badge: "bg-red-500/20 text-red-300 border-red-500/30",    header: "border-red-500/30 bg-red-900/10",    icon: "text-red-400" },
+    orange: { badge: "bg-orange-500/20 text-orange-300 border-orange-500/30", header: "border-orange-500/30 bg-orange-900/10", icon: "text-orange-400" },
+    amber:  { badge: "bg-amber-500/20 text-amber-300 border-amber-500/30",  header: "border-amber-500/30 bg-amber-900/10",  icon: "text-amber-400" },
+    slate:  { badge: "bg-slate-500/20 text-slate-300 border-slate-500/30",  header: "border-gray-700/40 bg-slate-800/40",  icon: "text-gray-400" },
+  };
+  const c = colors[color];
+  const visible = showAll ? leads : leads.slice(0, 8);
+
+  return (
+    <div className={cn("rounded-xl border overflow-hidden", c.header)}>
+      {/* Header clicável */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left"
+      >
+        <Icon className={cn("w-4 h-4 shrink-0", c.icon)} />
+        <span className="font-black text-white text-sm flex-1">{title}</span>
+        <span className={cn("text-[11px] font-black px-2 py-0.5 rounded-full border", c.badge)}>
+          {count}
+        </span>
+        {open
+          ? <ChevronUp className="w-4 h-4 text-gray-500 shrink-0" />
+          : <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" />
+        }
+      </button>
+
+      {/* Lista */}
+      {open && (
+        <div className="border-t border-gray-700/30">
+          {visible.map(lead => (
+            <QueueRow
+              key={lead.id}
+              lead={lead}
+              onReassign={onReassign}
+              highlight={getHighlight?.(lead)}
+            />
+          ))}
+          {!showAll && leads.length > 8 && (
+            <button
+              onClick={() => setShowAll(true)}
+              className="w-full py-2.5 text-[11px] font-bold text-gray-500 hover:text-gray-300 hover:bg-slate-800/40 transition-colors flex items-center justify-center gap-1.5"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+              Ver mais {leads.length - 8} leads
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Principal ────────────────────────────────────────────────────────────────
+
 export default function SaudeLeads() {
   const queryClient = useQueryClient();
   const [reassignLeadId, setReassignLeadId] = useState<string | null>(null);
-  const [selectedBrokerId, setSelectedBrokerId] = useState<string>("");
+  const [selectedBrokerId, setSelectedBrokerId] = useState("");
   const [reassigning, setReassigning] = useState(false);
+  const [filterBroker, setFilterBroker] = useState("all");
 
-  const { data: leads = [], isLoading } = useQuery<LeadHealth[]>({
-    queryKey: ["health-leads"],
+  const { data: leads = [], isLoading } = useQuery<Lead[]>({
+    queryKey: ["health-leads-v2"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("leads")
-        .select("id,name,phone,tag,status,health_score,broker_id,created_at,last_broker_whatsapp_at,last_lead_response_at,welcome_responded_at,next_action_date,broker:profiles!broker_id(first_name)")
+        .select("id,name,phone,tag,status,broker_id,created_at,last_broker_whatsapp_at,last_lead_response_at,welcome_responded_at,next_action_date,broker:profiles!broker_id(first_name,last_name)")
         .neq("status", "ABANDONED")
         .neq("status", "EXCLUDED")
         .neq("status", "CONCLUDED")
-        .order("health_score", { ascending: true })
-        .limit(200);
+        .order("created_at", { ascending: false })
+        .limit(300);
       if (error) throw error;
-      return data || [];
+      return (data || []) as Lead[];
     },
     refetchInterval: 60000,
-  });
-
-  const { data: templateStats = [] } = useQuery<TemplateStats[]>({
-    queryKey: ["welcome-template-stats"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("welcome_template_stats")
-        .select("*, template:welcome_templates(message)")
-        .order("response_rate", { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
   });
 
   const { data: brokers = [] } = useQuery<{ id: string; first_name: string; last_name: string }[]>({
     queryKey: ["active-brokers-list"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("profiles")
         .select("id, first_name, last_name")
         .eq("role", "BROKER")
         .eq("lead_assignment_enabled", true);
-      if (error) throw error;
       return data || [];
     },
   });
 
-  // Monitor do webhook: último evento recebido
-  const { data: lastWebhookEvent } = useQuery<Date | null>({
-    queryKey: ["last-webhook-event"],
-    queryFn: async () => {
-      const [r1, r2] = await Promise.all([
-        supabase.from("leads").select("last_broker_whatsapp_at").not("last_broker_whatsapp_at", "is", null).order("last_broker_whatsapp_at", { ascending: false }).limit(1).maybeSingle(),
-        supabase.from("leads").select("last_lead_response_at").not("last_lead_response_at", "is", null).order("last_lead_response_at", { ascending: false }).limit(1).maybeSingle(),
-      ]);
-      const t1 = r1.data?.last_broker_whatsapp_at ? new Date(r1.data.last_broker_whatsapp_at) : null;
-      const t2 = r2.data?.last_lead_response_at ? new Date(r2.data.last_lead_response_at) : null;
-      if (!t1 && !t2) return null;
-      if (!t1) return t2;
-      if (!t2) return t1;
-      return t1 > t2 ? t1 : t2;
-    },
-    refetchInterval: 60000,
-  });
-
-  const webhookOk = lastWebhookEvent
-    ? (Date.now() - lastWebhookEvent.getTime()) < 3 * 3600000 // evento nas últimas 3h
-    : false;
-
-  const handleConfirmReassign = async () => {
+  const handleReassign = async () => {
     if (!reassignLeadId || !selectedBrokerId) return;
     setReassigning(true);
     const { error } = await supabase
@@ -186,167 +197,176 @@ export default function SaudeLeads() {
       .update({ broker_id: selectedBrokerId })
       .eq("id", reassignLeadId);
     setReassigning(false);
-    if (error) {
-      toast.error("Erro ao redistribuir lead");
-      return;
-    }
-    toast.success("Lead redistribuído com sucesso!");
+    if (error) { toast.error("Erro ao redistribuir"); return; }
+    toast.success("Lead redistribuído!");
     setReassignLeadId(null);
     setSelectedBrokerId("");
-    queryClient.invalidateQueries({ queryKey: ["health-leads"] });
+    queryClient.invalidateQueries({ queryKey: ["health-leads-v2"] });
   };
 
-  const now = new Date();
+  const now = Date.now();
 
-  const critico = leads.filter(l =>
+  // Filtro por corretor
+  const filtered = filterBroker === "all"
+    ? leads
+    : filterBroker === "none"
+    ? leads.filter(l => !l.broker_id)
+    : leads.filter(l => l.broker_id === filterBroker);
+
+  // ── Grupos de problemas ──────────────────────────────────────────────────────
+
+  // 1. Sem corretor
+  const semCorretor = filtered.filter(l => !l.broker_id);
+
+  // 2. Lead respondeu e está esperando (>2h sem resposta do corretor)
+  const esperandoResposta = filtered.filter(l =>
     l.welcome_responded_at &&
     (!l.last_broker_whatsapp_at || new Date(l.last_broker_whatsapp_at) < new Date(l.welcome_responded_at)) &&
-    new Date(l.welcome_responded_at) < new Date(now.getTime() - 2 * 3600000)
+    now - new Date(l.welcome_responded_at).getTime() > 2 * 3600000
   );
 
-  const atencao = leads.filter(l =>
-    !critico.find(c => c.id === l.id) &&
-    l.health_score < 70 && l.health_score >= 30
+  // 3. Nunca tocados (corretor tem lead mas nunca enviou nada)
+  const nuncaTocados = filtered.filter(l =>
+    l.broker_id &&
+    !l.last_broker_whatsapp_at &&
+    !esperandoResposta.find(e => e.id === l.id)
   );
 
-  const emDia = leads.filter(l =>
-    !critico.find(c => c.id === l.id) &&
-    l.health_score >= 70
+  // 4. Parados +48h (último contato do corretor há mais de 48h)
+  const parados = filtered.filter(l =>
+    l.broker_id &&
+    l.last_broker_whatsapp_at &&
+    now - new Date(l.last_broker_whatsapp_at).getTime() > 48 * 3600000 &&
+    !esperandoResposta.find(e => e.id === l.id)
   );
 
-  const frio = leads.filter(l =>
-    !critico.find(c => c.id === l.id) &&
-    l.health_score < 30 &&
-    new Date(l.created_at) < new Date(now.getTime() - 7 * 24 * 3600000)
+  // 5. Sem próxima ação (não está em nenhuma categoria crítica acima)
+  const criticalIds = new Set([
+    ...semCorretor, ...esperandoResposta, ...nuncaTocados, ...parados
+  ].map(l => l.id));
+
+  const semAcao = filtered.filter(l =>
+    !criticalIds.has(l.id) &&
+    !l.next_action_date
   );
 
-  const columns: Column[] = [
-    { key: "critico", label: "Crítico", icon: AlertTriangle, color: "text-red-400", bg: "bg-red-900/10", border: "border-red-500/30", leads: critico },
-    { key: "atencao", label: "Atenção", icon: Clock, color: "text-yellow-400", bg: "bg-yellow-900/10", border: "border-yellow-500/30", leads: atencao },
-    { key: "emdia", label: "Em Dia", icon: CheckCircle, color: "text-green-400", bg: "bg-green-900/10", border: "border-green-500/30", leads: emDia },
-    { key: "frio", label: "Frio", icon: Snowflake, color: "text-blue-400", bg: "bg-blue-900/10", border: "border-blue-500/30", leads: frio },
-  ];
+  const total = semCorretor.length + esperandoResposta.length + nuncaTocados.length + parados.length;
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-4 space-y-4">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-black text-white">Saúde dos Leads</h2>
-          <p className="text-gray-500 text-sm">Monitoramento em tempo real do atendimento</p>
+          <h2 className="text-lg font-black text-white flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-400" />
+            Fila de Intervenção
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Leads que precisam de ação imediata — {total} pendentes
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Monitor Webhook */}
-          <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border ${
-            lastWebhookEvent === undefined
-              ? "text-gray-500 border-gray-700/40"
-              : webhookOk
-              ? "text-green-400 bg-green-900/10 border-green-500/20"
-              : "text-orange-400 bg-orange-900/10 border-orange-500/20"
-          }`}>
-            {webhookOk ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            <span>
-              {lastWebhookEvent
-                ? `Webhook: ${timeAgo(lastWebhookEvent.toISOString())}`
-                : "Webhook: sem eventos"}
-            </span>
-          </div>
+
+        <div className="flex items-center gap-2">
+          {/* Filtro por corretor */}
+          <Select value={filterBroker} onValueChange={setFilterBroker}>
+            <SelectTrigger className="h-8 text-xs bg-slate-800 border-gray-700 text-gray-300 w-[160px]">
+              <SelectValue placeholder="Filtrar corretor" />
+            </SelectTrigger>
+            <SelectContent className="bg-slate-800 border-gray-700">
+              <SelectItem value="all" className="text-white text-xs">Todos os corretores</SelectItem>
+              <SelectItem value="none" className="text-white text-xs">Sem corretor</SelectItem>
+              {brokers.map(b => (
+                <SelectItem key={b.id} value={b.id} className="text-white text-xs">
+                  {b.first_name} {b.last_name ?? ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["health-leads"] })}
-            className="text-gray-400 hover:text-white gap-2"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["health-leads-v2"] })}
+            className="h-8 text-gray-400 hover:text-white gap-1.5 text-xs"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
             Atualizar
           </Button>
         </div>
       </div>
 
-      {/* Resumo */}
-      <div className="grid grid-cols-4 gap-3">
-        {columns.map(col => (
-          <div key={col.key} className={`rounded-lg border p-3 ${col.bg} ${col.border}`}>
-            <div className="flex items-center gap-2 mb-1">
-              <col.icon className={`w-4 h-4 ${col.color}`} />
-              <span className={`text-sm font-bold ${col.color}`}>{col.label}</span>
-            </div>
-            <p className="text-2xl font-black text-white">{col.leads.length}</p>
-            <p className="text-xs text-gray-500">leads</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Kanban */}
       {isLoading ? (
-        <div className="text-center text-gray-500 py-12">Carregando...</div>
+        <div className="text-center text-gray-500 py-16 text-sm">Carregando fila...</div>
+      ) : total === 0 && semAcao.length === 0 ? (
+        <div className="text-center py-16 border border-emerald-500/20 rounded-xl bg-emerald-900/10">
+          <p className="text-emerald-400 font-bold text-sm">Tudo em ordem!</p>
+          <p className="text-gray-600 text-xs mt-1">Nenhum lead requer intervenção agora.</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {columns.map(col => (
-            <div key={col.key} className="space-y-3">
-              <div className={`flex items-center gap-2 pb-2 border-b ${col.border}`}>
-                <col.icon className={`w-4 h-4 ${col.color}`} />
-                <span className={`font-bold text-sm ${col.color}`}>{col.label}</span>
-                <Badge className="ml-auto bg-slate-700/50 text-gray-400 border-gray-600/40 text-xs">
-                  {col.leads.length}
-                </Badge>
-              </div>
-              {col.leads.length === 0 ? (
-                <p className="text-gray-600 text-xs text-center py-4">Nenhum lead</p>
-              ) : (
-                col.leads.map(lead => (
-                  <LeadCard key={lead.id} lead={lead} onReassign={setReassignLeadId} />
-                ))
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Métricas de Boas-vindas */}
-      {templateStats.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <BarChart2 className="w-4 h-4 text-indigo-400" />
-            <h3 className="text-white font-bold">Efetividade das Mensagens de Boas-vindas</h3>
-          </div>
-          <div className="space-y-2">
-            {templateStats.map((stat, i) => (
-              <div key={stat.template_id} className="bg-slate-800/60 border border-gray-700/40 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-gray-400 text-xs truncate max-w-[60%]">
-                    #{i + 1} {stat.template?.message?.substring(0, 60)}...
-                  </p>
-                  <div className="flex items-center gap-3 text-xs shrink-0">
-                    <span className="text-gray-500">{stat.total_sent} enviadas</span>
-                    <span className="text-gray-500">{stat.total_responded} respondidas</span>
-                    <Badge className={`${
-                      Number(stat.response_rate) >= 50 ? "bg-green-900/40 text-green-300 border-green-500/30" :
-                      Number(stat.response_rate) >= 25 ? "bg-yellow-900/40 text-yellow-300 border-yellow-500/30" :
-                      "bg-red-900/40 text-red-300 border-red-500/30"
-                    } border text-xs`}>
-                      {stat.response_rate}%
-                    </Badge>
-                  </div>
-                </div>
-                <div className="w-full bg-slate-700/50 rounded-full h-1.5">
-                  <div
-                    className={`h-1.5 rounded-full ${
-                      Number(stat.response_rate) >= 50 ? "bg-green-500" :
-                      Number(stat.response_rate) >= 25 ? "bg-yellow-500" : "bg-red-500"
-                    }`}
-                    style={{ width: `${Math.min(Number(stat.response_rate), 100)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+
+          <QueueSection
+            title="Sem Corretor Atribuído"
+            count={semCorretor.length}
+            icon={UserX}
+            color="red"
+            leads={semCorretor}
+            onReassign={setReassignLeadId}
+            getHighlight={l => `Chegou ${ago(l.created_at)}`}
+            defaultOpen
+          />
+
+          <QueueSection
+            title="Lead Aguardando Resposta"
+            count={esperandoResposta.length}
+            icon={Clock}
+            color="orange"
+            leads={esperandoResposta}
+            onReassign={setReassignLeadId}
+            getHighlight={l => `Respondeu ${ago(l.welcome_responded_at)}`}
+            defaultOpen
+          />
+
+          <QueueSection
+            title="Nunca Tocados pelo Corretor"
+            count={nuncaTocados.length}
+            icon={PhoneOff}
+            color="amber"
+            leads={nuncaTocados}
+            onReassign={setReassignLeadId}
+            getHighlight={l => `${ago(l.created_at)}`}
+            defaultOpen
+          />
+
+          <QueueSection
+            title="Parados há mais de 48h"
+            count={parados.length}
+            icon={AlertTriangle}
+            color="amber"
+            leads={parados}
+            onReassign={setReassignLeadId}
+            getHighlight={l => `Último contato ${ago(l.last_broker_whatsapp_at)}`}
+          />
+
+          <QueueSection
+            title="Sem Próxima Ação Agendada"
+            count={semAcao.length}
+            icon={CalendarX}
+            color="slate"
+            leads={semAcao}
+            onReassign={setReassignLeadId}
+            getHighlight={l => {
+              const broker = l.broker ? `${l.broker.first_name}` : "Sem corretor";
+              return broker;
+            }}
+          />
+
         </div>
       )}
 
-      {/* Dialog de Redistribuição */}
-      <Dialog open={!!reassignLeadId} onOpenChange={open => { if (!open) { setReassignLeadId(null); setSelectedBrokerId(""); } }}>
+      {/* Dialog redistribuição */}
+      <Dialog open={!!reassignLeadId} onOpenChange={open => { if (!open) { setReassignLeadId(null); setSelectedBrokerId(""); }}}>
         <DialogContent className="bg-slate-900 border border-gray-700 text-white">
           <DialogHeader>
             <DialogTitle>Redistribuir Lead</DialogTitle>
@@ -360,7 +380,7 @@ export default function SaudeLeads() {
               <SelectContent className="bg-slate-800 border-gray-600">
                 {brokers.map(b => (
                   <SelectItem key={b.id} value={b.id} className="text-white hover:bg-slate-700">
-                    {b.first_name} {b.last_name || ""}
+                    {b.first_name} {b.last_name ?? ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -371,7 +391,7 @@ export default function SaudeLeads() {
               Cancelar
             </Button>
             <Button
-              onClick={handleConfirmReassign}
+              onClick={handleReassign}
               disabled={!selectedBrokerId || reassigning}
               className="bg-indigo-600 hover:bg-indigo-500 text-white"
             >
