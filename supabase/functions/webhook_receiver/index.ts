@@ -18,7 +18,18 @@ serve(async (req) => {
 
     const phoneNumber = payload?.data?.key?.remoteJid?.replace('@s.whatsapp.net', '') ||
                         payload?.key?.remoteJid?.replace('@s.whatsapp.net', '');
+    const fromMe = payload?.data?.key?.fromMe === true || payload?.key?.fromMe === true;
     const messageText = payload?.data?.message?.conversation || payload?.data?.message?.extendedTextMessage?.text || payload?.message?.conversation || payload?.message?.extendedTextMessage?.text;
+
+    // Corretor enviou mensagem → atualiza last_broker_whatsapp_at no lead (sem custo de IA)
+    if (fromMe && phoneNumber) {
+      await supabase
+        .from('leads')
+        .update({ last_broker_whatsapp_at: new Date().toISOString() })
+        .eq('phone', phoneNumber)
+        .not('status', 'in', '("ABANDONED","EXCLUDED")');
+      console.log(`[webhook_receiver] last_broker_whatsapp_at atualizado para ${phoneNumber}`);
+    }
 
     if (!phoneNumber || !messageText) {
       console.warn('[webhook_receiver] missing phone or message');
