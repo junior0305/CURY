@@ -108,7 +108,7 @@ function LeadCard({ lead, onReassign }: { lead: LeadHealth; onReassign: (id: str
 export default function SaudeLeads() {
   const queryClient = useQueryClient();
 
-  const { data: leads = [], isLoading } = useQuery<LeadHealth[]>({
+  const { data: leads = [], isLoading, error: leadsError } = useQuery<LeadHealth[]>({
     queryKey: ["health-leads"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -205,6 +205,11 @@ export default function SaudeLeads() {
       </div>
 
       {/* Kanban */}
+      {leadsError && (
+        <div className="text-red-400 text-sm bg-red-900/20 border border-red-500/30 rounded-lg p-3">
+          Erro: {(leadsError as any)?.message}
+        </div>
+      )}
       {isLoading ? (
         <div className="text-center text-gray-500 py-12">Carregando...</div>
       ) : (
