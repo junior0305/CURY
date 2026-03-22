@@ -4,7 +4,7 @@ import { fetchLeadsForDashboard } from "@/integrations/supabase/leads";
 import { fetchOpenTasks } from "@/integrations/supabase/tasks";
 import { Lead, LeadStatus } from "@/types/lead";
 import { Task } from "@/types/task";
-import { Loader2, Phone, MessageSquare, Clock, AlertTriangle, Bell, Zap, AlertCircle, Hourglass, MapPin } from "lucide-react";
+import { Loader2, Phone, MessageSquare, Clock, AlertTriangle, Bell, Zap, AlertCircle, Hourglass, MapPin, Flame, Calendar, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/AuthProvider";
@@ -68,15 +68,31 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
       const hoursSinceLastAction = Math.max(0, Math.floor(diffMs / 3600000));
       const isStale = hoursSinceLastAction >= 4 && lead.status !== "CONCLUDED" && lead.status !== "EXCLUDED";
 
+      // Prioridade por status + urgência temporal
       let priority = 0;
-      if (isStale) priority = 4;
-      else if (lead.status === "NEW") priority = 3;
-      else if (nextTask) {
+      let urgencyTag: "hot" | "visit" | "docs" | "new" | "stale" | null = null;
+
+      if (lead.status === "VISIT_SCHEDULED") {
+        priority = 10;
+        urgencyTag = "visit";
+      } else if (lead.status === "DOCS_REQUESTED") {
+        priority = 8;
+        urgencyTag = "docs";
+      } else if (hoursSinceLastAction < 2 && (lead.status === "NEW" || lead.status === "IN_PROGRESS")) {
+        priority = 7;
+        urgencyTag = "hot";
+      } else if (lead.status === "NEW") {
+        priority = 5;
+        urgencyTag = "new";
+      } else if (isStale) {
+        priority = 4;
+        urgencyTag = "stale";
+      } else if (nextTask) {
         const diff = (new Date(nextTask.dueAt).getTime() - now) / 60000;
-        priority = diff < 15 ? 2 : 1;
+        priority = diff < 15 ? 3 : 2;
       }
 
-      return { ...lead, nextTask, priority, isStale, hoursSinceLastAction };
+      return { ...lead, nextTask, priority, urgencyTag, isStale, hoursSinceLastAction };
     });
 
     let filtered = leadsWithMeta;
@@ -136,7 +152,22 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
                       <MapPin className="w-2 h-2" /> {lead.tag}
                     </Badge>
                   )}
-                  {lead.isStale && (
+                  {lead.urgencyTag === "hot" && (
+                    <Badge className="bg-red-500/20 text-red-300 border-red-500/30 text-[9px] font-black uppercase animate-pulse px-1.5 h-4 flex items-center gap-0.5">
+                      <Flame className="w-2 h-2" /> Quente
+                    </Badge>
+                  )}
+                  {lead.urgencyTag === "visit" && (
+                    <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[9px] font-black uppercase px-1.5 h-4 flex items-center gap-0.5">
+                      <Calendar className="w-2 h-2" /> Visita
+                    </Badge>
+                  )}
+                  {lead.urgencyTag === "docs" && (
+                    <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[9px] font-black uppercase px-1.5 h-4 flex items-center gap-0.5">
+                      <FileText className="w-2 h-2" /> Docs
+                    </Badge>
+                  )}
+                  {lead.urgencyTag === "stale" && (
                     <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[9px] font-black uppercase animate-pulse px-1.5 h-4 flex items-center gap-0.5">
                       <Hourglass className="w-2 h-2" /> Esfriando
                     </Badge>

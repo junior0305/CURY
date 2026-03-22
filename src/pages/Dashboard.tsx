@@ -33,6 +33,7 @@ import { GamificationBar } from "@/components/gamification/GamificationBar";
 import { DailyMissionsPanel } from "@/components/gamification/DailyMissionsPanel";
 import { useRivalWatch } from "@/hooks/useRivalWatch";
 import { useGamification } from "@/hooks/useGamification";
+import { RadarAcao } from "@/components/broker/RadarAcao";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
@@ -296,6 +297,7 @@ const Dashboard = () => {
                 <PipelineStat label="Visita"    count={stats.visits}      active={filter === "VISIT_SCHEDULED"} onClick={() => setFilter("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
                 <PipelineStat label="Documentação"      count={stats.docs}        active={filter === "DOCS_REQUESTED"}  onClick={() => setFilter("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
               </div>
+              <RadarAcao onSelectLead={handleLeadSelect} />
               <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
               <div className="space-y-2">
                 <h3 className="text-xs font-black text-gray-600 uppercase tracking-widest px-1">Pipeline Geral</h3>
@@ -480,6 +482,7 @@ const Dashboard = () => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-[700px]">
             {/* Coluna esquerda */}
             <div className="lg:col-span-4 flex flex-col gap-3">
+              <RadarAcao onSelectLead={(id) => { handleLeadSelect(id); }} />
               <div className="bg-slate-800/50 border border-gray-700/40 rounded-2xl p-4">
                 <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
               </div>
