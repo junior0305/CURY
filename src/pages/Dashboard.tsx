@@ -116,6 +116,7 @@ const Dashboard = () => {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
   const [filter, setFilter] = useState<LeadStatus | "ACTIVE" | "ALL">("ACTIVE");
+  const [showLeadList, setShowLeadList] = useState(false);
 
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
@@ -161,11 +162,20 @@ const Dashboard = () => {
 
   const handleLeadSelect = (id: string) => {
     setSelectedLeadId(id);
+    setShowLeadList(false);
+    if (!isDesktop) setActiveTab("lead");
+  };
+
+  const handlePipelineClick = (f: LeadStatus | "ACTIVE" | "ALL") => {
+    setFilter(f);
+    setShowLeadList(true);
+    setSelectedLeadId(null);
     if (!isDesktop) setActiveTab("lead");
   };
 
   const handleBackToList = () => {
     setSelectedLeadId(null);
+    setShowLeadList(false);
     if (!isDesktop) setActiveTab("mission");
   };
 
@@ -304,10 +314,10 @@ const Dashboard = () => {
             <>
               <CampaignHeroBanner leads={leads} users={profiles} />
               <div className="grid grid-cols-2 gap-2">
-                <PipelineStat label="Novos"     count={stats.new}         active={filter === "NEW"}             onClick={() => setFilter("NEW")}             color="sky"     icon={Sparkles} />
-                <PipelineStat label="Atend."    count={stats.in_progress} active={filter === "IN_PROGRESS"}     onClick={() => setFilter("IN_PROGRESS")}     color="indigo"  icon={Users2} />
-                <PipelineStat label="Visita"    count={stats.visits}      active={filter === "VISIT_SCHEDULED"} onClick={() => setFilter("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
-                <PipelineStat label="Documentação"      count={stats.docs}        active={filter === "DOCS_REQUESTED"}  onClick={() => setFilter("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
+                <PipelineStat label="Novos"        count={stats.new}         active={filter === "NEW"             && showLeadList} onClick={() => handlePipelineClick("NEW")}             color="sky"     icon={Sparkles} />
+                <PipelineStat label="Atend."       count={stats.in_progress} active={filter === "IN_PROGRESS"     && showLeadList} onClick={() => handlePipelineClick("IN_PROGRESS")}     color="indigo"  icon={Users2} />
+                <PipelineStat label="Visita"       count={stats.visits}      active={filter === "VISIT_SCHEDULED" && showLeadList} onClick={() => handlePipelineClick("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
+                <PipelineStat label="Documentação" count={stats.docs}        active={filter === "DOCS_REQUESTED"  && showLeadList} onClick={() => handlePipelineClick("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
               </div>
               <RadarAcao onSelectLead={handleLeadSelect} />
               <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
@@ -317,21 +327,35 @@ const Dashboard = () => {
           {activeTab === "lead" && (
             selectedLeadId
               ? <div className="h-full"><LeadDetail leadId={selectedLeadId} onLeadUpdated={() => {}} onBack={handleBackToList} /></div>
-              : (
+              : showLeadList
+              ? (
                 <div className="space-y-3">
-                  <div className="flex gap-1.5 flex-wrap">
-                    {(["ACTIVE","NEW","IN_PROGRESS","VISIT_SCHEDULED","DOCS_REQUESTED","ALL"] as const).map(f => (
-                      <button key={f} onClick={() => setFilter(f as any)}
-                        className={cn("px-3 py-1 rounded-full text-[10px] font-black uppercase border transition-all",
-                          filter === f
-                            ? "bg-indigo-600 border-indigo-500 text-white"
-                            : "bg-slate-800 border-gray-700/40 text-gray-500 hover:border-gray-600"
-                        )}>
-                        {f === "ACTIVE" ? "Ativos" : f === "ALL" ? "Todos" : f === "NEW" ? "Novos" : f === "IN_PROGRESS" ? "Atend." : f === "VISIT_SCHEDULED" ? "Visita" : "Docs"}
-                      </button>
-                    ))}
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-1.5 flex-wrap">
+                      {(["NEW","IN_PROGRESS","VISIT_SCHEDULED","DOCS_REQUESTED","ALL"] as const).map(f => (
+                        <button key={f} onClick={() => handlePipelineClick(f as any)}
+                          className={cn("px-3 py-1 rounded-full text-[10px] font-black uppercase border transition-all",
+                            filter === f
+                              ? "bg-indigo-600 border-indigo-500 text-white"
+                              : "bg-slate-800 border-gray-700/40 text-gray-500 hover:border-gray-600"
+                          )}>
+                          {f === "ALL" ? "Todos" : f === "NEW" ? "Novos" : f === "IN_PROGRESS" ? "Atend." : f === "VISIT_SCHEDULED" ? "Visita" : "Docs"}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={() => { setShowLeadList(false); setActiveTab("mission"); }}
+                      className="text-[10px] text-gray-600 hover:text-gray-400 font-bold">
+                      ✕ Fechar
+                    </button>
                   </div>
-                  <LeadList selectedLeadId={selectedLeadId} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} />
+                  <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} />
+                </div>
+              )
+              : (
+                <div className="flex flex-col items-center justify-center py-20 text-gray-700">
+                  <Target className="w-10 h-10 mb-3 opacity-20" />
+                  <p className="text-sm font-bold">Selecione um filtro na aba Missão</p>
+                  <p className="text-xs text-gray-600 mt-1">Toque em Novos, Atend., Visita ou Docs</p>
                 </div>
               )
           )}
@@ -511,22 +535,10 @@ const Dashboard = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <PipelineStat label="Novos"        count={stats.new}         active={filter === "NEW"}             onClick={() => { setFilter("NEW");             setSelectedLeadId(null); }} color="sky"     icon={Sparkles} />
-                <PipelineStat label="Atendimento"  count={stats.in_progress} active={filter === "IN_PROGRESS"}     onClick={() => { setFilter("IN_PROGRESS");     setSelectedLeadId(null); }} color="indigo"  icon={Users2} />
-                <PipelineStat label="Visitas"      count={stats.visits}      active={filter === "VISIT_SCHEDULED"} onClick={() => { setFilter("VISIT_SCHEDULED"); setSelectedLeadId(null); }} color="emerald" icon={Calendar} />
-                <PipelineStat label="Documentação" count={stats.docs}        active={filter === "DOCS_REQUESTED"}  onClick={() => { setFilter("DOCS_REQUESTED");  setSelectedLeadId(null); }} color="amber"   icon={FileText} />
-              </div>
-
-              <div className="flex-1 flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden min-h-[400px]">
-                <div className="px-4 py-3 border-b border-gray-700/40 flex justify-between items-center">
-                  <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">Carteira Total</h3>
-                  <Badge className="bg-slate-700/60 text-gray-500 border-gray-600/30 text-[10px]">
-                    {leads.filter(l => l.brokerId === user?.id).length} leads
-                  </Badge>
-                </div>
-                <div className="flex-1 overflow-y-auto p-2">
-                  <LeadList selectedLeadId={selectedLeadId} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact />
-                </div>
+                <PipelineStat label="Novos"        count={stats.new}         active={filter === "NEW"             && showLeadList} onClick={() => handlePipelineClick("NEW")}             color="sky"     icon={Sparkles} />
+                <PipelineStat label="Atendimento"  count={stats.in_progress} active={filter === "IN_PROGRESS"     && showLeadList} onClick={() => handlePipelineClick("IN_PROGRESS")}     color="indigo"  icon={Users2} />
+                <PipelineStat label="Visitas"      count={stats.visits}      active={filter === "VISIT_SCHEDULED" && showLeadList} onClick={() => handlePipelineClick("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
+                <PipelineStat label="Documentação" count={stats.docs}        active={filter === "DOCS_REQUESTED"  && showLeadList} onClick={() => handlePipelineClick("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
               </div>
             </div>
 
@@ -536,13 +548,33 @@ const Dashboard = () => {
                 <div className="h-full rounded-2xl overflow-hidden border border-gray-700/40">
                   <LeadDetail leadId={selectedLeadId} onLeadUpdated={() => {}} />
                 </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center bg-slate-800/20 border border-gray-700/20 border-dashed rounded-2xl text-gray-700">
-                  <div className="bg-slate-800/60 p-6 rounded-full mb-4 border border-gray-700/40">
-                    <Target className="w-12 h-12 text-indigo-900" />
+              ) : showLeadList ? (
+                <div className="h-full flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-700/40 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">
+                        {filter === "NEW" ? "Novos" : filter === "IN_PROGRESS" ? "Em Atendimento" : filter === "VISIT_SCHEDULED" ? "Visita Agendada" : filter === "DOCS_REQUESTED" ? "Documentação" : "Todos"}
+                      </h3>
+                      <Badge className="bg-slate-700/60 text-gray-500 border-gray-600/30 text-[10px]">
+                        {leads.filter(l => l.brokerId === user?.id && (filter === "ALL" ? true : l.status === filter)).length}
+                      </Badge>
+                    </div>
+                    <button onClick={() => setShowLeadList(false)}
+                      className="text-gray-600 hover:text-gray-300 text-xs font-bold transition-colors px-2 py-1 rounded hover:bg-slate-700/40">
+                      ✕ Fechar
+                    </button>
                   </div>
-                  <h3 className="text-lg font-bold text-gray-600">Pronto para o Combate?</h3>
-                  <p className="text-sm text-gray-700 mt-1">Selecione um alvo na lista ao lado.</p>
+                  <div className="flex-1 overflow-y-auto p-3">
+                    <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact />
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center bg-slate-800/20 border border-gray-700/20 border-dashed rounded-2xl text-gray-700 gap-3">
+                  <Target className="w-10 h-10 opacity-10" />
+                  <div className="text-center">
+                    <p className="text-sm font-bold text-gray-600">Selecione um filtro</p>
+                    <p className="text-xs text-gray-700 mt-1">Clique em Novos, Atendimento, Visitas ou Documentação</p>
+                  </div>
                 </div>
               )}
             </div>
