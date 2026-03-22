@@ -179,15 +179,18 @@ export default function SaudeLeads() {
           <h2 className="text-xl font-black text-white">Saúde dos Leads</h2>
           <p className="text-gray-500 text-sm">Monitoramento em tempo real do atendimento</p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => queryClient.invalidateQueries({ queryKey: ["health-leads"] })}
-          className="text-gray-400 hover:text-white gap-2"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Atualizar
-        </Button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-600">Query: {leads.length} leads</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["health-leads"] })}
+            className="text-gray-400 hover:text-white gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       {/* Resumo */}
