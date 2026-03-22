@@ -4,7 +4,7 @@ import {
   Loader2, PlusCircle, LogOut, Target, Users2, Calendar,
   FileText, BarChart3, Trophy, LayoutDashboard, Sparkles,
   Zap, Shield, Bell, X, CheckCheck, Calendar as CalendarIcon, FileText as FileTextIcon,
-  Menu,
+  Menu, Volume2, VolumeX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
@@ -46,6 +46,12 @@ const Dashboard = () => {
 
   const isBroker = role === "BROKER";
   useRivalWatch(isBroker);
+  const [audioMuted, setAudioMuted] = useState(localStorage.getItem("crm_audio_muted") === "true");
+  const toggleAudio = () => {
+    const next = !audioMuted;
+    setAudioMuted(next);
+    localStorage.setItem("crm_audio_muted", String(next));
+  };
 
   // ── UMA única instância de gamificação — passada para GamificationBar como props
   const { xpStats, missions, prizeClaims, loading: gamLoading, reload } = useGamification();
@@ -262,6 +268,12 @@ const Dashboard = () => {
                       onClick={() => { setIsRewardsOpen(true); setMenuOpen(false); }}>
                       <Trophy className="w-4 h-4" /> Espólio
                     </button>
+                    <button
+                      className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-700/40 transition-colors text-sm font-bold"
+                      onClick={() => { toggleAudio(); setMenuOpen(false); }}>
+                      {audioMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                      {audioMuted ? "Ativar Sons" : "Silenciar Sons"}
+                    </button>
                     <div className="border-t border-gray-700/40" />
                     <button
                       className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 transition-colors text-sm font-bold"
@@ -299,10 +311,6 @@ const Dashboard = () => {
               </div>
               <RadarAcao onSelectLead={handleLeadSelect} />
               <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
-              <div className="space-y-2">
-                <h3 className="text-xs font-black text-gray-600 uppercase tracking-widest px-1">Pipeline Geral</h3>
-                <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} />
-              </div>
             </>
           )}
 
@@ -310,10 +318,20 @@ const Dashboard = () => {
             selectedLeadId
               ? <div className="h-full"><LeadDetail leadId={selectedLeadId} onLeadUpdated={() => {}} onBack={handleBackToList} /></div>
               : (
-                <div className="flex flex-col items-center justify-center py-20 text-gray-600">
-                  <Target className="w-12 h-12 mb-2 opacity-20" />
-                  <p className="text-sm">Selecione um lead na Missão</p>
-                  <Button variant="link" className="text-indigo-400 text-sm" onClick={() => setActiveTab("mission")}>Voltar</Button>
+                <div className="space-y-3">
+                  <div className="flex gap-1.5 flex-wrap">
+                    {(["ACTIVE","NEW","IN_PROGRESS","VISIT_SCHEDULED","DOCS_REQUESTED","ALL"] as const).map(f => (
+                      <button key={f} onClick={() => setFilter(f as any)}
+                        className={cn("px-3 py-1 rounded-full text-[10px] font-black uppercase border transition-all",
+                          filter === f
+                            ? "bg-indigo-600 border-indigo-500 text-white"
+                            : "bg-slate-800 border-gray-700/40 text-gray-500 hover:border-gray-600"
+                        )}>
+                        {f === "ACTIVE" ? "Ativos" : f === "ALL" ? "Todos" : f === "NEW" ? "Novos" : f === "IN_PROGRESS" ? "Atend." : f === "VISIT_SCHEDULED" ? "Visita" : "Docs"}
+                      </button>
+                    ))}
+                  </div>
+                  <LeadList selectedLeadId={selectedLeadId} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} />
                 </div>
               )
           )}
@@ -455,6 +473,11 @@ const Dashboard = () => {
             </SheetTrigger>
             <LeadForm onOpenChange={setIsLeadFormOpen} brokerId={user?.id || ""} managerId={null} />
           </Sheet>
+
+          <Button variant="ghost" size="icon" onClick={toggleAudio}
+            className={audioMuted ? "text-red-400 hover:bg-red-900/20" : "text-gray-500 hover:text-gray-300 hover:bg-slate-800"}>
+            {audioMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </Button>
 
           <Button variant="ghost" size="icon" onClick={signOut} className="text-gray-600 hover:text-red-400 hover:bg-red-900/20">
             <LogOut className="w-4 h-4" />

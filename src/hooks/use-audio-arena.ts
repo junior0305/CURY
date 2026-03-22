@@ -1,57 +1,123 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef } from 'react';
 
-// Nomes dos arquivos que devem estar na pasta /public
-const SOUND_FILES = {
-  SALE: 'sale.mp3',      
-  OVERTAKE: 'overtake.mp3', 
-  NEW_LEAD: 'new_lead.mp3', // Novo som para entrada de lead
-  NOTIFICATION: 'notification.mp3',
-};
+type SoundKey = 'SALE' | 'OVERTAKE' | 'NEW_LEAD' | 'NOTIFICATION';
+
+// Sintetiza sons via Web Audio API — sem dependência de arquivos externos
+function createAudioContext(): AudioContext | null {
+  try {
+    return new (window.AudioContext || (window as any).webkitAudioContext)();
+  } catch {
+    return null;
+  }
+}
+
+function playTone(
+  ctx: AudioContext,
+  frequency: number,
+  startTime: number,
+  duration: number,
+  volume: number,
+  type: OscillatorType = 'sine',
+  fadeOut = true
+) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = type;
+  osc.frequency.setValueAtTime(frequency, startTime);
+  gain.gain.setValueAtTime(volume, startTime);
+  if (fadeOut) gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+  osc.start(startTime);
+  osc.stop(startTime + duration);
+}
+
+function synthesize(ctx: AudioContext, key: SoundKey) {
+  const t = ctx.currentTime;
+  const vol = 0.35;
+
+  switch (key) {
+    case 'NEW_LEAD': {
+      // Três pings ascendentes — atenção imediata
+      playTone(ctx, 880, t,       0.12, vol, 'sine');
+      playTone(ctx, 1100, t + 0.13, 0.12, vol, 'sine');
+      playTone(ctx, 1320, t + 0.26, 0.18, vol, 'sine');
+      break;
+    }
+    case 'SALE': {
+      // Fanfarra triunfal — arpegio maior + sustain
+      const notes = [523, 659, 784, 1047];
+      notes.forEach((freq, i) => {
+        playTone(ctx, freq, t + i * 0.1, 0.25, vol * 0.9, 'triangle');
+      });
+      // Acorde final
+      [523, 784, 1047].forEach(freq => {
+        playTone(ctx, freq, t + 0.45, 0.55, vol * 0.6, 'sine');
+      });
+      break;
+    }
+    case 'OVERTAKE': {
+      // Impacto dramático — descida + punch
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(440, t);
+      osc.frequency.exponentialRampToValueAtTime(110, t + 0.3);
+      gain.gain.setValueAtTime(vol * 0.8, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      osc.start(t);
+      osc.stop(t + 0.3);
+      // Punch
+      playTone(ctx, 200, t + 0.05, 0.2, vol * 0.5, 'square');
+      // Brilho no topo
+      playTone(ctx, 880, t, 0.15, vol * 0.3, 'sine');
+      break;
+    }
+    case 'NOTIFICATION': {
+      // Sino suave — simples e não intrusivo
+      playTone(ctx, 660, t, 0.08, vol * 0.7, 'sine');
+      playTone(ctx, 880, t + 0.09, 0.2, vol * 0.5, 'sine');
+      break;
+    }
+  }
+}
 
 export function useAudioArena() {
-  const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({});
-  const [isLoaded, setIsLoaded] = useState(false);
+  const ctxRef = useRef<AudioContext | null>(null);
 
-  useEffect(() => {
-    const loadSounds = () => {
-      Object.entries(SOUND_FILES).forEach(([key, filename]) => {
-        // Agora busca da URL pública do Supabase Storage
-        const url = `https://jcmovytbcghvvukaszyb.supabase.co/storage/v1/object/public/audio-arena/${filename}`;
-        const audio = new Audio(url);
-        audio.preload = 'auto';
-        audioRefs.current[key] = audio;
-      });
-      setIsLoaded(true);
-    };
-
-    loadSounds();
-
-    return () => {
-      audioRefs.current = {};
-    };
+  const getCtx = useCallback((): AudioContext | null => {
+    if (!ctxRef.current) ctxRef.current = createAudioContext();
+    if (ctxRef.current?.state === 'suspended') {
+      ctxRef.current.resume().catch(() => {});
+    }
+    return ctxRef.current;
   }, []);
 
-  const playSound = (soundKey: keyof typeof SOUND_FILES) => {
+  const playSound = useCallback((soundKey: SoundKey) => {
     const isMuted = localStorage.getItem('crm_audio_muted') === 'true';
     if (isMuted) return;
 
-    const audio = audioRefs.current[soundKey];
-    if (audio) {
-      audio.currentTime = 0;
-      audio.volume = 0.9; 
-      
-      audio.play().catch(error => {
-        console.warn(`[AudioArena] Bloqueio de interação: o som tocará no próximo clique.`, error.message);
-        
-        const retryOnInteraction = () => {
-          audio.play().then(() => {
-            window.removeEventListener('click', retryOnInteraction);
-          }).catch(() => {});
-        };
-        window.addEventListener('click', retryOnInteraction, { once: true });
-      });
-    }
-  };
+    const ctx = getCtx();
+    if (!ctx) return;
 
-  return { playSound, isLoaded };
+    // Se bloqueado por política de autoplay, agenda para o próximo clique
+    if (ctx.state === 'suspended') {
+      const unlock = () => {
+        ctx.resume().then(() => synthesize(ctx, soundKey)).catch(() => {});
+        window.removeEventListener('click', unlock);
+      };
+      window.addEventListener('click', unlock, { once: true });
+      return;
+    }
+
+    try {
+      synthesize(ctx, soundKey);
+    } catch (e) {
+      console.warn('[AudioArena] Erro ao sintetizar som:', e);
+    }
+  }, [getCtx]);
+
+  return { playSound, isLoaded: true };
 }
