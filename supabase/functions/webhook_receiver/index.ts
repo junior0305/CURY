@@ -20,15 +20,63 @@ serve(async (req) => {
                         payload?.key?.remoteJid?.replace('@s.whatsapp.net', '');
     const fromMe = payload?.data?.key?.fromMe === true || payload?.key?.fromMe === true;
     const messageText = payload?.data?.message?.conversation || payload?.data?.message?.extendedTextMessage?.text || payload?.message?.conversation || payload?.message?.extendedTextMessage?.text;
+    const now = new Date().toISOString();
 
-    // Corretor enviou mensagem → atualiza last_broker_whatsapp_at no lead (sem custo de IA)
-    if (fromMe && phoneNumber) {
-      await supabase
-        .from('leads')
-        .update({ last_broker_whatsapp_at: new Date().toISOString() })
-        .eq('phone', phoneNumber)
-        .not('status', 'in', '("ABANDONED","EXCLUDED")');
-      console.log(`[webhook_receiver] last_broker_whatsapp_at atualizado para ${phoneNumber}`);
+    if (phoneNumber) {
+      if (fromMe) {
+        // ── Corretor enviou mensagem → atualiza last_broker_whatsapp_at
+        await supabase
+          .from('leads')
+          .update({ last_broker_whatsapp_at: now })
+          .eq('phone', phoneNumber)
+          .not('status', 'in', '("ABANDONED","EXCLUDED")');
+        console.log(`[webhook_receiver] corretor → lead ${phoneNumber}`);
+
+      } else {
+        // ── Lead enviou mensagem → atualiza last_lead_response_at
+        const { data: lead } = await supabase
+          .from('leads')
+          .select('id, broker_id, name, welcome_responded_at, welcome_template_id')
+          .eq('phone', phoneNumber)
+          .not('status', 'in', '("ABANDONED","EXCLUDED")')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (lead) {
+          const updates: any = { last_lead_response_at: now };
+
+          // Primeira resposta do lead → registra welcome_responded_at
+          if (!lead.welcome_responded_at) {
+            updates.welcome_responded_at = now;
+            console.log(`[webhook_receiver] 🔥 PRIMEIRA RESPOSTA do lead ${phoneNumber}`);
+
+            // Atualiza stats do template de boas-vindas
+            if (lead.welcome_template_id) {
+              await supabase.rpc('record_welcome_template_responded', {
+                p_template_id: lead.welcome_template_id
+              });
+            }
+
+            // Notifica corretor urgentemente: lead está quente
+            if (lead.broker_id) {
+              await supabase.from('internal_notifications').insert({
+                to_id: lead.broker_id,
+                type: 'LEAD_RESPONDED',
+                title: '🔥 Lead respondeu! Atenda agora',
+                message: `${lead.name} respondeu à mensagem de boas-vindas e está esperando você. Não perca esse momento!`,
+                related_lead_id: lead.id,
+              });
+            }
+          }
+
+          await supabase
+            .from('leads')
+            .update(updates)
+            .eq('id', lead.id);
+        }
+        console.log(`[webhook_receiver] lead → corretor ${phoneNumber}`);
+      }
     }
 
     if (!phoneNumber || !messageText) {

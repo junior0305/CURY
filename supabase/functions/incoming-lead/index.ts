@@ -171,7 +171,12 @@ serve(async (req) => {
           : { data: null };
         
         if (notificationBot) {
-          const notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${origin}`;
+          const notifMsg = `🎯 *Novo Lead*
+
+👤 ${name}
+📞 ${phone}
+🏷️ ${tag || 'Sem tag'}
+📍 ${origin}`;
           
           const { data: result } = await supabase.functions.invoke('send-whatsapp', {
             body: {
@@ -191,13 +196,15 @@ serve(async (req) => {
     let welcomeSent = false;
     if (chosenBroker?.automation_settings?.welcome_enabled && chosenBroker.bot_instance_id) {
       let text = `Olá ${name}! 👋\n\nObrigado pelo interesse!`;
-      
+      let usedTemplateId: string | null = null;
+
       const { data: templates } = await supabase.from('welcome_templates').select('*').eq('is_active', true);
       if (templates?.length > 0) {
         const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('broker_id', chosenBroker.id);
         const idx = (count || 0) % templates.length;
         const brokerName = `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() || 'Corretor';
         text = (templates[idx].message || '').replace(/\{nome\}/gi, name).replace(/\{broker\}/gi, brokerName);
+        usedTemplateId = templates[idx].id;
       }
 
       const { data: result } = await supabase.functions.invoke('send-whatsapp', {
@@ -209,8 +216,17 @@ serve(async (req) => {
           type: 'welcome'
         }
       });
-      
+
       welcomeSent = result?.success || false;
+
+      // Registra qual template foi usado e atualiza stats
+      if (welcomeSent && usedTemplateId) {
+        await supabase
+          .from('leads')
+          .update({ welcome_template_id: usedTemplateId })
+          .eq('id', newLead.id);
+        await supabase.rpc('record_welcome_template_sent', { p_template_id: usedTemplateId });
+      }
     }
 
     return new Response(JSON.stringify({ 

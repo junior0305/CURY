@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Shield, Users, DollarSign, Settings, FileText, RefreshCw, Webhook, Crown, LogOut, Gift, Bot, Target, UserCog } from "lucide-react";
+import { Shield, Users, DollarSign, Settings, FileText, RefreshCw, Webhook, Crown, LogOut, Gift, Bot, Target, UserCog, HeartPulse } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import Rework from "./Rework";
 import Webhooks from "./Webhooks";
 import Premios from "./Premios";
 import IaBuilder from "./IaBuilder";  // SEM chaves!
+import SaudeLeads from "./SaudeLeads";
 import { Prospeccao } from "./Prospeccao";
 import UserManagement from "@/pages/UserManagement";
 
@@ -99,9 +100,18 @@ const ALL_TABS = [
     roles: ["ADMIN", "SUPERINTENDENT"],
   },
 
+  {
+    value: "saude-leads",
+    label: "Saúde",
+    icon: HeartPulse,
+    color: "rose",
+    roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"],
+  },
+
 ];
 
 const COLOR_MAP: Record<string, string> = {
+  rose:   "data-[state=active]:bg-rose-900/60   data-[state=active]:text-rose-200   data-[state=active]:border-rose-500/50",
   red:    "data-[state=active]:bg-red-900/60    data-[state=active]:text-red-200    data-[state=active]:border-red-500/50",
   blue:   "data-[state=active]:bg-blue-900/60   data-[state=active]:text-blue-200   data-[state=active]:border-blue-500/50",
   yellow: "data-[state=active]:bg-yellow-900/60 data-[state=active]:text-yellow-200 data-[state=active]:border-yellow-500/50",
@@ -115,7 +125,7 @@ const COLOR_MAP: Record<string, string> = {
 const ICON_COLOR_MAP: Record<string, string> = {
   red: "text-red-400", blue: "text-blue-400", yellow: "text-yellow-400",
   purple: "text-purple-400", green: "text-green-400", orange: "text-orange-400",
-  indigo: "text-indigo-400", pink: "text-pink-400",
+  indigo: "text-indigo-400", pink: "text-pink-400", rose: "text-rose-400",
 };
 
 const ROLE_LABELS: Record<string, { label: string; color: string }> = {
@@ -229,7 +239,8 @@ export default function AdminLayout() {
         {visibleTabs.find(t => t.value === "webhooks")   && <TabsContent value="webhooks">   <Webhooks />   </TabsContent>}
         {visibleTabs.find(t => t.value === "prospeccao") && <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>}
         {visibleTabs.find(t => t.value === "ia-builder") && <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>}
-        {visibleTabs.find(t => t.value === "premios")    && <TabsContent value="premios">    <Premios />    </TabsContent>}
+        {visibleTabs.find(t => t.value === "premios")      && <TabsContent value="premios">      <Premios />      </TabsContent>}
+        {visibleTabs.find(t => t.value === "saude-leads") && <TabsContent value="saude-leads" className="p-0"><SaudeLeads /></TabsContent>}
       </Tabs>
     </div>
   );
