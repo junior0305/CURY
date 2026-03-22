@@ -114,7 +114,9 @@ export default function SaudeLeads() {
       const { data, error } = await supabase
         .from("leads")
         .select("id,name,phone,tag,status,health_score,broker_id,created_at,last_broker_whatsapp_at,last_lead_response_at,welcome_responded_at,next_action_date,broker:profiles!broker_id(first_name)")
-        .not("status", "in", '("ABANDONED","EXCLUDED","CONCLUDED")')
+        .neq("status", "ABANDONED")
+        .neq("status", "EXCLUDED")
+        .neq("status", "CONCLUDED")
         .order("health_score", { ascending: true })
         .limit(200);
       if (error) throw error;
