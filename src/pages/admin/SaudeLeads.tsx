@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Clock, CheckCircle, Snowflake, RefreshCw, User, Phone, MessageSquare, BarChart2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertTriangle, Clock, CheckCircle, Snowflake, RefreshCw, User, Phone, MessageSquare, BarChart2, Wifi, WifiOff } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -107,8 +110,11 @@ function LeadCard({ lead, onReassign }: { lead: LeadHealth; onReassign: (id: str
 
 export default function SaudeLeads() {
   const queryClient = useQueryClient();
+  const [reassignLeadId, setReassignLeadId] = useState<string | null>(null);
+  const [selectedBrokerId, setSelectedBrokerId] = useState<string>("");
+  const [reassigning, setReassigning] = useState(false);
 
-  const { data: leads = [], isLoading, error: leadsError } = useQuery<LeadHealth[]>({
+  const { data: leads = [], isLoading } = useQuery<LeadHealth[]>({
     queryKey: ["health-leads"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -137,8 +143,57 @@ export default function SaudeLeads() {
     },
   });
 
-  const handleReassign = async (leadId: string) => {
-    toast.info("Redistribuição manual disponível em Rework.");
+  const { data: brokers = [] } = useQuery<{ id: string; first_name: string; last_name: string }[]>({
+    queryKey: ["active-brokers-list"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, first_name, last_name")
+        .eq("role", "BROKER")
+        .eq("lead_assignment_enabled", true);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Monitor do webhook: último evento recebido
+  const { data: lastWebhookEvent } = useQuery<Date | null>({
+    queryKey: ["last-webhook-event"],
+    queryFn: async () => {
+      const [r1, r2] = await Promise.all([
+        supabase.from("leads").select("last_broker_whatsapp_at").not("last_broker_whatsapp_at", "is", null).order("last_broker_whatsapp_at", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("leads").select("last_lead_response_at").not("last_lead_response_at", "is", null).order("last_lead_response_at", { ascending: false }).limit(1).maybeSingle(),
+      ]);
+      const t1 = r1.data?.last_broker_whatsapp_at ? new Date(r1.data.last_broker_whatsapp_at) : null;
+      const t2 = r2.data?.last_lead_response_at ? new Date(r2.data.last_lead_response_at) : null;
+      if (!t1 && !t2) return null;
+      if (!t1) return t2;
+      if (!t2) return t1;
+      return t1 > t2 ? t1 : t2;
+    },
+    refetchInterval: 60000,
+  });
+
+  const webhookOk = lastWebhookEvent
+    ? (Date.now() - lastWebhookEvent.getTime()) < 3 * 3600000 // evento nas últimas 3h
+    : false;
+
+  const handleConfirmReassign = async () => {
+    if (!reassignLeadId || !selectedBrokerId) return;
+    setReassigning(true);
+    const { error } = await supabase
+      .from("leads")
+      .update({ broker_id: selectedBrokerId })
+      .eq("id", reassignLeadId);
+    setReassigning(false);
+    if (error) {
+      toast.error("Erro ao redistribuir lead");
+      return;
+    }
+    toast.success("Lead redistribuído com sucesso!");
+    setReassignLeadId(null);
+    setSelectedBrokerId("");
+    queryClient.invalidateQueries({ queryKey: ["health-leads"] });
   };
 
   const now = new Date();
@@ -182,7 +237,21 @@ export default function SaudeLeads() {
           <p className="text-gray-500 text-sm">Monitoramento em tempo real do atendimento</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-600">Query: {leads.length} leads</span>
+          {/* Monitor Webhook */}
+          <div className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border ${
+            lastWebhookEvent === undefined
+              ? "text-gray-500 border-gray-700/40"
+              : webhookOk
+              ? "text-green-400 bg-green-900/10 border-green-500/20"
+              : "text-orange-400 bg-orange-900/10 border-orange-500/20"
+          }`}>
+            {webhookOk ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+            <span>
+              {lastWebhookEvent
+                ? `Webhook: ${timeAgo(lastWebhookEvent.toISOString())}`
+                : "Webhook: sem eventos"}
+            </span>
+          </div>
           <Button
             variant="ghost"
             size="sm"
@@ -210,11 +279,6 @@ export default function SaudeLeads() {
       </div>
 
       {/* Kanban */}
-      {leadsError && (
-        <div className="text-red-400 text-sm bg-red-900/20 border border-red-500/30 rounded-lg p-3">
-          Erro: {(leadsError as any)?.message}
-        </div>
-      )}
       {isLoading ? (
         <div className="text-center text-gray-500 py-12">Carregando...</div>
       ) : (
@@ -232,7 +296,7 @@ export default function SaudeLeads() {
                 <p className="text-gray-600 text-xs text-center py-4">Nenhum lead</p>
               ) : (
                 col.leads.map(lead => (
-                  <LeadCard key={lead.id} lead={lead} onReassign={handleReassign} />
+                  <LeadCard key={lead.id} lead={lead} onReassign={setReassignLeadId} />
                 ))
               )}
             </div>
@@ -280,6 +344,43 @@ export default function SaudeLeads() {
           </div>
         </div>
       )}
+
+      {/* Dialog de Redistribuição */}
+      <Dialog open={!!reassignLeadId} onOpenChange={open => { if (!open) { setReassignLeadId(null); setSelectedBrokerId(""); } }}>
+        <DialogContent className="bg-slate-900 border border-gray-700 text-white">
+          <DialogHeader>
+            <DialogTitle>Redistribuir Lead</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-gray-400 text-sm">Escolha o corretor que vai receber este lead:</p>
+            <Select value={selectedBrokerId} onValueChange={setSelectedBrokerId}>
+              <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
+                <SelectValue placeholder="Selecionar corretor..." />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-gray-600">
+                {brokers.map(b => (
+                  <SelectItem key={b.id} value={b.id} className="text-white hover:bg-slate-700">
+                    {b.first_name} {b.last_name || ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setReassignLeadId(null); setSelectedBrokerId(""); }} className="text-gray-400">
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmReassign}
+              disabled={!selectedBrokerId || reassigning}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white"
+            >
+              {reassigning ? "Redistribuindo..." : "Confirmar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

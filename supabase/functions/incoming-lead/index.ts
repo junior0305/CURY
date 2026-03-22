@@ -159,6 +159,25 @@ serve(async (req) => {
       status: 'SUCCESS'
     });
 
+    // ALERTA: lead sem corretor atribuído
+    if (!chosenBroker) {
+      const { data: admins } = await supabase
+        .from('profiles')
+        .select('id')
+        .in('role', ['ADMIN', 'SUPERINTENDENT']);
+      if (admins?.length > 0) {
+        await supabase.from('internal_notifications').insert(
+          admins.map((a: any) => ({
+            to_id: a.id,
+            type: 'LEAD_NO_BROKER',
+            title: '⚠️ Lead sem corretor atribuído',
+            message: `${name} (${phone}) chegou mas não foi atribuído a nenhum corretor. Verifique as filas de distribuição.`,
+            related_lead_id: newLead.id,
+          }))
+        );
+      }
+    }
+
     // NOTIFICAR CORRETOR
     let notificationSent = false;
     if (chosenBroker?.phone) {
