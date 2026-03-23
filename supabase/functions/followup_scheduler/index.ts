@@ -240,10 +240,17 @@ serve(async (req) => {
       .limit(100);
 
     let cadenceProcessed = 0;
+    const cadenceLeadsSentThisRun = new Set<string>(); // anti-spam: 1 mensagem por lead por execução
     for (const exec of executions || []) {
       try {
         const lead = exec.leads;
         if (!lead) continue;
+
+        // Anti-spam: no máximo 1 disparo por lead por execução do scheduler
+        if (cadenceLeadsSentThisRun.has(lead.id)) {
+          console.log(`[B3] Pulando ${lead.id} — já enviou nesta execução`);
+          continue;
+        }
 
         const { data: broker } = await supabase
           .from('profiles')
@@ -259,7 +266,9 @@ serve(async (req) => {
           .maybeSingle();
         if (!bot) continue;
 
-        const message = exec.message || `Olá ${lead.name || ''}, tudo bem? Só um lembrete. 😊`;
+        const brokerName = broker.first_name || 'nossa equipe';
+        const rawMessage = exec.message || `Olá {nome}, tudo bem? Só um lembrete. 😊`;
+        const message = interpolate(rawMessage, lead.name, brokerName);
 
         const { error: sendError } = await supabase.functions.invoke('send_whatsapp_message', {
           body: {
@@ -277,6 +286,7 @@ serve(async (req) => {
         }
 
         cadenceProcessed++;
+        cadenceLeadsSentThisRun.add(lead.id);
         const nextDate = new Date();
         nextDate.setDate(nextDate.getDate() + 1);
 
