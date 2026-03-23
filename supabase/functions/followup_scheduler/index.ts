@@ -48,10 +48,18 @@ async function hasRecentAutoFollowup(supabase: any, leadId: string, hours: numbe
 }
 
 /**
- * Retorna a mensagem de follow-up adequada ao status e tempo parado do lead.
- * Sem custo de IA — templates por contexto.
+ * Interpola variáveis {nome} e {broker} no template.
  */
-function getFollowupMessage(
+function interpolate(template: string, name: string, brokerName: string): string {
+  return template
+    .replace(/\{nome\}/gi, name?.split(' ')[0] || name || 'você')
+    .replace(/\{broker\}/gi, brokerName || 'nossa equipe');
+}
+
+/**
+ * Fallback: retorna mensagem hardcoded quando não há templates configurados.
+ */
+function getFallbackMessage(
   status: string,
   name: string,
   tag: string,
@@ -68,16 +76,13 @@ function getFollowupMessage(
         return `Olá ${firstName}! ⚡ Vi seu interesse em ${product} agora mesmo. Estou separando as informações. Prefere que eu mande um vídeo rápido ou as plantas? 😊`;
       }
       return `${firstName}, ainda não conseguimos conversar sobre ${product}. Tenho condições especiais disponíveis hoje. Consegue dar uma olhada? 👋`;
-
     case 'IN_PROGRESS':
       if (hoursStale > 72) {
         return `${firstName}, não quero que você perca a oportunidade de ${product}. Ainda faz sentido conversarmos? Responde 1 para Sim ou 2 para mais tarde. 😊`;
       }
       return `Olá ${firstName}! 😊 ${broker} aqui. Passando para saber se surgiu alguma dúvida sobre ${product}. Estou à disposição!`;
-
     case 'DOCS_REQUESTED':
       return `${firstName}, precisamos dos seus documentos para garantir sua proposta em ${product}. Uma foto legível já basta! Consegue enviar hoje? 📄`;
-
     default:
       return `Olá ${firstName}! 😊 ${broker} aqui. Como posso te ajudar com ${product}?`;
   }
@@ -294,23 +299,46 @@ serve(async (req) => {
     console.log(`[followup_scheduler] Bloco 3 — Cadências: ${cadenceProcessed}`);
 
     // ── BLOCO 4: Follow-up Geral ──────────────────────────────────────────────
-    // Todos os leads ativos (NEW / IN_PROGRESS / DOCS_REQUESTED) sem interação
-    // há mais de STALE_THRESHOLD_HOURS horas — independente de welcome/resposta.
+    // Todos os leads ativos sem interação há mais de STALE_THRESHOLD_HOURS horas.
+    // Usa os templates configurados no IaBuilder:
+    //   - welcome_responded_at IS NULL  → lead nunca interagiu → welcome_template
+    //   - welcome_responded_at NOT NULL → já houve conversa, esfriou → cadence_template (passo 1)
+    // Fallback para mensagens hardcoded se não houver templates ativos.
+
     const thresholdAgo = new Date(nowMs - STALE_THRESHOLD_HOURS * 3600000).toISOString();
+
+    // Carrega templates ativos uma única vez
+    const { data: welcomeTemplates } = await supabase
+      .from('welcome_templates')
+      .select('id, message, name')
+      .eq('is_active', true);
+
+    const { data: cadenceTemplates } = await supabase
+      .from('cadence_templates')
+      .select('id, name, cadence_steps(*)')
+      .eq('is_active', true);
+
+    const activeWelcome = welcomeTemplates || [];
+    // Agrupa todos os passos de texto de todas as cadências ativas
+    const cadenceTextSteps = (cadenceTemplates || []).flatMap((c: any) =>
+      (c.cadence_steps || []).filter((s: any) => s.media_type === 'text' && s.content)
+    );
+
+    console.log(`[B4] Templates disponíveis — welcome: ${activeWelcome.length}, cadence steps: ${cadenceTextSteps.length}`);
 
     // Busca leads com last_interaction_at antigo
     const { data: staleWithInteraction } = await supabase
       .from('leads')
-      .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, broker:profiles!broker_id(first_name, bot_instance_id)')
+      .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, welcome_responded_at, broker:profiles!broker_id(first_name, bot_instance_id)')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .lt('last_interaction_at', thresholdAgo)
       .not('broker_id', 'is', null)
       .limit(30);
 
-    // Busca leads sem last_interaction_at (nunca registrado) e created há mais de X horas
+    // Busca leads sem last_interaction_at (nunca registrado) e criados há mais de X horas
     const { data: staleWithoutInteraction } = await supabase
       .from('leads')
-      .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, broker:profiles!broker_id(first_name, bot_instance_id)')
+      .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, welcome_responded_at, broker:profiles!broker_id(first_name, bot_instance_id)')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .is('last_interaction_at', null)
       .lt('created_at', thresholdAgo)
@@ -339,7 +367,28 @@ serve(async (req) => {
 
       const hoursStale = (nowMs - new Date(lead.last_interaction_at || lead.created_at).getTime()) / 3600000;
       const brokerName = broker.first_name || 'nossa equipe';
-      const message = getFollowupMessage(lead.status, lead.name, lead.tag, hoursStale, brokerName);
+
+      // ── Escolha do template ──────────────────────────────────────────────────
+      let message: string;
+      let templateSource: string;
+
+      const hadConversation = !!lead.welcome_responded_at;
+
+      if (!hadConversation && activeWelcome.length > 0) {
+        // Nunca interagiu → usa welcome_template aleatório
+        const tpl = activeWelcome[Math.floor(Math.random() * activeWelcome.length)];
+        message = interpolate(tpl.message, lead.name, brokerName);
+        templateSource = `welcome_template: ${tpl.name}`;
+      } else if (hadConversation && cadenceTextSteps.length > 0) {
+        // Já conversou e esfriou → usa passo de cadência aleatório
+        const step = cadenceTextSteps[Math.floor(Math.random() * cadenceTextSteps.length)];
+        message = interpolate(step.content, lead.name, brokerName);
+        templateSource = `cadence_step: ${step.id}`;
+      } else {
+        // Fallback: sem templates configurados → mensagem hardcoded por status/tempo
+        message = getFallbackMessage(lead.status, lead.name, lead.tag, hoursStale, brokerName);
+        templateSource = 'fallback_hardcoded';
+      }
 
       const { data: result } = await supabase.functions.invoke('send-whatsapp', {
         body: {
@@ -355,7 +404,7 @@ serve(async (req) => {
         // ✅ Reseta contador "horas sem contato"
         await updateLeadInteraction(supabase, lead.id);
 
-        // Notifica corretor para acompanhar a resposta
+        // Notifica corretor
         if (lead.broker_id) {
           await supabase.from('internal_notifications').insert({
             to_id: lead.broker_id,
@@ -367,10 +416,9 @@ serve(async (req) => {
         }
 
         staleProcessed++;
-        console.log(`[B4] Stale follow-up: ${lead.id} (${lead.name}) — ${Math.floor(hoursStale)}h sem interação, status: ${lead.status}`);
+        console.log(`[B4] ${lead.id} (${lead.name}) — ${Math.floor(hoursStale)}h, ${templateSource}, hadConversation: ${hadConversation}`);
       }
 
-      // Throttle para não sobrecarregar a API de WhatsApp
       await new Promise(r => setTimeout(r, 300));
     }
     console.log(`[followup_scheduler] Bloco 4 — Ativos parados: ${staleProcessed}`);
