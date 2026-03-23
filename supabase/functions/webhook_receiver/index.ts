@@ -32,6 +32,32 @@ serve(async (req) => {
           .not('status', 'in', '("ABANDONED","EXCLUDED")');
         console.log(`[webhook_receiver] corretor → lead ${phoneNumber}`);
 
+        // Pausar sessão Sentinela ativa se corretor assumiu a conversa
+        const { data: brokerLead } = await supabase
+          .from('leads')
+          .select('id')
+          .eq('phone', phoneNumber)
+          .not('status', 'in', '("ABANDONED","EXCLUDED")')
+          .limit(1)
+          .maybeSingle();
+
+        if (brokerLead?.id) {
+          const { data: activeSess } = await supabase
+            .from('ai_sentinela_sessions')
+            .select('id')
+            .eq('lead_id', brokerLead.id)
+            .eq('status', 'active')
+            .maybeSingle();
+          if (activeSess) {
+            await supabase.from('ai_sentinela_sessions').update({
+              status: 'broker_takeover',
+              ended_at: now,
+              end_reason: 'broker_takeover',
+            }).eq('id', activeSess.id);
+            console.log(`[webhook_receiver] Sentinela pausada para lead ${brokerLead.id} (broker_takeover)`);
+          }
+        }
+
       } else {
         // ── Lead enviou mensagem → atualiza last_lead_response_at
         const { data: lead } = await supabase

@@ -423,13 +423,24 @@ serve(async (req) => {
     }
     console.log(`[followup_scheduler] Bloco 4 — Ativos parados: ${staleProcessed}`);
 
+    // ── BLOCO 5: AI Sentinela ─────────────────────────────────────────────────
+    let sentinelaProcessed = 0;
+    try {
+      const { data: sr } = await supabase.functions.invoke('ai-sentinela', { body: {} });
+      sentinelaProcessed = sr?.processed ?? 0;
+      console.log(`[followup_scheduler] Bloco 5 — Sentinela: ${sentinelaProcessed}`);
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 5 error:', e.message);
+    }
+
     return new Response(
       JSON.stringify({
         critical: criticalProcessed,
         cold: coldProcessed,
         cadence: cadenceProcessed,
         stale: staleProcessed,
-        total: criticalProcessed + coldProcessed + cadenceProcessed + staleProcessed,
+        sentinela: sentinelaProcessed,
+        total: criticalProcessed + coldProcessed + cadenceProcessed + staleProcessed + sentinelaProcessed,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );

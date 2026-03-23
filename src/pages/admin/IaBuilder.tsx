@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Bot, Plus, Pencil, Trash2, Save, MessageSquare, Brain, Video, Mic, Image, FileText, Play, Clock, ArrowRight, Hand } from "lucide-react";
+import { Bot, Plus, Pencil, Trash2, Save, MessageSquare, Brain, Video, Mic, Image, FileText, Play, Clock, ArrowRight, Hand, Shield, DollarSign } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface AIProfile {
@@ -49,7 +49,30 @@ interface WelcomeTemplate {
   created_at: string;
 }
 
-type Tab = "profiles" | "cadence" | "welcome";
+type Tab = "profiles" | "cadence" | "welcome" | "sentinela";
+
+interface SentinelaConfig {
+  id?: string;
+  is_enabled: boolean;
+  provider: string;
+  model_name: string;
+  max_tokens: number;
+  monthly_budget_usd: number;
+  monthly_spent_usd: number;
+  window_start_brt: string;
+  window_end_brt: string;
+  stale_threshold_h: number;
+  max_messages_session: number;
+  default_profile_id: string | null;
+}
+
+interface ProfileMapRow {
+  id?: string;
+  match_field: "tag" | "source";
+  match_value: string;
+  profile_id: string;
+  priority: number;
+}
 
 export default function IaBuilder() {
   const { toast } = useToast();
@@ -88,6 +111,23 @@ export default function IaBuilder() {
   const [cadenceSteps, setCadenceSteps] = useState<Partial<CadenceStep>[]>([
     { step_number: 1, delay_days: 0, media_type: "text", content: "" },
   ]);
+
+  const defaultSentinelaConfig: SentinelaConfig = {
+    is_enabled: false,
+    provider: "gemini",
+    model_name: "gemini-2.0-flash",
+    max_tokens: 300,
+    monthly_budget_usd: 10,
+    monthly_spent_usd: 0,
+    window_start_brt: "18:00",
+    window_end_brt: "21:30",
+    stale_threshold_h: 48,
+    max_messages_session: 6,
+    default_profile_id: null,
+  };
+  const [sentinelaConfig, setSentinelaConfig] = useState<SentinelaConfig>(defaultSentinelaConfig);
+  const [profileMapRows, setProfileMapRows] = useState<ProfileMapRow[]>([]);
+  const [sentinelaLoading, setSentinelaLoading] = useState(false);
 
   const loadProfiles = async () => {
     const { data, error } = await supabase
@@ -128,9 +168,16 @@ export default function IaBuilder() {
     }
   };
 
+  const loadSentinelaConfig = async () => {
+    const { data: cfg } = await supabase.from("ai_sentinela_config").select("*").maybeSingle();
+    if (cfg) setSentinelaConfig(cfg);
+    const { data: maps } = await supabase.from("ai_sentinela_profile_map").select("*").order("priority", { ascending: false });
+    setProfileMapRows(maps || []);
+  };
+
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadProfiles(), loadCadences(), loadWelcomeTemplates()]).finally(() => setLoading(false));
+    Promise.all([loadProfiles(), loadCadences(), loadWelcomeTemplates(), loadSentinelaConfig()]).finally(() => setLoading(false));
   }, []);
 
   const handleSaveProfile = async () => {
@@ -307,6 +354,48 @@ export default function IaBuilder() {
     setCadenceSteps(newSteps);
   };
 
+  const handleSaveSentinela = async () => {
+    setSentinelaLoading(true);
+    try {
+      const { error } = await supabase.from("ai_sentinela_config").upsert(
+        { ...sentinelaConfig, updated_at: new Date().toISOString() },
+        { onConflict: "_singleton" }
+      );
+      if (error) throw error;
+
+      // Recriar mapeamentos: delete all then reinsert
+      await supabase.from("ai_sentinela_profile_map").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      const validRows = profileMapRows.filter(r => r.match_value && r.profile_id);
+      if (validRows.length > 0) {
+        const { error: mapErr } = await supabase.from("ai_sentinela_profile_map").insert(
+          validRows.map(({ id: _id, ...r }) => r)
+        );
+        if (mapErr) throw mapErr;
+      }
+
+      toast({ title: "✅ Sentinela IA salvo!" });
+      await loadSentinelaConfig();
+    } catch (error: any) {
+      toast({ title: "❌ Erro ao salvar", description: error.message, variant: "destructive" });
+    } finally {
+      setSentinelaLoading(false);
+    }
+  };
+
+  const addProfileMapRow = () => {
+    setProfileMapRows([...profileMapRows, { match_field: "tag", match_value: "", profile_id: "", priority: 0 }]);
+  };
+
+  const removeProfileMapRow = (index: number) => {
+    setProfileMapRows(profileMapRows.filter((_, i) => i !== index));
+  };
+
+  const updateProfileMapRow = (index: number, field: string, value: any) => {
+    const updated = [...profileMapRows];
+    updated[index] = { ...updated[index], [field]: value };
+    setProfileMapRows(updated);
+  };
+
   const getMediaIcon = (type: string) => {
     switch (type) {
       case "text": return <FileText className="w-4 h-4" />;
@@ -341,6 +430,10 @@ export default function IaBuilder() {
         <button onClick={() => setTab("cadence")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "cadence" ? "bg-blue-900/40 text-blue-300 border border-blue-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
           <Play className="w-4 h-4" /> Cadência Follow-up
           <span className="text-xs bg-slate-700 rounded px-1.5">{cadences.filter(c => c.is_active).length}</span>
+        </button>
+        <button onClick={() => setTab("sentinela")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "sentinela" ? "bg-orange-900/40 text-orange-300 border border-orange-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
+          <Shield className="w-4 h-4" /> Sentinela IA
+          {sentinelaConfig.is_enabled && <span className="text-xs bg-orange-700/60 text-orange-200 rounded px-1.5">ON</span>}
         </button>
       </div>
       {tab === "profiles" ? (
@@ -462,7 +555,7 @@ export default function IaBuilder() {
             </div>
           )}
         </div>
-      ) : (
+      ) : tab === "cadence" ? (
         <div className="space-y-4">
           <div className="flex justify-end">
             <Button onClick={() => { resetCadenceForm(); setCadenceModalOpen(true); }} className="bg-blue-600 hover:bg-blue-500 gap-2">
@@ -537,7 +630,225 @@ export default function IaBuilder() {
             </div>
           )}
         </div>
-      )}
+      ) : tab === "sentinela" ? (
+        <div className="space-y-6">
+          {/* A. Banner de orçamento */}
+          <Card className="border-2 border-orange-500/30 bg-orange-950/20">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-orange-400" />
+                  <span className="text-sm font-bold text-orange-300">Orçamento mensal</span>
+                </div>
+                <span className={`text-sm font-mono font-bold ${
+                  sentinelaConfig.monthly_spent_usd >= sentinelaConfig.monthly_budget_usd ? "text-red-400" :
+                  sentinelaConfig.monthly_spent_usd / sentinelaConfig.monthly_budget_usd > 0.8 ? "text-yellow-400" :
+                  "text-green-400"
+                }`}>
+                  ${sentinelaConfig.monthly_spent_usd.toFixed(4)} / ${sentinelaConfig.monthly_budget_usd.toFixed(2)}
+                </span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    sentinelaConfig.monthly_spent_usd >= sentinelaConfig.monthly_budget_usd ? "bg-red-500" :
+                    sentinelaConfig.monthly_spent_usd / sentinelaConfig.monthly_budget_usd > 0.8 ? "bg-yellow-500" :
+                    "bg-green-500"
+                  }`}
+                  style={{ width: `${Math.min(100, (sentinelaConfig.monthly_spent_usd / sentinelaConfig.monthly_budget_usd) * 100)}%` }}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* B. Toggle + modelo */}
+          <Card className="border-gray-700/50 bg-slate-800/40">
+            <CardContent className="pt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white font-bold">Sentinela IA</p>
+                  <p className="text-xs text-gray-500">Agente LLM autônomo para leads parados</p>
+                </div>
+                <Switch
+                  checked={sentinelaConfig.is_enabled}
+                  onCheckedChange={v => setSentinelaConfig({ ...sentinelaConfig, is_enabled: v })}
+                />
+              </div>
+              <div>
+                <Label className="text-gray-400 text-xs uppercase">Modelo LLM</Label>
+                <Select
+                  value={`${sentinelaConfig.provider}::${sentinelaConfig.model_name}`}
+                  onValueChange={v => {
+                    const [provider, model_name] = v.split("::");
+                    setSentinelaConfig({ ...sentinelaConfig, provider, model_name });
+                  }}
+                >
+                  <SelectTrigger className="bg-slate-900 border-gray-600 text-white mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-gray-600">
+                    <SelectItem value="gemini::gemini-2.0-flash">Gemini 2.0 Flash — ~$0.0004/conversa</SelectItem>
+                    <SelectItem value="anthropic::claude-haiku-4-5">Claude Haiku 4.5 — ~$0.003/conversa</SelectItem>
+                    <SelectItem value="anthropic::claude-sonnet-4-6">Claude Sonnet 4.6 — ~$0.010/conversa</SelectItem>
+                    <SelectItem value="openai::gpt-4o-mini">GPT-4o Mini — ~$0.001/conversa</SelectItem>
+                    <SelectItem value="openai::gpt-4o">GPT-4o — ~$0.008/conversa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* C. Configurações numéricas */}
+          <Card className="border-gray-700/50 bg-slate-800/40">
+            <CardContent className="pt-4">
+              <Label className="text-gray-400 text-xs uppercase mb-3 block">Parâmetros operacionais</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-gray-400 text-xs">Orçamento mensal (USD)</Label>
+                  <Input
+                    type="number" min={0} step={0.5}
+                    value={sentinelaConfig.monthly_budget_usd}
+                    onChange={e => setSentinelaConfig({ ...sentinelaConfig, monthly_budget_usd: parseFloat(e.target.value) || 0 })}
+                    className="bg-slate-900 border-gray-600 text-white mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-gray-400 text-xs">Inatividade mínima (horas)</Label>
+                  <Input
+                    type="number" min={1}
+                    value={sentinelaConfig.stale_threshold_h}
+                    onChange={e => setSentinelaConfig({ ...sentinelaConfig, stale_threshold_h: parseInt(e.target.value) || 48 })}
+                    className="bg-slate-900 border-gray-600 text-white mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-gray-400 text-xs">Início da janela (BRT)</Label>
+                  <Input
+                    type="time"
+                    value={sentinelaConfig.window_start_brt}
+                    onChange={e => setSentinelaConfig({ ...sentinelaConfig, window_start_brt: e.target.value })}
+                    className="bg-slate-900 border-gray-600 text-white mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-gray-400 text-xs">Fim da janela (BRT)</Label>
+                  <Input
+                    type="time"
+                    value={sentinelaConfig.window_end_brt}
+                    onChange={e => setSentinelaConfig({ ...sentinelaConfig, window_end_brt: e.target.value })}
+                    className="bg-slate-900 border-gray-600 text-white mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-gray-400 text-xs">Máx mensagens por sessão</Label>
+                  <Input
+                    type="number" min={1} max={20}
+                    value={sentinelaConfig.max_messages_session}
+                    onChange={e => setSentinelaConfig({ ...sentinelaConfig, max_messages_session: parseInt(e.target.value) || 6 })}
+                    className="bg-slate-900 border-gray-600 text-white mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-gray-400 text-xs">Máx tokens por resposta</Label>
+                  <Input
+                    type="number" min={50} max={1000}
+                    value={sentinelaConfig.max_tokens}
+                    onChange={e => setSentinelaConfig({ ...sentinelaConfig, max_tokens: parseInt(e.target.value) || 300 })}
+                    className="bg-slate-900 border-gray-600 text-white mt-1"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* D. Perfil padrão */}
+          <Card className="border-gray-700/50 bg-slate-800/40">
+            <CardContent className="pt-4">
+              <Label className="text-gray-400 text-xs uppercase mb-2 block">Perfil de IA padrão</Label>
+              <Select
+                value={sentinelaConfig.default_profile_id || "none"}
+                onValueChange={v => setSentinelaConfig({ ...sentinelaConfig, default_profile_id: v === "none" ? null : v })}
+              >
+                <SelectTrigger className="bg-slate-900 border-gray-600 text-white">
+                  <SelectValue placeholder="Selecione um perfil..." />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-gray-600">
+                  <SelectItem value="none">Nenhum (Sentinela desativada sem perfil)</SelectItem>
+                  {profiles.filter(p => p.is_active).map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 mt-1">Usado quando nenhum mapeamento tag/source corresponder ao lead</p>
+            </CardContent>
+          </Card>
+
+          {/* E. Mapeamentos tag/source → perfil */}
+          <Card className="border-gray-700/50 bg-slate-800/40">
+            <CardContent className="pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-gray-400 text-xs uppercase">Mapeamentos tag/source → perfil</Label>
+                <Button onClick={addProfileMapRow} size="sm" variant="outline" className="border-orange-500/30 text-orange-400 hover:bg-orange-900/20">
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar mapeamento
+                </Button>
+              </div>
+              {profileMapRows.length === 0 ? (
+                <p className="text-xs text-gray-500 text-center py-4">Nenhum mapeamento. Todos os leads usarão o perfil padrão.</p>
+              ) : (
+                <div className="space-y-2">
+                  {profileMapRows.map((row, idx) => (
+                    <div key={idx} className="grid grid-cols-[120px_1fr_1fr_80px_36px] gap-2 items-center">
+                      <Select value={row.match_field} onValueChange={v => updateProfileMapRow(idx, "match_field", v)}>
+                        <SelectTrigger className="bg-slate-900 border-gray-600 text-white text-xs h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-gray-600">
+                          <SelectItem value="tag">tag</SelectItem>
+                          <SelectItem value="source">source</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        placeholder="valor (ex: mcmv)"
+                        value={row.match_value}
+                        onChange={e => updateProfileMapRow(idx, "match_value", e.target.value)}
+                        className="bg-slate-900 border-gray-600 text-white text-xs h-8"
+                      />
+                      <Select value={row.profile_id || "none"} onValueChange={v => updateProfileMapRow(idx, "profile_id", v === "none" ? "" : v)}>
+                        <SelectTrigger className="bg-slate-900 border-gray-600 text-white text-xs h-8">
+                          <SelectValue placeholder="Perfil..." />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-gray-600">
+                          <SelectItem value="none">Selecione...</SelectItem>
+                          {profiles.filter(p => p.is_active).map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number" placeholder="prior."
+                        value={row.priority}
+                        onChange={e => updateProfileMapRow(idx, "priority", parseInt(e.target.value) || 0)}
+                        className="bg-slate-900 border-gray-600 text-white text-xs h-8"
+                      />
+                      <Button onClick={() => removeProfileMapRow(idx)} variant="ghost" size="sm" className="text-red-400 hover:bg-red-900/20 h-8 w-8 p-0">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* F. Salvar */}
+          <div className="flex justify-end">
+            <Button onClick={handleSaveSentinela} disabled={sentinelaLoading} className="bg-orange-600 hover:bg-orange-500 font-bold gap-2">
+              <Save className="w-4 h-4" />
+              {sentinelaLoading ? "Salvando..." : "Salvar configuração"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {/* MODAL PERFIL */}
       <Dialog open={profileModalOpen} onOpenChange={setProfileModalOpen}>
