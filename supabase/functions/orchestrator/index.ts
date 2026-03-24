@@ -85,7 +85,7 @@ serve(async (req) => {
       const targetAudience = campaign.target_audience || {};
       const daysWithoutContact = targetAudience.days_without_contact || 3;
       const leadStatus = targetAudience.lead_status || [];
-      let leadsQuery = supabaseClient.from('leads').select('id, name, phone').is('deleted_at', null);
+      let leadsQuery = supabaseClient.from('leads').select('id, name, phone, broker_id').is('deleted_at', null);
       if (leadStatus.length > 0) leadsQuery = leadsQuery.in('status', leadStatus);
       const cutoffDate = new Date(); cutoffDate.setDate(cutoffDate.getDate() - daysWithoutContact);
       leadsQuery = leadsQuery.or(`last_contact_at.is.null,last_contact_at.lt.${cutoffDate.toISOString()}`);
@@ -102,8 +102,31 @@ serve(async (req) => {
     let botIndex = 0;
 
     for (const [i, lead] of leads.entries()) {
-      const bot = bots[botIndex % bots.length];
+      // use_broker_chip: se habilitado e lead tem broker, usar o chip pessoal do corretor
+      let bot = bots[botIndex % bots.length];
       botIndex++;
+
+      if (campaign.use_broker_chip && lead.broker_id) {
+        const { data: brokerProfile } = await supabaseClient
+          .from('profiles')
+          .select('bot_instance_id')
+          .eq('id', lead.broker_id)
+          .maybeSingle();
+
+        if (brokerProfile?.bot_instance_id) {
+          const { data: brokerBot } = await supabaseClient
+            .from('bot_instances')
+            .select('*')
+            .eq('id', brokerProfile.bot_instance_id)
+            .eq('status', 'active')
+            .maybeSingle();
+
+          if (brokerBot) {
+            bot = brokerBot;
+            console.log(`[orchestrator] 🔑 use_broker_chip: lead ${lead.name} → chip do corretor ${brokerBot.name}`);
+          }
+        }
+      }
 
       console.log(`[orchestrator] 🧾 Processando lead ${i + 1}/${leads.length} -> ${lead.name || lead.phone} via bot ${bot.name}`);
 

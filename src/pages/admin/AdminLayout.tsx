@@ -9,6 +9,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { CompanySelector } from "@/components/CompanySelector";
 
 import Cockpit      from "./Cockpit";
 import Tropas       from "./Tropas";
@@ -190,6 +191,7 @@ export default function AdminLayout() {
           </div>
 
           <div className="flex items-center gap-3">
+            <CompanySelector compact />
             <div className="text-right hidden sm:block">
               <p className="text-white text-sm font-semibold">{user?.email}</p>
               {roleInfo && (

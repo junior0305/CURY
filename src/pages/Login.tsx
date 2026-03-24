@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/AuthProvider';
+import { CompanySelector } from '@/components/CompanySelector';
 import { Swords, Shield, Target } from "lucide-react";
 
 function Login() {
@@ -40,6 +41,8 @@ function Login() {
             Entre no campo de batalha e domine o mercado.
           </p>
         </div>
+
+        <CompanySelector />
 
         <div className="bg-white rounded-2xl p-1">
           <Auth

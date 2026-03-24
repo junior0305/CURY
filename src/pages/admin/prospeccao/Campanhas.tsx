@@ -54,6 +54,7 @@ interface Campaign {
   leads_responded: number;
   leads_qualified: number;
   leads_converted: number;
+  use_broker_chip: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -103,6 +104,7 @@ export default function Campanhas() {
     max_messages_per_lead: 3,
     delay_between_messages_min: 120,
     delay_between_messages_max: 480,
+    use_broker_chip: false,
   });
 
   const loadCampaigns = async () => {
@@ -192,6 +194,7 @@ export default function Campanhas() {
       max_messages_per_lead: formData.max_messages_per_lead,
       delay_between_messages_min: formData.delay_between_messages_min,
       delay_between_messages_max: formData.delay_between_messages_max,
+      use_broker_chip: formData.use_broker_chip,
       created_by: user.id,
       updated_at: new Date().toISOString(),
     };
@@ -237,12 +240,14 @@ export default function Campanhas() {
   const resetForm = () => {
     setFormData({
       name: "", description: "", status: "draft", ai_profile_id: null,
+      bot_instance_id: null, prospect_instance_ids: [],
       target_audience: { lead_status: [], days_without_contact: 3, tags: [], exclude_converted: true, source: 'crm' },
       message_templates: [{ id: 1, text: "" }],
       ai_instructions: "", scheduled_start: "", scheduled_end: "",
       working_hours: { start: "09:00", end: "18:00" },
       max_leads: null, max_messages_per_lead: 3,
       delay_between_messages_min: 120, delay_between_messages_max: 480,
+      use_broker_chip: false,
     });
     setEditCampaign(null);
     setCurrentStep(1);
@@ -263,6 +268,7 @@ export default function Campanhas() {
       max_leads: campaign.max_leads, max_messages_per_lead: campaign.max_messages_per_lead,
       delay_between_messages_min: campaign.delay_between_messages_min,
       delay_between_messages_max: campaign.delay_between_messages_max,
+      use_broker_chip: campaign.use_broker_chip ?? false,
     });
     setLeadSource(campaign.target_audience?.source || 'crm');
     setModalOpen(true);
@@ -419,6 +425,20 @@ export default function Campanhas() {
                     </div>
                   )}
                   <p className="text-xs text-gray-500 mt-2">{formData.ai_profile_id ? "✅ Perfil selecionado" : "ℹ️ Configure manualmente no próximo passo"}</p>
+
+                  <div className="mt-4 flex items-center justify-between p-3 bg-slate-800/60 rounded-lg border border-gray-700">
+                    <div>
+                      <p className="text-sm font-semibold text-white">Usar chip do corretor</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Cada lead recebe mensagem pelo chip pessoal do seu corretor. Requer leads do CRM com corretor atribuído.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormData(fd => ({ ...fd, use_broker_chip: !fd.use_broker_chip }))}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${formData.use_broker_chip ? 'bg-blue-600' : 'bg-gray-600'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${formData.use_broker_chip ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
                 </div>
 
                 <div>
