@@ -110,11 +110,18 @@ export default function Rework() {
   const parseCSV = (text: string): ParseResult => {
     const lines = text.trim().split(/\r?\n/);
     if (lines.length < 2) return { valid: [], errors: ["Arquivo vazio ou sem dados"] };
-    const headers = lines[0].toLowerCase().split(",").map(h => h.trim().replace(/"/g, ""));
-    const nameIdx = headers.findIndex(h => h.includes("nome") || h === "name");
-    const phoneIdx = headers.findIndex(h => h.includes("telefone") || h.includes("phone") || h.includes("celular") || h.includes("fone"));
-    const emailIdx = headers.findIndex(h => h.includes("email"));
-    const tagIdx = headers.findIndex(h => h.includes("tag") || h.includes("produto") || h.includes("product"));
+
+    // Auto-detecta delimitador: ; ou , ou \t
+    const firstLine = lines[0];
+    const delim = firstLine.includes(";") ? ";" : firstLine.includes("\t") ? "\t" : ",";
+
+    const splitLine = (line: string) => line.split(delim).map(c => c.trim().replace(/^"|"$/g, ""));
+
+    const headers = splitLine(lines[0]).map(h => h.toLowerCase());
+    const nameIdx   = headers.findIndex(h => h.includes("nome") || h === "name");
+    const phoneIdx  = headers.findIndex(h => h.includes("telefone") || h.includes("phone") || h.includes("celular") || h.includes("fone") || h.includes("whatsapp"));
+    const emailIdx  = headers.findIndex(h => h.includes("email"));
+    const tagIdx    = headers.findIndex(h => h.includes("tag") || h.includes("produto") || h.includes("product"));
     const sourceIdx = headers.findIndex(h => h.includes("source") || h.includes("fonte") || h.includes("origem"));
 
     if (nameIdx === -1) return { valid: [], errors: ["Coluna 'nome' ou 'name' não encontrada"] };
@@ -124,16 +131,19 @@ export default function Rework() {
     const errors: string[] = [];
 
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(",").map(c => c.trim().replace(/"/g, ""));
-      const name = cols[nameIdx];
-      const phone = cols[phoneIdx]?.replace(/\D/g, "");
+      if (!lines[i].trim()) continue;
+      const cols = splitLine(lines[i]);
+      const name = cols[nameIdx]?.trim();
+      // Remove prefixo p:+ e caracteres não numéricos (exceto +)
+      const rawPhone = cols[phoneIdx] || "";
+      const phone = rawPhone.replace(/^[a-zA-Z]+:/i, "").replace(/[^0-9+]/g, "");
       if (!name || name.length < 2) { errors.push(`Linha ${i + 1}: nome inválido`); continue; }
       if (!phone || phone.length < 8) { errors.push(`Linha ${i + 1}: telefone inválido`); continue; }
       valid.push({
         name, phone,
-        email: emailIdx >= 0 ? cols[emailIdx] || undefined : undefined,
-        tag: tagIdx >= 0 ? cols[tagIdx] || undefined : undefined,
-        source: sourceIdx >= 0 ? cols[sourceIdx] || undefined : undefined,
+        email: emailIdx >= 0 ? cols[emailIdx]?.trim() || undefined : undefined,
+        tag: tagIdx >= 0 ? cols[tagIdx]?.trim() || undefined : undefined,
+        source: sourceIdx >= 0 ? cols[sourceIdx]?.trim() || undefined : undefined,
       });
     }
     return { valid, errors };
