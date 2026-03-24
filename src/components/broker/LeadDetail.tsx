@@ -55,10 +55,34 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
       if (!leadId) return [];
       const { data: notes } = await supabase.from("lead_notes").select("*").eq("lead_id", leadId).order("created_at", { ascending: true });
       const { data: history } = await supabase.from("funnel_history").select("*").eq("lead_id", leadId).order("created_at", { ascending: true });
+
+      // Histórico de mensagens da IA
+      const { data: conv } = await supabase
+        .from("ia_conversations").select("id")
+        .eq("lead_id", leadId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const iaMessages: any[] = [];
+      if (conv) {
+        const { data: msgs } = await supabase
+          .from("ia_messages")
+          .select("id, message_text, direction, sender_type, created_at")
+          .eq("conversation_id", conv.id)
+          .order("created_at", { ascending: true })
+          .limit(30);
+        (msgs || []).forEach(m => {
+          iaMessages.push({
+            id: `ia-${m.id}`,
+            type: m.direction === "incoming" ? "IA_IN" : "IA_OUT",
+            content: m.message_text,
+            createdAt: m.created_at,
+          });
+        });
+      }
+
       return [
         ...(notes || []).map((n: any) => ({ id: n.id, type: "NOTE", content: n.content, createdAt: n.created_at, authorName: "Você" })),
         ...(history || []).map((h: any) => ({ id: h.id, type: "STATUS_CHANGE", content: `Mudou para: ${h.stage}`, createdAt: h.created_at })),
         lead ? { id: "creation", type: "CREATION", content: `Lead Criado: ${lead.name}`, createdAt: lead.createdAt } : null,
+        ...iaMessages,
       ].filter(Boolean).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     },
     enabled: !!leadId,
@@ -123,7 +147,7 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
     onSuccess: () => {
       setNoteContent("");
       refetchTimeline();
-      updateStatusMutation.mutate({ status: lead!.status });
+      // Nota interna NÃO atualiza last_interaction_at nem dispara status mutation
     },
   });
 
@@ -166,9 +190,10 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
   }
 
   const currentStepIndex = PIPELINE_STEPS.findIndex(s => s.id === lead.status);
-  const lastInter = new Date(lead.lastInteractionAt);
-  const isHot = isAfter(lastInter, addHours(new Date(), -24));
-  const isCold = !isAfter(lastInter, addHours(new Date(), -168));
+  // "Quente" = lead RESPONDEU nas últimas 24h (não quando o corretor agiu)
+  const lastLeadResp = lead.lastLeadResponseAt ? new Date(lead.lastLeadResponseAt) : null;
+  const isHot  = !!lastLeadResp && isAfter(lastLeadResp, addHours(new Date(), -24));
+  const isCold = !lastLeadResp || !isAfter(lastLeadResp, addHours(new Date(), -168));
 
   return (
     <div className="h-full flex flex-col bg-slate-900 overflow-hidden">
@@ -278,7 +303,7 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
         {/* Input de nota */}
         <div className="flex gap-2 mb-3">
           <Textarea
-            placeholder="Nota rápida ou script..."
+            placeholder="Nota interna (privada, não enviada ao lead)..."
             className="min-h-[40px] h-[40px] max-h-[80px] resize-none rounded-xl bg-slate-700/60 border-gray-600/50 text-white placeholder-gray-600 focus:border-indigo-500/50 focus:ring-indigo-500/20 text-sm py-2"
             value={noteContent}
             onChange={e => setNoteContent(e.target.value)}

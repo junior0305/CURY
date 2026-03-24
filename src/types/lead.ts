@@ -13,5 +13,6 @@ export interface Lead {
   tag: string;
   createdAt: string;
   lastInteractionAt: string;
+  lastLeadResponseAt: string | null;
   exclusionReason: ExclusionReason;
 }
