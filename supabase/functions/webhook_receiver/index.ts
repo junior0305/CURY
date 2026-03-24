@@ -35,13 +35,19 @@ serve(async (req) => {
         // Pausar sessão Sentinela ativa se corretor assumiu a conversa
         const { data: brokerLead } = await supabase
           .from('leads')
-          .select('id')
+          .select('id, status')
           .eq('phone', phoneNumber)
           .not('status', 'in', '("ABANDONED","EXCLUDED")')
           .limit(1)
           .maybeSingle();
 
         if (brokerLead?.id) {
+          // Auto-avança NEW → IN_PROGRESS quando corretor envia 1ª mensagem
+          if (brokerLead.status === 'NEW') {
+            await supabase.from('leads').update({ status: 'IN_PROGRESS' }).eq('id', brokerLead.id);
+            console.log(`[webhook_receiver] Lead ${brokerLead.id} NEW → IN_PROGRESS`);
+          }
+
           const { data: activeSess } = await supabase
             .from('ai_sentinela_sessions')
             .select('id')

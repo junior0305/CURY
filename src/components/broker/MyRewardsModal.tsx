@@ -3,11 +3,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Trophy, Gift, CheckCircle2, Lock } from "lucide-react";
+import { Loader2, Trophy, Gift, CheckCircle2, Lock, Banknote, Clock, XCircle } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
+
+const PRIZE_ICONS: Record<string, string> = { PIX: "💸", FOLGA: "🏖️", BONUS: "🎁" };
+const fmt = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "";
 
 interface MyRewardsModalProps {
   isOpen: boolean;
@@ -58,6 +62,22 @@ export const MyRewardsModal = ({ isOpen, onOpenChange }: MyRewardsModalProps) =>
     enabled: campaigns.length > 0 && !!user?.id
   });
 
+  // 2b. Histórico de prêmios (prize_claims) — inclui pagamentos do admin
+  const { data: prizeClaims = [], isLoading: loadingClaims } = useQuery({
+    queryKey: ['my-prize-claims', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data } = await supabase
+        .from('prize_claims')
+        .select('id, prize_type, prize_value, prize_label, status, paid_at, notes, created_at')
+        .eq('broker_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
   // 3. Check if already redeemed
   const { data: redeemedCampaigns = [], isLoading: loadingRedeemed } = useQuery({
     queryKey: ['my-redeemed-campaigns', user?.id],
@@ -96,7 +116,7 @@ export const MyRewardsModal = ({ isOpen, onOpenChange }: MyRewardsModalProps) =>
     onError: (err: any) => toast.error("Erro ao solicitar: " + err.message)
   });
 
-  const isLoading = loadingCampaigns || loadingProgress || loadingRedeemed;
+  const isLoading = loadingCampaigns || loadingProgress || loadingRedeemed || loadingClaims;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -110,6 +130,34 @@ export const MyRewardsModal = ({ isOpen, onOpenChange }: MyRewardsModalProps) =>
         </div>
 
         <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+          {/* ── Histórico de Prêmios (prize_claims) ─────────────────────── */}
+          {prizeClaims.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest">Meus Prêmios</h3>
+              {prizeClaims.map((claim: any) => {
+                const isPaid     = claim.status === 'PAID';
+                const isApproved = claim.status === 'APPROVED';
+                const isRejected = claim.status === 'REJECTED';
+                return (
+                  <div key={claim.id} className={`flex items-center gap-3 p-3 rounded-xl border ${isPaid ? 'bg-emerald-50 border-emerald-200' : isApproved ? 'bg-blue-50 border-blue-200' : isRejected ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                    <span className="text-2xl">{PRIZE_ICONS[claim.prize_type] || "🎁"}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-slate-800">{fmt(claim.prize_value)}</span>
+                        <span className="text-slate-500 text-xs">— {claim.prize_label}</span>
+                        {isPaid && <Badge className="bg-emerald-500 text-white text-[9px] gap-1"><Banknote className="w-2.5 h-2.5" /> PAGO {fmtDate(claim.paid_at)}</Badge>}
+                        {isApproved && <Badge className="bg-blue-500 text-white text-[9px] gap-1"><CheckCircle2 className="w-2.5 h-2.5" /> APROVADO</Badge>}
+                        {isRejected && <Badge className="bg-red-500 text-white text-[9px] gap-1"><XCircle className="w-2.5 h-2.5" /> RECUSADO</Badge>}
+                        {!isPaid && !isApproved && !isRejected && <Badge className="bg-yellow-500 text-white text-[9px] gap-1"><Clock className="w-2.5 h-2.5" /> AGUARDANDO</Badge>}
+                      </div>
+                      {claim.notes && <p className="text-[11px] text-slate-500 mt-0.5">{claim.notes}</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {isLoading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-8 h-8 text-indigo-600 animate-spin" /></div>
           ) : campaigns.length === 0 ? (
