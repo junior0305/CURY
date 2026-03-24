@@ -195,6 +195,7 @@ export default function Equipes() {
 
   // Managers disponíveis = usuários com role manager/admin
   const eligibleManagers = profiles.filter((p) =>
+    p.role === "MANAGER" || p.role === "ADMIN" || p.role === "SUPERINTENDENT" ||
     p.role === "manager" || p.role === "admin" || p.role === "superintendent"
   );
 
