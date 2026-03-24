@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   RefreshCw, Upload, Users, ArrowRight, CheckCircle2,
-  XCircle, AlertTriangle, FileText, Download,
+  XCircle, AlertTriangle, FileText, Download, Shuffle, UserCheck,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -34,6 +34,7 @@ type Tab = "redistribute" | "upload";
 
 interface CsvRow { name: string; phone: string; email?: string; tag?: string; source?: string; }
 interface ParseResult { valid: CsvRow[]; errors: string[]; }
+interface Queue { id: string; name: string; broker_ids: string[]; last_assigned_index: number; }
 
 export default function Rework() {
   const { toast } = useToast();
@@ -55,16 +56,21 @@ export default function Rework() {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ inserted: number; errors: number } | null>(null);
+  const [assignMode, setAssignMode] = useState<"broker" | "queue">("broker");
   const [assignTo, setAssignTo] = useState("");
+  const [assignQueue, setAssignQueue] = useState("");
+  const [queues, setQueues] = useState<Queue[]>([]);
 
   const loadData = async () => {
     setLoading(true);
-    const [{ data: p }, { data: l }] = await Promise.all([
+    const [{ data: p }, { data: l }, { data: q }] = await Promise.all([
       supabase.from("profiles").select("id,first_name,last_name,email,role,lead_assignment_enabled").order("first_name"),
       supabase.from("leads").select("id,name,phone,email,status,broker_id,tag,created_at").order("created_at", { ascending: false }).limit(500),
+      supabase.from("distribution_queues").select("id,name,broker_ids,last_assigned_index").eq("is_active", true).order("name"),
     ]);
     setBrokers((p || []).filter(pr => pr.role === "BROKER"));
     setLeads(l || []);
+    setQueues(q || []);
     setLoading(false);
   };
 
@@ -148,22 +154,49 @@ export default function Rework() {
 
   const handleUpload = async () => {
     if (!parseResult || parseResult.valid.length === 0) return toast({ title: "Nenhum dado válido para importar", variant: "destructive" });
+
     setUploading(true);
     let inserted = 0; let errors = 0;
-    // Insert in batches of 50
-    const batches: CsvRow[][] = [];
-    for (let i = 0; i < parseResult.valid.length; i += 50) batches.push(parseResult.valid.slice(i, i + 50));
-    for (const batch of batches) {
-      const rows = batch.map(r => ({
-        name: r.name, phone: r.phone,
-        email: r.email || null, tag: r.tag || null,
-        broker_id: assignTo || null,
-        status: "NEW",
-      }));
-      const { error, data } = await supabase.from("leads").insert(rows).select("id");
-      if (error) errors += batch.length;
-      else inserted += data?.length || 0;
+
+    // Distribuição por fila (round-robin)
+    if (assignMode === "queue" && assignQueue) {
+      const { data: freshQueue } = await supabase
+        .from("distribution_queues").select("broker_ids,last_assigned_index").eq("id", assignQueue).single();
+      if (!freshQueue?.broker_ids?.length) {
+        setUploading(false);
+        return toast({ title: "Regra sem corretores ativos", variant: "destructive" });
+      }
+      let idx = freshQueue.last_assigned_index || 0;
+      const rows = parseResult.valid.map(r => {
+        const broker_id = freshQueue.broker_ids[idx % freshQueue.broker_ids.length];
+        idx++;
+        return { name: r.name, phone: r.phone, email: r.email || null, tag: r.tag || null, broker_id, status: "NEW" };
+      });
+      // Atualiza índice da fila
+      await supabase.from("distribution_queues").update({ last_assigned_index: idx }).eq("id", assignQueue);
+      // Insere em lotes de 50
+      for (let i = 0; i < rows.length; i += 50) {
+        const { error, data } = await supabase.from("leads").insert(rows.slice(i, i + 50)).select("id");
+        if (error) errors += Math.min(50, rows.length - i);
+        else inserted += data?.length || 0;
+      }
+    } else {
+      // Atribuição direta a um corretor (ou sem corretor)
+      const batches: CsvRow[][] = [];
+      for (let i = 0; i < parseResult.valid.length; i += 50) batches.push(parseResult.valid.slice(i, i + 50));
+      for (const batch of batches) {
+        const rows = batch.map(r => ({
+          name: r.name, phone: r.phone,
+          email: r.email || null, tag: r.tag || null,
+          broker_id: assignTo || null,
+          status: "NEW",
+        }));
+        const { error, data } = await supabase.from("leads").insert(rows).select("id");
+        if (error) errors += batch.length;
+        else inserted += data?.length || 0;
+      }
     }
+
     setUploading(false);
     setUploadResult({ inserted, errors });
     if (inserted > 0) toast({ title: `✅ ${inserted} leads importados!` });
@@ -332,18 +365,41 @@ export default function Rework() {
             </Button>
           </div>
 
-          {/* Atribuir a */}
-          <div className="space-y-1.5">
-            <Label className="text-gray-400 text-xs uppercase tracking-wider">Atribuir leads importados a (opcional)</Label>
-            <select value={assignTo} onChange={e => setAssignTo(e.target.value)}
-              className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2 text-sm">
-              <option value="">Fila automática (via regras)</option>
-              {brokers.map(b => (
-                <option key={b.id} value={b.id}>
-                  {`${b.first_name || ""} ${b.last_name || ""}`.trim() || b.email}
-                </option>
-              ))}
-            </select>
+          {/* Modo de atribuição */}
+          <div className="space-y-3">
+            <Label className="text-gray-400 text-xs uppercase tracking-wider">Modo de atribuição</Label>
+            <div className="flex gap-2">
+              <button onClick={() => setAssignMode("broker")}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-bold transition-all ${assignMode === "broker" ? "bg-blue-900/40 border-blue-500/50 text-blue-300" : "border-gray-700/40 text-gray-500 hover:text-gray-300"}`}>
+                <UserCheck className="w-4 h-4" /> Corretor específico
+              </button>
+              <button onClick={() => setAssignMode("queue")}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-bold transition-all ${assignMode === "queue" ? "bg-purple-900/40 border-purple-500/50 text-purple-300" : "border-gray-700/40 text-gray-500 hover:text-gray-300"}`}>
+                <Shuffle className="w-4 h-4" /> Regra de distribuição
+              </button>
+            </div>
+
+            {assignMode === "broker" ? (
+              <select value={assignTo} onChange={e => setAssignTo(e.target.value)}
+                className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2 text-sm">
+                <option value="">Sem corretor (não atribuído)</option>
+                {brokers.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {`${b.first_name || ""} ${b.last_name || ""}`.trim() || b.email}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select value={assignQueue} onChange={e => setAssignQueue(e.target.value)}
+                className="w-full bg-slate-800 text-white border border-gray-600 rounded-md p-2 text-sm">
+                <option value="">Selecionar regra...</option>
+                {queues.map(q => (
+                  <option key={q.id} value={q.id}>
+                    {q.name} ({q.broker_ids?.length || 0} corretores)
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Upload area */}
