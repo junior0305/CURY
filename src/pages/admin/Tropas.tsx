@@ -133,13 +133,13 @@ export default function Tropas() {
   };
 
   const loadSystemSettings = async () => {
-    const { data: botSetting } = await supabase.from("system_settings").select("value").eq("key", "notification_bot_instance_id").single();
+    const { data: botSetting } = await supabase.from("system_settings").select("value").eq("key", "notification_bot_instance_id").maybeSingle();
     if (botSetting?.value) setNotificationBotId(botSetting.value);
-    
-    const { data: managerSetting } = await supabase.from("system_settings").select("value").eq("key", "notify_managers_enabled").single();
+
+    const { data: managerSetting } = await supabase.from("system_settings").select("value").eq("key", "notify_managers_enabled").maybeSingle();
     if (managerSetting?.value !== undefined) setNotifyManagers(managerSetting.value);
-    
-    const { data: brokerSetting } = await supabase.from("system_settings").select("value").eq("key", "notify_brokers_enabled").single();
+
+    const { data: brokerSetting } = await supabase.from("system_settings").select("value").eq("key", "notify_brokers_enabled").maybeSingle();
     if (brokerSetting?.value !== undefined) setNotifyBrokers(brokerSetting.value);
   };
 
