@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, UserX, PhoneOff, Clock, CalendarX, RefreshCw, ChevronDown, ChevronUp, ArrowRightLeft, Phone } from "lucide-react";
+import { AlertTriangle, UserX, PhoneOff, Clock, CalendarX, RefreshCw, ChevronDown, ChevronUp, ArrowRightLeft, Phone, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -32,10 +32,11 @@ function ago(date: string | null) {
 
 // ─── Linha da fila ────────────────────────────────────────────────────────────
 
-function QueueRow({ lead, onReassign, highlight }: {
+function QueueRow({ lead, onReassign, onDelete, highlight }: {
   lead: Lead;
   onReassign: (id: string) => void;
-  highlight?: string; // texto de destaque (motivo)
+  onDelete: (id: string, name: string) => void;
+  highlight?: string;
 }) {
   const brokerName = lead.broker
     ? `${lead.broker.first_name} ${lead.broker.last_name ?? ""}`.trim()
@@ -68,28 +69,39 @@ function QueueRow({ lead, onReassign, highlight }: {
         </span>
       )}
 
-      {/* Ação */}
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => onReassign(lead.id)}
-        className="shrink-0 h-7 px-2.5 text-[11px] font-bold text-indigo-400 hover:text-white hover:bg-indigo-600 border border-indigo-500/20 hover:border-indigo-500 gap-1 transition-all"
-      >
-        <ArrowRightLeft className="w-3 h-3" /> Redistribuir
-      </Button>
+      {/* Ações */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => onReassign(lead.id)}
+          className="h-7 px-2.5 text-[11px] font-bold text-indigo-400 hover:text-white hover:bg-indigo-600 border border-indigo-500/20 hover:border-indigo-500 gap-1 transition-all"
+        >
+          <ArrowRightLeft className="w-3 h-3" /> Redistribuir
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => onDelete(lead.id, lead.name)}
+          className="h-7 w-7 p-0 text-gray-600 hover:text-red-400 hover:bg-red-900/20 border border-transparent hover:border-red-500/20 transition-all opacity-0 group-hover:opacity-100"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }
 
 // ─── Seção colapsável ─────────────────────────────────────────────────────────
 
-function QueueSection({ title, count, icon: Icon, color, leads, onReassign, getHighlight, defaultOpen = false }: {
+function QueueSection({ title, count, icon: Icon, color, leads, onReassign, onDelete, getHighlight, defaultOpen = false }: {
   title: string;
   count: number;
   icon: React.ElementType;
   color: "red" | "orange" | "amber" | "slate";
   leads: Lead[];
   onReassign: (id: string) => void;
+  onDelete: (id: string, name: string) => void;
   getHighlight?: (l: Lead) => string;
   defaultOpen?: boolean;
 }) {
@@ -133,6 +145,7 @@ function QueueSection({ title, count, icon: Icon, color, leads, onReassign, getH
               key={lead.id}
               lead={lead}
               onReassign={onReassign}
+              onDelete={onDelete}
               highlight={getHighlight?.(lead)}
             />
           ))}
@@ -159,6 +172,9 @@ export default function SaudeLeads() {
   const [selectedBrokerId, setSelectedBrokerId] = useState("");
   const [reassigning, setReassigning] = useState(false);
   const [filterBroker, setFilterBroker] = useState("all");
+  const [deleteLeadId, setDeleteLeadId] = useState<string | null>(null);
+  const [deleteLeadName, setDeleteLeadName] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const { data: leads = [], isLoading } = useQuery<Lead[]>({
     queryKey: ["health-leads-v2"],
@@ -189,6 +205,10 @@ export default function SaudeLeads() {
     },
   });
 
+  const removeLead = (id: string) => {
+    queryClient.setQueryData<Lead[]>(["health-leads-v2"], old => (old ?? []).filter(l => l.id !== id));
+  };
+
   const handleReassign = async () => {
     if (!reassignLeadId || !selectedBrokerId) return;
     setReassigning(true);
@@ -199,9 +219,29 @@ export default function SaudeLeads() {
     setReassigning(false);
     if (error) { toast.error("Erro ao redistribuir"); return; }
     toast.success("Lead redistribuído!");
+    removeLead(reassignLeadId);
     setReassignLeadId(null);
     setSelectedBrokerId("");
-    queryClient.invalidateQueries({ queryKey: ["health-leads-v2"] });
+  };
+
+  const handleDelete = async () => {
+    if (!deleteLeadId) return;
+    setDeleting(true);
+    const { error } = await supabase
+      .from("leads")
+      .update({ status: "EXCLUDED" })
+      .eq("id", deleteLeadId);
+    setDeleting(false);
+    if (error) { toast.error("Erro ao excluir lead"); return; }
+    toast.success(`Lead "${deleteLeadName}" excluído.`);
+    removeLead(deleteLeadId);
+    setDeleteLeadId(null);
+    setDeleteLeadName("");
+  };
+
+  const openDelete = (id: string, name: string) => {
+    setDeleteLeadId(id);
+    setDeleteLeadName(name);
   };
 
   const now = Date.now();
@@ -313,6 +353,7 @@ export default function SaudeLeads() {
             color="red"
             leads={semCorretor}
             onReassign={setReassignLeadId}
+            onDelete={openDelete}
             getHighlight={l => `Chegou ${ago(l.created_at)}`}
             defaultOpen
           />
@@ -324,6 +365,7 @@ export default function SaudeLeads() {
             color="orange"
             leads={esperandoResposta}
             onReassign={setReassignLeadId}
+            onDelete={openDelete}
             getHighlight={l => `Respondeu ${ago(l.welcome_responded_at)}`}
             defaultOpen
           />
@@ -335,6 +377,7 @@ export default function SaudeLeads() {
             color="amber"
             leads={nuncaTocados}
             onReassign={setReassignLeadId}
+            onDelete={openDelete}
             getHighlight={l => `${ago(l.created_at)}`}
             defaultOpen
           />
@@ -346,6 +389,7 @@ export default function SaudeLeads() {
             color="amber"
             leads={parados}
             onReassign={setReassignLeadId}
+            onDelete={openDelete}
             getHighlight={l => `Último contato ${ago(l.last_broker_whatsapp_at)}`}
           />
 
@@ -356,6 +400,7 @@ export default function SaudeLeads() {
             color="slate"
             leads={semAcao}
             onReassign={setReassignLeadId}
+            onDelete={openDelete}
             getHighlight={l => {
               const broker = l.broker ? `${l.broker.first_name}` : "Sem corretor";
               return broker;
@@ -396,6 +441,37 @@ export default function SaudeLeads() {
               className="bg-indigo-600 hover:bg-indigo-500 text-white"
             >
               {reassigning ? "Redistribuindo..." : "Confirmar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog exclusão */}
+      <Dialog open={!!deleteLeadId} onOpenChange={open => { if (!open) { setDeleteLeadId(null); setDeleteLeadName(""); }}}>
+        <DialogContent className="bg-slate-900 border border-gray-700 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-400">
+              <Trash2 className="w-4 h-4" /> Excluir Lead
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-gray-300 text-sm">
+              Tem certeza que deseja excluir <strong className="text-white">"{deleteLeadName}"</strong>?
+            </p>
+            <p className="text-gray-500 text-xs mt-2">
+              O lead será marcado como EXCLUDED e não aparecerá mais no sistema.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setDeleteLeadId(null); setDeleteLeadName(""); }} className="text-gray-400">
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-red-700 hover:bg-red-600 text-white"
+            >
+              {deleting ? "Excluindo..." : "Excluir"}
             </Button>
           </DialogFooter>
         </DialogContent>
