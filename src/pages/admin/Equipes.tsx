@@ -38,6 +38,7 @@ import {
   ChevronDown,
   ChevronRight,
   AlertTriangle,
+  Smartphone,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -51,10 +52,17 @@ interface Profile {
   team_id: string | null;
 }
 
+interface BotInstance {
+  id: string;
+  name: string;
+  phone: string;
+}
+
 interface Team {
   id: string;
   name: string;
   manager_id: string | null;
+  bot_instance_id: string | null;
   created_at: string;
   manager?: Profile | null;
   members?: Profile[];
@@ -78,6 +86,7 @@ export default function Equipes() {
   const { toast } = useToast();
   const [teams, setTeams] = useState<Team[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [bots, setBots] = useState<BotInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
@@ -91,6 +100,7 @@ export default function Equipes() {
   // Form
   const [formName, setFormName] = useState("");
   const [formManagerId, setFormManagerId] = useState("none");
+  const [formBotId, setFormBotId] = useState("none");
   const [saving, setSaving] = useState(false);
 
   // ─── Carregamento ────────────────────────────────────────────────────────────
@@ -98,10 +108,12 @@ export default function Equipes() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [{ data: teamsData }, { data: profilesData }] = await Promise.all([
+      const [{ data: teamsData }, { data: profilesData }, { data: botsData }] = await Promise.all([
         supabase.from("teams").select("*").order("name"),
         supabase.from("profiles").select("id, full_name, email, role, team_id").order("full_name"),
+        supabase.from("bot_instances").select("id, name, phone").eq("status", "active").order("name"),
       ]);
+      setBots(botsData || []);
 
       const allProfiles: Profile[] = profilesData || [];
       const allTeams: Team[] = (teamsData || []).map((t) => ({
@@ -129,6 +141,7 @@ export default function Equipes() {
     const { error } = await supabase.from("teams").insert({
       name: formName.trim(),
       manager_id: formManagerId === "none" ? null : formManagerId,
+      bot_instance_id: formBotId === "none" ? null : formBotId,
     });
     setSaving(false);
     if (error) return toast({ title: "Erro ao criar equipe", description: error.message, variant: "destructive" });
@@ -144,6 +157,7 @@ export default function Equipes() {
     const { error } = await supabase.from("teams").update({
       name: formName.trim(),
       manager_id: formManagerId === "none" ? null : formManagerId,
+      bot_instance_id: formBotId === "none" ? null : formBotId,
     }).eq("id", editTeam.id);
     setSaving(false);
     if (error) return toast({ title: "Erro ao editar equipe", description: error.message, variant: "destructive" });
@@ -177,12 +191,13 @@ export default function Equipes() {
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  const resetForm = () => { setFormName(""); setFormManagerId("none"); };
+  const resetForm = () => { setFormName(""); setFormManagerId("none"); setFormBotId("none"); };
 
   const openEdit = (team: Team) => {
     setEditTeam(team);
     setFormName(team.name);
     setFormManagerId(team.manager_id ?? "none");
+    setFormBotId(team.bot_instance_id ?? "none");
   };
 
   const toggleExpand = (id: string) => {
@@ -434,6 +449,25 @@ export default function Equipes() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-gray-400 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <Smartphone className="w-3.5 h-3.5" /> Instância WhatsApp da Equipe
+              </Label>
+              <Select value={formBotId} onValueChange={setFormBotId}>
+                <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
+                  <SelectValue placeholder="Selecionar instância..." />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-gray-600">
+                  <SelectItem value="none" className="text-gray-400">Usar instância global</SelectItem>
+                  {bots.map((b) => (
+                    <SelectItem key={b.id} value={b.id} className="text-white">
+                      {b.name} ({b.phone})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">Notificações de novos leads serão enviadas por esta instância</p>
+            </div>
             <div className="flex gap-2 pt-2">
               <Button variant="outline" onClick={() => setCreateOpen(false)} className="flex-1 border-gray-600 text-gray-300 hover:bg-slate-800">
                 Cancelar
@@ -479,6 +513,25 @@ export default function Equipes() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-gray-400 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <Smartphone className="w-3.5 h-3.5" /> Instância WhatsApp da Equipe
+              </Label>
+              <Select value={formBotId} onValueChange={setFormBotId}>
+                <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-gray-600">
+                  <SelectItem value="none" className="text-gray-400">Usar instância global</SelectItem>
+                  {bots.map((b) => (
+                    <SelectItem key={b.id} value={b.id} className="text-white">
+                      {b.name} ({b.phone})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">Notificações de novos leads serão enviadas por esta instância</p>
             </div>
             <div className="flex gap-2 pt-2">
               <Button variant="outline" onClick={() => setEditTeam(null)} className="flex-1 border-gray-600 text-gray-300 hover:bg-slate-800">
