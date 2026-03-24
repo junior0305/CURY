@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Users, Plus, Pencil, Trash2, Phone, Mail, Shield, Bot, MessageSquare, RefreshCw, Smartphone, Settings, Bell, Save, UserCheck, Building } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Phone, Mail, Shield, Bot, MessageSquare, RefreshCw, Smartphone, Settings, Bell, Save, UserCheck, Building, Eye, EyeOff, KeyRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Profile {
@@ -70,6 +70,7 @@ export default function Tropas() {
   
   const [formData, setFormData] = useState({
     email: "",
+    password: "",
     first_name: "",
     full_name: "",
     phone: "",
@@ -87,6 +88,7 @@ export default function Tropas() {
       ai_assist_enabled: true,
     },
   });
+  const [showPassword, setShowPassword] = useState(false);
 
   const [botFormData, setBotFormData] = useState({
     name: "",
@@ -156,6 +158,14 @@ export default function Tropas() {
       toast({ title: "Email obrigatório", variant: "destructive" });
       return;
     }
+    if (!editUser && !formData.password.trim()) {
+      toast({ title: "Senha obrigatória para novo usuário", variant: "destructive" });
+      return;
+    }
+    if (formData.password && formData.password.length < 6) {
+      toast({ title: "Senha deve ter no mínimo 6 caracteres", variant: "destructive" });
+      return;
+    }
 
     try {
       if (editUser) {
@@ -173,15 +183,24 @@ export default function Tropas() {
           bot_instance_id: formData.bot_instance_id,
           automation_settings: formData.automation_settings,
         }).eq("id", editUser.id);
-        
         if (error) throw error;
+
+        // Alterar senha se preenchida
+        if (formData.password.trim()) {
+          const { data: pwData, error: pwError } = await supabase.functions.invoke('create-user', {
+            body: { action: 'update-password', userId: editUser.id, password: formData.password },
+          });
+          if (pwError) throw pwError;
+          if (pwData?.error) throw new Error(pwData.error);
+        }
+
         toast({ title: "✅ Usuário atualizado!" });
-    
+
       } else {
         const { data, error } = await supabase.functions.invoke('create-user', {
           body: {
             email: formData.email,
-            password: formData.password || 'senha_temporaria_123',
+            password: formData.password,
             firstName: formData.first_name,
             lastName: formData.last_name,
             role: formData.role,
@@ -190,38 +209,27 @@ export default function Tropas() {
             phone: formData.phone,
           }
         });
-        
-        console.log('Edge Function Response DATA:', JSON.stringify(data, null, 2));
-        console.log('Edge Function Response ERROR:', JSON.stringify(error, null, 2));        
-        if (error) {
-          console.error('Edge Function Error:', error);
-          throw error;
+
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+
+        if (data?.user?.id) {
+          await supabase.from("profiles").update({
+            full_name: formData.full_name,
+            lead_assignment_enabled: formData.lead_assignment_enabled,
+            evolution_instance: formData.evolution_instance,
+            qualification_ai_enabled: formData.qualification_ai_enabled,
+            bot_instance_id: formData.bot_instance_id,
+            automation_settings: formData.automation_settings,
+          }).eq("id", data.user.id);
         }
-        
-        // Verificar se data tem erro interno
-        if (data && data.error) {
-          console.error('Edge Function returned error:', data.error);
-          throw new Error(data.error);
-        }
-          
-          // Atualizar campos adicionais que a Edge Function não cobre
-          if (data?.user?.id) {
-            await supabase.from("profiles").update({
-              full_name: formData.full_name,
-              lead_assignment_enabled: formData.lead_assignment_enabled,
-              evolution_instance: formData.evolution_instance,
-              qualification_ai_enabled: formData.qualification_ai_enabled,
-              bot_instance_id: formData.bot_instance_id,
-              automation_settings: formData.automation_settings,
-            }).eq("id", data.user.id);
-          }
-          
-          toast({ title: "✅ Usuário criado!" });
-        }
-        
-        setModalOpen(false);
-        resetForm();
-        loadUsers();
+
+        toast({ title: "✅ Usuário criado!" });
+      }
+
+      setModalOpen(false);
+      resetForm();
+      loadUsers();
     } catch (error: any) {
       toast({ title: "❌ Erro ao salvar", description: error.message, variant: "destructive" });
     }
@@ -312,11 +320,12 @@ export default function Tropas() {
 
   const resetForm = () => {
     setFormData({
-      email: "", first_name: "", full_name: "", phone: "", role: "broker", is_active: true,
+      email: "", password: "", first_name: "", full_name: "", phone: "", role: "broker", is_active: true,
       team_id: null, manager_id: null, lead_assignment_enabled: false, evolution_instance: "",
       qualification_ai_enabled: false, bot_instance_id: null,
       automation_settings: { welcome_enabled: false, follow_up_enabled: true, ai_assist_enabled: true },
     });
+    setShowPassword(false);
     setEditUser(null);
   };
 
@@ -327,12 +336,13 @@ export default function Tropas() {
   const openEdit = (user: Profile) => {
     setEditUser(user);
     setFormData({
-      email: user.email, first_name: user.first_name || "", full_name: user.full_name || "", phone: user.phone || "",
+      email: user.email, password: "", first_name: user.first_name || "", full_name: user.full_name || "", phone: user.phone || "",
       role: user.role, is_active: user.is_active, team_id: user.team_id, manager_id: user.manager_id,
       lead_assignment_enabled: user.lead_assignment_enabled, evolution_instance: user.evolution_instance || "",
       qualification_ai_enabled: user.qualification_ai_enabled, bot_instance_id: user.bot_instance_id,
       automation_settings: user.automation_settings || { welcome_enabled: false, follow_up_enabled: true, ai_assist_enabled: true },
     });
+    setShowPassword(false);
     setModalOpen(true);
   };
 
@@ -580,6 +590,29 @@ export default function Tropas() {
               <div>
                 <Label className="text-gray-400 text-xs uppercase">Email *</Label>
                 <Input value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} disabled={!!editUser} placeholder="joao@email.com" className="bg-slate-800 border-gray-600 text-white" />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-gray-400 text-xs uppercase flex items-center gap-1">
+                <KeyRound className="w-3 h-3" />
+                {editUser ? "Nova Senha (deixe em branco para não alterar)" : "Senha *"}
+              </Label>
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={formData.password}
+                  onChange={e => setFormData({ ...formData, password: e.target.value })}
+                  placeholder={editUser ? "Digite para alterar a senha..." : "Mínimo 6 caracteres"}
+                  className="bg-slate-800 border-gray-600 text-white pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
