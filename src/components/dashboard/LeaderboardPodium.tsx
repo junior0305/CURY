@@ -3,13 +3,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Lead } from "@/types/lead";
 import { User } from "@/types/user";
 import { Crown, Sparkles, Trophy, BarChart3, TrendingUp } from "lucide-react";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { startOfWeek, startOfMonth, isAfter, parseISO } from "date-fns";
+import { startOfWeek, startOfMonth } from "date-fns";
 
 type PodiumEntry = { id: string; name: string; points: number; subtitle: string };
 
@@ -18,23 +17,6 @@ function initials(name: string) {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1]?.[0] : "")).toUpperCase();
 }
 
-function scoreForLead(lead: Lead, filteredHistory: any[], startDate: Date) {
-  const relevantHistory = filteredHistory.filter(h =>
-    h.lead_id === lead.id && h.created_at && isAfter(parseISO(h.created_at), startDate)
-  );
-  const stagesReached = new Set(relevantHistory.map(h => h.stage));
-  const lastUpdateStr = lead.lastInteractionAt || lead.createdAt;
-  const lastUpdate = lastUpdateStr ? parseISO(lastUpdateStr) : new Date(0);
-  if (isAfter(lastUpdate, startDate)) stagesReached.add(lead.status);
-
-  let pts = 0;
-  if (stagesReached.has("CONCLUDED"))       pts += 500;
-  if (stagesReached.has("DOCS_REQUESTED"))  pts += 50;
-  if (stagesReached.has("VISIT_SCHEDULED")) pts += 20;
-  if (stagesReached.has("IN_PROGRESS"))     pts += 2;
-  if (lead.createdAt && isAfter(parseISO(lead.createdAt), startDate)) pts += 0.5;
-  return pts;
-}
 
 const SLOT_CONFIG = [
   { place: 2 as const, height: "h-20 sm:h-24", label: "Vice-Líder",  avatarBg: "bg-slate-600",  barBg: "bg-slate-600",   barShadow: "" },
@@ -43,7 +25,7 @@ const SLOT_CONFIG = [
 ];
 
 export function LeaderboardPodium({ users, onOpenKPIs }: {
-  leads?: Lead[];   // mantido por compatibilidade, não usado
+  leads?: never;
   users: User[];
   onOpenKPIs?: (id: string, name: string) => void;
 }) {
@@ -51,48 +33,32 @@ export function LeaderboardPodium({ users, onOpenKPIs }: {
   const { playSound } = useAudioArena();
   const prevRankings = useRef<string[]>([]);
 
-  // Busca TODOS os leads (não filtrado por broker) para o ranking
-  const { data: allLeads = [] } = useQuery({
-    queryKey: ["ranking-all-leads"],
+  // Usa SECURITY DEFINER para bypassar RLS e ver todos os corretores
+  const { data: rankingData = [] } = useQuery({
+    queryKey: ["broker-ranking", timeframe],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("leads")
-        .select("id, broker_id, status, last_interaction_at, created_at")
-        .not("status", "in", '("ABANDONED","EXCLUDED")');
-      return (data || []).map((l: any) => ({
-        id: l.id,
-        brokerId: l.broker_id,
-        status: l.status,
-        lastInteractionAt: l.last_interaction_at,
-        createdAt: l.created_at,
-      })) as Lead[];
+      const startDate = timeframe === "WEEK" ? startOfWeek(new Date()) : startOfMonth(new Date());
+      const { data, error } = await supabase.rpc("get_broker_ranking", {
+        p_start_date: startDate.toISOString(),
+      });
+      if (error) throw error;
+      return data as { broker_id: string; score: number; sales_count: number }[];
     },
     staleTime: 2 * 60 * 1000,
   });
 
-  const { data: history = [] } = useQuery({
-    queryKey: ["funnel-history"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("funnel_history").select("*");
-      if (error) throw error;
-      return data;
-    },
-  });
-
   const top3 = useMemo(() => {
     const brokers = users.filter(u => u.role === "BROKER");
-    const startDate = timeframe === "WEEK" ? startOfWeek(new Date()) : startOfMonth(new Date());
     const byBroker: Record<string, number> = {};
-    for (const lead of allLeads) {
-      if (!lead.brokerId) continue;
-      byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead, history, startDate);
+    for (const row of rankingData) {
+      byBroker[row.broker_id] = row.score;
     }
     return brokers
       .map(b => ({ id: b.id, name: b.name, points: Math.round((byBroker[b.id] ?? 0) * 10) / 10, subtitle: b.leadAssignmentEnabled ? "Em Campo" : "Pausa" }))
       .filter(e => e.points > 0)
       .sort((a, b) => b.points - a.points)
       .slice(0, 3);
-  }, [allLeads, users, history, timeframe]);
+  }, [rankingData, users, timeframe]);
 
   useEffect(() => {
     const ids = top3.map(b => b.id);
