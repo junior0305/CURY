@@ -178,15 +178,15 @@ export default function Tropas() {
         toast({ title: "✅ Usuário atualizado!" });
     
       } else {
-        const { data, error } = await supabase.functions.invoke('create_user_admin', {
+        const { data, error } = await supabase.functions.invoke('create-user', {
           body: {
             email: formData.email,
             password: formData.password || 'senha_temporaria_123',
-            first_name: formData.first_name,
-            last_name: formData.last_name,
+            firstName: formData.first_name,
+            lastName: formData.last_name,
             role: formData.role,
-            team_id: formData.team_id,
-            manager_id: formData.manager_id,
+            teamId: formData.team_id,
+            managerId: formData.manager_id,
             phone: formData.phone,
           }
         });
