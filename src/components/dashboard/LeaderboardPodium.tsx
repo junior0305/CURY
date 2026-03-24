@@ -42,14 +42,33 @@ const SLOT_CONFIG = [
   { place: 3 as const, height: "h-16 sm:h-20", label: "Top 3",       avatarBg: "bg-amber-700",  barBg: "bg-amber-700",   barShadow: "" },
 ];
 
-export function LeaderboardPodium({ leads, users, onOpenKPIs }: {
-  leads: Lead[];
+export function LeaderboardPodium({ users, onOpenKPIs }: {
+  leads?: Lead[];   // mantido por compatibilidade, não usado
   users: User[];
   onOpenKPIs?: (id: string, name: string) => void;
 }) {
   const [timeframe, setTimeframe] = useState<"WEEK" | "MONTH">("MONTH");
   const { playSound } = useAudioArena();
   const prevRankings = useRef<string[]>([]);
+
+  // Busca TODOS os leads (não filtrado por broker) para o ranking
+  const { data: allLeads = [] } = useQuery({
+    queryKey: ["ranking-all-leads"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("leads")
+        .select("id, broker_id, status, last_interaction_at, created_at")
+        .not("status", "in", '("ABANDONED","EXCLUDED")');
+      return (data || []).map((l: any) => ({
+        id: l.id,
+        brokerId: l.broker_id,
+        status: l.status,
+        lastInteractionAt: l.last_interaction_at,
+        createdAt: l.created_at,
+      })) as Lead[];
+    },
+    staleTime: 2 * 60 * 1000,
+  });
 
   const { data: history = [] } = useQuery({
     queryKey: ["funnel-history"],
@@ -64,7 +83,7 @@ export function LeaderboardPodium({ leads, users, onOpenKPIs }: {
     const brokers = users.filter(u => u.role === "BROKER");
     const startDate = timeframe === "WEEK" ? startOfWeek(new Date()) : startOfMonth(new Date());
     const byBroker: Record<string, number> = {};
-    for (const lead of leads) {
+    for (const lead of allLeads) {
       if (!lead.brokerId) continue;
       byBroker[lead.brokerId] = (byBroker[lead.brokerId] ?? 0) + scoreForLead(lead, history, startDate);
     }
@@ -73,7 +92,7 @@ export function LeaderboardPodium({ leads, users, onOpenKPIs }: {
       .filter(e => e.points > 0)
       .sort((a, b) => b.points - a.points)
       .slice(0, 3);
-  }, [leads, users, history, timeframe]);
+  }, [allLeads, users, history, timeframe]);
 
   useEffect(() => {
     const ids = top3.map(b => b.id);
