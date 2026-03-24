@@ -24,7 +24,9 @@ serve(async (req) => {
 
     const sourceData = payload.data?.attributes || payload.attributes || payload;
     const name = sourceData.name || sourceData.nome || sourceData.fullName || 'Lead Sem Nome';
-    const phone = sourceData.phone || sourceData.telefone || sourceData.cellphone || sourceData.whatsapp || sourceData.contact;
+    const rawPhone = sourceData.phone || sourceData.telefone || sourceData.cellphone || sourceData.whatsapp || sourceData.contact;
+    // Remove prefixes like "p:" sent by some integrations (e.g. Facebook via Make)
+    const phone = rawPhone ? String(rawPhone).replace(/^[a-z]+:/i, '').replace(/[^0-9+]/g, '') : null;
     const email = sourceData.email || sourceData.mail || '';
     const origin = sourceData.source || sourceData.origin || sourceData.origem || 'Make/Webhook';
     const message = sourceData.message || sourceData.mensagem || sourceData.Interesse || '';
