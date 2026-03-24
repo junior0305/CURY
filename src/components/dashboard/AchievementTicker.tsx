@@ -133,10 +133,20 @@ export function AchievementTicker() {
     return msgs[(item.name.charCodeAt(0) || 0) % msgs.length];
   };
 
+  // Corretor líder do mês: quem tem mais vendas concluídas
+  const topBroker = useMemo(() => {
+    if (recentSales.length === 0) return null;
+    let topId = '';
+    let topCount = 0;
+    for (const [id, count] of Object.entries(monthlySalesCount)) {
+      if (count > topCount) { topCount = count; topId = id; }
+    }
+    const topSale = (recentSales as any[]).find(s => s.broker_id === topId);
+    return topSale ? { name: topSale.profiles?.first_name || 'Corretor', count: topCount } : null;
+  }, [recentSales, monthlySalesCount]);
+
   const userName = user?.email?.split('@')[0] || "Agente";
-  const firstSale = recentSales[0] as any;
-  const firstAch = achievements[0] as any;
-  const initialName = firstSale?.profiles?.first_name || firstAch?.profiles?.first_name;
+  const initialName = topBroker?.name || (achievements[0] as any)?.profiles?.first_name;
 
   return (
     <div className="relative overflow-hidden bg-[#070B14] h-12 flex items-center border-b border-indigo-500/20 shadow-[0_4px_30px_rgba(0,0,0,0.5)] z-50">
@@ -156,7 +166,7 @@ export function AchievementTicker() {
                 <>
                   <Flame className="h-5 w-5 text-rose-500 animate-pulse" />
                   <span className="font-black text-xs sm:text-sm tracking-tight text-white uppercase italic flex items-center gap-2">
-                    {initialName.toUpperCase()} JÁ GARANTIU O DELA HOJE. CADÊ O SEU RESULTADO, {userName.toUpperCase()}?
+                    {initialName.toUpperCase()} LIDERA COM {topBroker?.count ?? ''} VENDA{(topBroker?.count ?? 0) > 1 ? 'S' : ''} NO MÊS. CADÊ O SEU RESULTADO, {userName.toUpperCase()}?
                   </span>
                   <div className="h-2 w-2 rounded-full bg-rose-500 animate-ping" />
                 </>
