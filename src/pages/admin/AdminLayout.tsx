@@ -24,6 +24,7 @@ import IaBuilder    from "./IaBuilder";
 import SaudeLeads   from "./SaudeLeads";
 import { Prospeccao } from "./Prospeccao";
 import AudioSettings from "@/components/admin/AudioSettings";
+import MonitorScheduler from "@/components/admin/MonitorScheduler";
 
 // ─── Grupos principais ────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ const GROUPS = [
       { value: "ia-builder", label: "IA Builder",   roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "prospeccao", label: "Prospecção",   roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "sons",       label: "Arena Sonora", roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "monitor",    label: "Monitor",      roles: ["ADMIN", "SUPERINTENDENT"] },
     ],
   },
   {
@@ -301,6 +303,7 @@ export default function AdminLayout() {
               { v: "ia-builder", l: "IA Builder" },
               { v: "prospeccao", l: "Prospecção" },
               { v: "sons",       l: "Arena Sonora" },
+              { v: "monitor",    l: "Monitor" },
             ].map(s => (
               <TabsTrigger key={s.v} value={s.v}
                 className="px-4 py-2 rounded-lg text-xs font-bold text-gray-500 data-[state=active]:bg-amber-600 data-[state=active]:text-white transition-all">
@@ -312,6 +315,7 @@ export default function AdminLayout() {
           <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>
           <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>
           <TabsContent value="sons" className="p-6"><AudioSettings /></TabsContent>
+          <TabsContent value="monitor" className="p-6"><MonitorScheduler /></TabsContent>
         </Tabs>
       )}
 

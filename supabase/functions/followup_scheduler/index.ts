@@ -100,6 +100,7 @@ serve(async (req) => {
     );
     const now = new Date().toISOString();
     const nowMs = Date.now();
+    const startTime = nowMs;
     console.log('[followup_scheduler] running at', now);
 
     // ── BLOCO 1: Leads Críticos ───────────────────────────────────────────────
@@ -232,6 +233,8 @@ serve(async (req) => {
     console.log(`[followup_scheduler] Bloco 2 — Frios: ${coldProcessed}`);
 
     // ── BLOCO 3: Cadências existentes ─────────────────────────────────────────
+    const TERMINAL_STATUSES = ['CONCLUDED', 'ABANDONED', 'EXCLUDED'];
+
     const { data: executions } = await supabase
       .from('cadence_executions')
       .select('*, leads(*)')
@@ -245,6 +248,17 @@ serve(async (req) => {
       try {
         const lead = exec.leads;
         if (!lead) continue;
+
+        // ── Encerra cadência se lead foi vendido/abandonado ───────────────────
+        if (TERMINAL_STATUSES.includes((lead.status || '').toUpperCase())) {
+          await supabase.from('cadence_executions').update({
+            status: 'completed',
+            stopped_reason: `lead_status_${lead.status}`,
+            completed_at: new Date().toISOString(),
+          }).eq('id', exec.id);
+          console.log(`[B3] Cadência encerrada — lead ${lead.id} status=${lead.status}`);
+          continue;
+        }
 
         // Anti-spam: no máximo 1 disparo por lead por execução do scheduler
         if (cadenceLeadsSentThisRun.has(lead.id)) {
@@ -266,8 +280,18 @@ serve(async (req) => {
           .maybeSingle();
         if (!bot) continue;
 
+        // ── Busca conteúdo real do passo atual no cadence_steps ───────────────
+        const stepNumber = (exec.current_step || 0) + 1;
+        const { data: stepData } = await supabase
+          .from('cadence_steps')
+          .select('content')
+          .eq('cadence_id', exec.cadence_id)
+          .eq('step_number', stepNumber)
+          .eq('media_type', 'text')
+          .maybeSingle();
+
         const brokerName = broker.first_name || 'nossa equipe';
-        const rawMessage = exec.message || `Olá {nome}, tudo bem? Só um lembrete. 😊`;
+        const rawMessage = stepData?.content || exec.message || getFallbackMessage(lead.status, lead.name, lead.tag, 0, brokerName);
         const message = interpolate(rawMessage, lead.name, brokerName);
 
         const { error: sendError } = await supabase.functions.invoke('send_whatsapp_message', {
@@ -443,6 +467,24 @@ serve(async (req) => {
       console.error('[followup_scheduler] Bloco 5 error:', e.message);
     }
 
+    const total = criticalProcessed + coldProcessed + cadenceProcessed + staleProcessed + sentinelaProcessed;
+    const durationMs = Date.now() - startTime;
+
+    // ── Registro de execução (monitoramento) ─────────────────────────────────
+    try {
+      await supabase.from('scheduler_runs').insert({
+        ran_at: now,
+        status: 'success',
+        critical: criticalProcessed,
+        cold: coldProcessed,
+        cadence: cadenceProcessed,
+        stale: staleProcessed,
+        sentinela: sentinelaProcessed,
+        total,
+        duration_ms: durationMs,
+      });
+    } catch (_) { /* tabela pode não existir ainda */ }
+
     return new Response(
       JSON.stringify({
         critical: criticalProcessed,
@@ -450,13 +492,21 @@ serve(async (req) => {
         cadence: cadenceProcessed,
         stale: staleProcessed,
         sentinela: sentinelaProcessed,
-        total: criticalProcessed + coldProcessed + cadenceProcessed + staleProcessed + sentinelaProcessed,
+        total,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
 
   } catch (error: any) {
     console.error('[followup_scheduler] error', error.message);
+    try {
+      await supabase.from('scheduler_runs').insert({
+        ran_at: now,
+        status: 'error',
+        error_message: error.message,
+        duration_ms: Date.now() - startTime,
+      });
+    } catch (_) { /* ignorar */ }
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
