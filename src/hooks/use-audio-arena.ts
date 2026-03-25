@@ -84,6 +84,18 @@ function synthesize(ctx: AudioContext, key: SoundKey) {
   }
 }
 
+// Custom MP3 URLs são salvas no localStorage após carregamento do DB
+export const CUSTOM_SOUND_KEY = (key: SoundKey) => `crm_sound_${key}_url`;
+
+function playCustomMp3(url: string): Promise<void> {
+  return new Promise((resolve) => {
+    const audio = new Audio(url);
+    audio.onended = () => resolve();
+    audio.onerror = () => resolve(); // fallback silencioso
+    audio.play().catch(() => resolve());
+  });
+}
+
 export function useAudioArena() {
   const ctxRef = useRef<AudioContext | null>(null);
 
@@ -98,6 +110,13 @@ export function useAudioArena() {
   const playSound = useCallback((soundKey: SoundKey) => {
     const isMuted = localStorage.getItem('crm_audio_muted') === 'true';
     if (isMuted) return;
+
+    // Verificar se há MP3 customizado
+    const customUrl = localStorage.getItem(CUSTOM_SOUND_KEY(soundKey));
+    if (customUrl) {
+      playCustomMp3(customUrl).catch(() => {});
+      return;
+    }
 
     const ctx = getCtx();
     if (!ctx) return;
