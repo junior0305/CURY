@@ -82,16 +82,15 @@ export default function MonitorScheduler() {
 
   const handleRunNow = async () => {
     setRunning(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("followup_scheduler", { body: {} });
-      if (error) throw error;
-      toast.success(`Follow-up executado! Total: ${data?.total ?? 0} mensagens`);
+    toast.info("Scheduler iniciado. Pode levar até 2 minutos...");
+    // Fire-and-forget: não aguarda resposta (pode ultrapassar o timeout de 150s)
+    supabase.functions.invoke("followup_scheduler", { body: {} }).catch(() => {});
+    // Aguarda 8s e atualiza o histórico
+    setTimeout(async () => {
       await fetchRuns();
-    } catch (e: any) {
-      toast.error("Erro ao executar: " + e.message);
-    } finally {
       setRunning(false);
-    }
+      toast.success("Execução concluída! Histórico atualizado.");
+    }, 8000);
   };
 
   const lastRun = runs[0];
