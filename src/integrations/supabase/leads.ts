@@ -164,6 +164,30 @@ async function applyGamification(
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
+export const fetchTeamLeads = async (brokerIds: string[]): Promise<Lead[]> => {
+  if (!brokerIds.length) return [];
+  const { data, error } = await supabase
+    .from('leads')
+    .select('*')
+    .in('broker_id', brokerIds)
+    .not('status', 'in', '("EXCLUDED")')
+    .order('last_interaction_at', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(mapLeadFromDB);
+};
+
+export const fetchUnassignedLeads = async (): Promise<Lead[]> => {
+  const { data, error } = await supabase
+    .from('leads')
+    .select('*')
+    .is('broker_id', null)
+    .not('status', 'in', '("EXCLUDED","ABANDONED","CONCLUDED")')
+    .order('created_at', { ascending: true })
+    .limit(50);
+  if (error) throw error;
+  return (data || []).map(mapLeadFromDB);
+};
+
 export const fetchLeadsForAdmin = async (): Promise<Lead[]> => {
   const { data, error } = await supabase
     .from("leads")

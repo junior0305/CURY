@@ -83,6 +83,25 @@ export const fetchManagers = async (): Promise<User[]> => {
   return managers;
 };
 
+export const fetchTeamBrokers = async (managerId: string): Promise<User[]> => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('manager_id', managerId)
+    .eq('role', 'BROKER')
+    .order('first_name');
+  if (error) throw error;
+  return (data || []).map(mapProfileToUser);
+};
+
+export const toggleBrokerPresence = async (brokerId: string, present: boolean): Promise<void> => {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ lead_assignment_enabled: present, updated_at: new Date().toISOString() })
+    .eq('id', brokerId);
+  if (error) throw error;
+};
+
 export const updateProfile = async (user: User) => {
   const { id, name, role, managerId, teamId, leadAssignmentEnabled, phone, botInstanceId } = user;
 
