@@ -71,6 +71,7 @@ export default function Tropas() {
   const [testingSupNotif, setTestingSupNotif] = useState(false);
   const [testingBrokerNotif, setTestingBrokerNotif] = useState(false);
   const [runningManagerNotif, setRunningManagerNotif] = useState(false);
+  const [runningBrokerNotif, setRunningBrokerNotif] = useState(false);
   
   const [formData, setFormData] = useState({
     email: "",
@@ -321,6 +322,20 @@ export default function Tropas() {
       toast({ title: "❌ Erro ao disparar resumo", description: error.message, variant: "destructive" });
     } finally {
       setRunningManagerNotif(false);
+    }
+  };
+
+  const runBrokerNotification = async () => {
+    setRunningBrokerNotif(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("notify-brokers", { body: {} });
+      if (error) throw error;
+      const processed = data?.processed ?? 0;
+      toast({ title: `✅ Avisos enviados para ${processed} corretor(es)` });
+    } catch (error: any) {
+      toast({ title: "❌ Erro ao notificar corretores", description: error.message, variant: "destructive" });
+    } finally {
+      setRunningBrokerNotif(false);
     }
   };
 
@@ -702,6 +717,10 @@ export default function Tropas() {
                 <Button onClick={testBrokerNotification} disabled={testingBrokerNotif} variant="outline" size="sm" className="border-green-500/30 text-green-400 hover:bg-green-900/20">
                   {testingBrokerNotif ? <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1" />}
                   Testar canal
+                </Button>
+                <Button onClick={runBrokerNotification} disabled={runningBrokerNotif} size="sm" className="bg-green-600 hover:bg-green-500">
+                  {runningBrokerNotif ? <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Bell className="w-3.5 h-3.5 mr-1" />}
+                  Disparar para corretores
                 </Button>
               </div>
             </CardContent>

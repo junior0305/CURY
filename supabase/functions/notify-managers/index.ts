@@ -83,32 +83,59 @@ serve(async (req) => {
 
       const brokerIds = brokers.map(b => b.id)
 
-      // 6. Leads parados dos corretores desta equipe
-      const { data: staleLeads } = await supabase
+      // 6. Leads parados dos corretores desta equipe (com ou sem last_interaction_at)
+      const { data: staleWithInteraction } = await supabase
         .from('leads')
-        .select('id, name, status, last_interaction_at, broker_id')
+        .select('id, name, status, last_interaction_at, created_at, broker_id')
         .in('broker_id', brokerIds)
         .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
         .lt('last_interaction_at', staleSince)
         .order('last_interaction_at', { ascending: true })
         .limit(15)
 
-      if (!staleLeads?.length) {
+      const { data: staleWithoutInteraction } = await supabase
+        .from('leads')
+        .select('id, name, status, last_interaction_at, created_at, broker_id')
+        .in('broker_id', brokerIds)
+        .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
+        .is('last_interaction_at', null)
+        .lt('created_at', staleSince)
+        .order('created_at', { ascending: true })
+        .limit(10)
+
+      const seenIds = new Set<string>()
+      const staleLeads = [
+        ...(staleWithInteraction || []),
+        ...(staleWithoutInteraction || []),
+      ].filter(l => {
+        if (seenIds.has(l.id)) return false
+        seenIds.add(l.id)
+        return true
+      })
+
+      if (!staleLeads.length) {
         results.push({ manager: manager.first_name, skipped: 'no_stale_leads' })
         continue
       }
 
-      // 7. Montar mensagem
+      // 7. Montar mensagem executiva: só corretor + contagem + tempo máximo parado
       const brokerMap = Object.fromEntries(brokers.map(b => [b.id, b.first_name || 'Corretor']))
       const now = new Date()
 
-      const leadLines = staleLeads.map(lead => {
-        const hoursStale = Math.round(
-          (now.getTime() - new Date(lead.last_interaction_at).getTime()) / 3600000
-        )
+      // Agrupa leads por broker para contar e achar tempo máximo
+      const summaryByBroker: Record<string, { count: number; maxHours: number }> = {}
+      for (const lead of staleLeads) {
         const brokerName = brokerMap[lead.broker_id] || 'Corretor'
-        return `• ${lead.name} → ${brokerName} (${hoursStale}h parado)`
-      })
+        const lastActivity = lead.last_interaction_at || lead.created_at
+        const hoursStale = Math.round((now.getTime() - new Date(lastActivity).getTime()) / 3600000)
+        if (!summaryByBroker[brokerName]) summaryByBroker[brokerName] = { count: 0, maxHours: 0 }
+        summaryByBroker[brokerName].count++
+        if (hoursStale > summaryByBroker[brokerName].maxHours) summaryByBroker[brokerName].maxHours = hoursStale
+      }
+
+      const brokerLines = Object.entries(summaryByBroker).map(([brokerName, { count, maxHours }]) =>
+        `• *${brokerName}* — ${count} lead${count > 1 ? 's' : ''} (até ${maxHours}h parado)`
+      )
 
       const managerName = manager.first_name || 'Gerente'
       const timeNow = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
@@ -116,9 +143,9 @@ serve(async (req) => {
       const message = [
         `📊 *Resumo da equipe — ${timeNow}*`,
         ``,
-        `Olá ${managerName}! ${staleLeads.length} lead${staleLeads.length > 1 ? 's' : ''} sem resposta há +${staleHours}h:`,
+        `Olá ${managerName}! Sua equipe tem leads parados há +${staleHours}h:`,
         ``,
-        ...leadLines,
+        ...brokerLines,
         ``,
         `Acesse o painel para redistribuir ou acionar sua equipe. 🎯`,
       ].join('\n')
