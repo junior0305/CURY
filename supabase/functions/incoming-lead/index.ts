@@ -119,7 +119,7 @@ serve(async (req) => {
       const today = new Date().toISOString().split('T')[0];
       const { data: brokers } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, phone, team_id, bot_instance_id, automation_settings, evolution_instance')
+        .select('id, first_name, last_name, phone, team_id, bot_instance_id, manager_id, automation_settings, evolution_instance')
         .eq('lead_assignment_enabled', true)
         .eq('role', 'BROKER');
 
@@ -180,19 +180,19 @@ serve(async (req) => {
       }
     }
 
-    // NOTIFICAR CORRETOR
+    // NOTIFICAR CORRETOR via bot do manager
     let notificationSent = false;
     if (chosenBroker?.phone) {
       const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
 
       if (setting?.value === true) {
-        // Busca instância da equipe do corretor (prioridade) ou instância global (fallback)
+        // Prioridade: bot do manager do corretor → fallback: bot global
         let notifBotId: string | null = null;
 
-        if (chosenBroker.team_id) {
-          const { data: teamData } = await supabase
-            .from('teams').select('bot_instance_id').eq('id', chosenBroker.team_id).maybeSingle();
-          notifBotId = teamData?.bot_instance_id ?? null;
+        if (chosenBroker.manager_id) {
+          const { data: managerData } = await supabase
+            .from('profiles').select('bot_instance_id').eq('id', chosenBroker.manager_id).maybeSingle();
+          notifBotId = managerData?.bot_instance_id ?? null;
         }
 
         if (!notifBotId) {
@@ -201,23 +201,18 @@ serve(async (req) => {
         }
 
         if (notifBotId) {
-          const notifMsg = `🎯 *Novo Lead*
+          const notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${origin}`;
 
-👤 ${name}
-📞 ${phone}
-🏷️ ${tag || 'Sem tag'}
-📍 ${origin}`;
-
-          const { data: result } = await supabase.functions.invoke('send-whatsapp', {
+          const { data: result } = await supabase.functions.invoke('send_whatsapp_message', {
             body: {
-              instance_id: notifBotId,
+              botId: notifBotId,
               phone: chosenBroker.phone,
               message: notifMsg,
-              type: 'notification'
             }
           });
 
           notificationSent = result?.success || false;
+          console.log(`[incoming-lead] Notificação corretor ${chosenBroker.first_name}: ${notificationSent}`);
         }
       }
     }

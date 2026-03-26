@@ -11,6 +11,7 @@ const mapProfileToUser = (profile: any): User => ({
   managerId: profile.manager_id,
   teamId: profile.team_id,
   leadAssignmentEnabled: !!profile.lead_assignment_enabled,
+  botInstanceId: profile.bot_instance_id || null,
 });
 
 export const fetchProfiles = async (): Promise<User[]> => {
@@ -83,7 +84,7 @@ export const fetchManagers = async (): Promise<User[]> => {
 };
 
 export const updateProfile = async (user: User) => {
-  const { id, name, role, managerId, teamId, leadAssignmentEnabled, phone } = user;
+  const { id, name, role, managerId, teamId, leadAssignmentEnabled, phone, botInstanceId } = user;
 
   const names = name.trim().split(/\s+/);
   const firstName = names[0];
@@ -93,10 +94,11 @@ export const updateProfile = async (user: User) => {
     first_name: firstName,
     last_name: lastName,
     role: role,
-    phone: phone || null, // Garante que o telefone seja enviado
+    phone: phone || null,
     manager_id: (managerId === 'none' || !managerId) ? null : managerId,
     team_id: (teamId === 'none' || !teamId) ? null : teamId,
     lead_assignment_enabled: leadAssignmentEnabled,
+    bot_instance_id: (botInstanceId === 'none' || !botInstanceId) ? null : botInstanceId,
     updated_at: new Date().toISOString(),
   };
 

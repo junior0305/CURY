@@ -42,7 +42,7 @@ async function hasRecentAutoFollowup(supabase: any, leadId: string, hours: numbe
     .eq('entity_id', leadId)
     .eq('entity_type', 'followup')
     .eq('status', 'success')
-    .gte('created_at', since)
+    .gte('executed_at', since)
     .maybeSingle();
   return !!data;
 }
@@ -152,17 +152,15 @@ serve(async (req) => {
       // Envia mensagem de aquecimento pelo bot do corretor
       if (broker?.bot_instance_id && lead.phone) {
         const brokerName = broker.first_name || 'nosso corretor';
-        const { data: result } = await supabase.functions.invoke('send-whatsapp', {
+        const { data: result } = await supabase.functions.invoke('send_whatsapp_message', {
           body: {
-            instance_id: broker.bot_instance_id,
+            botId: broker.bot_instance_id,
             phone: lead.phone,
             message: `Olá ${lead.name}! 😊\n\n${brokerName} está verificando sua solicitação e entra em contato em breve.\n\nAgradecemos sua paciência!`,
-            lead_id: lead.id,
-            type: 'followup',
           },
         });
 
-        if (result?.success !== false) {
+        if (result?.success) {
           // ✅ Reseta contador "horas sem contato"
           await updateLeadInteraction(supabase, lead.id);
           criticalProcessed++;
@@ -188,10 +186,14 @@ serve(async (req) => {
       .neq('status', 'CONCLUDED')
       .limit(30);
 
+    console.log(`[B2] ${coldLeads?.length || 0} leads frios encontrados`);
     let coldProcessed = 0;
     for (const lead of coldLeads || []) {
       const broker = (lead as any).broker;
-      if (!broker?.bot_instance_id || !lead.phone) continue;
+      if (!broker?.bot_instance_id || !lead.phone) {
+        console.log(`[B2] SKIP ${lead.id} — bot=${broker?.bot_instance_id}, phone=${lead.phone}`);
+        continue;
+      }
 
       // Anti-spam: máximo 1 reativação a cada 3 dias
       const { data: recentFollowup } = await supabase
@@ -201,17 +203,25 @@ serve(async (req) => {
         .eq('type', 'COLD_FOLLOWUP_SENT')
         .gte('created_at', threeDaysAgo)
         .maybeSingle();
-      if (recentFollowup) continue;
+      if (recentFollowup) { console.log(`[B2] ANTISPAM ${lead.id}`); continue; }
 
-      const { data: result } = await supabase.functions.invoke('send-whatsapp', {
+      const { data: result, error: sendErr } = await supabase.functions.invoke('send_whatsapp_message', {
         body: {
-          instance_id: broker.bot_instance_id,
+          botId: broker.bot_instance_id,
           phone: lead.phone,
           message: `Olá ${lead.name}! 👋\n\nPassamos aqui para saber se você ainda tem interesse no imóvel.\n\nEstamos à disposição! 😊`,
-          lead_id: lead.id,
-          type: 'followup',
         },
       });
+      console.log(`[B2] send ${lead.id} → success=${result?.success}, status=${result?.status}, err=${sendErr?.message}`);
+
+      await supabase.from('automation_logs').insert({
+        entity_type: 'followup',
+        entity_id: lead.id,
+        status: result?.success ? 'success' : 'failed',
+        message_sent: `Olá ${lead.name}! 👋\n\nPassamos aqui para saber se você ainda tem interesse no imóvel.\n\nEstamos à disposição! 😊`,
+        recipient_phone: lead.phone,
+        error_message: result?.success ? null : (sendErr?.message || JSON.stringify(result?.result) || `HTTP ${result?.status}`),
+      }).catch(() => {});
 
       if (result?.success) {
         if (lead.broker_id) {
@@ -390,14 +400,18 @@ serve(async (req) => {
       return true;
     });
 
+    console.log(`[B4] ${staleLeads.length} leads parados encontrados`);
     let staleProcessed = 0;
     for (const lead of staleLeads) {
       const broker = (lead as any).broker;
-      if (!broker?.bot_instance_id || !lead.phone) continue;
+      if (!broker?.bot_instance_id || !lead.phone) {
+        console.log(`[B4] SKIP ${lead.id} — bot=${broker?.bot_instance_id}, phone=${lead.phone}`);
+        continue;
+      }
 
       // Anti-spam: máximo 1 follow-up automático a cada MIN_FOLLOWUP_INTERVAL_HOURS
       const alreadySent = await hasRecentAutoFollowup(supabase, lead.id, MIN_FOLLOWUP_INTERVAL_HOURS);
-      if (alreadySent) continue;
+      if (alreadySent) { console.log(`[B4] ANTISPAM ${lead.id}`); continue; }
 
       const hoursStale = (nowMs - new Date(lead.last_interaction_at || lead.created_at).getTime()) / 3600000;
       const brokerName = broker.first_name || 'nossa equipe';
@@ -424,15 +438,23 @@ serve(async (req) => {
         templateSource = 'fallback_hardcoded';
       }
 
-      const { data: result } = await supabase.functions.invoke('send-whatsapp', {
+      const { data: result, error: sendErr } = await supabase.functions.invoke('send_whatsapp_message', {
         body: {
-          instance_id: broker.bot_instance_id,
+          botId: broker.bot_instance_id,
           phone: lead.phone,
           message,
-          lead_id: lead.id,
-          type: 'followup',
         },
       });
+      console.log(`[B4] send ${lead.id} → success=${result?.success}, status=${result?.status}, err=${sendErr?.message}`);
+
+      await supabase.from('automation_logs').insert({
+        entity_type: 'followup',
+        entity_id: lead.id,
+        status: result?.success ? 'success' : 'failed',
+        message_sent: message,
+        recipient_phone: lead.phone,
+        error_message: result?.success ? null : (sendErr?.message || JSON.stringify(result?.result) || `HTTP ${result?.status}`),
+      }).catch(() => {});
 
       if (result?.success) {
         // ✅ Reseta contador "horas sem contato"

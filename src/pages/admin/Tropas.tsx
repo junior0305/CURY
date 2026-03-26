@@ -668,7 +668,7 @@ export default function Tropas() {
               </div>
             </div>
 
-            {formData.role === 'BROKER' && (
+            {(formData.role === 'BROKER' || formData.role === 'MANAGER') && (
               <>
                 <div>
                   <Label className="text-gray-400 text-xs uppercase">Bot/Instância</Label>

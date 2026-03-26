@@ -14,4 +14,5 @@ export interface User {
   managerId: string | null;
   teamId: string | null;
   leadAssignmentEnabled: boolean;
+  botInstanceId?: string | null;
 }

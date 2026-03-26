@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { User, UserRole, Team } from "@/types/user";
-import { Save, Loader2, UserPlus, Shield, Users, RefreshCw, Phone, Mail, Lock, Briefcase, Zap } from "lucide-react";
+import { Save, Loader2, UserPlus, Shield, Users, RefreshCw, Phone, Mail, Lock, Briefcase, Zap, Bot } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchManagers, fetchTeams } from "@/integrations/supabase/profiles";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,6 +41,14 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
     queryFn: fetchTeams,
   });
 
+  const { data: botInstances = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ['bot_instances'],
+    queryFn: async () => {
+      const { data } = await supabase.from('bot_instances').select('id, name').order('name');
+      return data || [];
+    },
+  });
+
   const filteredManagers = useMemo(() => {
     if (formData.role === 'MANAGER') {
       return allManagers.filter(m => m.role === 'SUPERINTENDENT' || m.role === 'ADMIN');
@@ -64,6 +72,7 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
         managerId: null,
         teamId: null,
         leadAssignmentEnabled: false,
+        botInstanceId: null,
       });
     }
   }, [userToEdit, isOpen]);
@@ -114,7 +123,8 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
             role: formData.role,
             managerId: formData.managerId === "none" ? null : formData.managerId,
             teamId: formData.teamId === "none" ? null : formData.teamId,
-            leadAssignmentEnabled: formData.leadAssignmentEnabled
+            leadAssignmentEnabled: formData.leadAssignmentEnabled,
+            botInstanceId: formData.botInstanceId === "none" ? null : formData.botInstanceId
           }
         });
         if (error) throw error;
@@ -234,6 +244,23 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
                     </SelectContent>
                   </Select>
                 </div>
+
+                {(formData.role === 'BROKER' || formData.role === 'MANAGER') && (
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Bot className="w-3.5 h-3.5 text-slate-400" /> Instância WhatsApp
+                    </Label>
+                    <Select value={formData.botInstanceId || "none"} onValueChange={(v) => handleChange("botInstanceId", v === "none" ? null : v)}>
+                      <SelectTrigger className="h-12 rounded-xl border-slate-200 bg-white">
+                        <SelectValue placeholder="Nenhuma instância" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-none shadow-2xl">
+                        <SelectItem value="none">Nenhuma</SelectItem>
+                        {botInstances.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {(formData.role === 'BROKER' || formData.role === 'MANAGER') && (
                   <div className="space-y-2">
