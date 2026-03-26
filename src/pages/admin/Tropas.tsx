@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Users, Plus, Pencil, Trash2, Phone, Mail, Shield, Bot, MessageSquare, RefreshCw, Smartphone, Settings, Bell, Save, UserCheck, Building, Eye, EyeOff, KeyRound } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Phone, Mail, Shield, Bot, MessageSquare, RefreshCw, Smartphone, Settings, Bell, Save, UserCheck, Building, Eye, EyeOff, KeyRound, AlertTriangle, CheckCircle2, Clock, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Profile {
@@ -63,10 +63,14 @@ export default function Tropas() {
   const [botModalOpen, setBotModalOpen] = useState(false);
   const [editUser, setEditUser] = useState<Profile | null>(null);
   
-  const [notificationBotId, setNotificationBotId] = useState<string>("");
   const [notifyManagers, setNotifyManagers] = useState(true);
   const [notifyBrokers, setNotifyBrokers] = useState(true);
+  const [supBotId, setSupBotId] = useState<string>("");
+  const [staleHours, setStaleHours] = useState<number>(24);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [testingSupNotif, setTestingSupNotif] = useState(false);
+  const [testingBrokerNotif, setTestingBrokerNotif] = useState(false);
+  const [runningManagerNotif, setRunningManagerNotif] = useState(false);
   
   const [formData, setFormData] = useState({
     email: "",
@@ -135,14 +139,17 @@ export default function Tropas() {
   };
 
   const loadSystemSettings = async () => {
-    const { data: botSetting } = await supabase.from("system_settings").select("value").eq("key", "notification_bot_instance_id").maybeSingle();
-    if (botSetting?.value) setNotificationBotId(botSetting.value);
+    const { data: supBot } = await supabase.from("system_settings").select("value").eq("key", "superintendent_bot_instance_id").maybeSingle();
+    if (supBot?.value) setSupBotId(supBot.value);
 
     const { data: managerSetting } = await supabase.from("system_settings").select("value").eq("key", "notify_managers_enabled").maybeSingle();
     if (managerSetting?.value !== undefined) setNotifyManagers(managerSetting.value);
 
     const { data: brokerSetting } = await supabase.from("system_settings").select("value").eq("key", "notify_brokers_enabled").maybeSingle();
     if (brokerSetting?.value !== undefined) setNotifyBrokers(brokerSetting.value);
+
+    const { data: staleSetting } = await supabase.from("system_settings").select("value").eq("key", "manager_notify_stale_hours").maybeSingle();
+    if (staleSetting?.value) setStaleHours(Number(staleSetting.value));
   };
 
   useEffect(() => {
@@ -270,9 +277,10 @@ export default function Tropas() {
   const handleSaveSettings = async () => {
     setSavingSettings(true);
     try {
-      await supabase.from("system_settings").upsert({ key: "notification_bot_instance_id", value: notificationBotId, description: "ID da instância usada para notificações do sistema" }, { onConflict: "key" });
-      await supabase.from("system_settings").upsert({ key: "notify_managers_enabled", value: notifyManagers, description: "Ativar notificações para managers" }, { onConflict: "key" });
-      await supabase.from("system_settings").upsert({ key: "notify_brokers_enabled", value: notifyBrokers, description: "Ativar notificações para brokers" }, { onConflict: "key" });
+      await supabase.from("system_settings").upsert({ key: "superintendent_bot_instance_id", value: supBotId, description: "Instância WhatsApp do Superintendente para notificar managers" }, { onConflict: "key" });
+      await supabase.from("system_settings").upsert({ key: "notify_managers_enabled", value: notifyManagers, description: "Ativar notificações do Superintendente para managers" }, { onConflict: "key" });
+      await supabase.from("system_settings").upsert({ key: "notify_brokers_enabled", value: notifyBrokers, description: "Ativar notificações dos managers para corretores" }, { onConflict: "key" });
+      await supabase.from("system_settings").upsert({ key: "manager_notify_stale_hours", value: staleHours, description: "Horas de inatividade para incluir lead no resumo do manager" }, { onConflict: "key" });
       toast({ title: "✅ Configurações salvas!" });
     } catch (error: any) {
       toast({ title: "❌ Erro ao salvar", description: error.message, variant: "destructive" });
@@ -281,29 +289,60 @@ export default function Tropas() {
     }
   };
 
-  const testNotification = async () => {
-    if (!notificationBotId) {
-      toast({ title: "⚠️ Selecione uma instância primeiro", variant: "destructive" });
+  const testSupNotification = async () => {
+    if (!supBotId) {
+      toast({ title: "⚠️ Configure a instância do Superintendente primeiro", variant: "destructive" });
       return;
     }
-
+    setTestingSupNotif(true);
     try {
-      toast({ title: "🧪 Enviando teste..." });
-      const { data: bot } = await supabase.from("bot_instances").select("phone").eq("id", notificationBotId).single();
-      
-      if (!bot?.phone) {
-        toast({ title: "❌ Bot sem telefone", variant: "destructive" });
-        return;
-      }
-
+      const { data: bot } = await supabase.from("bot_instances").select("phone").eq("id", supBotId).single();
+      if (!bot?.phone) throw new Error("Instância sem telefone configurado");
       const { error } = await supabase.functions.invoke("send_whatsapp_message", {
-        body: { botId: notificationBotId, phone: bot.phone, message: "🧪 Teste de notificação do sistema!\n\nSe você recebeu esta mensagem, as notificações estão funcionando corretamente. ✅", conversationId: null },
+        body: { botId: supBotId, phone: bot.phone, message: "🧪 *Teste — Canal Superintendente → Managers*\n\nSe você recebeu esta mensagem, o canal está funcionando. ✅" },
       });
-
       if (error) throw error;
       toast({ title: "✅ Teste enviado!", description: `Verifique o WhatsApp ${bot.phone}` });
     } catch (error: any) {
       toast({ title: "❌ Erro no teste", description: error.message, variant: "destructive" });
+    } finally {
+      setTestingSupNotif(false);
+    }
+  };
+
+  const runManagerNotification = async () => {
+    setRunningManagerNotif(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("notify-managers", { body: {} });
+      if (error) throw error;
+      const processed = data?.processed ?? 0;
+      toast({ title: `✅ Resumo enviado para ${processed} manager(s)` });
+    } catch (error: any) {
+      toast({ title: "❌ Erro ao disparar resumo", description: error.message, variant: "destructive" });
+    } finally {
+      setRunningManagerNotif(false);
+    }
+  };
+
+  const testBrokerNotification = async () => {
+    const managersWithBot = users.filter(u => u.role === 'MANAGER' && u.bot_instance_id);
+    if (!managersWithBot.length) {
+      toast({ title: "⚠️ Nenhum manager com instância configurada", variant: "destructive" });
+      return;
+    }
+    setTestingBrokerNotif(true);
+    try {
+      const mgr = managersWithBot[0];
+      if (!mgr.bot_instance_id || !mgr.phone) throw new Error("Manager sem bot ou telefone");
+      const { error } = await supabase.functions.invoke("send_whatsapp_message", {
+        body: { botId: mgr.bot_instance_id, phone: mgr.phone, message: `🧪 *Teste — Canal Manager → Corretores*\n\nOlá ${mgr.first_name}! Canal funcionando. ✅` },
+      });
+      if (error) throw error;
+      toast({ title: "✅ Teste enviado!", description: `Para ${mgr.first_name} (${mgr.phone})` });
+    } catch (error: any) {
+      toast({ title: "❌ Erro no teste", description: error.message, variant: "destructive" });
+    } finally {
+      setTestingBrokerNotif(false);
     }
   };
 
@@ -516,60 +555,163 @@ export default function Tropas() {
         </div>
       ) : (
         <div className="space-y-6">
-          <Card className="border-2 border-gray-700/50 bg-slate-800/40">
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Settings className="w-5 h-5 text-green-400" />
-                <h4 className="text-white font-bold">Configurações de Notificações</h4>
+
+          {/* ── CANAL 1: Superintendente → Managers ── */}
+          <Card className="border-2 border-blue-500/30 bg-slate-800/40">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                    <Bell className="w-4 h-4 text-blue-400" />
+                  </div>
+                  <div>
+                    <h4 className="text-white font-bold text-sm">Superintendente → Managers</h4>
+                    <p className="text-gray-400 text-xs">Resumo diário de leads parados por equipe</p>
+                  </div>
+                </div>
+                <Switch checked={notifyManagers} onCheckedChange={setNotifyManagers} />
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label className="text-gray-400 text-xs uppercase mb-2 block">Instância para Notificações</Label>
-                <Select value={notificationBotId} onValueChange={setNotificationBotId}>
+                <Label className="text-gray-400 text-xs uppercase mb-2 block">Instância do Superintendente (remetente)</Label>
+                <Select value={supBotId} onValueChange={setSupBotId}>
                   <SelectTrigger className="bg-slate-900 border-gray-600 text-white">
-                    <SelectValue placeholder="Escolha uma instância" />
+                    <SelectValue placeholder="Escolha a instância Junior" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-gray-600">
-                    {bots.filter(b => b.status === 'active').map(bot => (
-                      <SelectItem key={bot.id} value={bot.id}>{bot.name} ({bot.phone})</SelectItem>
+                    {bots.map(bot => (
+                      <SelectItem key={bot.id} value={bot.id}>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${bot.status === 'active' ? 'bg-green-400' : 'bg-red-400'}`} />
+                          {bot.name} ({bot.phone})
+                        </div>
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="pt-4 border-t border-gray-700/50 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-white flex items-center gap-2">
-                      <Bell className="w-4 h-4 text-blue-400" />
-                      Notificar Managers
-                    </div>
-                    <div className="text-xs text-gray-400">Resumo diário de leads sem resposta (9h)</div>
-                  </div>
-                  <Switch checked={notifyManagers} onCheckedChange={setNotifyManagers} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-white flex items-center gap-2">
-                      <Bell className="w-4 h-4 text-green-400" />
-                      Notificar Brokers
-                    </div>
-                    <div className="text-xs text-gray-400">Avisar quando lead é atribuído</div>
-                  </div>
-                  <Switch checked={notifyBrokers} onCheckedChange={setNotifyBrokers} />
+
+              <div>
+                <Label className="text-gray-400 text-xs uppercase mb-2 block">Leads parados há mais de (horas)</Label>
+                <input
+                  type="number"
+                  min={1}
+                  max={168}
+                  value={staleHours}
+                  onChange={e => setStaleHours(Number(e.target.value))}
+                  className="w-24 bg-slate-900 border border-gray-600 text-white rounded-md px-3 py-2 text-sm"
+                />
+              </div>
+
+              {/* Tabela de roteamento: Manager → instância do manager (destinatários) */}
+              <div>
+                <Label className="text-gray-400 text-xs uppercase mb-2 block">Destinatários (managers da equipe)</Label>
+                <div className="rounded-lg border border-gray-700/50 overflow-hidden">
+                  {users.filter(u => u.role === 'MANAGER').length === 0 ? (
+                    <div className="p-3 text-gray-500 text-xs text-center">Nenhum manager cadastrado</div>
+                  ) : (
+                    users.filter(u => u.role === 'MANAGER').map(mgr => (
+                      <div key={mgr.id} className="flex items-center justify-between px-3 py-2 border-b border-gray-700/30 last:border-0">
+                        <div className="flex items-center gap-2">
+                          <Users className="w-3.5 h-3.5 text-gray-400" />
+                          <span className="text-white text-sm">{mgr.first_name || mgr.email}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {mgr.phone ? (
+                            <span className="text-gray-400 text-xs">{mgr.phone}</span>
+                          ) : (
+                            <Badge className="bg-red-900/40 text-red-400 border-red-500/30 text-xs flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" /> Sem telefone
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
-              <div className="pt-4 border-t border-gray-700/50 flex gap-2">
-                <Button onClick={testNotification} variant="outline" className="flex-1 border-purple-500/30 text-purple-400 hover:bg-purple-900/20">
-                  🧪 Teste
+
+              <div className="flex gap-2 pt-2">
+                <Button onClick={testSupNotification} disabled={testingSupNotif || !supBotId} variant="outline" size="sm" className="border-blue-500/30 text-blue-400 hover:bg-blue-900/20">
+                  {testingSupNotif ? <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1" />}
+                  Testar canal
                 </Button>
-                <Button onClick={handleSaveSettings} disabled={savingSettings} className="flex-1 bg-green-600 hover:bg-green-500">
-                  {savingSettings ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                  Salvar
+                <Button onClick={runManagerNotification} disabled={runningManagerNotif || !notifyManagers} size="sm" className="bg-blue-600 hover:bg-blue-500">
+                  {runningManagerNotif ? <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Bell className="w-3.5 h-3.5 mr-1" />}
+                  Disparar agora
                 </Button>
               </div>
             </CardContent>
           </Card>
+
+          {/* ── CANAL 2: Manager → Corretores ── */}
+          <Card className="border-2 border-green-500/30 bg-slate-800/40">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                    <Bell className="w-4 h-4 text-green-400" />
+                  </div>
+                  <div>
+                    <h4 className="text-white font-bold text-sm">Manager → Corretores</h4>
+                    <p className="text-gray-400 text-xs">Novo lead atribuído e alertas de acompanhamento</p>
+                  </div>
+                </div>
+                <Switch checked={notifyBrokers} onCheckedChange={setNotifyBrokers} />
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Tabela de roteamento: Manager → bot próprio → corretores */}
+              <div>
+                <Label className="text-gray-400 text-xs uppercase mb-2 block">Roteamento por equipe</Label>
+                <div className="rounded-lg border border-gray-700/50 overflow-hidden">
+                  {users.filter(u => u.role === 'MANAGER').length === 0 ? (
+                    <div className="p-3 text-gray-500 text-xs text-center">Nenhum manager cadastrado</div>
+                  ) : (
+                    users.filter(u => u.role === 'MANAGER').map(mgr => {
+                      const brokerCount = users.filter(u => u.role === 'BROKER' && u.manager_id === mgr.id).length;
+                      const hasBot = !!mgr.bot_instance_id;
+                      return (
+                        <div key={mgr.id} className="flex items-center justify-between px-3 py-2.5 border-b border-gray-700/30 last:border-0">
+                          <div className="flex items-center gap-2 flex-1">
+                            <Users className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            <span className="text-white text-sm">{mgr.first_name || mgr.email}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {hasBot ? (
+                              <Badge className="bg-green-900/40 text-green-400 border-green-500/30 text-xs flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" /> {mgr.bot_instances?.name || 'Bot OK'}
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-amber-900/40 text-amber-400 border-amber-500/30 text-xs flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" /> Sem instância
+                              </Badge>
+                            )}
+                            <span className="text-gray-500 text-xs">{brokerCount} corretor{brokerCount !== 1 ? 'es' : ''}</span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                <p className="text-gray-500 text-xs mt-1.5">Configure a instância de cada manager em Usuários → editar perfil.</p>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button onClick={testBrokerNotification} disabled={testingBrokerNotif} variant="outline" size="sm" className="border-green-500/30 text-green-400 hover:bg-green-900/20">
+                  {testingBrokerNotif ? <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1" />}
+                  Testar canal
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Botão salvar global ── */}
+          <Button onClick={handleSaveSettings} disabled={savingSettings} className="w-full bg-slate-700 hover:bg-slate-600 border border-slate-600">
+            {savingSettings ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            Salvar configurações
+          </Button>
         </div>
       )}
 
