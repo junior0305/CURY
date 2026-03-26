@@ -50,19 +50,25 @@ serve(async (req) => {
       });
     }
 
+    // Normaliza URL e instance name (igual ao send_whatsapp_message)
+    const base = (bot.evolution_api_url || '').toString().replace(/\/+$/g, '');
+    const instance = encodeURIComponent((bot.instance_name || bot.name || '').toString().trim());
+    const cleanPhone = phone.replace(/\D/g, '');
+
     console.log(`[send-whatsapp] Bot: ${bot.instance_name}`);
-    console.log(`[send-whatsapp] URL: ${bot.evolution_api_url}/message/sendText/${bot.instance_name}`);
+    console.log(`[send-whatsapp] URL: ${base}/message/sendText/${instance}`);
+    console.log(`[send-whatsapp] Phone cleaned: ${cleanPhone}`);
 
     const response = await fetch(
-      `${bot.evolution_api_url}/message/sendText/${bot.instance_name}`,
+      `${base}/message/sendText/${instance}`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': bot.evolution_api_key
+          'apikey': (bot.evolution_api_key || '').toString().trim()
         },
         body: JSON.stringify({
-          number: phone,
+          number: cleanPhone,
           text: message
         })
       }

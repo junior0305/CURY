@@ -135,7 +135,7 @@ serve(async (req) => {
           .from('ia_conversations')
           .select('*')
           .eq('is_crm_lead', true)
-          .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()) // últimos 7 dias
+          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()) // últimos 30 dias
           .order('created_at', { ascending: false })
           .limit(item.sample_size || 5);
 

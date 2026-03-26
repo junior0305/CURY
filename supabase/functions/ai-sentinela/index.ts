@@ -275,7 +275,7 @@ serve(async (req) => {
 
     const { data: staleWithInteraction } = await supabase
       .from('leads')
-      .select('id, name, phone, status, tag, source, broker_id, last_interaction_at, last_broker_whatsapp_at, broker:profiles!broker_id(first_name, bot_instance_id)')
+      .select('id, name, phone, status, tag, source, broker_id, last_interaction_at, last_broker_whatsapp_at, broker:profiles(first_name, bot_instance_id)')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .lt('last_interaction_at', thresholdAgo)
       .not('broker_id', 'is', null)
@@ -283,7 +283,7 @@ serve(async (req) => {
 
     const { data: staleWithoutInteraction } = await supabase
       .from('leads')
-      .select('id, name, phone, status, tag, source, broker_id, last_interaction_at, created_at, last_broker_whatsapp_at, broker:profiles!broker_id(first_name, bot_instance_id)')
+      .select('id, name, phone, status, tag, source, broker_id, last_interaction_at, created_at, last_broker_whatsapp_at, broker:profiles(first_name, bot_instance_id)')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .is('last_interaction_at', null)
       .lt('created_at', thresholdAgo)
@@ -304,6 +304,7 @@ serve(async (req) => {
     console.log(`[ai-sentinela] ${staleLeads.length} leads parados encontrados`);
 
     let processed = 0;
+    const errors: string[] = [];
 
     for (const lead of staleLeads) {
       try {
@@ -408,20 +409,27 @@ serve(async (req) => {
         console.log(`[ai-sentinela] Lead ${lead.id} (${lead.name}) — mensagem gerada: ${messageText.substring(0, 80)}...`);
 
         // Enviar via WhatsApp
-        const { data: sendResult } = await supabase.functions.invoke('send-whatsapp', {
+        const { data: sendResult } = await supabase.functions.invoke('send_whatsapp_message', {
           body: {
-            instance_id: broker.bot_instance_id,
+            botId: broker.bot_instance_id,
             phone: lead.phone,
             message: messageText,
-            lead_id: lead.id,
-            type: 'sentinela',
           },
         });
 
-        if (sendResult?.success === false) {
+        if (!sendResult?.success) {
           console.warn(`[ai-sentinela] Falha ao enviar para ${lead.id}`);
           continue;
         }
+
+        // Log de automação
+        await supabase.from('automation_logs').insert({
+          entity_type: 'sentinela',
+          entity_id: lead.id,
+          status: 'success',
+          message_sent: messageText,
+          recipient_phone: lead.phone,
+        }).catch(() => {});
 
         // Calcular custo
         const costUsd = estimateCost(config.model_name, llmResult.inputTokens, llmResult.outputTokens);
@@ -493,7 +501,9 @@ serve(async (req) => {
         console.log(`[ai-sentinela] ✅ Lead ${lead.id} processado (custo: $${costUsd.toFixed(6)})`);
 
       } catch (leadErr: any) {
-        console.error(`[ai-sentinela] Erro no lead ${lead.id}:`, leadErr.message);
+        const msg = `lead ${lead.id}: ${leadErr.message}`;
+        console.error(`[ai-sentinela] Erro no ${msg}`);
+        errors.push(msg);
       }
 
       await new Promise(resolve => setTimeout(resolve, 500));
