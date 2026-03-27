@@ -62,6 +62,35 @@ serve(async (req) => {
             }).eq('id', activeSess.id);
             console.log(`[webhook_receiver] Sentinela pausada para lead ${brokerLead.id} (broker_takeover)`);
           }
+
+          // Cérebro: cancelar warmup e alertas pendentes (corretor assumiu)
+          await supabase
+            .from('lead_activation_queue')
+            .update({ status: 'cancelled', cancel_reason: 'broker_replied' })
+            .eq('lead_id', brokerLead.id)
+            .eq('status', 'pending')
+            .in('action_type', ['broker_warmup', 'broker_alert', 'manager_alert']);
+
+          // Salvar mensagem do corretor em ia_messages para Análise IA
+          if (messageText) {
+            const { data: conv } = await supabase
+              .from('ia_conversations')
+              .select('id')
+              .eq('lead_id', brokerLead.id)
+              .eq('status', 'active')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (conv?.id) {
+              await supabase.from('ia_messages').insert({
+                conversation_id: conv.id,
+                message_text: messageText,
+                direction: 'outgoing',
+                sender_type: 'broker',
+                created_at: now,
+              });
+            }
+          }
         }
 
       } else {
@@ -106,6 +135,23 @@ serve(async (req) => {
             .from('leads')
             .update(updates)
             .eq('id', lead.id);
+
+          // Cérebro: cancelar toques pendentes + agendar warmup e escalações
+          await supabase
+            .from('lead_activation_queue')
+            .update({ status: 'cancelled', cancel_reason: 'lead_responded' })
+            .eq('lead_id', lead.id)
+            .eq('status', 'pending')
+            .in('action_type', ['toque_1', 'toque_2', 'sentinela', 'last_chance']);
+
+          const warmupAt = new Date(Date.now() + 35 * 60000).toISOString();
+          const alertAt  = new Date(Date.now() +  2 * 3600000).toISOString();
+          const managerAt = new Date(Date.now() + 4 * 3600000).toISOString();
+          await supabase.from('lead_activation_queue').insert([
+            { lead_id: lead.id, action_type: 'broker_warmup',  scheduled_for: warmupAt },
+            { lead_id: lead.id, action_type: 'broker_alert',   scheduled_for: alertAt },
+            { lead_id: lead.id, action_type: 'manager_alert',  scheduled_for: managerAt },
+          ]).catch(() => {}); // tabela pode não existir em ambientes antigos
         }
         console.log(`[webhook_receiver] lead → corretor ${phoneNumber}`);
       }

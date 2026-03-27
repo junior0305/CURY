@@ -103,8 +103,20 @@ serve(async (req) => {
     const startTime = nowMs;
     console.log('[followup_scheduler] running at', now);
 
+    // ── Verifica se o Cérebro está ativo ──────────────────────────────────────
+    const { data: cerebroCfg } = await supabase
+      .from('system_settings')
+      .select('value')
+      .eq('key', 'cerebro_enabled')
+      .maybeSingle();
+    const cerebroEnabled = cerebroCfg?.value === true || cerebroCfg?.value === 'true';
+    if (cerebroEnabled) {
+      console.log('[followup_scheduler] Cérebro ativo — Blocos 1, 2, 4 e 5 desabilitados');
+    }
+
     // ── BLOCO 1: Leads Críticos ───────────────────────────────────────────────
     // Lead respondeu boas-vindas, corretor ignorou por mais de 2h
+    // (substituído pelo Cérebro quando cerebroEnabled = true)
     const twoHoursAgo = new Date(nowMs - 2 * 3600000).toISOString();
 
     const { data: criticalLeads } = await supabase
@@ -118,7 +130,7 @@ serve(async (req) => {
       .limit(30);
 
     let criticalProcessed = 0;
-    for (const lead of criticalLeads || []) {
+    for (const lead of cerebroEnabled ? [] : (criticalLeads || [])) {
       const broker = (lead as any).broker;
 
       // Ignorar se o corretor já respondeu depois que o lead mandou mensagem
@@ -188,7 +200,7 @@ serve(async (req) => {
 
     console.log(`[B2] ${coldLeads?.length || 0} leads frios encontrados`);
     let coldProcessed = 0;
-    for (const lead of coldLeads || []) {
+    for (const lead of cerebroEnabled ? [] : (coldLeads || [])) {
       const broker = (lead as any).broker;
       if (!broker?.bot_instance_id || !lead.phone) {
         console.log(`[B2] SKIP ${lead.id} — bot=${broker?.bot_instance_id}, phone=${lead.phone}`);
@@ -402,7 +414,7 @@ serve(async (req) => {
 
     console.log(`[B4] ${staleLeads.length} leads parados encontrados`);
     let staleProcessed = 0;
-    for (const lead of staleLeads) {
+    for (const lead of cerebroEnabled ? [] : staleLeads) {
       const broker = (lead as any).broker;
       if (!broker?.bot_instance_id || !lead.phone) {
         console.log(`[B4] SKIP ${lead.id} — bot=${broker?.bot_instance_id}, phone=${lead.phone}`);
@@ -480,16 +492,31 @@ serve(async (req) => {
     console.log(`[followup_scheduler] Bloco 4 — Ativos parados: ${staleProcessed}`);
 
     // ── BLOCO 5: AI Sentinela ─────────────────────────────────────────────────
+    // Desabilitado quando Cérebro está ativo (Cérebro gerencia o toque 'sentinela')
     let sentinelaProcessed = 0;
-    try {
-      const { data: sr } = await supabase.functions.invoke('ai-sentinela', { body: {} });
-      sentinelaProcessed = sr?.processed ?? 0;
-      console.log(`[followup_scheduler] Bloco 5 — Sentinela: ${sentinelaProcessed}`);
-    } catch (e: any) {
-      console.error('[followup_scheduler] Bloco 5 error:', e.message);
+    if (!cerebroEnabled) {
+      try {
+        const { data: sr } = await supabase.functions.invoke('ai-sentinela', { body: {} });
+        sentinelaProcessed = sr?.processed ?? 0;
+        console.log(`[followup_scheduler] Bloco 5 — Sentinela: ${sentinelaProcessed}`);
+      } catch (e: any) {
+        console.error('[followup_scheduler] Bloco 5 error:', e.message);
+      }
     }
 
-    const total = criticalProcessed + coldProcessed + cadenceProcessed + staleProcessed + sentinelaProcessed;
+    // ── BLOCO 6: Cérebro Central ──────────────────────────────────────────────
+    let cerebroProcessed = 0;
+    if (cerebroEnabled) {
+      try {
+        const { data: cr } = await supabase.functions.invoke('cerebro-orquestrador', { body: {} });
+        cerebroProcessed = cr?.processed ?? 0;
+        console.log(`[followup_scheduler] Bloco 6 — Cérebro: ${cerebroProcessed} (rescheduled=${cr?.rescheduled ?? 0} cancelled=${cr?.cancelled ?? 0})`);
+      } catch (e: any) {
+        console.error('[followup_scheduler] Bloco 6 error:', e.message);
+      }
+    }
+
+    const total = criticalProcessed + coldProcessed + cadenceProcessed + staleProcessed + sentinelaProcessed + cerebroProcessed;
     const durationMs = Date.now() - startTime;
 
     // ── Registro de execução (monitoramento) ─────────────────────────────────
@@ -502,6 +529,7 @@ serve(async (req) => {
         cadence: cadenceProcessed,
         stale: staleProcessed,
         sentinela: sentinelaProcessed,
+        cerebro: cerebroProcessed,
         total,
         duration_ms: durationMs,
       });
@@ -514,6 +542,8 @@ serve(async (req) => {
         cadence: cadenceProcessed,
         stale: staleProcessed,
         sentinela: sentinelaProcessed,
+        cerebro: cerebroProcessed,
+        cerebro_enabled: cerebroEnabled,
         total,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

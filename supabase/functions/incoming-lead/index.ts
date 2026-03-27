@@ -252,6 +252,26 @@ serve(async (req) => {
           .eq('id', newLead.id);
         await supabase.rpc('record_welcome_template_sent', { p_template_id: usedTemplateId });
       }
+
+      // ── CÉREBRO: cria fila de ativação se habilitado ──────────────────────
+      if (welcomeSent) {
+        const { data: cerebroCfg } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'cerebro_enabled')
+          .maybeSingle();
+
+        if (cerebroCfg?.value === true || cerebroCfg?.value === 'true') {
+          const t = Date.now();
+          await supabase.from('lead_activation_queue').insert([
+            { lead_id: newLead.id, action_type: 'toque_1',    scheduled_for: new Date(t +  3 * 3600000).toISOString() },
+            { lead_id: newLead.id, action_type: 'toque_2',    scheduled_for: new Date(t +  5 * 3600000).toISOString() },
+            { lead_id: newLead.id, action_type: 'sentinela',  scheduled_for: new Date(t +  8 * 3600000).toISOString() },
+            { lead_id: newLead.id, action_type: 'last_chance', scheduled_for: new Date(t + 24 * 3600000).toISOString() },
+          ]);
+          console.log(`[incoming-lead] Fila Cérebro criada para lead ${newLead.id}`);
+        }
+      }
     }
 
     return new Response(JSON.stringify({ 
