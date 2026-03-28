@@ -423,13 +423,13 @@ serve(async (req) => {
         }
 
         // Log de automação
-        await supabase.from('automation_logs').insert({
+        try { await supabase.from('automation_logs').insert({
           entity_type: 'sentinela',
           entity_id: lead.id,
           status: 'success',
           message_sent: messageText,
           recipient_phone: lead.phone,
-        }).catch(() => {});
+        }); } catch {}
 
         // Calcular custo
         const costUsd = estimateCost(config.model_name, llmResult.inputTokens, llmResult.outputTokens);

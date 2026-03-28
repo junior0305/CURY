@@ -384,14 +384,14 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
           }
 
           // Log to cerebro_learning
-          await supabase.from('cerebro_learning').insert({
+          try { await supabase.from('cerebro_learning').insert({
             lead_id: lead.id,
             action_type: item.action_type,
             lead_source: lead.source,
             lead_tag: lead.tag,
             sent_hour_brt: brtHour,
             responded: false,
-          }).catch(() => {});
+          }); } catch {}
 
           processed++;
           details.push({ action: item.action_type, lead: lead.name, status: 'sent' });
@@ -414,12 +414,12 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
     }
 
     const durationMs = Date.now() - startTime;
-    await supabase.from('cerebro_runs').insert({
+    try { await supabase.from('cerebro_runs').insert({
       ran_at: now, status: 'success',
       processed, rescheduled, cancelled, skipped,
       duration_ms: durationMs,
       details: { items: details },
-    }).catch(() => {});
+    }); } catch {}
 
     console.log(`[cerebro] done — processed=${processed} rescheduled=${rescheduled} cancelled=${cancelled} skipped=${skipped} (${durationMs}ms)`);
 
@@ -429,11 +429,11 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
 
   } catch (error: any) {
     console.error('[cerebro] fatal:', error.message);
-    await supabase.from('cerebro_runs').insert({
+    try { await supabase.from('cerebro_runs').insert({
       ran_at: now, status: 'error',
       error_message: error.message,
       duration_ms: Date.now() - startTime,
-    }).catch(() => {});
+    }); } catch {}
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

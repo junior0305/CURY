@@ -147,11 +147,11 @@ serve(async (req) => {
           const warmupAt = new Date(Date.now() + 35 * 60000).toISOString();
           const alertAt  = new Date(Date.now() +  2 * 3600000).toISOString();
           const managerAt = new Date(Date.now() + 4 * 3600000).toISOString();
-          await supabase.from('lead_activation_queue').insert([
+          try { await supabase.from('lead_activation_queue').insert([
             { lead_id: lead.id, action_type: 'broker_warmup',  scheduled_for: warmupAt },
             { lead_id: lead.id, action_type: 'broker_alert',   scheduled_for: alertAt },
             { lead_id: lead.id, action_type: 'manager_alert',  scheduled_for: managerAt },
-          ]).catch(() => {}); // tabela pode não existir em ambientes antigos
+          ]); } catch {} // tabela pode não existir em ambientes antigos
         }
         console.log(`[webhook_receiver] lead → corretor ${phoneNumber}`);
       }

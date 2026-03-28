@@ -226,14 +226,14 @@ serve(async (req) => {
       });
       console.log(`[B2] send ${lead.id} → success=${result?.success}, status=${result?.status}, err=${sendErr?.message}`);
 
-      await supabase.from('automation_logs').insert({
+      try { await supabase.from('automation_logs').insert({
         entity_type: 'followup',
         entity_id: lead.id,
         status: result?.success ? 'success' : 'failed',
         message_sent: `Olá ${lead.name}! 👋\n\nPassamos aqui para saber se você ainda tem interesse no imóvel.\n\nEstamos à disposição! 😊`,
         recipient_phone: lead.phone,
         error_message: result?.success ? null : (sendErr?.message || JSON.stringify(result?.result) || `HTTP ${result?.status}`),
-      }).catch(() => {});
+      }); } catch {}
 
       if (result?.success) {
         if (lead.broker_id) {
@@ -459,14 +459,14 @@ serve(async (req) => {
       });
       console.log(`[B4] send ${lead.id} → success=${result?.success}, status=${result?.status}, err=${sendErr?.message}`);
 
-      await supabase.from('automation_logs').insert({
+      try { await supabase.from('automation_logs').insert({
         entity_type: 'followup',
         entity_id: lead.id,
         status: result?.success ? 'success' : 'failed',
         message_sent: message,
         recipient_phone: lead.phone,
         error_message: result?.success ? null : (sendErr?.message || JSON.stringify(result?.result) || `HTTP ${result?.status}`),
-      }).catch(() => {});
+      }); } catch {}
 
       if (result?.success) {
         // ✅ Reseta contador "horas sem contato"
