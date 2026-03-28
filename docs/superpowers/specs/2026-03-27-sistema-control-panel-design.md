@@ -10,135 +10,156 @@ Substituir o `MonitorScheduler` por um **Painel de Controle do Sistema** que mos
 ---
 
 ## Localização
-- **Rota:** Admin → Automação → aba "Monitor" (renomear para "Sistema")
+- **Rota:** Admin → Automação → aba "Monitor" (label renomeia para "Sistema")
 - **Arquivo substituído:** `src/components/admin/MonitorScheduler.tsx` → `src/components/admin/SistemaControl.tsx`
-- **AdminLayout.tsx:** trocar import e label da aba
+- **AdminLayout.tsx:** trocar import de `MonitorScheduler` para `SistemaControl` + mudar label de `"Monitor"` para `"Sistema"`
 
 ---
 
 ## Os 11 Módulos Monitorados
 
 ### Grupo 1 — Recepção de Leads
-| Módulo | Fonte de dados | Saudável quando |
-|---|---|---|
-| **Boas-vindas** | `distribution_logs` (last entry) + `automation_logs` WHERE entity_type='welcome' | enviou welcome há menos de 24h sem erro |
-| **Incoming Lead** | `distribution_logs` (last entry) | recebeu lead nas últimas 24h |
+
+**Boas-vindas**
+- Fonte: `distribution_logs` (última entrada com `status='SUCCESS'`)
+- Saudável quando: há registro nas últimas 24h
+- Ocioso: habilitado mas sem lead novo nas últimas 24h (normal fora do horário comercial)
+- Ação: mostrar último lead recebido (nome, telefone, timestamp)
+
+**Incoming Lead**
+- Fonte: `distribution_logs` (última entrada)
+- Saudável quando: há registro nas últimas 24h
+- Ação: mostrar quantidade de leads recebidos hoje
+
+---
 
 ### Grupo 2 — Automações de Follow-up
-| Módulo | Fonte de dados | Saudável quando |
-|---|---|---|
-| **Follow-up (Scheduler)** | `scheduler_runs` (last row) | rodou há menos de 2h, status='success' |
-| **Cadências** | `cadence_executions` WHERE status='active' + `cadence_templates` WHERE is_active=true | há templates ativos configurados |
-| **Cérebro Central** | `cerebro_runs` (last row) + `system_settings` WHERE key='cerebro_enabled' | flag=true + rodou junto com scheduler |
 
-### Grupo 3 — IA
-| Módulo | Fonte de dados | Saudável quando |
-|---|---|---|
-| **Sentinela IA** | `ai_sentinela_config` (is_enabled, monthly_spent_usd, monthly_budget_usd) + `ai_sentinela_sessions` | is_enabled=true + orçamento disponível |
-| **IA Coach** | `ai_coach_queue` (last processed) + `ai_coach_analysis` (last row) | processou item nas últimas 48h sem erro |
-| **Análise IA** | `ia_conversations` (last updated) + `ia_messages` (last row) | houve conversa com mensagem nas últimas 24h |
+**Follow-up (Scheduler)**
+- Fonte: `scheduler_runs` (última linha, ordenado por `ran_at` DESC)
+- Saudável quando: `status='success'` e `ran_at` há menos de 2h
+- Erro: mostrar `error_message` em texto claro
+- Ação: botão **Rodar Agora** (fire-and-forget para `followup_scheduler`)
+
+**Cadências**
+- Fonte: `cadence_templates` WHERE `is_active=true` (contagem)
+- Saudável quando: há pelo menos 1 template ativo
+- Ocioso: nenhum template ativo configurado
+- Ação: link para aba IaBuilder (abrir `/admin` → grupo Automação → aba ia-builder)
+
+**Cérebro Central**
+- Fonte: `system_settings` WHERE `key='cerebro_enabled'` + `cerebro_runs` (última linha)
+- Saudável quando: `value='true'` E `cerebro_runs` tem execução recente com `status='success'`
+- Desabilitado quando: `value='false'`
+- Ação: **Toggle ativar/desativar** (UPDATE `system_settings` SET value) + botão **Ver fila** (count de `lead_activation_queue` WHERE `status='pending'`)
+
+---
+
+### Grupo 3 — Inteligência Artificial
+
+**Sentinela IA**
+- Fonte: `ai_sentinela_config` (campos: `is_enabled`, `monthly_spent_usd`, `monthly_budget_usd`)
+- Saudável quando: `is_enabled=true` E `monthly_spent_usd < monthly_budget_usd`
+- Erro de orçamento: `monthly_spent_usd >= monthly_budget_usd`
+- Ação: **Toggle ativar/desativar** (UPDATE `ai_sentinela_config`) + mostrar barra de orçamento (`monthly_spent_usd / monthly_budget_usd`) + link para IaBuilder
+
+**IA Coach**
+- Fonte: `ai_coach_queue` (última linha processada) + `ai_coach_analysis` (última linha)
+- Saudável quando: `ai_coach_queue` tem item com `status='completed'` nas últimas 48h
+- Ocioso: nenhuma análise nas últimas 48h (normal se não há conversas)
+- Ação: mostrar timestamp da última análise
+
+**Análise IA**
+- Fonte: `ia_conversations` (MAX `last_message_at`) + `ia_messages` (última linha)
+- Saudável quando: houve mensagem em `ia_messages` nas últimas 24h
+- Ocioso: sem conversas recentes
+- Ação: mostrar última conversa processada (lead name + timestamp)
+
+---
 
 ### Grupo 4 — Infraestrutura WhatsApp
-| Módulo | Fonte de dados | Saudável quando |
-|---|---|---|
-| **Webhook** | `leads` (MAX last_lead_response_at) | recebeu mensagem de lead nas últimas 24h |
-| **WhatsApp (Evolution)** | `bot_instances` (status field) | pelo menos 1 instância com status='open' |
-| **Notificações** | `system_settings` WHERE key='notify_brokers_enabled' + `internal_notifications` (last row) | flag=true + notificação enviada nas últimas 24h |
+
+**Webhook**
+- Fonte: `leads` (MAX `last_lead_response_at`)
+- Saudável quando: houve resposta de lead nas últimas 24h
+- Ocioso: sem mensagens recebidas (pode ser normal à noite)
+- Ação: mostrar timestamp do último evento recebido
+
+**WhatsApp (Evolution)**
+- Fonte: `bot_instances` (campos: `name`, `status`, `instance_name`)
+- Saudável quando: pelo menos 1 instância com `status='open'`
+- Erro: mostrar nome(s) da(s) instância(s) com status diferente de `'open'`
+- Ação: listar cada instância com seu status individual. **Sem botão Reconectar** — mostrar instrução: "Acesse o painel Evolution para reconectar"
+- Nota: reconexão automática não é suportada pela edge function atual
+
+**Notificações Internas**
+- Fonte: `system_settings` WHERE `key='notify_brokers_enabled'` + `internal_notifications` (count hoje)
+- Saudável quando: `value=true` E há notificações enviadas hoje
+- Ação: **Toggle ativar/desativar** (UPDATE `system_settings`) + mostrar contagem de notificações hoje
 
 ---
 
 ## Estados de cada módulo
 
-| Estado | Cor | Significado |
-|---|---|---|
-| **Funcionando** | 🟢 verde | Operando normalmente dentro do esperado |
-| **Ocioso** | 🟡 amarelo | Habilitado mas sem atividade recente (pode ser normal) |
-| **Erro** | 🔴 vermelho | Última execução falhou ou configuração inválida |
-| **Desabilitado** | ⚫ cinza | Flag desligada intencionalmente |
-
----
-
-## Ações por módulo
-
-| Módulo | Ação disponível |
-|---|---|
-| **Boas-vindas** | Ver últimas enviadas (lista compacta) |
-| **Incoming Lead** | Ver últimos leads recebidos |
-| **Follow-up** | Rodar Agora + ver erro detalhado da última execução |
-| **Cadências** | Link → IA Builder (configurar templates) |
-| **Cérebro Central** | Toggle ativar/desativar (grava `system_settings.cerebro_enabled`) + ver itens pendentes na fila |
-| **Sentinela IA** | Toggle ativar/desativar (grava `ai_sentinela_config.is_enabled`) + ver orçamento restante + link → IaBuilder |
-| **IA Coach** | Ver última análise gerada |
-| **Análise IA** | Ver última conversa processada |
-| **Webhook** | Mostrar último evento recebido com timestamp |
-| **WhatsApp** | Listar instâncias com status individual. Botão Reconectar (invoca endpoint Evolution) |
-| **Notificações** | Toggle ativar/desativar (grava `system_settings.notify_brokers_enabled`) |
+| Estado | Cor | Badge | Significado |
+|---|---|---|---|
+| **Funcionando** | 🟢 verde | "OK" | Operando normalmente |
+| **Ocioso** | 🟡 amarelo | "Ocioso" | Habilitado mas sem atividade recente |
+| **Erro** | 🔴 vermelho | "Erro" | Falha na última execução |
+| **Desabilitado** | ⚫ cinza | "Desabilitado" | Flag desligada intencionalmente |
 
 ---
 
 ## Layout da tela
 
+Grid de cards agrupados por seção. Cada card tem:
+- **Título** do módulo + ícone
+- **Badge** de status (colorido)
+- **Linha de detalhe**: última atividade ou causa do erro em português
+- **Ação**: botão ou link relevante (ou nada se não há ação disponível)
+
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  🔧 PAINEL DE CONTROLE DO SISTEMA        [Atualizar]    │
-│  Última verificação: há 2min                            │
+│  🔧 Controle do Sistema            [↻ Atualizar]        │
+│  Verificado há 2min                                     │
 ├─────────────────────────────────────────────────────────┤
-│                                                         │
 │  RECEPÇÃO DE LEADS                                      │
-│  ┌──────────────┐  ┌──────────────┐                    │
-│  │ Boas-vindas  │  │ Incoming Lead│                    │
-│  │ 🟢 OK        │  │ 🟢 OK        │                    │
-│  │ há 3h        │  │ há 1h        │                    │
-│  │ [Ver últimas]│  │ [Ver últimos]│                    │
-│  └──────────────┘  └──────────────┘                    │
+│  [ Boas-vindas 🟢 ]  [ Incoming Lead 🟢 ]               │
 │                                                         │
 │  AUTOMAÇÕES DE FOLLOW-UP                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │ Follow-up    │  │ Cadências    │  │ Cérebro      │ │
-│  │ 🔴 Erro      │  │ 🟡 Ocioso    │  │ ⚫ Desabili  │ │
-│  │ "401 Unauth" │  │ 0 ativos     │  │              │ │
-│  │ [Rodar Agora]│  │ [Configurar] │  │ [● Ativar]   │ │
-│  └──────────────┘  └──────────────┘  └──────────────┘ │
+│  [ Follow-up 🔴 ]  [ Cadências 🟡 ]  [ Cérebro ⚫ ]    │
 │                                                         │
 │  INTELIGÊNCIA ARTIFICIAL                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │ Sentinela IA │  │ IA Coach     │  │ Análise IA   │ │
-│  │ ⚫ Desabili  │  │ 🟢 OK        │  │ 🟢 OK        │ │
-│  │ $0/$10 budget│  │ há 2h        │  │ há 45min     │ │
-│  │ [● Ativar]   │  │ [Ver análise]│  │ [Ver conv.]  │ │
-│  └──────────────┘  └──────────────┘  └──────────────┘ │
+│  [ Sentinela ⚫ ]  [ IA Coach 🟢 ]  [ Análise IA 🟢 ]  │
 │                                                         │
 │  INFRAESTRUTURA WHATSAPP                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │ Webhook      │  │ WhatsApp     │  │ Notificações │ │
-│  │ 🟢 OK        │  │ 🔴 Desconect │  │ 🟢 OK        │ │
-│  │ há 12min     │  │ sjc-main ❌  │  │ 5 hoje       │ │
-│  │ [Ver evento] │  │ [Reconectar] │  │ [● Desativar]│ │
-│  └──────────────┘  └──────────────┘  └──────────────┘ │
+│  [ Webhook 🟢 ]  [ WhatsApp 🔴 ]  [ Notificações 🟢 ]  │
 │                                                         │
-│  ── Histórico de execuções (últimas 10) ─────────────  │
-│  [tabela compacta do scheduler_runs + cerebro_runs]     │
+│  ── Histórico (scheduler_runs + cerebro_runs, 10 itens) │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Arquivos a modificar/criar
+## Arquivos a criar/modificar
 
-| Arquivo | Mudança |
+| Arquivo | Ação |
 |---|---|
-| `src/components/admin/SistemaControl.tsx` | CRIAR — componente principal do painel |
-| `src/components/admin/MonitorScheduler.tsx` | DELETAR — substituído pelo SistemaControl |
-| `src/pages/admin/AdminLayout.tsx` | Trocar import + label da aba de "Monitor" para "Sistema" |
+| `src/components/admin/SistemaControl.tsx` | CRIAR — componente principal |
+| `src/components/admin/MonitorScheduler.tsx` | DELETAR |
+| `src/pages/admin/AdminLayout.tsx` | Trocar import + label "Monitor" → "Sistema" |
 
 ---
 
 ## Decisões técnicas
 
-- **Polling:** `useEffect` com `setInterval(fetch, 60000)` — atualiza a cada 60s automaticamente
-- **Toggle Cérebro/Sentinela/Notificações:** UPDATE direto em `system_settings` ou `ai_sentinela_config` via Supabase client — sem edge function necessária
-- **Rodar Agora:** fire-and-forget para `followup_scheduler` (padrão já existente no MonitorScheduler)
-- **Reconectar WhatsApp:** chamar endpoint da Evolution API via edge function `send_whatsapp_message` com action='restart'
-- **Erros em linguagem clara:** mapear códigos HTTP e mensagens comuns para texto em português (ex: "401" → "Credencial inválida — verifique o token da instância")
-- **Histórico compacto:** manter tabela das últimas 10 execuções do scheduler + cerebro na parte inferior da tela
-- **Sem nova migração:** todos os dados necessários já existem nas tabelas atuais
+- **Polling:** `setInterval(fetch, 60000)` — atualiza a cada 60s
+- **Toggle Cérebro:** `supabase.from('system_settings').update({value:'true'}).eq('key','cerebro_enabled')`
+- **Toggle Sentinela:** `supabase.from('ai_sentinela_config').update({is_enabled:true})`
+- **Toggle Notificações:** `supabase.from('system_settings').update({value:true}).eq('key','notify_brokers_enabled')`
+- **Rodar Agora:** fire-and-forget `supabase.functions.invoke('followup_scheduler', {body:{}})` — padrão já existente
+- **Cérebro Rodar:** quando `cerebro_enabled=true`, o `followup_scheduler` já chama o `cerebro-orquestrador` internamente — não há invocação separada
+- **WhatsApp reconectar:** não implementado — mostrar instrução manual
+- **Erros em português:** mapear mensagens comuns: `"401"` → `"Credencial inválida"`, `"timeout"` → `"Tempo esgotado"`, `"ECONNREFUSED"` → `"Serviço inacessível"`
+- **Tabelas existentes confirmadas:** `ia_conversations`, `ia_messages`, `ai_coach_queue`, `ai_coach_analysis`, `bot_instances` existem no banco (criadas antes das migrations numeradas)
+- **Sem nova migration necessária**
