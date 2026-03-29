@@ -34,6 +34,7 @@ import { DailyMissionsPanel } from "@/components/gamification/DailyMissionsPanel
 import { useRivalWatch } from "@/hooks/useRivalWatch";
 import { useGamification } from "@/hooks/useGamification";
 import { RadarAcao } from "@/components/broker/RadarAcao";
+import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
@@ -193,6 +194,7 @@ const Dashboard = () => {
     return (
       <div className="flex flex-col h-screen bg-slate-900">
         <div className="flex-none z-50"><AchievementTicker /></div>
+        <WhatsAppQRBanner />
 
         <header className="flex-none bg-slate-900/95 backdrop-blur-sm border-b border-gray-700/50 z-40">
           <div className="px-3 pt-3 pb-2 flex justify-between items-center">
@@ -405,6 +407,7 @@ const Dashboard = () => {
   return (
     <div className="h-screen flex flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black overflow-hidden">
       <AchievementTicker />
+      <WhatsAppQRBanner />
 
       <IntelTacticsModal open={isIntelOpen} onOpenChange={setIsIntelOpen}
         brokerId={intelTargetUser?.id || user?.id || ""} userName={intelTargetUser?.name} />
