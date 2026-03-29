@@ -99,9 +99,38 @@ serve(async (req) => {
     const withinWindow = isWithinWindow();
     const brtHour = getBRTHour();
 
-    // ── 2. Auto-queue: DOCS_REQUESTED leads sem docs_reminder agendado ──────
-    // Garante que leads que mudaram para DOCS_REQUESTED também entrem na fila
+    // ── 2. Auto-queue: leads parados sem item pendente na fila ────────────
+    // Garante que todos os leads ativos parados 24h+ entrem na fila automaticamente
+    const twentyFourAgo = new Date(Date.now() - 24 * 3600000).toISOString();
     const fortyEightAgo = new Date(Date.now() - 48 * 3600000).toISOString();
+
+    // NEW/IN_PROGRESS sem interação há 24h+
+    const { data: staleLeadsForQueue } = await supabase
+      .from('leads')
+      .select('id')
+      .in('status', ['NEW', 'IN_PROGRESS'])
+      .not('broker_id', 'is', null)
+      .or(`last_interaction_at.lt.${twentyFourAgo},and(last_interaction_at.is.null,created_at.lt.${twentyFourAgo})`)
+      .limit(60);
+
+    for (const sl of staleLeadsForQueue || []) {
+      const { data: existing } = await supabase
+        .from('lead_activation_queue')
+        .select('id')
+        .eq('lead_id', sl.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+      if (!existing) {
+        await supabase.from('lead_activation_queue').insert({
+          lead_id: sl.id,
+          action_type: 'toque_1',
+          scheduled_for: now,
+          status: 'pending',
+        });
+      }
+    }
+
+    // DOCS_REQUESTED sem docs_reminder agendado
     const { data: docsLeads } = await supabase
       .from('leads')
       .select('id')
