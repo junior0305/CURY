@@ -53,6 +53,44 @@ serve(async (req) => {
 
     if (createError) throw createError
 
+    // Auto-cria bot_instance para BROKER se não foi passado botInstanceId
+    let resolvedBotInstanceId = (botInstanceId === 'none' || !botInstanceId) ? null : botInstanceId;
+
+    if (role === 'BROKER' && !resolvedBotInstanceId) {
+      // Busca URL e key da Evolution API de uma instância existente
+      const { data: refBot } = await supabaseAdmin
+        .from('bot_instances')
+        .select('evolution_api_url, evolution_api_key')
+        .limit(1)
+        .maybeSingle();
+
+      if (refBot?.evolution_api_url) {
+        const instanceName = firstName; // nome da instância = primeiro nome do corretor
+        const { data: newBot } = await supabaseAdmin
+          .from('bot_instances')
+          .insert({
+            name: firstName,
+            instance_name: instanceName,
+            phone: `inst_${instanceName}_${Date.now()}`, // placeholder único
+            evolution_api_url: refBot.evolution_api_url,
+            evolution_api_key: refBot.evolution_api_key,
+            status: 'active',
+            weight: 50,
+            priority: 5,
+            health_score: 100,
+            instance_type: 'prospecting',
+            persona_style: 'formal',
+          })
+          .select('id')
+          .single();
+
+        if (newBot?.id) {
+          resolvedBotInstanceId = newBot.id;
+          console.log(`[create-user] bot_instance criada: ${instanceName} (${newBot.id})`);
+        }
+      }
+    }
+
     // Force creation of profile to ensure it doesn't fail
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
@@ -64,12 +102,12 @@ serve(async (req) => {
         team_id: (teamId === 'none' || !teamId) ? null : teamId,
         role: role,
         email: email,
-        phone: phone, // Salvando telefone no perfil
+        phone: phone,
         lead_assignment_enabled: leadAssignmentEnabled || false,
-        bot_instance_id: (botInstanceId === 'none' || !botInstanceId) ? null : botInstanceId,
+        bot_instance_id: resolvedBotInstanceId,
         updated_at: new Date().toISOString()
       })
-    
+
     if (profileError) console.error("Profile update error:", profileError.message)
 
     return new Response(JSON.stringify({ success: true, user: userData.user }), {
