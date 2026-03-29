@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Shield, Users, DollarSign, Settings, FileText, RefreshCw,
   Webhook, Crown, LogOut, Gift, Bot, Target, HeartPulse,
-  Gauge, Activity, Zap, Music, MonitorDot,
+  Gauge, Activity, Zap, Music,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
@@ -71,15 +71,8 @@ const GROUPS = [
       { value: "ia-builder", label: "IA Builder",   roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "prospeccao", label: "Prospecção",   roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "sons",       label: "Arena Sonora", roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "monitor",    label: "Sistema",      roles: ["ADMIN", "SUPERINTENDENT"] },
     ],
-  },
-  {
-    value: "sistema",
-    label: "Sistema",
-    icon: MonitorDot,
-    color: "indigo",
-    roles: ["ADMIN", "SUPERINTENDENT"],
-    single: true,
   },
   {
     value: "financeiro",
@@ -322,11 +315,8 @@ export default function AdminLayout() {
           <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>
           <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>
           <TabsContent value="sons" className="p-6"><AudioSettings /></TabsContent>
+          <TabsContent value="monitor" className="p-6"><SistemaControl /></TabsContent>
         </Tabs>
-      )}
-
-      {activeGroup === "sistema" && (
-        <div className="p-6"><SistemaControl /></div>
       )}
 
       {activeGroup === "financeiro" && (

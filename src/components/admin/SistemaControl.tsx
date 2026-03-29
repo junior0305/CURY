@@ -395,8 +395,7 @@ export default function SistemaControl() {
       </section>
 
       {/* ── Histórico Cérebro ──────────────────────────────────────────────── */}
-      {cerebroRun && (
-        <section>
+      <section>
           <SectionHeader>Histórico do Cérebro Central</SectionHeader>
           <Card className="bg-slate-900/60 border-slate-700/50 overflow-hidden">
             {!Array.isArray(cerebroRuns) || !cerebroRuns.length ? (
@@ -479,7 +478,6 @@ export default function SistemaControl() {
             )}
           </Card>
         </section>
-      )}
 
       {/* ── Histórico ──────────────────────────────────────────────────────── */}
       <section>
