@@ -102,7 +102,7 @@ export default function SistemaControl() {
       supabase.from("scheduler_runs").select("*").order("ran_at", { ascending: false }).limit(10),
       supabase.from("cadence_templates").select("id", { count: "exact", head: true }).eq("is_active", true),
       supabase.from("system_settings").select("value").eq("key", "cerebro_enabled").maybeSingle(),
-      supabase.from("cerebro_runs").select("ran_at,status,processed,error_message").order("ran_at", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("cerebro_runs").select("*").order("ran_at", { ascending: false }).limit(10),
       supabase.from("lead_activation_queue").select("id", { count: "exact", head: true }).eq("status", "pending"),
       supabase.from("ai_sentinela_config").select("is_enabled,monthly_spent_usd,monthly_budget_usd,provider,model_name").maybeSingle(),
       supabase.from("ai_coach_analysis").select("created_at").order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -113,7 +113,7 @@ export default function SistemaControl() {
       supabase.from("internal_notifications").select("id", { count: "exact", head: true }).gte("created_at", today),
     ]);
 
-    setRaw({ distLogs, schedulerRuns, cadenceCount, cerebroSetting, cerebroRun, queuePending, sentinela, coachAnalysis, iaMsg, webhookLead, bots, notifSetting, notifCount, now });
+    setRaw({ distLogs, schedulerRuns, cadenceCount, cerebroSetting, cerebroRuns: cerebroRun, queuePending, sentinela, coachAnalysis, iaMsg, webhookLead, bots, notifSetting, notifCount, now });
     setCheckedAt(new Date());
     setLoading(false);
   }, []);
@@ -161,8 +161,9 @@ export default function SistemaControl() {
     );
   }
 
-  const { distLogs, schedulerRuns, cadenceCount, cerebroSetting, cerebroRun, queuePending,
+  const { distLogs, schedulerRuns, cadenceCount, cerebroSetting, cerebroRuns, queuePending,
     sentinela, coachAnalysis, iaMsg, webhookLead, bots, notifSetting, notifCount, now } = raw;
+  const cerebroRun = Array.isArray(cerebroRuns) ? cerebroRuns[0] : cerebroRuns;
 
   const h2  = now - 2  * 3600000;
   const h24 = now - 24 * 3600000;
@@ -392,6 +393,93 @@ export default function SistemaControl() {
           />
         </div>
       </section>
+
+      {/* ── Histórico Cérebro ──────────────────────────────────────────────── */}
+      {cerebroRun && (
+        <section>
+          <SectionHeader>Histórico do Cérebro Central</SectionHeader>
+          <Card className="bg-slate-900/60 border-slate-700/50 overflow-hidden">
+            {!Array.isArray(cerebroRuns) || !cerebroRuns.length ? (
+              <p className="p-6 text-center text-slate-500 text-sm">Nenhuma execução registrada.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-500 font-semibold">
+                      <th className="px-4 py-3 text-left">Data/Hora (BRT)</th>
+                      <th className="px-3 py-3 text-center">Status</th>
+                      <th className="px-3 py-3 text-center text-emerald-400">Enviados</th>
+                      <th className="px-3 py-3 text-center text-red-400 hidden md:table-cell">Failed</th>
+                      <th className="px-3 py-3 text-center hidden md:table-cell">Pulados</th>
+                      <th className="px-3 py-3 text-center hidden md:table-cell">Reagend.</th>
+                      <th className="px-3 py-3 text-center hidden md:table-cell">Cancelados</th>
+                      <th className="px-3 py-3 text-center text-slate-300 font-bold">Fila</th>
+                      <th className="px-3 py-3 text-center hidden sm:table-cell">Duração</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cerebroRuns.map((run: any) => {
+                      const items: any[] = run.details?.items ?? [];
+                      const failedCount = items.filter((i: any) => i.status === "failed").length;
+                      const totalAttempted = (run.processed ?? 0) + failedCount + (run.skipped ?? 0);
+                      return (
+                        <tr key={run.id} className={cn(
+                          "border-b border-slate-800/40 hover:bg-slate-800/30 transition-colors",
+                          run.status === "error" && "bg-red-900/10"
+                        )}>
+                          <td className="px-4 py-2.5">
+                            <div className="text-slate-300 font-medium">{fmtTime(run.ran_at)}</div>
+                            <div className="text-slate-600">{timeAgo(run.ran_at)}</div>
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            {run.status === "success"
+                              ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 inline" />
+                              : <XCircle className="h-3.5 w-3.5 text-red-500 inline" title={run.error_message ?? ""} />
+                            }
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span className={cn("font-bold", (run.processed ?? 0) > 0 ? "text-emerald-400" : "text-slate-700")}>
+                              {run.processed ?? 0}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center hidden md:table-cell">
+                            <span className={cn("font-bold", failedCount > 0 ? "text-red-400" : "text-slate-700")}>
+                              {failedCount}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center hidden md:table-cell">
+                            <span className={cn("font-bold", (run.skipped ?? 0) > 0 ? "text-yellow-400" : "text-slate-700")}>
+                              {run.skipped ?? 0}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center hidden md:table-cell">
+                            <span className={cn("font-bold", (run.rescheduled ?? 0) > 0 ? "text-blue-400" : "text-slate-700")}>
+                              {run.rescheduled ?? 0}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center hidden md:table-cell">
+                            <span className={cn("font-bold", (run.cancelled ?? 0) > 0 ? "text-slate-400" : "text-slate-700")}>
+                              {run.cancelled ?? 0}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span className={cn("font-bold text-sm", totalAttempted > 0 ? "text-white" : "text-slate-600")}>
+                              {totalAttempted}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center text-slate-500 hidden sm:table-cell">
+                            {fmtDuration(run.duration_ms)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </section>
+      )}
 
       {/* ── Histórico ──────────────────────────────────────────────────────── */}
       <section>
