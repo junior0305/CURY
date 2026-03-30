@@ -21,12 +21,16 @@ function isWithinWindow(): boolean {
   return brtTotal >= 8 * 60 && brtTotal <= 21 * 60 + 45;
 }
 
-// Returns ISO timestamp for 08:00 BRT the next valid day
+// Returns ISO timestamp for 08:00 BRT the next valid opening.
+// Só avança para amanhã se já passou das 21:45 BRT (janela fechada).
+// Antes das 8h ou entre 8h-21h45, agenda para HOJE às 11:00 UTC.
 function nextWindowOpen(): string {
   const now = new Date();
   const brtH = (now.getUTCHours() - 3 + 24) % 24;
+  const brtM = now.getUTCMinutes();
+  const brtTotal = brtH * 60 + brtM;
   const next = new Date(now);
-  if (brtH >= 8) next.setUTCDate(next.getUTCDate() + 1);
+  if (brtTotal > 21 * 60 + 45) next.setUTCDate(next.getUTCDate() + 1);
   next.setUTCHours(11, 0, 0, 0); // 08:00 BRT = 11:00 UTC
   return next.toISOString();
 }
