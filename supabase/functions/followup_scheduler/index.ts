@@ -516,6 +516,17 @@ serve(async (req) => {
       }
     }
 
+    // ── BLOCO 7: Health check das instâncias WhatsApp ─────────────────────────
+    let botHealthChecked = 0, botHealthUpdated = 0;
+    try {
+      const { data: bh } = await supabase.functions.invoke('check-bot-health', { body: {} });
+      botHealthChecked = bh?.checked ?? 0;
+      botHealthUpdated = bh?.updated ?? 0;
+      console.log(`[followup_scheduler] Bloco 7 — BotHealth: checked=${botHealthChecked} updated=${botHealthUpdated} open=${bh?.open ?? 0} offline=${bh?.offline ?? 0}`);
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 7 error:', e.message);
+    }
+
     const total = criticalProcessed + coldProcessed + cadenceProcessed + staleProcessed + sentinelaProcessed + cerebroProcessed;
     const durationMs = Date.now() - startTime;
 
@@ -544,6 +555,7 @@ serve(async (req) => {
         sentinela: sentinelaProcessed,
         cerebro: cerebroProcessed,
         cerebro_enabled: cerebroEnabled,
+        bot_health: { checked: botHealthChecked, updated: botHealthUpdated },
         total,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
