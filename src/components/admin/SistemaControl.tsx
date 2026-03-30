@@ -125,7 +125,7 @@ export default function SistemaControl() {
   }, [fetchAll]);
 
   const toggleCerebro = async (val: boolean) => {
-    await supabase.from("system_settings").update({ value: String(val) }).eq("key", "cerebro_enabled");
+    await supabase.from("system_settings").upsert({ key: "cerebro_enabled", value: String(val) }, { onConflict: "key" });
     toast.success(val ? "Cérebro Central ativado" : "Cérebro Central desativado");
     fetchAll();
   };
@@ -137,7 +137,7 @@ export default function SistemaControl() {
   };
 
   const toggleNotif = async (val: boolean) => {
-    await supabase.from("system_settings").update({ value: val }).eq("key", "notify_brokers_enabled");
+    await supabase.from("system_settings").upsert({ key: "notify_brokers_enabled", value: val }, { onConflict: "key" });
     toast.success(val ? "Notificações ativadas" : "Notificações desativadas");
     fetchAll();
   };
