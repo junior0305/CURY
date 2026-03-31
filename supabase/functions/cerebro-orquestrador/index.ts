@@ -120,11 +120,15 @@ serve(async (req) => {
     for (const sl of staleLeadsForQueue || []) {
       const { data: existing } = await supabase
         .from('lead_activation_queue')
-        .select('id')
+        .select('id, status, attempts')
         .eq('lead_id', sl.id)
-        .eq('status', 'pending')
+        .in('status', ['pending', 'failed'])
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
-      if (!existing) {
+      // Só cria novo item se não há pending E não há failed com menos de 5 tentativas
+      const shouldQueue = !existing || (existing.status === 'failed' && (existing.attempts || 0) >= 5);
+      if (shouldQueue) {
         await supabase.from('lead_activation_queue').insert({
           lead_id: sl.id,
           action_type: 'toque_1',
@@ -145,12 +149,15 @@ serve(async (req) => {
     for (const dl of docsLeads || []) {
       const { data: existing } = await supabase
         .from('lead_activation_queue')
-        .select('id')
+        .select('id, status, attempts')
         .eq('lead_id', dl.id)
         .eq('action_type', 'docs_reminder')
-        .eq('status', 'pending')
+        .in('status', ['pending', 'failed'])
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
-      if (!existing) {
+      const shouldQueue = !existing || (existing.status === 'failed' && (existing.attempts || 0) >= 5);
+      if (shouldQueue) {
         await supabase.from('lead_activation_queue').insert({
           lead_id: dl.id,
           action_type: 'docs_reminder',
@@ -430,12 +437,28 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
           details.push({ action: item.action_type, lead: lead.name, status: 'sent' });
           console.log(`[cerebro] ✅ ${item.action_type} → ${lead.name}`);
         } else if (isOutbound) {
-          await supabase.from('lead_activation_queue').update({
-            status: 'failed',
-            last_attempt_at: new Date().toISOString(),
-            attempts: (item.attempts || 0) + 1,
-          }).eq('id', item.id);
-          details.push({ action: item.action_type, lead: lead.name, status: 'failed' });
+          const newAttempts = (item.attempts || 0) + 1;
+          if (newAttempts >= 5) {
+            // Falhou 5 vezes: marca como failed permanente
+            await supabase.from('lead_activation_queue').update({
+              status: 'failed',
+              last_attempt_at: new Date().toISOString(),
+              attempts: newAttempts,
+            }).eq('id', item.id);
+            details.push({ action: item.action_type, lead: lead.name, status: 'failed' });
+          } else {
+            // Reagenda para retry: se ainda dentro da janela, tenta em 30min; senão, próxima janela
+            const retryTime = withinWindow
+              ? new Date(Date.now() + 30 * 60000).toISOString()
+              : nextWindowOpen();
+            await supabase.from('lead_activation_queue').update({
+              scheduled_for: retryTime,
+              last_attempt_at: new Date().toISOString(),
+              attempts: newAttempts,
+            }).eq('id', item.id);
+            rescheduled++;
+            details.push({ action: item.action_type, lead: lead.name, status: `retry_${newAttempts}` });
+          }
         }
 
         await new Promise(r => setTimeout(r, 300));
