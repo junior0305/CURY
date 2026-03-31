@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import {
   RefreshCw, Play, CheckCircle2, XCircle, Bot, Brain,
   MessageSquare, Webhook, Smartphone, Bell, Zap, Shield,
-  Activity, Inbox, Users,
+  Activity, Inbox, Users, AlertTriangle, HeartPulse,
 } from "lucide-react";
 
 type Status = "ok" | "ocioso" | "erro" | "desabilitado";
@@ -77,6 +77,8 @@ export default function SistemaControl() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [checkedAt, setCheckedAt] = useState(new Date());
+  const [alertPhone, setAlertPhone] = useState("");
+  const [savingPhone, setSavingPhone] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -97,6 +99,9 @@ export default function SistemaControl() {
       { data: bots },
       { data: notifSetting },
       { count: notifCount },
+      { data: guardianHeartbeat },
+      { data: guardianActiveAlerts },
+      { data: guardianAlertPhone },
     ] = await Promise.all([
       supabase.from("distribution_logs").select("lead_name, created_at").order("created_at", { ascending: false }).limit(3),
       supabase.from("scheduler_runs").select("*").order("ran_at", { ascending: false }).limit(10),
@@ -111,9 +116,13 @@ export default function SistemaControl() {
       supabase.from("bot_instances").select("id,name,instance_name,status"),
       supabase.from("system_settings").select("value").eq("key", "notify_brokers_enabled").maybeSingle(),
       supabase.from("internal_notifications").select("id", { count: "exact", head: true }).gte("created_at", today),
+      supabase.from("guardian_alerts").select("created_at, message").eq("check_type", "heartbeat").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("guardian_alerts").select("check_type, severity, message, created_at").is("resolved_at", null).neq("check_type", "heartbeat").order("created_at", { ascending: false }).limit(10),
+      supabase.from("system_settings").select("value").eq("key", "guardian_alert_phone").maybeSingle(),
     ]);
 
-    setRaw({ distLogs, schedulerRuns, cadenceCount, cerebroSetting, cerebroRuns: cerebroRun, queuePending, sentinela, coachAnalysis, iaMsg, webhookLead, bots, notifSetting, notifCount, now });
+    setRaw({ distLogs, schedulerRuns, cadenceCount, cerebroSetting, cerebroRuns: cerebroRun, queuePending, sentinela, coachAnalysis, iaMsg, webhookLead, bots, notifSetting, notifCount, guardianHeartbeat, guardianActiveAlerts, now });
+    if (guardianAlertPhone?.value) setAlertPhone(guardianAlertPhone.value);
     setCheckedAt(new Date());
     setLoading(false);
   }, []);
@@ -142,6 +151,13 @@ export default function SistemaControl() {
     fetchAll();
   };
 
+  const saveAlertPhone = async () => {
+    setSavingPhone(true);
+    await supabase.from("system_settings").upsert({ key: "guardian_alert_phone", value: alertPhone || null }, { onConflict: "key" });
+    toast.success(alertPhone ? "Telefone de alerta salvo" : "Alerta por WhatsApp desativado");
+    setSavingPhone(false);
+  };
+
   const handleRunNow = () => {
     setRunning(true);
     toast.info("Scheduler iniciado. Aguarde...");
@@ -162,8 +178,24 @@ export default function SistemaControl() {
   }
 
   const { distLogs, schedulerRuns, cadenceCount, cerebroSetting, cerebroRuns, queuePending,
-    sentinela, coachAnalysis, iaMsg, webhookLead, bots, notifSetting, notifCount, now } = raw;
+    sentinela, coachAnalysis, iaMsg, webhookLead, bots, notifSetting, notifCount,
+    guardianHeartbeat, guardianActiveAlerts, now } = raw;
   const cerebroRun = Array.isArray(cerebroRuns) ? cerebroRuns[0] : cerebroRuns;
+
+  // ── Guardian ──────────────────────────────────────────────────────────────
+  const guardianLastRun = guardianHeartbeat?.created_at ?? null;
+  const guardianAlertsArr: any[] = guardianActiveAlerts ?? [];
+  const highAlerts = guardianAlertsArr.filter((a: any) => a.severity === "high");
+  const medAlerts  = guardianAlertsArr.filter((a: any) => a.severity === "medium");
+  const guardianStatus: Status = !guardianLastRun ? "ocioso"
+    : highAlerts.length > 0 ? "erro"
+    : medAlerts.length > 0 ? "ocioso"
+    : "ok";
+  const guardianDetail = !guardianLastRun
+    ? "Nenhuma execução registrada ainda. Rode o Scheduler para ativar."
+    : guardianAlertsArr.length === 0
+    ? `Tudo saudável — último heartbeat ${timeAgo(guardianLastRun)}`
+    : `${guardianAlertsArr.length} alerta(s) ativo(s) — último check ${timeAgo(guardianLastRun)}`;
 
   const h2  = now - 2  * 3600000;
   const h24 = now - 24 * 3600000;
@@ -392,6 +424,58 @@ export default function SistemaControl() {
             }
           />
         </div>
+      </section>
+
+      {/* ── Guardian ───────────────────────────────────────────────────────── */}
+      <section>
+        <SectionHeader>Sistema Guardian — Saúde Automática</SectionHeader>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
+          <ModuleCard title="Guardian" icon={HeartPulse} status={guardianStatus} detail={guardianDetail} />
+          <Card className="lg:col-span-2 p-4 bg-slate-900/60 border-slate-700/50 flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-slate-400" />
+              <span className="text-sm font-bold text-white">Alerta WhatsApp (opcional)</span>
+            </div>
+            <p className="text-xs text-slate-400">
+              Telefone do admin para receber alertas críticos. Formato: 5511999999999
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={alertPhone}
+                onChange={e => setAlertPhone(e.target.value)}
+                placeholder="5511999999999"
+                className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              />
+              <Button size="sm" onClick={saveAlertPhone} disabled={savingPhone}
+                className="bg-amber-600 hover:bg-amber-500 text-white text-xs">
+                {savingPhone ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+        {guardianAlertsArr.length > 0 && (
+          <Card className="bg-slate-900/60 border-slate-700/50 overflow-hidden">
+            <div className="p-3 border-b border-slate-800 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-bold text-amber-400 uppercase tracking-wide">Alertas Ativos</span>
+            </div>
+            <div className="divide-y divide-slate-800/50">
+              {guardianAlertsArr.map((alert: any, i: number) => (
+                <div key={i} className="px-4 py-3 flex items-start gap-3">
+                  <span className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0",
+                    alert.severity === "high" ? "bg-red-500" :
+                    alert.severity === "medium" ? "bg-yellow-500" : "bg-blue-400"
+                  )} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-slate-300 leading-relaxed">{alert.message}</p>
+                    <p className="text-xs text-slate-600 mt-0.5">{timeAgo(alert.created_at)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
       </section>
 
       {/* ── Histórico Cérebro ──────────────────────────────────────────────── */}

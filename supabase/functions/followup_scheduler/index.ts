@@ -527,6 +527,17 @@ serve(async (req) => {
       console.error('[followup_scheduler] Bloco 7 error:', e.message);
     }
 
+    // ── BLOCO 8: Sistema Guardian ─────────────────────────────────────────────
+    let guardianAlerts = 0, guardianFixed = 0;
+    try {
+      const { data: gr } = await supabase.functions.invoke('sistema-guardian', { body: {} });
+      guardianAlerts = gr?.alerts ?? 0;
+      guardianFixed = gr?.auto_fixed ?? 0;
+      console.log(`[followup_scheduler] Bloco 8 — Guardian: alerts=${guardianAlerts} auto_fixed=${guardianFixed}`);
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 8 error:', e.message);
+    }
+
     const total = criticalProcessed + coldProcessed + cadenceProcessed + staleProcessed + sentinelaProcessed + cerebroProcessed;
     const durationMs = Date.now() - startTime;
 
