@@ -451,7 +451,7 @@ export default function Tropas() {
         </button>
         <button onClick={() => setTab("bots")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "bots" ? "bg-purple-900/40 text-purple-300 border border-purple-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
           <Bot className="w-4 h-4" /> Bots
-          <span className="text-xs bg-slate-700 rounded px-1.5">{bots.filter(b => b.status === 'active').length}</span>
+          <span className="text-xs bg-slate-700 rounded px-1.5">{bots.filter(b => !['paused','blocked'].includes(b.status)).length}</span>
         </button>
         <button onClick={() => setTab("settings")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "settings" ? "bg-green-900/40 text-green-300 border border-green-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
           <Settings className="w-4 h-4" /> Configurações
@@ -548,7 +548,7 @@ export default function Tropas() {
         </div>
       ) : tab === "bots" ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {bots.filter(b => b.status === 'active').map(bot => (
+          {bots.filter(b => !['paused','blocked'].includes(b.status)).map(bot => (
             <Card key={bot.id} className="border-2 border-gray-700/50 bg-slate-800/40 hover:border-purple-500/50 transition-all">
               <CardHeader>
                 <div className="flex items-center gap-2">
