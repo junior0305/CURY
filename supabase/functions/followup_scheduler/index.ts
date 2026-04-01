@@ -538,6 +538,26 @@ serve(async (req) => {
       console.error('[followup_scheduler] Bloco 8 error:', e.message);
     }
 
+    // ── BLOCO 9: Redistribuição Automática ───────────────────────────────────
+    let redistribuicaoCount = 0;
+    try {
+      const { data: rr } = await supabase.functions.invoke('agente-redistribuicao', { body: {} });
+      redistribuicaoCount = rr?.redistributed ?? 0;
+      console.log(`[followup_scheduler] Bloco 9 — Redistribuição: ${redistribuicaoCount}`);
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 9 error:', e.message);
+    }
+
+    // ── BLOCO 10: Relatório Diário ────────────────────────────────────────────
+    let relatorioSent = 0;
+    try {
+      const { data: relr } = await supabase.functions.invoke('agente-relatorio-diario', { body: {} });
+      relatorioSent = relr?.sent ?? 0;
+      console.log(`[followup_scheduler] Bloco 10 — Relatório: sent=${relatorioSent}`);
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 10 error:', e.message);
+    }
+
     const total = criticalProcessed + coldProcessed + cadenceProcessed + staleProcessed + sentinelaProcessed + cerebroProcessed;
     const durationMs = Date.now() - startTime;
 
@@ -567,6 +587,8 @@ serve(async (req) => {
         cerebro: cerebroProcessed,
         cerebro_enabled: cerebroEnabled,
         bot_health: { checked: botHealthChecked, updated: botHealthUpdated },
+        redistribuicao: redistribuicaoCount,
+        relatorio: relatorioSent,
         total,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
