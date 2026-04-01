@@ -52,6 +52,7 @@ async function hasRecentAutoFollowup(supabase: any, leadId: string, hours: numbe
  */
 function interpolate(template: string, name: string, brokerName: string): string {
   return template
+    .replace(/\\n/g, '\n')          // converte \n literal (digitado no admin) para quebra real
     .replace(/\{nome\}/gi, name?.split(' ')[0] || name || 'você')
     .replace(/\{broker\}/gi, brokerName || 'nossa equipe');
 }

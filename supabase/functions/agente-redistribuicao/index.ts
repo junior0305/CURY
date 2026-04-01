@@ -42,7 +42,7 @@ serve(async (req) => {
     // E o lead foi criado há mais de X horas (não redistribuir leads recém-criados)
     const { data: staleLeads } = await supabase
       .from('leads')
-      .select('id, name, broker_id, status, broker:profiles!broker_id(id, first_name, protect_own_leads, bot_instance_id)')
+      .select('id, name, broker_id, status, broker:profiles!broker_id(id, first_name, protect_own_leads, bot_instance_id, manager_id)')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .not('broker_id', 'is', null)
       .lt('created_at', thresholdAgo)
@@ -60,7 +60,7 @@ serve(async (req) => {
     // ── Corretores disponíveis para receber leads ──────────────────────────────
     const { data: availableBrokers } = await supabase
       .from('profiles')
-      .select('id, first_name, bot_instance_id')
+      .select('id, first_name, bot_instance_id, manager_id')
       .eq('role', 'BROKER')
       .eq('lead_assignment_enabled', true)
       .not('bot_instance_id', 'is', null);
@@ -108,10 +108,14 @@ serve(async (req) => {
         continue;
       }
 
-      // Escolher novo corretor: menor carga, diferente do atual
-      const candidates = availableBrokers.filter(b => b.id !== lead.broker_id);
+      // Escolher novo corretor: mesma equipe (manager_id), menor carga, diferente do atual
+      const brokerManagerId = broker.manager_id ?? null;
+      const candidates = availableBrokers.filter(b =>
+        b.id !== lead.broker_id &&
+        (brokerManagerId ? b.manager_id === brokerManagerId : true)
+      );
       if (!candidates.length) {
-        console.log(`[agente-redistribuicao] SKIP ${lead.id} — sem outro corretor disponível`);
+        console.log(`[agente-redistribuicao] SKIP ${lead.id} — sem outro corretor disponível na mesma equipe (manager_id=${brokerManagerId})`);
         continue;
       }
       candidates.sort((a, b) => (loadMap[a.id] || 0) - (loadMap[b.id] || 0));
