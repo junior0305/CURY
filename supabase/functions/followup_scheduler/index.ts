@@ -558,6 +558,37 @@ serve(async (req) => {
       console.error('[followup_scheduler] Bloco 10 error:', e.message);
     }
 
+    // ── BLOCO 11: Recuperação de Abandonados ─────────────────────────────────
+    let recuperacaoCount = 0;
+    try {
+      const { data: recr } = await supabase.functions.invoke('agente-recuperacao-abandonados', { body: {} });
+      recuperacaoCount = recr?.reactivated ?? 0;
+      console.log(`[followup_scheduler] Bloco 11 — Recuperação: ${recuperacaoCount}`);
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 11 error:', e.message);
+    }
+
+    // ── BLOCO 12: Anti-Sobrecarga ─────────────────────────────────────────────
+    let sobrecargaPaused = 0, sobrecargaRestored = 0;
+    try {
+      const { data: sor } = await supabase.functions.invoke('agente-anti-sobrecarga', { body: {} });
+      sobrecargaPaused = sor?.paused ?? 0;
+      sobrecargaRestored = sor?.restored ?? 0;
+      console.log(`[followup_scheduler] Bloco 12 — Anti-Sobrecarga: paused=${sobrecargaPaused} restored=${sobrecargaRestored}`);
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 12 error:', e.message);
+    }
+
+    // ── BLOCO 13: Scoring de Leads ────────────────────────────────────────────
+    let scoringCount = 0;
+    try {
+      const { data: scr } = await supabase.functions.invoke('agente-scoring', { body: {} });
+      scoringCount = scr?.scored ?? 0;
+      console.log(`[followup_scheduler] Bloco 13 — Scoring: ${scoringCount}`);
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 13 error:', e.message);
+    }
+
     const total = criticalProcessed + coldProcessed + cadenceProcessed + staleProcessed + sentinelaProcessed + cerebroProcessed;
     const durationMs = Date.now() - startTime;
 

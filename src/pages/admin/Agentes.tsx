@@ -111,17 +111,18 @@ const AGENTS: AgentDef[] = [
     borderColor: "border-green-500/30",
     title: "Recuperação de Abandonados",
     description:
-      "Reativa leads abandonados após X dias com mensagem personalizada de IA.",
+      "Reativa leads abandonados após X dias com mensagem personalizada.",
     enabledKey: "agente_recuperacao_enabled",
-    status: "coming_soon",
+    status: "available",
     fields: [
       {
         key: "agente_recuperacao_dias",
-        label: "Dias de espera",
+        label: "Dias de espera após abandono",
         type: "number",
         default: 15,
         min: 7,
         max: 90,
+        hint: "Quantos dias após o abandono antes de tentar reativar o lead.",
       },
       {
         key: "agente_recuperacao_max_tentativas",
@@ -130,8 +131,11 @@ const AGENTS: AgentDef[] = [
         default: 2,
         min: 1,
         max: 5,
+        hint: "Após atingir o limite, o lead não será mais contatado automaticamente.",
       },
     ],
+    notes:
+      "Leads reativados voltam para status NEW. O corretor original é notificado para fazer o acompanhamento.",
   },
   {
     id: "sobrecarga",
@@ -143,17 +147,20 @@ const AGENTS: AgentDef[] = [
     description:
       "Pausa a distribuição para corretores com leads ativos acima do limite.",
     enabledKey: "agente_sobrecarga_enabled",
-    status: "coming_soon",
+    status: "available",
     fields: [
       {
         key: "agente_sobrecarga_max_leads",
-        label: "Máx. leads por corretor",
+        label: "Máx. leads ativos por corretor",
         type: "number",
         default: 30,
-        min: 10,
-        max: 100,
+        min: 5,
+        max: 200,
+        hint: "Ao atingir o limite, o corretor para de receber novos leads. Restaura automaticamente quando a carga cair para 80% do limite.",
       },
     ],
+    notes:
+      "Só pausa corretores que foram desativados por este agente. Corretores desabilitados manualmente não são afetados.",
   },
   {
     id: "scoring",
@@ -163,10 +170,12 @@ const AGENTS: AgentDef[] = [
     borderColor: "border-red-500/30",
     title: "Scoring de Leads",
     description:
-      "Prioriza leads com maior probabilidade de conversão na fila do Cérebro.",
+      "Calcula e atualiza o score de cada lead com base em engajamento e recência.",
     enabledKey: "agente_scoring_enabled",
-    status: "coming_soon",
+    status: "available",
     fields: [],
+    notes:
+      "Score de 0-100 atualizado a cada hora. Leva em conta: resposta ao contato inicial, status no funil, tempo desde a última interação e acessibilidade via bot.",
   },
 ];
 
