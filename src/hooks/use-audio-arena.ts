@@ -87,6 +87,39 @@ function synthesize(ctx: AudioContext, key: SoundKey) {
 // Custom MP3 URLs são salvas no localStorage após carregamento do DB
 export const CUSTOM_SOUND_KEY = (key: SoundKey) => `crm_sound_${key}_url`;
 
+const ALL_SOUND_KEYS: SoundKey[] = ['SALE', 'OVERTAKE', 'NEW_LEAD', 'NOTIFICATION'];
+const SETTING_PREFIX = 'custom_sound_';
+const SESSION_SYNC_KEY = 'crm_audio_synced_v2';
+
+/**
+ * Sincroniza URLs de sons customizados do banco → localStorage.
+ * Executa uma vez por sessão (flag em sessionStorage).
+ * Garante que todos os usuários (corretores, gestores) toquem o som correto
+ * mesmo sem abrir as configurações de áudio.
+ */
+export async function syncAudioSettings(supabase: any): Promise<void> {
+  if (sessionStorage.getItem(SESSION_SYNC_KEY)) return;
+  try {
+    const keys = ALL_SOUND_KEYS.map((k) => `${SETTING_PREFIX}${k}`);
+    const { data } = await supabase
+      .from('system_settings')
+      .select('key, value')
+      .in('key', keys);
+
+    // Limpa entradas antigas antes de repopular
+    ALL_SOUND_KEYS.forEach((k) => localStorage.removeItem(CUSTOM_SOUND_KEY(k)));
+
+    (data ?? []).forEach((row: any) => {
+      const soundKey = row.key.replace(SETTING_PREFIX, '') as SoundKey;
+      if (row.value) localStorage.setItem(CUSTOM_SOUND_KEY(soundKey), row.value);
+    });
+
+    sessionStorage.setItem(SESSION_SYNC_KEY, '1');
+  } catch {
+    // Falha silenciosa — usa localStorage existente ou sons sintetizados
+  }
+}
+
 function playCustomMp3(url: string): Promise<void> {
   return new Promise((resolve) => {
     const audio = new Audio(url);

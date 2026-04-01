@@ -4,6 +4,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./components/AuthProvider";
+import { useEffect } from "react";
+import { syncAudioSettings } from "@/hooks/use-audio-arena";
+import { supabase } from "@/integrations/supabase/client";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
@@ -17,6 +20,13 @@ import ProfileDebug from "@/pages/ProfileDebug";
 import UserManagement from "@/pages/UserManagement";
 
 const queryClient = new QueryClient();
+
+// Sincroniza sons customizados do banco → localStorage uma vez por sessão
+// Garante que corretores e gestores toquem o som certo sem abrir configurações
+function AudioSyncOnLoad() {
+  useEffect(() => { syncAudioSettings(supabase); }, []);
+  return null;
+}
 
 const LoadingScreen = () => (
   <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
@@ -58,6 +68,7 @@ const App = () => (
     <TooltipProvider>
       <BrowserRouter>
         <AuthProvider>
+          <AudioSyncOnLoad />
           <Toaster />
           <Sonner />
           <Routes>

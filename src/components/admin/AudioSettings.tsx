@@ -116,7 +116,8 @@ export default function AudioSettings() {
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-      const publicUrl = urlData.publicUrl;
+      // Adiciona cache-buster para forçar novo download após substituição do arquivo
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
       // Salva URL no system_settings
       await supabase.from("system_settings").upsert(
