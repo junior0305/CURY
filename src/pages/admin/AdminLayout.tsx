@@ -25,6 +25,7 @@ import SaudeLeads   from "./SaudeLeads";
 import { Prospeccao } from "./Prospeccao";
 import AudioSettings from "@/components/admin/AudioSettings";
 import SistemaControl from "@/components/admin/SistemaControl";
+import Agentes from "./Agentes";
 
 // ─── Grupos principais ────────────────────────────────────────────────────────
 
@@ -69,6 +70,7 @@ const GROUPS = [
     subtabs: [
       { value: "webhooks",   label: "Webhooks",     roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "ia-builder", label: "IA Builder",   roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "agentes",    label: "Agentes",      roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "prospeccao", label: "Prospecção",   roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "sons",       label: "Arena Sonora", roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "monitor",    label: "Sistema",      roles: ["ADMIN", "SUPERINTENDENT"] },
@@ -301,6 +303,7 @@ export default function AdminLayout() {
             {[
               { v: "webhooks",   l: "Webhooks" },
               { v: "ia-builder", l: "IA Builder" },
+              { v: "agentes",    l: "Agentes" },
               { v: "prospeccao", l: "Prospecção" },
               { v: "sons",       l: "Arena Sonora" },
               { v: "monitor",    l: "Sistema" },
@@ -313,6 +316,7 @@ export default function AdminLayout() {
           </TabsList>
           <TabsContent value="webhooks"><Webhooks /></TabsContent>
           <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>
+          <TabsContent value="agentes" className="p-6"><Agentes /></TabsContent>
           <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>
           <TabsContent value="sons" className="p-6"><AudioSettings /></TabsContent>
           <TabsContent value="monitor" className="p-6"><SistemaControl /></TabsContent>
