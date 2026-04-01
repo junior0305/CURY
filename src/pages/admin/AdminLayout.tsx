@@ -169,8 +169,8 @@ export default function AdminLayout() {
               <img
                 src="/comandra-logo.png"
                 alt="Comandra"
-                className="h-12 w-12 object-contain"
-                style={{ filter: "drop-shadow(0 0 8px rgba(0,170,255,0.6))" }}
+                className="h-20 w-20 object-contain"
+                style={{ filter: "drop-shadow(0 0 12px rgba(0,170,255,0.7))" }}
               />
               <div>
                 <h1
