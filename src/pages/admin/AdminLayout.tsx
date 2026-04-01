@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Shield, Users, DollarSign, Settings, FileText, RefreshCw,
-  Webhook, Crown, LogOut, Gift, Bot, Target, HeartPulse,
-  Gauge, Activity, Zap, Music,
+  Users, DollarSign, LogOut, Crown,
+  Gauge, Activity, Zap, ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
@@ -34,7 +33,6 @@ const GROUPS = [
     value: "cockpit",
     label: "Cockpit",
     icon: Gauge,
-    color: "indigo",
     roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"],
     single: true,
   },
@@ -42,7 +40,6 @@ const GROUPS = [
     value: "equipe",
     label: "Equipe",
     icon: Users,
-    color: "blue",
     roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"],
     subtabs: [
       { value: "tropas",  label: "Tropas",  roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
@@ -53,7 +50,6 @@ const GROUPS = [
     value: "pipeline",
     label: "Pipeline",
     icon: Activity,
-    color: "rose",
     roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"],
     subtabs: [
       { value: "saude-leads", label: "Saúde",  roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
@@ -65,7 +61,6 @@ const GROUPS = [
     value: "automacao",
     label: "Automação",
     icon: Zap,
-    color: "amber",
     roles: ["ADMIN", "SUPERINTENDENT"],
     subtabs: [
       { value: "webhooks",   label: "Webhooks",     roles: ["ADMIN", "SUPERINTENDENT"] },
@@ -80,7 +75,6 @@ const GROUPS = [
     value: "financeiro",
     label: "Financeiro",
     icon: DollarSign,
-    color: "emerald",
     roles: ["ADMIN", "SUPERINTENDENT"],
     subtabs: [
       { value: "economia", label: "Economia", roles: ["ADMIN", "SUPERINTENDENT"] },
@@ -92,52 +86,13 @@ const GROUPS = [
 
 type GroupValue = typeof GROUPS[number]["value"];
 
-// ─── Estilos por cor ──────────────────────────────────────────────────────────
+// ─── Labels de role ───────────────────────────────────────────────────────────
 
-const GROUP_COLORS: Record<string, { active: string; icon: string; sub: string }> = {
-  indigo:  { active: "data-[state=active]:bg-indigo-600  data-[state=active]:text-white  data-[state=active]:shadow-lg data-[state=active]:shadow-indigo-900/40",  icon: "text-indigo-400",  sub: "bg-indigo-600 text-white" },
-  blue:    { active: "data-[state=active]:bg-blue-600    data-[state=active]:text-white  data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/40",    icon: "text-blue-400",    sub: "bg-blue-600 text-white" },
-  rose:    { active: "data-[state=active]:bg-rose-600    data-[state=active]:text-white  data-[state=active]:shadow-lg data-[state=active]:shadow-rose-900/40",    icon: "text-rose-400",    sub: "bg-rose-600 text-white" },
-  amber:   { active: "data-[state=active]:bg-amber-600   data-[state=active]:text-white  data-[state=active]:shadow-lg data-[state=active]:shadow-amber-900/40",   icon: "text-amber-400",   sub: "bg-amber-600 text-white" },
-  emerald: { active: "data-[state=active]:bg-emerald-600 data-[state=active]:text-white  data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-900/40", icon: "text-emerald-400", sub: "bg-emerald-600 text-white" },
+const ROLE_LABELS: Record<string, { label: string }> = {
+  ADMIN:          { label: "Admin" },
+  SUPERINTENDENT: { label: "Superintendente" },
+  MANAGER:        { label: "Gerente" },
 };
-
-const ROLE_LABELS: Record<string, { label: string; color: string }> = {
-  ADMIN:          { label: "General",         color: "bg-yellow-900/50 text-yellow-300 border-yellow-500/40" },
-  SUPERINTENDENT: { label: "Superintendente", color: "bg-yellow-900/50 text-yellow-300 border-yellow-500/40" },
-  MANAGER:        { label: "Capitão",         color: "bg-blue-900/50 text-blue-300 border-blue-500/40" },
-};
-
-// ─── SubTabs ─────────────────────────────────────────────────────────────────
-
-function SubTabs({ group, role, subColor }: {
-  group: typeof GROUPS[number];
-  role: string;
-  subColor: string;
-}) {
-  if ("single" in group && group.single) return null;
-  if (!("subtabs" in group)) return null;
-
-  const visibleSubs = group.subtabs.filter(s => s.roles.includes(role));
-  if (visibleSubs.length <= 1) return null;
-
-  return (
-    <div className="flex gap-1 mb-4 flex-wrap">
-      {visibleSubs.map(s => (
-        <TabsTrigger
-          key={s.value}
-          value={s.value}
-          className={cn(
-            "px-4 py-1.5 rounded-lg text-xs font-bold border border-transparent text-gray-500 hover:text-gray-300 transition-all",
-            `data-[state=active]:${subColor} data-[state=active]:border-white/10`
-          )}
-        >
-          {s.label}
-        </TabsTrigger>
-      ))}
-    </div>
-  );
-}
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
@@ -148,7 +103,6 @@ export default function AdminLayout() {
   const visibleGroups = GROUPS.filter(g => g.roles.includes(normalizedRole));
   const [activeGroup, setActiveGroup] = useState<string>(visibleGroups[0]?.value ?? "cockpit");
 
-  // Sub-aba padrão por grupo
   const defaultSub = (gv: string) => {
     const g = GROUPS.find(g => g.value === gv);
     if (!g || "single" in g) return gv;
@@ -171,178 +125,282 @@ export default function AdminLayout() {
     }
   }, [normalizedRole]);
 
-  const currentGroup = GROUPS.find(g => g.value === activeGroup);
-  const groupColor = currentGroup ? GROUP_COLORS[currentGroup.color] : GROUP_COLORS.indigo;
   const roleInfo = ROLE_LABELS[normalizedRole];
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black p-4 md:p-6">
+    <div
+      className="min-h-screen p-4 md:p-6"
+      style={{
+        background: "radial-gradient(ellipse at 15% 0%, #001040 0%, #050810 45%, #020508 100%)",
+      }}
+    >
+      {/* ── Grade sutil de fundo (efeito HUD) ─────────────────────────────── */}
+      <div
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `
+            linear-gradient(rgba(0,102,255,0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,102,255,0.03) 1px, transparent 1px)
+          `,
+          backgroundSize: "60px 60px",
+          zIndex: 0,
+        }}
+      />
 
-      {/* ─── Header ─────────────────────────────────────────────────────────── */}
-      <div className="mb-6 relative">
-        <div className="absolute inset-0 bg-red-500/5 blur-3xl rounded-full pointer-events-none" />
-        <div className="relative flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-red-900/40 border border-red-500/30 shadow-lg shadow-red-900/20">
-              <Shield className="w-8 h-8 text-red-400" />
+      <div className="relative" style={{ zIndex: 1 }}>
+
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <div className="mb-6">
+          {/* Glow ambiente */}
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              top: -40,
+              left: -40,
+              width: 500,
+              height: 200,
+              background: "radial-gradient(ellipse, rgba(0,102,255,0.12) 0%, transparent 70%)",
+            }}
+          />
+
+          <div className="relative flex items-center justify-between gap-4 flex-wrap">
+            {/* Logo + nome */}
+            <div className="flex items-center gap-4">
+              <img
+                src="/comandra-logo.png"
+                alt="Comandra"
+                className="h-12 w-12 object-contain"
+                style={{ filter: "drop-shadow(0 0 8px rgba(0,170,255,0.6))" }}
+              />
+              <div>
+                <h1
+                  className="text-2xl md:text-3xl font-black tracking-[0.18em] uppercase"
+                  style={{
+                    color: "#ffffff",
+                    textShadow: "0 0 20px rgba(0,170,255,0.5), 0 0 40px rgba(0,102,255,0.3)",
+                    fontFamily: "'Segoe UI', system-ui, sans-serif",
+                  }}
+                >
+                  COMANDRA
+                </h1>
+                <p
+                  className="text-xs tracking-[0.3em] uppercase font-medium mt-0.5"
+                  style={{ color: "#00aaff", opacity: 0.8 }}
+                >
+                  SISTEMA DE COMANDO
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-black text-white tracking-wider uppercase">
-                Quartel General
-              </h1>
-              <p className="text-gray-500 text-xs tracking-widest uppercase mt-0.5">
-                Sistema de Comando e Controle
-              </p>
+
+            {/* Direita: seletor + usuário + sair */}
+            <div className="flex items-center gap-3">
+              <CompanySelector compact />
+              <div className="text-right hidden sm:block">
+                <p className="text-white text-sm font-semibold">{user?.email}</p>
+                {roleInfo && (
+                  <Badge
+                    className="text-xs border mt-0.5"
+                    style={{
+                      background: "rgba(0,102,255,0.15)",
+                      borderColor: "rgba(0,170,255,0.35)",
+                      color: "#00aaff",
+                    }}
+                  >
+                    <Crown className="w-3 h-3 mr-1" />
+                    {roleInfo.label}
+                  </Badge>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={signOut}
+                className="gap-1.5"
+                style={{ color: "#8899bb" }}
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline text-xs">Sair</span>
+              </Button>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <CompanySelector compact />
-            <div className="text-right hidden sm:block">
-              <p className="text-white text-sm font-semibold">{user?.email}</p>
-              {roleInfo && (
-                <Badge className={`text-xs border mt-0.5 ${roleInfo.color}`}>
-                  <Crown className="w-3 h-3 mr-1" />
-                  {roleInfo.label}
-                </Badge>
-              )}
+          {/* Aviso de gerente */}
+          {normalizedRole === "MANAGER" && (
+            <div
+              className="mt-4 flex items-center gap-2 rounded-lg px-4 py-2.5"
+              style={{
+                background: "rgba(0,102,255,0.08)",
+                border: "1px solid rgba(0,170,255,0.2)",
+              }}
+            >
+              <ChevronRight className="w-4 h-4 shrink-0" style={{ color: "#00aaff" }} />
+              <p className="text-sm" style={{ color: "#00aaff" }}>
+                Visualizando apenas os dados da <strong>sua equipe</strong>.
+              </p>
             </div>
-            <Button variant="ghost" size="sm" onClick={signOut}
-              className="text-gray-500 hover:text-red-400 hover:bg-red-900/20 gap-1.5">
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline text-xs">Sair</span>
-            </Button>
+          )}
+
+          {/* Linha divisora com scan */}
+          <div className="mt-5 relative h-px overflow-visible">
+            <div
+              className="absolute inset-0"
+              style={{
+                background: "linear-gradient(90deg, transparent 0%, #0066ff 20%, #00e5ff 50%, #0066ff 80%, transparent 100%)",
+                boxShadow: "0 0 8px rgba(0,229,255,0.6)",
+              }}
+            />
           </div>
         </div>
 
-        {normalizedRole === "MANAGER" && (
-          <div className="mt-4 flex items-center gap-2 bg-blue-900/20 border border-blue-500/20 rounded-lg px-4 py-2.5">
-            <Shield className="w-4 h-4 text-blue-400 shrink-0" />
-            <p className="text-blue-300 text-sm">
-              Você está visualizando apenas os dados da <strong>sua equipe</strong>.
-            </p>
-          </div>
+        {/* ── Navegação principal ──────────────────────────────────────────── */}
+        <div className="flex gap-2 mb-6 flex-wrap">
+          {visibleGroups.map(({ value, label, icon: Icon }) => {
+            const isActive = activeGroup === value;
+            return (
+              <button
+                key={value}
+                onClick={() => handleGroupChange(value)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200"
+                style={isActive ? {
+                  background: "linear-gradient(135deg, #0055cc 0%, #0066ff 100%)",
+                  borderColor: "rgba(0,170,255,0.5)",
+                  color: "#ffffff",
+                  boxShadow: "0 0 16px rgba(0,102,255,0.45), inset 0 1px 0 rgba(255,255,255,0.1)",
+                } : {
+                  background: "rgba(10,15,30,0.8)",
+                  borderColor: "rgba(26,39,68,0.8)",
+                  color: "#4a5a7a",
+                }}
+              >
+                <Icon
+                  className="w-4 h-4"
+                  style={{ color: isActive ? "#00e5ff" : "#2a3a5a" }}
+                />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Conteúdo com sub-abas ────────────────────────────────────────── */}
+        {activeGroup === "cockpit" && <Cockpit />}
+
+        {activeGroup === "equipe" && (
+          <Tabs value={activeSub} onValueChange={setActiveSub}>
+            <TabsList
+              className="h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex"
+              style={{ background: "rgba(10,15,30,0.9)", border: "1px solid rgba(26,39,68,0.9)" }}
+            >
+              {["tropas","equipes"].filter(v => {
+                const g = GROUPS.find(g => g.value === "equipe");
+                if (!g || !("subtabs" in g)) return false;
+                return g.subtabs.find(s => s.value === v)?.roles.includes(normalizedRole);
+              }).map(v => (
+                <TabsTrigger key={v} value={v}
+                  className="px-4 py-2 rounded-lg text-xs font-bold transition-all"
+                  style={{ color: activeSub === v ? "#ffffff" : "#4a5a7a" }}
+                  data-comandra-sub={activeSub === v ? "active" : ""}
+                >
+                  {v === "tropas" ? "Tropas" : "Equipes"}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <TabsContent value="tropas"><Tropas /></TabsContent>
+            <TabsContent value="equipes"><Equipes /></TabsContent>
+          </Tabs>
         )}
 
-        <div className="mt-4 h-px bg-gradient-to-r from-red-500/50 via-gray-700 to-transparent" />
-      </div>
-
-      {/* ─── Navegação principal (5 grupos) ─────────────────────────────────── */}
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {visibleGroups.map(({ value, label, icon: Icon, color }) => {
-          const c = GROUP_COLORS[color];
-          const isActive = activeGroup === value;
-          return (
-            <button
-              key={value}
-              onClick={() => handleGroupChange(value)}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all",
-                isActive
-                  ? `bg-${color}-600 border-${color}-500/50 text-white shadow-lg`
-                  : "bg-slate-800/60 border-gray-700/40 text-gray-500 hover:text-gray-300 hover:border-gray-600/60"
-              )}
-              style={isActive ? {
-                backgroundColor: color === "indigo" ? "#4f46e5" : color === "blue" ? "#2563eb" : color === "rose" ? "#e11d48" : color === "amber" ? "#d97706" : "#059669",
-                borderColor: "rgba(255,255,255,0.15)",
-              } : {}}
+        {activeGroup === "pipeline" && (
+          <Tabs value={activeSub} onValueChange={setActiveSub}>
+            <TabsList
+              className="h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex"
+              style={{ background: "rgba(10,15,30,0.9)", border: "1px solid rgba(26,39,68,0.9)" }}
             >
-              <Icon className={cn("w-4 h-4", isActive ? "text-white" : c.icon)} />
-              <span className="hidden sm:inline">{label}</span>
-              <span className="sm:hidden text-xs">{label}</span>
-            </button>
-          );
-        })}
+              {[
+                { v: "saude-leads", l: "Saúde",  roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
+                { v: "rework",      l: "Rework", roles: ["ADMIN","SUPERINTENDENT"] },
+                { v: "logs",        l: "Logs",   roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
+              ].filter(s => s.roles.includes(normalizedRole)).map(s => (
+                <TabsTrigger key={s.v} value={s.v}
+                  className="px-4 py-2 rounded-lg text-xs font-bold transition-all"
+                  style={{ color: activeSub === s.v ? "#ffffff" : "#4a5a7a" }}
+                >
+                  {s.l}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <TabsContent value="saude-leads" className="p-0"><SaudeLeads /></TabsContent>
+            <TabsContent value="rework"><Rework /></TabsContent>
+            <TabsContent value="logs"><Logs /></TabsContent>
+          </Tabs>
+        )}
+
+        {activeGroup === "automacao" && (
+          <Tabs value={activeSub} onValueChange={setActiveSub}>
+            <TabsList
+              className="h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex"
+              style={{ background: "rgba(10,15,30,0.9)", border: "1px solid rgba(26,39,68,0.9)" }}
+            >
+              {[
+                { v: "webhooks",   l: "Webhooks" },
+                { v: "ia-builder", l: "IA Builder" },
+                { v: "agentes",    l: "Agentes" },
+                { v: "prospeccao", l: "Prospecção" },
+                { v: "sons",       l: "Arena Sonora" },
+                { v: "monitor",    l: "Sistema" },
+              ].map(s => (
+                <TabsTrigger key={s.v} value={s.v}
+                  className="px-4 py-2 rounded-lg text-xs font-bold transition-all"
+                  style={{ color: activeSub === s.v ? "#ffffff" : "#4a5a7a" }}
+                >
+                  {s.l}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <TabsContent value="webhooks"><Webhooks /></TabsContent>
+            <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>
+            <TabsContent value="agentes" className="p-6"><Agentes /></TabsContent>
+            <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>
+            <TabsContent value="sons" className="p-6"><AudioSettings /></TabsContent>
+            <TabsContent value="monitor" className="p-6"><SistemaControl /></TabsContent>
+          </Tabs>
+        )}
+
+        {activeGroup === "financeiro" && (
+          <Tabs value={activeSub} onValueChange={setActiveSub}>
+            <TabsList
+              className="h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex"
+              style={{ background: "rgba(10,15,30,0.9)", border: "1px solid rgba(26,39,68,0.9)" }}
+            >
+              {[
+                { v: "economia", l: "Economia" },
+                { v: "premios",  l: "Prêmios" },
+                { v: "regras",   l: "Regras" },
+              ].map(s => (
+                <TabsTrigger key={s.v} value={s.v}
+                  className="px-4 py-2 rounded-lg text-xs font-bold transition-all"
+                  style={{ color: activeSub === s.v ? "#ffffff" : "#4a5a7a" }}
+                >
+                  {s.l}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <TabsContent value="economia"><Economia /></TabsContent>
+            <TabsContent value="premios"><Premios /></TabsContent>
+            <TabsContent value="regras"><Regras /></TabsContent>
+          </Tabs>
+        )}
+
       </div>
 
-      {/* ─── Conteúdo com sub-abas ───────────────────────────────────────────── */}
-      {activeGroup === "cockpit" && <Cockpit />}
-
-      {activeGroup === "equipe" && (
-        <Tabs value={activeSub} onValueChange={setActiveSub}>
-          <TabsList className="bg-slate-900/80 border border-gray-700/50 h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex">
-            {["tropas","equipes"].filter(v => {
-              const g = GROUPS.find(g => g.value === "equipe");
-              if (!g || !("subtabs" in g)) return false;
-              return g.subtabs.find(s => s.value === v)?.roles.includes(normalizedRole);
-            }).map(v => (
-              <TabsTrigger key={v} value={v}
-                className="px-4 py-2 rounded-lg text-xs font-bold text-gray-500 data-[state=active]:bg-blue-600 data-[state=active]:text-white transition-all">
-                {v === "tropas" ? "Tropas" : "Equipes"}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <TabsContent value="tropas"><Tropas /></TabsContent>
-          <TabsContent value="equipes"><Equipes /></TabsContent>
-        </Tabs>
-      )}
-
-      {activeGroup === "pipeline" && (
-        <Tabs value={activeSub} onValueChange={setActiveSub}>
-          <TabsList className="bg-slate-900/80 border border-gray-700/50 h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex">
-            {[
-              { v: "saude-leads", l: "Saúde",  roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
-              { v: "rework",      l: "Rework", roles: ["ADMIN","SUPERINTENDENT"] },
-              { v: "logs",        l: "Logs",   roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
-            ].filter(s => s.roles.includes(normalizedRole)).map(s => (
-              <TabsTrigger key={s.v} value={s.v}
-                className="px-4 py-2 rounded-lg text-xs font-bold text-gray-500 data-[state=active]:bg-rose-600 data-[state=active]:text-white transition-all">
-                {s.l}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <TabsContent value="saude-leads" className="p-0"><SaudeLeads /></TabsContent>
-          <TabsContent value="rework"><Rework /></TabsContent>
-          <TabsContent value="logs"><Logs /></TabsContent>
-        </Tabs>
-      )}
-
-      {activeGroup === "automacao" && (
-        <Tabs value={activeSub} onValueChange={setActiveSub}>
-          <TabsList className="bg-slate-900/80 border border-gray-700/50 h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex">
-            {[
-              { v: "webhooks",   l: "Webhooks" },
-              { v: "ia-builder", l: "IA Builder" },
-              { v: "agentes",    l: "Agentes" },
-              { v: "prospeccao", l: "Prospecção" },
-              { v: "sons",       l: "Arena Sonora" },
-              { v: "monitor",    l: "Sistema" },
-            ].map(s => (
-              <TabsTrigger key={s.v} value={s.v}
-                className="px-4 py-2 rounded-lg text-xs font-bold text-gray-500 data-[state=active]:bg-amber-600 data-[state=active]:text-white transition-all">
-                {s.l}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <TabsContent value="webhooks"><Webhooks /></TabsContent>
-          <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>
-          <TabsContent value="agentes" className="p-6"><Agentes /></TabsContent>
-          <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>
-          <TabsContent value="sons" className="p-6"><AudioSettings /></TabsContent>
-          <TabsContent value="monitor" className="p-6"><SistemaControl /></TabsContent>
-        </Tabs>
-      )}
-
-      {activeGroup === "financeiro" && (
-        <Tabs value={activeSub} onValueChange={setActiveSub}>
-          <TabsList className="bg-slate-900/80 border border-gray-700/50 h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex">
-            {[
-              { v: "economia", l: "Economia" },
-              { v: "premios",  l: "Prêmios" },
-              { v: "regras",   l: "Regras" },
-            ].map(s => (
-              <TabsTrigger key={s.v} value={s.v}
-                className="px-4 py-2 rounded-lg text-xs font-bold text-gray-500 data-[state=active]:bg-emerald-600 data-[state=active]:text-white transition-all">
-                {s.l}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <TabsContent value="economia"><Economia /></TabsContent>
-          <TabsContent value="premios"><Premios /></TabsContent>
-          <TabsContent value="regras"><Regras /></TabsContent>
-        </Tabs>
-      )}
-
+      {/* ── CSS global para sub-abas ativas ─────────────────────────────────── */}
+      <style>{`
+        [data-radix-collection-item][data-state="active"] {
+          background: linear-gradient(135deg, #0044aa 0%, #0066ff 100%) !important;
+          color: #ffffff !important;
+          box-shadow: 0 0 12px rgba(0, 102, 255, 0.4) !important;
+        }
+      `}</style>
     </div>
   );
 }
