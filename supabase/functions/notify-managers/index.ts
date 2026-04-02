@@ -22,7 +22,7 @@ serve(async (req) => {
       .from('system_settings').select('value')
       .eq('key', 'notify_managers_enabled').maybeSingle()
 
-    if (enabledSetting?.value !== true) {
+    if (enabledSetting?.value !== true && enabledSetting?.value !== "true" && enabledSetting?.value !== 1) {
       console.log('[notify-managers] Notificações desativadas, pulando.')
       return new Response(JSON.stringify({ skipped: 'notify_managers_disabled' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

@@ -187,7 +187,7 @@ serve(async (req) => {
     if (chosenBroker?.phone) {
       const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
 
-      if (setting?.value === true) {
+      if (setting?.value === true || setting?.value === "true" || setting?.value === 1) {
         // Prioridade: bot do manager do corretor → fallback: bot global
         let notifBotId: string | null = null;
 
