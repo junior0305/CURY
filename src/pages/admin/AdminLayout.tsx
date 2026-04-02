@@ -25,6 +25,7 @@ import { Prospeccao } from "./Prospeccao";
 import AudioSettings from "@/components/admin/AudioSettings";
 import SistemaControl from "@/components/admin/SistemaControl";
 import Agentes from "./Agentes";
+import LeadDistribution from "@/components/admin/LeadDistribution";
 
 // ─── Grupos principais ────────────────────────────────────────────────────────
 
@@ -52,9 +53,10 @@ const GROUPS = [
     icon: Activity,
     roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"],
     subtabs: [
-      { value: "saude-leads", label: "Saúde",  roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
-      { value: "rework",      label: "Rework", roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "logs",        label: "Logs",   roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
+      { value: "saude-leads",  label: "Saúde",        roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
+      { value: "filas",        label: "Filas",         roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "rework",       label: "Rework",        roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "logs",         label: "Logs",          roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
     ],
   },
   {
@@ -318,6 +320,7 @@ export default function AdminLayout() {
             >
               {[
                 { v: "saude-leads", l: "Saúde",  roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
+                { v: "filas",       l: "Filas",  roles: ["ADMIN","SUPERINTENDENT"] },
                 { v: "rework",      l: "Rework", roles: ["ADMIN","SUPERINTENDENT"] },
                 { v: "logs",        l: "Logs",   roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
               ].filter(s => s.roles.includes(normalizedRole)).map(s => (
@@ -330,6 +333,7 @@ export default function AdminLayout() {
               ))}
             </TabsList>
             <TabsContent value="saude-leads" className="p-0"><SaudeLeads /></TabsContent>
+            <TabsContent value="filas" className="p-4"><LeadDistribution /></TabsContent>
             <TabsContent value="rework"><Rework /></TabsContent>
             <TabsContent value="logs"><Logs /></TabsContent>
           </Tabs>
