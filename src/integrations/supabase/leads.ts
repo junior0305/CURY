@@ -260,6 +260,13 @@ export const createManualLead = async (leadData: {
   return mapLeadFromDB(data);
 };
 
+export const touchLeadInteraction = async (leadId: string) => {
+  await supabase
+    .from("leads")
+    .update({ last_interaction_at: new Date().toISOString() })
+    .eq("id", leadId);
+};
+
 export const updateLeadBroker = async (leadId: string, brokerId: string) => {
   const { error } = await supabase
     .from("leads")

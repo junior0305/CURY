@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchLeadsForDashboard, updateLeadStatus } from "@/integrations/supabase/leads";
+import { fetchLeadsForDashboard, updateLeadStatus, touchLeadInteraction } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
-import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin, Brain, BrainCircuit } from "lucide-react";
+import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin, Brain, BrainCircuit, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -24,6 +24,8 @@ interface LeadDetailProps {
   leadId: string | null;
   onLeadUpdated: () => void;
   onBack?: () => void;
+  leadQueue?: string[];
+  onNavigateLead?: (id: string) => void;
 }
 
 const PIPELINE_STEPS = [
@@ -41,7 +43,7 @@ const QUICK_NOTES = [
   { label: "Sem perfil", value: "Lead sem perfil para o produto" },
 ];
 
-const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
+const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }: LeadDetailProps) => {
   const queryClient = useQueryClient();
   const { playSound } = useAudioArena();
   const [isExclusionDialogOpen, setIsExclusionDialogOpen] = useState(false);
@@ -50,6 +52,7 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
   const [noteContent, setNoteContent] = useState("");
   const [isSendingNote, setIsSendingNote] = useState(false);
   const [showQualModal, setShowQualModal] = useState(false);
+  const [nextHighlighted, setNextHighlighted] = useState(false);
 
   const { data: leads = [], isLoading } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
@@ -155,11 +158,12 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
       if (!leadId) return;
       const { error } = await supabase.from("lead_notes").insert({ lead_id: leadId, content, broker_id: lead?.brokerId });
       if (error) throw error;
+      await touchLeadInteraction(leadId);
     },
     onSuccess: () => {
       setNoteContent("");
       refetchTimeline();
-      // Nota interna NÃO atualiza last_interaction_at nem dispara status mutation
+      queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
     },
   });
 
@@ -177,6 +181,12 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
       updateStatusMutation.mutate({ status: "IN_PROGRESS" });
     } else {
       sendNoteMutation.mutate("Clicou para abrir WhatsApp");
+    }
+    // Destacar botão "Próximo" por 3s para facilitar avanço na fila
+    const currentIdx = leadQueue && leadId ? leadQueue.indexOf(leadId) : -1;
+    if (currentIdx >= 0 && leadQueue && currentIdx < leadQueue.length - 1) {
+      setNextHighlighted(true);
+      setTimeout(() => setNextHighlighted(false), 3000);
     }
   };
 
@@ -207,6 +217,9 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
   }
 
   const currentStepIndex = PIPELINE_STEPS.findIndex(s => s.id === lead.status);
+  const currentQueueIndex = leadQueue && leadId ? leadQueue.indexOf(leadId) : -1;
+  const hasPrev = currentQueueIndex > 0;
+  const hasNext = leadQueue ? currentQueueIndex >= 0 && currentQueueIndex < leadQueue.length - 1 : false;
   // "Quente" = lead RESPONDEU nas últimas 24h (não quando o corretor agiu)
   const lastLeadResp = lead.lastLeadResponseAt ? new Date(lead.lastLeadResponseAt) : null;
   const isHot  = !!lastLeadResp && isAfter(lastLeadResp, addHours(new Date(), -24));
@@ -267,6 +280,39 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {/* Navegação na fila */}
+        {leadQueue && leadQueue.length > 1 && currentQueueIndex >= 0 && (
+          <div className="flex items-center justify-between gap-2">
+            <button
+              disabled={!hasPrev}
+              onClick={() => hasPrev && onNavigateLead && onNavigateLead(leadQueue[currentQueueIndex - 1])}
+              className={cn(
+                "flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
+                hasPrev
+                  ? "border-gray-600/50 bg-slate-700/40 text-gray-300 hover:bg-slate-600/60 hover:text-white active:scale-95"
+                  : "border-gray-700/30 bg-slate-800/20 text-gray-700 cursor-not-allowed"
+              )}>
+              <ChevronLeft className="w-3.5 h-3.5" /> Anterior
+            </button>
+            <span className="text-[10px] font-bold text-gray-600 tabular-nums">
+              {currentQueueIndex + 1} / {leadQueue.length}
+            </span>
+            <button
+              disabled={!hasNext}
+              onClick={() => hasNext && onNavigateLead && onNavigateLead(leadQueue[currentQueueIndex + 1])}
+              className={cn(
+                "flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
+                nextHighlighted
+                  ? "border-emerald-500 bg-emerald-600 text-white shadow-lg shadow-emerald-900/40 scale-105"
+                  : hasNext
+                    ? "border-gray-600/50 bg-slate-700/40 text-gray-300 hover:bg-slate-600/60 hover:text-white active:scale-95"
+                    : "border-gray-700/30 bg-slate-800/20 text-gray-700 cursor-not-allowed"
+              )}>
+              {nextHighlighted ? "Próximo ✓" : "Próximo"} <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Pipeline Stepper */}
         <div className="w-full bg-slate-900/60 rounded-xl p-1.5 relative">

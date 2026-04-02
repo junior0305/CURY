@@ -205,8 +205,10 @@ const Dashboard = () => {
 
   const handleLeadSelect = (id: string) => {
     setSelectedLeadId(id);
-    setShowLeadList(false);
-    if (!isDesktop) setActiveTab("lead");
+    if (!isDesktop) {
+      setShowLeadList(false);
+      setActiveTab("lead");
+    }
   };
 
   const handlePipelineClick = (f: LeadStatus | "ACTIVE" | "ALL") => {
@@ -218,9 +220,25 @@ const Dashboard = () => {
 
   const handleBackToList = () => {
     setSelectedLeadId(null);
-    setShowLeadList(false);
-    if (!isDesktop) setActiveTab("mission");
+    setShowLeadList(true);
+    if (!isDesktop) setActiveTab("lead");
   };
+
+  const sortedLeadIds = useMemo(() => {
+    return leads
+      .filter(l => l.brokerId === user?.id && l.status !== "ABANDONED" && l.status !== "EXCLUDED")
+      .map(l => {
+        let priority = 0;
+        if (l.status === "VISIT_SCHEDULED") priority = 10;
+        else if (iaRepliedLeadIds.has(l.id)) priority = 9;
+        else if (l.status === "DOCS_REQUESTED") priority = 8;
+        else if (l.status === "NEW") priority = 5;
+        else priority = 3; // IN_PROGRESS e outros
+        return { id: l.id, priority };
+      })
+      .sort((a, b) => b.priority - a.priority)
+      .map(l => l.id);
+  }, [leads, user?.id, iaRepliedLeadIds]);
 
   if (loading) {
     return (
@@ -381,7 +399,7 @@ const Dashboard = () => {
 
           {activeTab === "lead" && (
             selectedLeadId
-              ? <div className="h-full"><LeadDetail leadId={selectedLeadId} onLeadUpdated={() => {}} onBack={handleBackToList} /></div>
+              ? <div className="h-full"><LeadDetail leadId={selectedLeadId} onLeadUpdated={() => {}} onBack={handleBackToList} leadQueue={sortedLeadIds} onNavigateLead={handleLeadSelect} /></div>
               : showLeadList
               ? (
                 <div className="space-y-3">
@@ -633,8 +651,25 @@ const Dashboard = () => {
             {/* ── Coluna direita ───────────────────────────────────────────────── */}
             <div className="lg:col-span-8 min-h-[600px] mb-10">
               {selectedLeadId ? (
-                <div className="h-full rounded-2xl overflow-hidden border border-gray-700/40">
-                  <LeadDetail leadId={selectedLeadId} onLeadUpdated={() => {}} />
+                <div className="h-full flex gap-3">
+                  {/* Lista compacta lateral */}
+                  <div className="w-[260px] shrink-0 flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden">
+                    <div className="px-3 py-2 border-b border-gray-700/40 flex items-center justify-between shrink-0">
+                      <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Fila</span>
+                      <button
+                        onClick={() => { setSelectedLeadId(null); setShowLeadList(true); }}
+                        className="text-gray-600 hover:text-gray-400 transition-colors p-0.5 rounded">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2">
+                      <LeadList selectedLeadId={selectedLeadId} onSelectLead={handleLeadSelect} currentUserRole={role} filter="ACTIVE" compact iaRepliedLeadIds={iaRepliedLeadIds} redistributionThresholdH={redistributionThresholdH} />
+                    </div>
+                  </div>
+                  {/* Painel de detalhe */}
+                  <div className="flex-1 min-w-0 rounded-2xl overflow-hidden border border-gray-700/40">
+                    <LeadDetail leadId={selectedLeadId} onLeadUpdated={() => {}} leadQueue={sortedLeadIds} onNavigateLead={handleLeadSelect} />
+                  </div>
                 </div>
               ) : showLeadList ? (
                 <div className="h-full flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden">
