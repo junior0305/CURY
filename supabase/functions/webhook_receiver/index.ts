@@ -289,10 +289,28 @@ serve(async (req) => {
           }).select().single();
 
           console.log('[webhook_receiver] created conversation', newConv?.id);
+
+          // FIX: responder a primeira mensagem do lead — antes retornava sem chamar a IA
+          if (newConv?.id && messageText) {
+            await supabase.from('ia_messages').insert({
+              conversation_id: newConv.id,
+              message_text: messageText,
+              direction: 'incoming',
+              sender_type: 'lead',
+              created_at: new Date().toISOString(),
+            });
+            const { error: iaErr } = await supabase.functions.invoke('ia_chat_engine', {
+              body: { conversationId: newConv.id, incomingMessage: messageText }
+            });
+            if (iaErr) console.error('[webhook_receiver] ia_chat_engine error (first msg):', iaErr.message);
+            else console.log('[webhook_receiver] IA respondeu à primeira mensagem do lead');
+          }
+
+          return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
       }
 
-      // If still no conversation, ignore (or log)
+      // Lead sem bot configurado — apenas loga
       return new Response(JSON.stringify({ message: 'No active conversation' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

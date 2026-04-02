@@ -133,11 +133,28 @@ serve(async (req) => {
     ).join('\n');
 
     // ── System prompt ─────────────────────────────────────────────────────
-    let systemPrompt = 'Você é um assistente prestativo e profissional.';
+    let systemPrompt = 'Você é um assistente de vendas de imóveis. Seja prestativo, cordial e objetivo. Fale em português do Brasil, tom casual. Máximo 3 frases por resposta.';
     if (conversation.ia_campaigns?.ai_profiles?.system_prompt) {
       systemPrompt = conversation.ia_campaigns.ai_profiles.system_prompt;
     } else if (conversation.ia_campaigns?.ai_instructions) {
       systemPrompt = conversation.ia_campaigns.ai_instructions;
+    } else {
+      // Sem campanha → tentar usar o perfil padrão da Sentinela como fallback
+      const { data: sentConfig } = await supabase
+        .from('ai_sentinela_config')
+        .select('default_profile_id')
+        .maybeSingle();
+      if (sentConfig?.default_profile_id) {
+        const { data: defaultProfile } = await supabase
+          .from('ai_profiles')
+          .select('system_prompt')
+          .eq('id', sentConfig.default_profile_id)
+          .maybeSingle();
+        if (defaultProfile?.system_prompt) {
+          systemPrompt = defaultProfile.system_prompt;
+          console.log(`[ia_chat_engine] Usando perfil padrão da Sentinela como fallback`);
+        }
+      }
     }
     const fullSystemPrompt = `${systemPrompt}\n\nVocê está conversando com ${conversation.lead_name || 'Cliente'}.`;
     const userPrompt = `Histórico:\n${historyText}\n\nCliente: ${incomingMessage}\n\nResponda naturalmente:`;
