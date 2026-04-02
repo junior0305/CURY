@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { addHours, isAfter } from "date-fns";
+import { differenceInHours } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 
@@ -37,10 +37,10 @@ const PIPELINE_STEPS = [
 ];
 
 const QUICK_NOTES = [
-  { label: "Não atendeu", value: "Ligação não atendida" },
-  { label: "Caixa postal", value: "Caiu na caixa postal" },
-  { label: "Aguardando retorno", value: "Lead vai retornar o contato" },
-  { label: "Sem perfil", value: "Lead sem perfil para o produto" },
+  { label: "Não atendeu",       value: "Ligação não atendida",           icon: "📵" },
+  { label: "Caixa postal",      value: "Caiu na caixa postal",           icon: "📬" },
+  { label: "Aguardando retorno",value: "Lead vai retornar o contato",    icon: "⏳" },
+  { label: "Sem perfil",        value: "Lead sem perfil para o produto", icon: "🚫" },
 ];
 
 const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }: LeadDetailProps) => {
@@ -220,10 +220,45 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
   const currentQueueIndex = leadQueue && leadId ? leadQueue.indexOf(leadId) : -1;
   const hasPrev = currentQueueIndex > 0;
   const hasNext = leadQueue ? currentQueueIndex >= 0 && currentQueueIndex < leadQueue.length - 1 : false;
-  // "Quente" = lead RESPONDEU nas últimas 24h (não quando o corretor agiu)
-  const lastLeadResp = lead.lastLeadResponseAt ? new Date(lead.lastLeadResponseAt) : null;
-  const isHot  = !!lastLeadResp && isAfter(lastLeadResp, addHours(new Date(), -24));
-  const isCold = !lastLeadResp || !isAfter(lastLeadResp, addHours(new Date(), -168));
+
+  // "Quente" = avançou no funil (visita ou docs) — comprador sério
+  // "Morno"  = em atendimento
+  // "Frio"   = novo, ainda sem contato
+  const isHot  = lead.status === "VISIT_SCHEDULED" || lead.status === "DOCS_REQUESTED";
+  const isWarm = lead.status === "IN_PROGRESS";
+  const isCold = !isHot && !isWarm;
+
+  const hoursWithoutContact = differenceInHours(new Date(), new Date(lead.lastInteractionAt || lead.createdAt));
+
+  // Ação sugerida baseada no contexto real do lead
+  const suggestedAction = (() => {
+    if (lead.status === "VISIT_SCHEDULED") return {
+      text: "Confirme a visita e prepare os detalhes do imóvel",
+      cls: "bg-emerald-500/10 border-emerald-500/30 text-emerald-300",
+      icon: "📅",
+    };
+    if (lead.status === "DOCS_REQUESTED") return {
+      text: "Cobrar envio dos documentos — lead próximo do fechamento",
+      cls: "bg-amber-500/10 border-amber-500/30 text-amber-300",
+      icon: "📄",
+    };
+    if (lead.status === "NEW") return {
+      text: "Primeiro contato — envie a apresentação via WhatsApp",
+      cls: "bg-sky-500/10 border-sky-500/30 text-sky-300",
+      icon: "🚀",
+    };
+    if (lead.status === "IN_PROGRESS" && hoursWithoutContact >= 48) return {
+      text: `Sem contato há ${hoursWithoutContact}h — retome agora para não perder`,
+      cls: "bg-red-500/10 border-red-500/30 text-red-300",
+      icon: "⏰",
+    };
+    if (lead.status === "IN_PROGRESS") return {
+      text: "Em negociação — qualifique o interesse e proponha uma visita",
+      cls: "bg-indigo-500/10 border-indigo-500/30 text-indigo-300",
+      icon: "💬",
+    };
+    return null;
+  })();
 
   return (
     <div className="h-full flex flex-col bg-slate-900 overflow-hidden">
@@ -244,7 +279,10 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
               </Button>
             )}
             <Avatar className="h-10 w-10 border-2 border-gray-700/60 shrink-0">
-              <AvatarFallback className={cn("font-black text-white text-sm", isHot ? "bg-rose-600" : "bg-indigo-600")}>
+              <AvatarFallback className={cn(
+                "font-black text-white text-sm",
+                isHot ? "bg-rose-600" : isWarm ? "bg-indigo-600" : "bg-slate-600"
+              )}>
                 {lead.name.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
@@ -253,9 +291,9 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
                 <h2 className="text-base font-black text-white truncate max-w-[160px] sm:max-w-sm leading-none">{lead.name}</h2>
                 <Badge className={cn(
                   "text-[9px] font-black uppercase border-none",
-                  isHot ? "bg-rose-500/20 text-rose-300" : isCold ? "bg-sky-500/20 text-sky-300" : "bg-amber-500/20 text-amber-300"
+                  isHot ? "bg-rose-500/20 text-rose-300" : isWarm ? "bg-amber-500/20 text-amber-300" : "bg-slate-600/40 text-gray-400"
                 )}>
-                  {isHot ? "🔥 Quente" : isCold ? "❄️ Frio" : "⚡ Morno"}
+                  {isHot ? "🔥 Quente" : isWarm ? "⚡ Morno" : "❄️ Frio"}
                 </Badge>
                 {lead.tag && (
                   <Badge className="bg-slate-700/60 text-gray-400 border-gray-600/40 text-[9px] font-black uppercase flex items-center gap-0.5">
@@ -311,6 +349,14 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
               )}>
               {nextHighlighted ? "Próximo ✓" : "Próximo"} <ChevronRight className="w-3.5 h-3.5" />
             </button>
+          </div>
+        )}
+
+        {/* Banner de ação sugerida */}
+        {suggestedAction && (
+          <div className={cn("flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold", suggestedAction.cls)}>
+            <span className="text-base leading-none shrink-0">{suggestedAction.icon}</span>
+            <span>{suggestedAction.text}</span>
           </div>
         )}
 
@@ -370,9 +416,9 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
               key={n.value}
               onClick={() => sendNoteMutation.mutate(n.value)}
               disabled={sendNoteMutation.isPending}
-              className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-slate-700/60 border border-gray-600/40 text-gray-400 hover:text-white hover:bg-slate-600/60 hover:border-gray-500/60 transition-all active:scale-95"
+              className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-slate-700/60 border border-gray-600/40 text-gray-400 hover:text-white hover:bg-slate-600/60 hover:border-gray-500/60 transition-all active:scale-95"
             >
-              {n.label}
+              <span>{n.icon}</span>{n.label}
             </button>
           ))}
         </div>

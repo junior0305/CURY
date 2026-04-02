@@ -373,6 +373,18 @@ const Dashboard = () => {
         <main className="flex-1 overflow-y-auto p-3 pb-24 space-y-3">
           {activeTab === "mission" && (
             <>
+              {/* 1. Radar — ação imediata: o corretor sabe o que fazer SEM PENSAR */}
+              <RadarAcao onSelectLead={handleLeadSelect} />
+
+              {/* 2. Pipeline — acesso rápido à fila por status */}
+              <div className="grid grid-cols-2 gap-2">
+                <PipelineStat label="Novos"        count={stats.new}         active={filter === "NEW"             && showLeadList} onClick={() => handlePipelineClick("NEW")}             color="sky"     icon={Sparkles} />
+                <PipelineStat label="Atend."       count={stats.in_progress} active={filter === "IN_PROGRESS"     && showLeadList} onClick={() => handlePipelineClick("IN_PROGRESS")}     color="indigo"  icon={Users2} />
+                <PipelineStat label="Visita"       count={stats.visits}      active={filter === "VISIT_SCHEDULED" && showLeadList} onClick={() => handlePipelineClick("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
+                <PipelineStat label="Docs"         count={stats.docs}        active={filter === "DOCS_REQUESTED"  && showLeadList} onClick={() => handlePipelineClick("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
+              </div>
+
+              {/* 3. Briefing diário */}
               {isBroker && user?.id && (
                 <DailyBriefing
                   leads={leads}
@@ -382,17 +394,8 @@ const Dashboard = () => {
                 />
               )}
 
+              {/* 4. Campanha + missão */}
               <CampaignHeroBanner leads={leads} users={profiles} />
-
-              {/* Pipeline cards — primeiro item acionável */}
-              <div className="grid grid-cols-2 gap-2">
-                <PipelineStat label="Novos"        count={stats.new}         active={filter === "NEW"             && showLeadList} onClick={() => handlePipelineClick("NEW")}             color="sky"     icon={Sparkles} />
-                <PipelineStat label="Atend."       count={stats.in_progress} active={filter === "IN_PROGRESS"     && showLeadList} onClick={() => handlePipelineClick("IN_PROGRESS")}     color="indigo"  icon={Users2} />
-                <PipelineStat label="Visita"       count={stats.visits}      active={filter === "VISIT_SCHEDULED" && showLeadList} onClick={() => handlePipelineClick("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
-                <PipelineStat label="Docs"         count={stats.docs}        active={filter === "DOCS_REQUESTED"  && showLeadList} onClick={() => handlePipelineClick("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
-              </div>
-
-              <RadarAcao onSelectLead={handleLeadSelect} />
               <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
             </>
           )}
@@ -628,7 +631,10 @@ const Dashboard = () => {
             {/* ── Coluna esquerda ──────────────────────────────────────────────── */}
             <div className="lg:col-span-4 flex flex-col gap-3">
 
-              {/* 1. Pipeline — principal CTA da coluna */}
+              {/* 1. Radar — próxima ação urgente: primeiro elemento visível */}
+              <RadarAcao onSelectLead={handleLeadSelect} />
+
+              {/* 2. Pipeline — acesso à fila por status */}
               <div>
                 <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest mb-2 px-0.5">Pipeline</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -638,9 +644,6 @@ const Dashboard = () => {
                   <PipelineStat label="Documentação" count={stats.docs}        active={filter === "DOCS_REQUESTED"  && showLeadList} onClick={() => handlePipelineClick("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
                 </div>
               </div>
-
-              {/* 2. Radar — próxima ação urgente */}
-              <RadarAcao onSelectLead={handleLeadSelect} />
 
               {/* 3. Missão do dia — agenda */}
               <div className="bg-slate-800/40 border border-gray-700/40 rounded-2xl p-4 flex-1">
