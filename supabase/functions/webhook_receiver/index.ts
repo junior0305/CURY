@@ -6,6 +6,53 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ── Detecção de opt-out ────────────────────────────────────────────────────
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const OPT_OUT_PATTERNS = [
+  'nao quero mais',
+  'nao quero receber',
+  'nao quero contato',
+  'para de me',
+  'pare de me',
+  'para de enviar',
+  'pare de enviar',
+  'para de mandar',
+  'pare de mandar',
+  'nao tenho interesse',
+  'sem interesse',
+  'me retire',
+  'me tire da lista',
+  'me remova',
+  'me descadastre',
+  'descadastrar',
+  'nao me contacte',
+  'nao me contate',
+  'nao me envie',
+  'nao me mande',
+  'nao preciso',
+  'nao quero',   // curto mas direto
+  'stop',
+  'unsubscribe',
+  'cancelar mensagens',
+  'parar mensagens',
+  'remover contato',
+];
+
+function detectOptOut(text: string): boolean {
+  if (!text) return false;
+  const normalized = normalizeText(text);
+  return OPT_OUT_PATTERNS.some(pattern => normalized.includes(pattern));
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -105,6 +152,54 @@ serve(async (req) => {
           .maybeSingle();
 
         if (lead) {
+          // ── Verificar opt-out ──────────────────────────────────────────
+          if (messageText && detectOptOut(messageText)) {
+            console.log(`[webhook_receiver] 🚫 OPT-OUT detectado — lead ${lead.id} (${lead.name}): "${messageText.substring(0, 80)}"`);
+
+            // Marcar como EXCLUDED para bloquear todos os envios futuros
+            await supabase
+              .from('leads')
+              .update({ status: 'EXCLUDED', last_interaction_at: now })
+              .eq('id', lead.id);
+
+            // Cancelar TODOS os itens pendentes da fila de automação
+            await supabase
+              .from('lead_activation_queue')
+              .update({ status: 'cancelled', cancel_reason: 'opt_out' })
+              .eq('lead_id', lead.id)
+              .eq('status', 'pending');
+
+            // Encerrar sessões Sentinela ativas
+            await supabase
+              .from('ai_sentinela_sessions')
+              .update({ status: 'ended', ended_at: now, end_reason: 'opt_out' })
+              .eq('lead_id', lead.id)
+              .eq('status', 'active');
+
+            // Notificar corretor sobre o opt-out
+            if (lead.broker_id) {
+              await supabase.from('internal_notifications').insert({
+                to_id: lead.broker_id,
+                type: 'LEAD_OPT_OUT',
+                title: '🚫 Lead pediu para não ser contactado',
+                message: `${lead.name} solicitou parar de receber mensagens. Automações pausadas e lead marcado como Excluído.`,
+                related_lead_id: lead.id,
+              });
+            }
+
+            // Registrar evento no histórico do lead
+            await supabase.from('lead_notes').insert({
+              lead_id: lead.id,
+              content: `🚫 Opt-out detectado automaticamente. Mensagem recebida: "${messageText.substring(0, 150)}". Lead marcado como EXCLUÍDO e automações canceladas.`,
+              type: 'SYSTEM',
+            });
+
+            return new Response(
+              JSON.stringify({ success: true, opt_out: true, lead_id: lead.id }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
           const updates: any = { last_lead_response_at: now };
 
           // Primeira resposta do lead → registra welcome_responded_at
