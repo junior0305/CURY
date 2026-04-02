@@ -18,6 +18,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { addHours, isAfter } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useAudioArena } from "@/hooks/use-audio-arena";
 
 interface LeadDetailProps {
   leadId: string | null;
@@ -33,8 +34,16 @@ const PIPELINE_STEPS = [
   { id: "CONCLUDED",       label: "Venda",  icon: Trophy,       color: "bg-indigo-600",  ring: "ring-indigo-500/40" },
 ];
 
+const QUICK_NOTES = [
+  { label: "Não atendeu", value: "Ligação não atendida" },
+  { label: "Caixa postal", value: "Caiu na caixa postal" },
+  { label: "Aguardando retorno", value: "Lead vai retornar o contato" },
+  { label: "Sem perfil", value: "Lead sem perfil para o produto" },
+];
+
 const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
   const queryClient = useQueryClient();
+  const { playSound } = useAudioArena();
   const [isExclusionDialogOpen, setIsExclusionDialogOpen] = useState(false);
   const [selectedExclusionReason, setSelectedExclusionReason] = useState<ExclusionReason | null>(null);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
@@ -128,12 +137,15 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
   const updateStatusMutation = useMutation({
     mutationFn: async ({ status, reason }: { status: LeadStatus; reason?: ExclusionReason }) => {
       await updateLeadStatus(leadId!, status, reason);
+      return status;
     },
-    onSuccess: () => {
+    onSuccess: (status) => {
       queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
       queryClient.invalidateQueries({ queryKey: ["lead-timeline"] });
       toast.success("Status atualizado!");
       onLeadUpdated();
+      if (status === "CONCLUDED") playSound("SALE");
+      else if (status !== "ABANDONED" && status !== "EXCLUDED") playSound("NOTIFICATION");
     },
     onError: (err: any) => toast.error(`Erro: ${err.message}`),
   });
@@ -305,6 +317,20 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
 
       {/* Footer de ações */}
       <div className="flex-none bg-slate-800/80 border-t border-gray-700/50 p-3 z-20">
+        {/* Notas rápidas */}
+        <div className="flex gap-1.5 flex-wrap mb-2">
+          {QUICK_NOTES.map(n => (
+            <button
+              key={n.value}
+              onClick={() => sendNoteMutation.mutate(n.value)}
+              disabled={sendNoteMutation.isPending}
+              className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-slate-700/60 border border-gray-600/40 text-gray-400 hover:text-white hover:bg-slate-600/60 hover:border-gray-500/60 transition-all active:scale-95"
+            >
+              {n.label}
+            </button>
+          ))}
+        </div>
+
         {/* Input de nota */}
         <div className="flex gap-2 mb-3">
           <Textarea

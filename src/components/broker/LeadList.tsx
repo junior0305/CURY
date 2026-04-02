@@ -4,7 +4,11 @@ import { fetchLeadsForDashboard } from "@/integrations/supabase/leads";
 import { fetchOpenTasks } from "@/integrations/supabase/tasks";
 import { Lead, LeadStatus } from "@/types/lead";
 import { Task } from "@/types/task";
-import { Loader2, Phone, MessageSquare, Clock, AlertTriangle, Bell, Zap, AlertCircle, Hourglass, MapPin, Flame, Calendar, FileText } from "lucide-react";
+import {
+  Loader2, Phone, MessageSquare, Clock, AlertTriangle, Bell,
+  Zap, AlertCircle, Hourglass, MapPin, Flame, Calendar, FileText,
+  Bot, SkipForward, AlertOctagon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/AuthProvider";
@@ -15,6 +19,8 @@ interface LeadListProps {
   currentUserRole: string;
   filter: LeadStatus | "ACTIVE" | "ALL";
   compact?: boolean;
+  iaRepliedLeadIds?: Set<string>;
+  redistributionThresholdH?: number;
 }
 
 const STATUS_COLORS: Record<LeadStatus, string> = {
@@ -37,7 +43,13 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   ABANDONED:       "PERDIDO",
 };
 
-const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compact }: LeadListProps) => {
+// Statuses eligible for redistribution
+const REDIST_STATUSES: LeadStatus[] = ["NEW", "IN_PROGRESS", "DOCS_REQUESTED"];
+
+const LeadList = ({
+  selectedLeadId, onSelectLead, currentUserRole, filter, compact,
+  iaRepliedLeadIds = new Set(), redistributionThresholdH,
+}: LeadListProps) => {
   const { session } = useAuth();
 
   const { data: leads = [], isLoading: loadingLeads } = useQuery<Lead[]>({
@@ -68,7 +80,21 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
       const hoursSinceLastAction = Math.max(0, Math.floor(diffMs / 3600000));
       const isStale = hoursSinceLastAction >= 4 && lead.status !== "CONCLUDED" && lead.status !== "EXCLUDED";
 
-      // Prioridade por status + urgência temporal
+      // Redistribution countdown
+      const isRedistEligible = REDIST_STATUSES.includes(lead.status as LeadStatus) && !!redistributionThresholdH;
+      let hoursUntilRedist: number | null = null;
+      if (isRedistEligible && redistributionThresholdH) {
+        const baseTime = lead.lastBrokerWhatsappAt
+          ? new Date(lead.lastBrokerWhatsappAt).getTime()
+          : new Date(lead.createdAt).getTime();
+        const hoursSinceBase = (now - baseTime) / 3600000;
+        hoursUntilRedist = Math.max(0, redistributionThresholdH - hoursSinceBase);
+      }
+
+      // IA replied badge
+      const respondeuIA = iaRepliedLeadIds.has(lead.id);
+
+      // Priority
       let priority = 0;
       let urgencyTag: "hot" | "visit" | "docs" | "new" | "stale" | null = null;
 
@@ -78,6 +104,8 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
       } else if (lead.status === "DOCS_REQUESTED") {
         priority = 8;
         urgencyTag = "docs";
+      } else if (respondeuIA) {
+        priority = 9; // IA reply is very high priority
       } else if (hoursSinceLastAction < 2 && lead.status === "NEW") {
         priority = 7;
         urgencyTag = "hot";
@@ -92,7 +120,12 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
         priority = diff < 15 ? 3 : 2;
       }
 
-      return { ...lead, nextTask, priority, urgencyTag, isStale, hoursSinceLastAction };
+      // Boost priority if redistribution is imminent
+      if (hoursUntilRedist !== null && hoursUntilRedist < 2) {
+        priority = Math.max(priority, 8);
+      }
+
+      return { ...lead, nextTask, priority, urgencyTag, isStale, hoursSinceLastAction, respondeuIA, hoursUntilRedist };
     });
 
     let filtered = leadsWithMeta;
@@ -104,7 +137,7 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
       if (b.priority !== a.priority) return b.priority - a.priority;
       return new Date(a.lastInteractionAt || a.createdAt || 0).getTime() - new Date(b.lastInteractionAt || b.createdAt || 0).getTime();
     });
-  }, [leads, tasks, filter, session?.user.id]);
+  }, [leads, tasks, filter, session?.user.id, iaRepliedLeadIds, redistributionThresholdH]);
 
   if (loadingLeads) {
     return (
@@ -123,11 +156,33 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
     );
   }
 
+  const nextLead = processedLeads[0];
+
   return (
     <div className="space-y-2">
+      {/* Botão "Próximo da Fila" */}
+      {nextLead && (
+        <button
+          onClick={() => onSelectLead(nextLead.id)}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-indigo-600/15 border border-indigo-500/30 hover:bg-indigo-600/25 hover:border-indigo-500/50 transition-all group active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-2">
+            <SkipForward className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="text-xs font-black text-indigo-300 uppercase tracking-wide">Próximo da Fila</span>
+          </div>
+          <span className="text-[11px] font-bold text-indigo-400/70 truncate max-w-[140px]">{nextLead.name}</span>
+        </button>
+      )}
+
       {processedLeads.map(lead => {
         const isSelected = selectedLeadId === lead.id;
         const hoursAgo = Math.round((Date.now() - new Date(lead.lastInteractionAt).getTime()) / 3600000);
+        const redistUrgent = lead.hoursUntilRedist !== null && lead.hoursUntilRedist < 2;
+        const redistWarning = lead.hoursUntilRedist !== null && lead.hoursUntilRedist >= 2 && lead.hoursUntilRedist < 4;
+        const redistHours = lead.hoursUntilRedist !== null ? Math.floor(lead.hoursUntilRedist) : null;
+        const redistMins = lead.hoursUntilRedist !== null
+          ? Math.floor((lead.hoursUntilRedist - Math.floor(lead.hoursUntilRedist)) * 60)
+          : null;
 
         return (
           <div key={lead.id} onClick={() => onSelectLead(lead.id)}
@@ -135,9 +190,13 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
               "p-3 rounded-xl border cursor-pointer transition-all group",
               isSelected
                 ? "bg-indigo-500/10 border-indigo-500/40 ring-1 ring-indigo-500/20"
-                : lead.isStale
-                  ? "bg-amber-500/5 border-amber-500/20 hover:border-amber-500/30"
-                  : "bg-slate-700/30 border-gray-700/40 hover:border-gray-600/60 hover:bg-slate-700/50"
+                : redistUrgent
+                  ? "bg-red-500/5 border-red-500/30 hover:border-red-500/50"
+                  : lead.isStale
+                    ? "bg-amber-500/5 border-amber-500/20 hover:border-amber-500/30"
+                    : lead.respondeuIA
+                      ? "bg-violet-500/5 border-violet-500/20 hover:border-violet-500/30"
+                      : "bg-slate-700/30 border-gray-700/40 hover:border-gray-600/60 hover:bg-slate-700/50"
             )}>
 
             {/* Linha principal */}
@@ -150,6 +209,11 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
                   {lead.tag && (
                     <Badge className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 text-[9px] font-black uppercase px-1.5 h-4 flex items-center gap-0.5">
                       <MapPin className="w-2 h-2" /> {lead.tag}
+                    </Badge>
+                  )}
+                  {lead.respondeuIA && (
+                    <Badge className="bg-violet-500/20 text-violet-300 border-violet-500/30 text-[9px] font-black uppercase animate-pulse px-1.5 h-4 flex items-center gap-0.5">
+                      <Bot className="w-2 h-2" /> Respondeu à IA
                     </Badge>
                   )}
                   {lead.urgencyTag === "hot" && (
@@ -198,8 +262,27 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
               </div>
             </div>
 
+            {/* Countdown de redistribuição — prioridade sobre outros alertas */}
+            {redistUrgent && redistHours !== null && (
+              <div className="flex items-center gap-1.5 text-[11px] font-black py-1 px-2 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 w-fit animate-pulse mb-2">
+                <AlertOctagon className="w-3 h-3" />
+                Redistribuição em {redistHours}h{redistMins! > 0 ? `${redistMins}min` : ""}!
+              </div>
+            )}
+            {redistWarning && redistHours !== null && (
+              <div className="flex items-center gap-1.5 text-[11px] font-bold py-1 px-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 w-fit mb-2">
+                <AlertOctagon className="w-3 h-3" />
+                Redistribuição em {redistHours}h
+              </div>
+            )}
+
             {/* Alerta / Tarefa */}
-            {lead.isStale ? (
+            {lead.respondeuIA && !redistUrgent ? (
+              <div className="flex items-center gap-1.5 text-[11px] font-black py-1 px-2 rounded-lg bg-violet-500/15 border border-violet-500/30 text-violet-300 w-fit">
+                <Bot className="w-3 h-3" />
+                Respondeu à automação — atenda agora!
+              </div>
+            ) : lead.isStale && !redistUrgent ? (
               <div className="flex items-center gap-1.5 text-[11px] font-black py-1 px-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 w-fit">
                 <AlertCircle className="w-3 h-3" />
                 {Math.floor(lead.hoursSinceLastAction)}h sem atendimento!

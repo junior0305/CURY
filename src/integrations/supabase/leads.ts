@@ -13,6 +13,7 @@ const mapLeadFromDB = (l: any): Lead => ({
   createdAt: l.created_at,
   lastInteractionAt: l.last_interaction_at,
   lastLeadResponseAt: l.last_lead_response_at ?? null,
+  lastBrokerWhatsappAt: l.last_broker_whatsapp_at ?? null,
   exclusionReason: l.exclusion_reason as ExclusionReason,
 });
 

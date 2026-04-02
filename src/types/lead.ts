@@ -14,5 +14,6 @@ export interface Lead {
   createdAt: string;
   lastInteractionAt: string;
   lastLeadResponseAt: string | null;
+  lastBrokerWhatsappAt: string | null;
   exclusionReason: ExclusionReason;
 }

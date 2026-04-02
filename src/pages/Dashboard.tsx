@@ -35,6 +35,7 @@ import { useRivalWatch } from "@/hooks/useRivalWatch";
 import { useGamification } from "@/hooks/useGamification";
 import { RadarAcao } from "@/components/broker/RadarAcao";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
+import { DailyBriefing } from "@/components/broker/DailyBriefing";
 
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
@@ -127,6 +128,47 @@ const Dashboard = () => {
   const { data: profiles = [] } = useQuery<User[]>({
     queryKey: ["profiles"],
     queryFn: fetchProfiles,
+  });
+
+  // Leads que responderam à IA nas últimas 48h
+  const { data: iaRepliedLeadIds = new Set<string>() } = useQuery<Set<string>>({
+    queryKey: ["ia-replied-leads"],
+    queryFn: async () => {
+      try {
+        const since = new Date(Date.now() - 48 * 3600000).toISOString();
+        const { data: msgs } = await supabase
+          .from("ia_messages")
+          .select("conversation_id")
+          .eq("direction", "incoming")
+          .gte("created_at", since);
+        if (!msgs?.length) return new Set<string>();
+        const convIds = [...new Set(msgs.map((m: any) => m.conversation_id))];
+        const { data: convs } = await supabase
+          .from("ia_conversations")
+          .select("lead_id")
+          .in("id", convIds);
+        return new Set((convs || []).map((c: any) => c.lead_id as string));
+      } catch {
+        return new Set<string>();
+      }
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Threshold de redistribuição (horas)
+  const { data: redistributionThresholdH } = useQuery<number | undefined>({
+    queryKey: ["redistribution-threshold"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("system_settings")
+        .select("value")
+        .eq("key", "agente_redistribuicao_threshold_h")
+        .maybeSingle();
+      if (!data?.value) return undefined;
+      const parsed = parseInt(String(data.value), 10);
+      return isNaN(parsed) ? undefined : parsed;
+    },
+    staleTime: 10 * 60 * 1000,
   });
 
   const userName = useMemo(() => {
@@ -313,6 +355,15 @@ const Dashboard = () => {
         <main className="flex-1 overflow-y-auto p-3 pb-24 space-y-3">
           {activeTab === "mission" && (
             <>
+              {isBroker && user?.id && (
+                <DailyBriefing
+                  leads={leads}
+                  iaRepliedLeadIds={iaRepliedLeadIds}
+                  userId={user.id}
+                  onFilter={(f) => handlePipelineClick(f as any)}
+                />
+              )}
+
               <CampaignHeroBanner leads={leads} users={profiles} />
 
               {/* Pipeline cards — primeiro item acionável */}
@@ -352,7 +403,7 @@ const Dashboard = () => {
                       ✕ Fechar
                     </button>
                   </div>
-                  <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} />
+                  <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} iaRepliedLeadIds={iaRepliedLeadIds} redistributionThresholdH={redistributionThresholdH} />
                 </div>
               )
               : (
@@ -543,6 +594,15 @@ const Dashboard = () => {
             />
           )}
 
+          {isBroker && user?.id && (
+            <DailyBriefing
+              leads={leads}
+              iaRepliedLeadIds={iaRepliedLeadIds}
+              userId={user.id}
+              onFilter={(f) => handlePipelineClick(f as any)}
+            />
+          )}
+
           <CampaignHeroBanner leads={leads} users={profiles} />
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-[700px]">
@@ -594,7 +654,7 @@ const Dashboard = () => {
                     </button>
                   </div>
                   <div className="flex-1 overflow-y-auto p-3">
-                    <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact />
+                    <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact iaRepliedLeadIds={iaRepliedLeadIds} redistributionThresholdH={redistributionThresholdH} />
                   </div>
                 </div>
               ) : (
