@@ -6,7 +6,7 @@ import { Lead, LeadStatus } from "@/types/lead";
 import { Task } from "@/types/task";
 import {
   Loader2, Phone, MessageSquare, Clock, AlertTriangle, Bell,
-  Zap, AlertCircle, Hourglass, MapPin, Flame, Calendar, FileText,
+  Zap, AlertCircle, Hourglass, MapPin, Calendar, FileText,
   Bot, SkipForward, AlertOctagon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -94,21 +94,24 @@ const LeadList = ({
       // IA replied badge
       const respondeuIA = iaRepliedLeadIds.has(lead.id);
 
-      // Priority
+      // Priority — alinhada com a definição de quente/morno/frio
+      // 🔥 Quente = DOCS (mandou docs, pronto para fechar)
+      // 🏠 Visita = VISIT_SCHEDULED (compromisso real)
+      // ❄️ Frio   = IN_PROGRESS / NEW (ainda só falando)
       let priority = 0;
-      let urgencyTag: "hot" | "visit" | "docs" | "new" | "stale" | null = null;
+      let urgencyTag: "docs" | "visit" | "ia" | "new_fast" | "new" | "stale" | null = null;
 
-      if (lead.status === "VISIT_SCHEDULED") {
-        priority = 10;
-        urgencyTag = "visit";
-      } else if (lead.status === "DOCS_REQUESTED") {
-        priority = 8;
+      if (lead.status === "DOCS_REQUESTED") {
+        priority = 10; // Quente — mais próximo do fechamento
         urgencyTag = "docs";
       } else if (respondeuIA) {
-        priority = 9; // IA reply is very high priority
+        priority = 9; // IA reply — intenção alta
+      } else if (lead.status === "VISIT_SCHEDULED") {
+        priority = 8; // Visita marcada
+        urgencyTag = "visit";
       } else if (hoursSinceLastAction < 2 && lead.status === "NEW") {
-        priority = 7;
-        urgencyTag = "hot";
+        priority = 7; // Lead acabou de chegar — resposta rápida aumenta conversão
+        urgencyTag = "new_fast";
       } else if (lead.status === "NEW") {
         priority = 5;
         urgencyTag = "new";
@@ -211,24 +214,24 @@ const LeadList = ({
                       <MapPin className="w-2 h-2" /> {lead.tag}
                     </Badge>
                   )}
-                  {lead.respondeuIA && (
-                    <Badge className="bg-violet-500/20 text-violet-300 border-violet-500/30 text-[9px] font-black uppercase animate-pulse px-1.5 h-4 flex items-center gap-0.5">
-                      <Bot className="w-2 h-2" /> Respondeu à IA
-                    </Badge>
-                  )}
-                  {lead.urgencyTag === "hot" && (
-                    <Badge className="bg-red-500/20 text-red-300 border-red-500/30 text-[9px] font-black uppercase animate-pulse px-1.5 h-4 flex items-center gap-0.5">
-                      <Flame className="w-2 h-2" /> Quente
+                  {lead.urgencyTag === "docs" && (
+                    <Badge className="bg-rose-500/20 text-rose-300 border-rose-500/30 text-[9px] font-black uppercase animate-pulse px-1.5 h-4 flex items-center gap-0.5">
+                      🔥 Quente
                     </Badge>
                   )}
                   {lead.urgencyTag === "visit" && (
                     <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[9px] font-black uppercase px-1.5 h-4 flex items-center gap-0.5">
-                      <Calendar className="w-2 h-2" /> Visita
+                      <Calendar className="w-2 h-2" /> 🏠 Visita
                     </Badge>
                   )}
-                  {lead.urgencyTag === "docs" && (
-                    <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[9px] font-black uppercase px-1.5 h-4 flex items-center gap-0.5">
-                      <FileText className="w-2 h-2" /> Docs
+                  {lead.respondeuIA && (
+                    <Badge className="bg-violet-500/20 text-violet-300 border-violet-500/30 text-[9px] font-black uppercase animate-pulse px-1.5 h-4 flex items-center gap-0.5">
+                      <Bot className="w-2 h-2" /> Respondeu IA
+                    </Badge>
+                  )}
+                  {lead.urgencyTag === "new_fast" && (
+                    <Badge className="bg-sky-500/20 text-sky-300 border-sky-500/30 text-[9px] font-black uppercase animate-pulse px-1.5 h-4 flex items-center gap-0.5">
+                      <Zap className="w-2 h-2" /> Chegou agora
                     </Badge>
                   )}
                   {lead.urgencyTag === "stale" && (
