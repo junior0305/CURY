@@ -28,7 +28,9 @@ serve(async (req) => {
     // Remove prefixes like "p:" sent by some integrations (e.g. Facebook via Make)
     const phone = rawPhone ? String(rawPhone).replace(/^[a-z]+:/i, '').replace(/[^0-9+]/g, '') : null;
     const email = sourceData.email || sourceData.mail || '';
-    const origin = sourceData.source || sourceData.origin || sourceData.origem || 'Make/Webhook';
+    const origin = sourceData.source || sourceData.origin || sourceData.origem ||
+                   sourceData.campaign || sourceData.campaign_name || sourceData.ad_name ||
+                   sourceData.channel || sourceData.platform || '';
     const message = sourceData.message || sourceData.mensagem || sourceData.Interesse || '';
     const tag = sourceData.tag || sourceData.interest || sourceData.source || sourceData.origin || sourceData.origem || '';
 
@@ -201,7 +203,8 @@ serve(async (req) => {
         }
 
         if (notifBotId) {
-          const notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${origin}`;
+          const originLabel = origin || tag || 'Sem origem';
+          const notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${originLabel}`;
 
           const { data: result } = await supabase.functions.invoke('send_whatsapp_message', {
             body: {
@@ -228,7 +231,10 @@ serve(async (req) => {
         const { count } = await supabase.from('leads').select('id', { count: 'exact', head: true }).eq('broker_id', chosenBroker.id);
         const idx = (count || 0) % templates.length;
         const brokerName = `${chosenBroker.first_name || ''} ${chosenBroker.last_name || ''}`.trim() || 'Corretor';
-        text = (templates[idx].message || '').replace(/\{nome\}/gi, name).replace(/\{broker\}/gi, brokerName);
+        text = (templates[idx].message || '')
+          .replace(/\\n/g, '\n')
+          .replace(/\{nome\}/gi, name)
+          .replace(/\{broker\}/gi, brokerName);
         usedTemplateId = templates[idx].id;
       }
 

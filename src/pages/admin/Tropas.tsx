@@ -198,7 +198,14 @@ export default function Tropas() {
           const { data: pwData, error: pwError } = await supabase.functions.invoke('create-user', {
             body: { action: 'update-password', userId: editUser.id, password: formData.password },
           });
-          if (pwError) throw pwError;
+          if (pwError) {
+            let msg = pwError.message;
+            try {
+              const body = await (pwError as any).context?.json?.();
+              if (body?.error) msg = body.error;
+            } catch {}
+            throw new Error(msg);
+          }
           if (pwData?.error) throw new Error(pwData.error);
         }
 

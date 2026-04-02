@@ -91,7 +91,14 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
       const { data, error } = await supabase.functions.invoke('create-user', {
         body: { action: 'update-password', userId: userToEdit.id, password: formData.password }
       });
-      if (error) throw error;
+      if (error) {
+        let msg = error.message;
+        try {
+          const body = await (error as any).context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch {}
+        throw new Error(msg);
+      }
       toast.success("Senha alterada com sucesso!");
       setFormData(prev => ({ ...prev, password: "" }));
     } catch (err: any) {
