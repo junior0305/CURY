@@ -55,7 +55,6 @@ export function LeaderboardPodium({ users, onOpenKPIs }: {
     }
     return brokers
       .map(b => ({ id: b.id, name: b.name, points: Math.round((byBroker[b.id] ?? 0) * 10) / 10, subtitle: b.leadAssignmentEnabled ? "Em Campo" : "Pausa" }))
-      .filter(e => e.points > 0)
       .sort((a, b) => b.points - a.points)
       .slice(0, 3);
   }, [rankingData, users, timeframe]);

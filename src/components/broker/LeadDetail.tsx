@@ -160,7 +160,12 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack }: LeadDetailProps) => {
   const handleWhatsApp = () => {
     if (!lead) return;
     window.open(`https://wa.me/${lead.phone.replace(/\D/g, "")}`, "_blank");
-    sendNoteMutation.mutate("Clicou para abrir WhatsApp");
+    // Se lead ainda está em NOVO, avança automaticamente para EM ATENDIMENTO
+    if (lead.status === "NEW") {
+      updateStatusMutation.mutate({ status: "IN_PROGRESS" });
+    } else {
+      sendNoteMutation.mutate("Clicou para abrir WhatsApp");
+    }
   };
 
   const handleCall = () => {

@@ -78,7 +78,7 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
       } else if (lead.status === "DOCS_REQUESTED") {
         priority = 8;
         urgencyTag = "docs";
-      } else if (hoursSinceLastAction < 2 && (lead.status === "NEW" || lead.status === "IN_PROGRESS")) {
+      } else if (hoursSinceLastAction < 2 && lead.status === "NEW") {
         priority = 7;
         urgencyTag = "hot";
       } else if (lead.status === "NEW") {
@@ -181,10 +181,18 @@ const LeadList = ({ selectedLeadId, onSelectLead, currentUserRole, filter, compa
 
               {/* Ações rápidas */}
               <div className="flex gap-1 shrink-0">
-                <div className="h-7 w-7 rounded-lg bg-slate-700/60 group-hover:bg-indigo-600 flex items-center justify-center text-gray-500 group-hover:text-white transition-colors">
+                <div
+                  className="h-7 w-7 rounded-lg bg-slate-700/60 hover:bg-indigo-600 flex items-center justify-center text-gray-500 hover:text-white transition-colors cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${lead.phone?.replace(/\D/g, "")}`, "_blank"); }}
+                  title="Abrir WhatsApp"
+                >
                   <MessageSquare className="w-3.5 h-3.5" />
                 </div>
-                <div className="h-7 w-7 rounded-lg bg-slate-700/60 group-hover:bg-emerald-600 flex items-center justify-center text-gray-500 group-hover:text-white transition-colors">
+                <div
+                  className="h-7 w-7 rounded-lg bg-slate-700/60 hover:bg-emerald-600 flex items-center justify-center text-gray-500 hover:text-white transition-colors cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); window.open(`tel:${lead.phone?.replace(/\D/g, "")}`, "_blank"); }}
+                  title="Ligar"
+                >
                   <Phone className="w-3.5 h-3.5" />
                 </div>
               </div>
