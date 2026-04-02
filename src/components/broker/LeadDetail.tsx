@@ -221,12 +221,12 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
   const hasPrev = currentQueueIndex > 0;
   const hasNext = leadQueue ? currentQueueIndex >= 0 && currentQueueIndex < leadQueue.length - 1 : false;
 
-  // "Quente" = avançou no funil (visita ou docs) — comprador sério
-  // "Morno"  = em atendimento
-  // "Frio"   = novo, ainda sem contato
-  const isHot  = lead.status === "VISIT_SCHEDULED" || lead.status === "DOCS_REQUESTED";
-  const isWarm = lead.status === "IN_PROGRESS";
-  const isCold = !isHot && !isWarm;
+  // "Quente" = DOCS_REQUESTED — mandou documentação, próximo do fechamento
+  // "Visita" = VISIT_SCHEDULED — tem compromisso marcado
+  // "Frio"   = IN_PROGRESS + NEW — ainda só falando, sem compromisso
+  const isHot   = lead.status === "DOCS_REQUESTED";
+  const isVisit = lead.status === "VISIT_SCHEDULED";
+  const isCold  = !isHot && !isVisit;
 
   const hoursWithoutContact = differenceInHours(new Date(), new Date(lead.lastInteractionAt || lead.createdAt));
 
@@ -281,7 +281,7 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
             <Avatar className="h-10 w-10 border-2 border-gray-700/60 shrink-0">
               <AvatarFallback className={cn(
                 "font-black text-white text-sm",
-                isHot ? "bg-rose-600" : isWarm ? "bg-indigo-600" : "bg-slate-600"
+                isHot ? "bg-rose-600" : isVisit ? "bg-emerald-700" : "bg-slate-600"
               )}>
                 {lead.name.substring(0, 2).toUpperCase()}
               </AvatarFallback>
@@ -291,9 +291,9 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
                 <h2 className="text-base font-black text-white truncate max-w-[160px] sm:max-w-sm leading-none">{lead.name}</h2>
                 <Badge className={cn(
                   "text-[9px] font-black uppercase border-none",
-                  isHot ? "bg-rose-500/20 text-rose-300" : isWarm ? "bg-amber-500/20 text-amber-300" : "bg-slate-600/40 text-gray-400"
+                  isHot ? "bg-rose-500/20 text-rose-300" : isVisit ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-600/40 text-gray-400"
                 )}>
-                  {isHot ? "🔥 Quente" : isWarm ? "⚡ Morno" : "❄️ Frio"}
+                  {isHot ? "🔥 Quente" : isVisit ? "🏠 Visita" : "❄️ Frio"}
                 </Badge>
                 {lead.tag && (
                   <Badge className="bg-slate-700/60 text-gray-400 border-gray-600/40 text-[9px] font-black uppercase flex items-center gap-0.5">

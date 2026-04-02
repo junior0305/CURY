@@ -22,35 +22,35 @@ function getUrgencyLevel(lead: Lead, tasks: Task[], now: number): UrgentAction |
 
   const hoursSince = (now - new Date(lead.lastInteractionAt || lead.createdAt || now).getTime()) / 3600000;
 
-  // VISITA MARCADA — máxima prioridade
+  // DOCS SOLICITADOS — máxima prioridade: lead pronto para fechar
+  if (lead.status === "DOCS_REQUESTED") {
+    return {
+      lead,
+      level: "critico",
+      label: "🔥 Quente — Docs pendentes",
+      action: "Cobrar envio dos documentos — esse lead está pronto para fechar",
+      icon: FileText,
+    };
+  }
+
+  // VISITA MARCADA — alta prioridade: compromisso real
   if (lead.status === "VISIT_SCHEDULED") {
     return {
       lead,
       level: "urgente",
-      label: "Visita marcada",
+      label: "🏠 Visita marcada",
       action: "Confirme a visita e prepare os detalhes do imóvel",
       icon: Calendar,
     };
   }
 
-  // DOCS SOLICITADOS — alta prioridade
-  if (lead.status === "DOCS_REQUESTED") {
-    return {
-      lead,
-      level: "importante",
-      label: "Docs pendentes",
-      action: "Cobrar envio dos documentos solicitados",
-      icon: FileText,
-    };
-  }
-
-  // LEAD QUENTE — respondeu recentemente (< 2h, status NEW ou IN_PROGRESS)
+  // FALANDO AGORA — respondeu recentemente (NEW ou IN_PROGRESS < 2h): ainda frio, mas ativo
   if (hoursSince < 2 && (lead.status === "NEW" || lead.status === "IN_PROGRESS")) {
     return {
       lead,
-      level: "critico",
-      label: `🔥 Quente — ${Math.round(hoursSince * 60)}min atrás`,
-      action: "Lead ativo agora — responda antes que esfrie",
+      level: "importante",
+      label: `Ativo — ${Math.round(hoursSince * 60)}min atrás`,
+      action: "Lead respondendo agora — qualifique e tente agendar visita",
       icon: Flame,
     };
   }
