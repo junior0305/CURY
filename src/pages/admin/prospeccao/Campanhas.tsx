@@ -30,6 +30,8 @@ import {
   FileSpreadsheet,
   RefreshCw,
   Brain,
+  Smartphone,
+  Send,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -68,11 +70,26 @@ interface AIProfile {
   is_active: boolean;
 }
 
+interface ChipStat {
+  chip_name: string;
+  instance_name: string;
+  conversations: number;
+  messages: number;
+}
+
+interface CampaignStats {
+  total_conversations: number;
+  total_messages: number;
+  chips: ChipStat[];
+  pending_leads: number;
+}
+
 export default function Campanhas() {
   const { toast } = useToast();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [aiProfiles, setAiProfiles] = useState<AIProfile[]>([]);
   const [botOptions, setBotOptions] = useState<any[]>([]);
+  const [campaignStats, setCampaignStats] = useState<Record<string, CampaignStats>>({});
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editCampaign, setEditCampaign] = useState<Campaign | null>(null);
@@ -114,8 +131,57 @@ export default function Campanhas() {
       toast({ title: "Erro ao carregar campanhas", description: error.message, variant: "destructive" });
     } else {
       setCampaigns(data || []);
+      if (data && data.length > 0) {
+        loadCampaignStats(data.map((c: Campaign) => c.id));
+      }
     }
     setLoading(false);
+  };
+
+  const loadCampaignStats = async (campaignIds: string[]) => {
+    // Conversations + messages per chip per campaign
+    const { data: convData } = await supabase
+      .from("ia_conversations")
+      .select("campaign_id, messages_count, bot_instances!bot_instance_id(name, instance_name)")
+      .in("campaign_id", campaignIds);
+
+    // Pending leads per campaign
+    const { data: pendingData } = await supabase
+      .from("campaign_leads")
+      .select("campaign_id")
+      .in("campaign_id", campaignIds)
+      .eq("status", "pending");
+
+    const stats: Record<string, CampaignStats> = {};
+
+    for (const id of campaignIds) {
+      const convs = (convData || []).filter((c: any) => c.campaign_id === id);
+      const pending = (pendingData || []).filter((p: any) => p.campaign_id === id).length;
+
+      const chipMap: Record<string, ChipStat> = {};
+      let totalMsgs = 0;
+
+      for (const conv of convs) {
+        const bot = (conv as any).bot_instances;
+        if (!bot) continue;
+        const key = bot.instance_name || bot.name;
+        if (!chipMap[key]) {
+          chipMap[key] = { chip_name: bot.name, instance_name: bot.instance_name, conversations: 0, messages: 0 };
+        }
+        chipMap[key].conversations += 1;
+        chipMap[key].messages += conv.messages_count || 0;
+        totalMsgs += conv.messages_count || 0;
+      }
+
+      stats[id] = {
+        total_conversations: convs.length,
+        total_messages: totalMsgs,
+        chips: Object.values(chipMap).sort((a, b) => b.messages - a.messages),
+        pending_leads: pending,
+      };
+    }
+
+    setCampaignStats(stats);
   };
 
   const loadAIProfiles = async () => {
@@ -334,6 +400,38 @@ export default function Campanhas() {
                   <div className="bg-slate-900/40 rounded-lg p-2"><div className="text-xl font-black text-green-300">{campaign.leads_converted}</div><div className="text-xs text-gray-500">Convertidos</div></div>
                 </div>
                 {campaign.leads_contacted > 0 && <div className="bg-slate-900/60 rounded-lg p-2 flex items-center justify-between"><span className="text-xs text-gray-500">Conversão:</span><span className="text-sm font-bold text-green-400">{calculateConversionRate(campaign)}%</span></div>}
+
+                {/* Stats de envio por chip */}
+                {(() => {
+                  const s = campaignStats[campaign.id];
+                  return (
+                    <div className="bg-slate-900/50 rounded-lg p-2.5 border border-slate-700/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1"><Send className="w-3 h-3" />Envios reais</span>
+                        <div className="flex gap-3 text-xs">
+                          <span className="text-cyan-400 font-bold">{s?.total_messages ?? 0} msgs</span>
+                          <span className="text-slate-500">{s?.total_conversations ?? 0} convs</span>
+                          {(s?.pending_leads ?? 0) > 0 && <span className="text-yellow-400">{s.pending_leads} pendentes</span>}
+                        </div>
+                      </div>
+                      {s?.chips && s.chips.length > 0 ? (
+                        <div className="space-y-1">
+                          {s.chips.map(chip => (
+                            <div key={chip.instance_name} className="flex items-center gap-2">
+                              <Smartphone className="w-3 h-3 text-slate-600 shrink-0" />
+                              <span className="text-[11px] text-slate-300 flex-1 truncate">{chip.chip_name}</span>
+                              <span className="text-[11px] text-cyan-400 font-bold">{chip.messages} msgs</span>
+                              <span className="text-[11px] text-slate-500">{chip.conversations} conv</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-600 italic">Nenhum envio registrado ainda</p>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div className="pt-2 border-t border-gray-700/50 space-y-1.5 text-xs">
                   <div className="flex items-center justify-between text-gray-500"><span className="flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" />Mensagens:</span><span className="text-white">{campaign.message_templates?.length || 0} variações</span></div>
                   <div className="flex items-center justify-between text-gray-500"><span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" />Delay:</span><span className="text-white">{campaign.delay_between_messages_min}-{campaign.delay_between_messages_max}s</span></div>
