@@ -57,6 +57,8 @@ interface Campaign {
   leads_qualified: number;
   leads_converted: number;
   use_broker_chip: boolean;
+  prospect_instance_ids: string[] | null;
+  bot_instance_id: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -132,42 +134,67 @@ export default function Campanhas() {
     } else {
       setCampaigns(data || []);
       if (data && data.length > 0) {
-        loadCampaignStats(data.map((c: Campaign) => c.id));
+        loadCampaignStats(data);
       }
     }
     setLoading(false);
   };
 
-  const loadCampaignStats = async (campaignIds: string[]) => {
-    // Conversations + messages per chip per campaign
-    const { data: convData } = await supabase
-      .from("ia_conversations")
-      .select("campaign_id, messages_count, bot_instances!bot_instance_id(name, instance_name)")
-      .in("campaign_id", campaignIds);
+  const loadCampaignStats = async (campaignList: Campaign[]) => {
+    const campaignIds = campaignList.map(c => c.id);
 
-    // Pending leads per campaign
-    const { data: pendingData } = await supabase
-      .from("campaign_leads")
-      .select("campaign_id")
-      .in("campaign_id", campaignIds)
-      .eq("status", "pending");
+    // All chip IDs referenced by any campaign (prospect or single bot)
+    const allChipIds = Array.from(new Set(campaignList.flatMap(c => [
+      ...(c.prospect_instance_ids || []),
+      ...(c.bot_instance_id ? [c.bot_instance_id] : []),
+    ])));
+
+    const [{ data: convData }, { data: pendingData }, { data: botsData }] = await Promise.all([
+      supabase
+        .from("ia_conversations")
+        .select("campaign_id, messages_count, bot_instance_id, bot_instances!bot_instance_id(name, instance_name)")
+        .in("campaign_id", campaignIds),
+      supabase
+        .from("campaign_leads")
+        .select("campaign_id")
+        .in("campaign_id", campaignIds)
+        .eq("status", "pending"),
+      allChipIds.length > 0
+        ? supabase.from("bot_instances").select("id, name, instance_name").in("id", allChipIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const botById: Record<string, { name: string; instance_name: string }> = {};
+    for (const b of (botsData || [])) botById[b.id] = b;
 
     const stats: Record<string, CampaignStats> = {};
 
-    for (const id of campaignIds) {
+    for (const campaign of campaignList) {
+      const id = campaign.id;
       const convs = (convData || []).filter((c: any) => c.campaign_id === id);
       const pending = (pendingData || []).filter((p: any) => p.campaign_id === id).length;
 
       const chipMap: Record<string, ChipStat> = {};
-      let totalMsgs = 0;
 
+      // Pre-populate configured chips with 0 so they always appear
+      const configuredIds = campaign.prospect_instance_ids?.length
+        ? campaign.prospect_instance_ids
+        : campaign.bot_instance_id ? [campaign.bot_instance_id] : [];
+
+      for (const chipId of configuredIds) {
+        const b = botById[chipId];
+        if (!b) continue;
+        const key = b.instance_name || b.name;
+        if (!chipMap[key]) chipMap[key] = { chip_name: b.name, instance_name: b.instance_name, conversations: 0, messages: 0 };
+      }
+
+      // Fill in real send counts from conversations
+      let totalMsgs = 0;
       for (const conv of convs) {
         const bot = (conv as any).bot_instances;
         if (!bot) continue;
         const key = bot.instance_name || bot.name;
-        if (!chipMap[key]) {
-          chipMap[key] = { chip_name: bot.name, instance_name: bot.instance_name, conversations: 0, messages: 0 };
-        }
+        if (!chipMap[key]) chipMap[key] = { chip_name: bot.name, instance_name: bot.instance_name, conversations: 0, messages: 0 };
         chipMap[key].conversations += 1;
         chipMap[key].messages += conv.messages_count || 0;
         totalMsgs += conv.messages_count || 0;
@@ -404,29 +431,50 @@ export default function Campanhas() {
                 {/* Stats de envio por chip */}
                 {(() => {
                   const s = campaignStats[campaign.id];
+                  const totalMsgs = s?.total_messages ?? 0;
+                  const totalConvs = s?.total_conversations ?? 0;
+                  const pending = s?.pending_leads ?? 0;
+                  const chips = s?.chips ?? [];
                   return (
-                    <div className="bg-slate-900/50 rounded-lg p-2.5 border border-slate-700/50">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1"><Send className="w-3 h-3" />Envios reais</span>
-                        <div className="flex gap-3 text-xs">
-                          <span className="text-cyan-400 font-bold">{s?.total_messages ?? 0} msgs</span>
-                          <span className="text-slate-500">{s?.total_conversations ?? 0} convs</span>
-                          {(s?.pending_leads ?? 0) > 0 && <span className="text-yellow-400">{s.pending_leads} pendentes</span>}
-                        </div>
+                    <div className="rounded-xl border border-slate-700/60 bg-slate-900/60 overflow-hidden">
+                      {/* Header totais */}
+                      <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800 bg-slate-900/40">
+                        <Send className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex-1">Instâncias & Disparos</span>
+                        <span className="text-xs font-black text-cyan-300">{totalMsgs} msgs</span>
+                        <span className="text-[11px] text-slate-500">·</span>
+                        <span className="text-[11px] text-slate-400">{totalConvs} convs</span>
+                        {pending > 0 && (
+                          <><span className="text-[11px] text-slate-500">·</span>
+                          <span className="text-[11px] text-yellow-400 font-semibold">{pending} pendentes</span></>
+                        )}
                       </div>
-                      {s?.chips && s.chips.length > 0 ? (
-                        <div className="space-y-1">
-                          {s.chips.map(chip => (
-                            <div key={chip.instance_name} className="flex items-center gap-2">
-                              <Smartphone className="w-3 h-3 text-slate-600 shrink-0" />
-                              <span className="text-[11px] text-slate-300 flex-1 truncate">{chip.chip_name}</span>
-                              <span className="text-[11px] text-cyan-400 font-bold">{chip.messages} msgs</span>
-                              <span className="text-[11px] text-slate-500">{chip.conversations} conv</span>
-                            </div>
-                          ))}
+                      {/* Linhas por chip */}
+                      {chips.length > 0 ? (
+                        <div className="divide-y divide-slate-800/60">
+                          {chips.map(chip => {
+                            const pct = totalMsgs > 0 ? Math.round((chip.messages / totalMsgs) * 100) : 0;
+                            return (
+                              <div key={chip.instance_name} className="flex items-center gap-2.5 px-3 py-2">
+                                <Smartphone className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between mb-0.5">
+                                    <span className="text-xs font-semibold text-white truncate">{chip.chip_name}</span>
+                                    <span className="text-xs font-black text-cyan-400 ml-2 shrink-0">{chip.messages} msgs</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 h-1 rounded-full bg-slate-800 overflow-hidden">
+                                      <div className="h-full rounded-full bg-cyan-500/70" style={{ width: `${pct}%` }} />
+                                    </div>
+                                    <span className="text-[10px] text-slate-500 shrink-0">{chip.conversations} conv</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : (
-                        <p className="text-[11px] text-slate-600 italic">Nenhum envio registrado ainda</p>
+                        <div className="px-3 py-3 text-center text-[11px] text-slate-600 italic">Nenhum chip configurado</div>
                       )}
                     </div>
                   );
