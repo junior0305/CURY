@@ -85,10 +85,10 @@ serve(async (req) => {
       const targetAudience = campaign.target_audience || {};
       const daysWithoutContact = targetAudience.days_without_contact || 3;
       const leadStatus = targetAudience.lead_status || [];
-      let leadsQuery = supabaseClient.from('leads').select('id, name, phone, broker_id').is('deleted_at', null);
+      let leadsQuery = supabaseClient.from('leads').select('id, name, phone, broker_id');
       if (leadStatus.length > 0) leadsQuery = leadsQuery.in('status', leadStatus);
       const cutoffDate = new Date(); cutoffDate.setDate(cutoffDate.getDate() - daysWithoutContact);
-      leadsQuery = leadsQuery.or(`last_contact_at.is.null,last_contact_at.lt.${cutoffDate.toISOString()}`);
+      leadsQuery = leadsQuery.or(`last_interaction_at.is.null,last_interaction_at.lt.${cutoffDate.toISOString()}`);
       if (campaign.max_leads) leadsQuery = leadsQuery.limit(campaign.max_leads);
       const { data: crmLeads } = await leadsQuery;
       leads = (crmLeads || []).map(l => ({ ...l, source: 'crm' }));
