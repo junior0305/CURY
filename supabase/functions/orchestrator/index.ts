@@ -48,7 +48,7 @@ serve(async (req) => {
     // Determine bot pool: priority -> prospect_instance_ids (explicit list) -> bot_instance_id (single) -> pool is_prospecting
     let bots: any[] = [];
     if (campaign.prospect_instance_ids && Array.isArray(campaign.prospect_instance_ids) && campaign.prospect_instance_ids.length > 0) {
-      const { data: listedBots } = await supabaseClient.from('bot_instances').select('*').in('id', campaign.prospect_instance_ids).eq('status', 'active').gte('health_score', 50);
+      const { data: listedBots } = await supabaseClient.from('bot_instances').select('*').in('id', campaign.prospect_instance_ids).in('status', ['active', 'open']).gte('health_score', 50);
       bots = listedBots || [];
       if (!bots || bots.length === 0) {
         return new Response(JSON.stringify({ error: 'No specified prospecting bots available' }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -60,7 +60,7 @@ serve(async (req) => {
       }
       bots = [singleBot];
     } else {
-      const { data: poolBots } = await supabaseClient.from('bot_instances').select('*').eq('status', 'active').gte('health_score', 50).eq('is_prospecting', true);
+      const { data: poolBots } = await supabaseClient.from('bot_instances').select('*').in('status', ['active', 'open']).gte('health_score', 50).eq('is_prospecting', true);
       bots = poolBots || [];
       if (!bots || bots.length === 0) {
         return new Response(JSON.stringify({ error: 'No prospecting bots available' }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -118,7 +118,7 @@ serve(async (req) => {
             .from('bot_instances')
             .select('*')
             .eq('id', brokerProfile.bot_instance_id)
-            .eq('status', 'active')
+            .in('status', ['active', 'open'])
             .maybeSingle();
 
           if (brokerBot) {
