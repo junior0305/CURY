@@ -132,7 +132,7 @@ export default function Campanhas() {
     loadAIProfiles();
     // load available prospecting bots for selection
     (async () => {
-      const { data } = await supabase.from('bot_instances').select('*').eq('is_prospecting', true).eq('status', 'active').order('priority', { ascending: false });
+      const { data } = await supabase.from('bot_instances').select('*').eq('is_prospecting', true).in('status', ['active', 'open']).order('name', { ascending: true });
       setBotOptions(data || []);
     })();
 
@@ -395,30 +395,6 @@ export default function Campanhas() {
                     </SelectContent>
                   </Select>
 
-                  <div className="mt-4">
-                    <Label className="text-gray-200 font-bold">Instância de Envio (opcional)</Label>
-                    <div>
-                      <Label className="text-gray-200 font-bold mb-2">Instâncias de Envio (selecione 0, 1 ou várias)</Label>
-                      <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto p-2 bg-slate-800 rounded">
-                        <label className="text-xs text-gray-400 mb-1">Opções selecionadas: {Array.isArray(formData.prospect_instance_ids) ? formData.prospect_instance_ids.length : 0}</label>
-                        {botOptions.map(bot => (
-                                                  <label key={bot.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                                                    <input type="checkbox" checked={Array.isArray(formData.prospect_instance_ids) && formData.prospect_instance_ids.includes(bot.id)} onChange={e => {
-                                                      const checked = e.target.checked;
-                                                      setFormData(fd => {
-                                                        const cur = new Set(Array.isArray(fd.prospect_instance_ids) ? fd.prospect_instance_ids : []);
-                                                        if (checked) cur.add(bot.id); else cur.delete(bot.id);
-                                                        return { ...fd, prospect_instance_ids: Array.from(cur) };
-                                                      });
-                                                    }} />
-                                                    <span className="text-white ml-1">{bot.name} — {bot.phone}</span>
-                                                  </label>
-                                                ))}
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">Se você escolher 0 instâncias, o sistema usará o pool de prospecção. Se escolher 1 instância, a campanha usará somente ela. Se escolher várias, o sistema fará round-robin entre elas.</p>
-                    </div>
-                  </div>
-
                   {formData.ai_profile_id && aiProfiles.find(p => p.id === formData.ai_profile_id)?.description && (
                     <div className="mt-2 p-2 bg-purple-900/20 rounded border border-purple-500/30">
                       <p className="text-xs text-purple-300">{aiProfiles.find(p => p.id === formData.ai_profile_id)?.description}</p>
@@ -426,6 +402,7 @@ export default function Campanhas() {
                   )}
                   <p className="text-xs text-gray-500 mt-2">{formData.ai_profile_id ? "✅ Perfil selecionado" : "ℹ️ Configure manualmente no próximo passo"}</p>
 
+                  {/* Toggle: usar chip do corretor */}
                   <div className="mt-4 flex items-center justify-between p-3 bg-slate-800/60 rounded-lg border border-gray-700">
                     <div>
                       <p className="text-sm font-semibold text-white">Usar chip do corretor</p>
@@ -438,6 +415,72 @@ export default function Campanhas() {
                     >
                       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${formData.use_broker_chip ? 'translate-x-5' : 'translate-x-0'}`} />
                     </button>
+                  </div>
+
+                  {/* Seleção de chips — muda conforme o toggle */}
+                  <div className="mt-3">
+                    {formData.use_broker_chip ? (
+                      <div className="p-3 bg-blue-900/20 rounded-lg border border-blue-500/30">
+                        <p className="text-xs font-semibold text-blue-300 mb-1">Chip de fallback (quando corretor não tem chip)</p>
+                        <div className="grid grid-cols-1 gap-1.5 max-h-44 overflow-y-auto">
+                          {botOptions.length === 0 ? (
+                            <p className="text-xs text-gray-500 py-2">Nenhum chip de prospecção online no momento.</p>
+                          ) : (
+                            botOptions.map(bot => (
+                              <label key={bot.id} className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">
+                                <input
+                                  type="radio"
+                                  name="fallback_chip"
+                                  checked={formData.bot_instance_id === bot.id}
+                                  onChange={() => setFormData(fd => ({ ...fd, bot_instance_id: bot.id }))}
+                                  className="accent-blue-500"
+                                />
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                <span className="text-white text-sm font-semibold">{bot.name}</span>
+                                <span className="text-gray-500 text-xs">{bot.instance_name}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">Se o corretor não tiver chip cadastrado, o sistema usará o chip selecionado acima.</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-300 mb-2">Chips de prospecção <span className="text-gray-500 font-normal">(selecione 1 ou mais)</span></p>
+                        <div className="grid grid-cols-1 gap-1.5 max-h-44 overflow-y-auto p-2 bg-slate-800 rounded-lg border border-gray-700">
+                          {botOptions.length === 0 ? (
+                            <p className="text-xs text-gray-500 py-2 text-center">Nenhum chip de prospecção online.<br/>Verifique se os chips estão conectados.</p>
+                          ) : (
+                            botOptions.map(bot => (
+                              <label key={bot.id} className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">
+                                <input
+                                  type="checkbox"
+                                  checked={Array.isArray(formData.prospect_instance_ids) && formData.prospect_instance_ids.includes(bot.id)}
+                                  onChange={e => {
+                                    const checked = e.target.checked;
+                                    setFormData(fd => {
+                                      const cur = new Set(Array.isArray(fd.prospect_instance_ids) ? fd.prospect_instance_ids : []);
+                                      if (checked) cur.add(bot.id); else cur.delete(bot.id);
+                                      return { ...fd, prospect_instance_ids: Array.from(cur) };
+                                    });
+                                  }}
+                                  className="accent-blue-500 w-4 h-4"
+                                />
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                <span className="text-white text-sm font-semibold">{bot.name}</span>
+                                <span className="text-gray-500 text-xs">{bot.instance_name}</span>
+                                <span className="ml-auto text-xs text-cyan-400">{bot.messages_today || 0} hoje</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2">
+                          {Array.isArray(formData.prospect_instance_ids) && formData.prospect_instance_ids.length > 0
+                            ? `✅ ${formData.prospect_instance_ids.length} chip(s) selecionado(s) — round-robin entre eles`
+                            : "ℹ️ Sem seleção: usa todos os chips de prospecção disponíveis"}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
