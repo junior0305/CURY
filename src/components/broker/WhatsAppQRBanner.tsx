@@ -4,20 +4,20 @@ import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Smartphone, RefreshCw, CheckCircle2, WifiOff } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 export function WhatsAppQRBanner() {
   const { user } = useAuth();
   const [botInstanceId, setBotInstanceId] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState<boolean | null>(null); // null = ainda carregando
+  const [instanceName, setInstanceName] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState<boolean | null>(null); // null = carregando
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [qrBase64, setQrBase64] = useState<string | null>(null);
   const [justConnected, setJustConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // 1. Busca o bot_instance_id do perfil do corretor
+  // 1. Busca bot_instance_id + instance_name do perfil do corretor
   useEffect(() => {
     if (!user?.id) return;
     supabase
@@ -26,69 +26,75 @@ export function WhatsAppQRBanner() {
       .eq("id", user.id)
       .maybeSingle()
       .then(({ data }) => {
-        if (data?.bot_instance_id) setBotInstanceId(data.bot_instance_id);
+        if (!data?.bot_instance_id) {
+          setIsConnected(null); // sem chip configurado — não exibir
+          return;
+        }
+        setBotInstanceId(data.bot_instance_id);
+
+        // Lê o status atual e o instance_name do chip
+        supabase
+          .from("bot_instances")
+          .select("status, instance_name")
+          .eq("id", data.bot_instance_id)
+          .maybeSingle()
+          .then(({ data: bot }) => {
+            if (bot) {
+              setInstanceName(bot.instance_name);
+              setIsConnected(bot.status === "open");
+            } else {
+              setIsConnected(false);
+            }
+          });
       });
   }, [user?.id]);
 
-  // 2. Verifica status real da Evolution API (não apenas o DB)
-  const checkConnection = useCallback(async (silent = true) => {
-    if (!botInstanceId) return;
-    try {
-      const { data } = await supabase.functions.invoke("get-whatsapp-qr", {
-        body: { botInstanceId },
-      });
-      const connected = !!data?.connected;
-      setIsConnected(connected);
-
-      // Atualiza DB para manter consistência
-      if (connected) {
-        await supabase
-          .from("bot_instances")
-          .update({ status: "open" })
-          .eq("id", botInstanceId);
-      }
-    } catch {
-      // Erro silencioso — não muda o estado atual
-    }
-  }, [botInstanceId]);
-
-  // 3. Verifica ao montar e a cada 30s automaticamente
+  // 2. Realtime: escuta mudanças no bot_instances para reagir instantaneamente
   useEffect(() => {
     if (!botInstanceId) return;
 
-    checkConnection();
+    const channel = supabase
+      .channel(`bot_status_${botInstanceId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "bot_instances", filter: `id=eq.${botInstanceId}` },
+        (payload) => {
+          const newStatus = payload.new?.status;
+          const connected = newStatus === "open";
+          setIsConnected(connected);
+          if (connected) {
+            setJustConnected(true);
+            setOpen(false);
+          }
+        }
+      )
+      .subscribe();
 
-    intervalRef.current = setInterval(() => {
-      checkConnection();
-    }, 30000);
+    return () => { supabase.removeChannel(channel); };
+  }, [botInstanceId]);
 
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [botInstanceId, checkConnection]);
-
-  // 4. Polling rápido (5s) quando o modal está aberto e aguardando QR scan
+  // 3. Polling rápido (5s) enquanto modal aberto — confirma conexão via DB
   useEffect(() => {
     if (!open || !botInstanceId || justConnected) return;
 
-    const poll = setInterval(async () => {
-      const { data } = await supabase.functions.invoke("get-whatsapp-qr", {
-        body: { botInstanceId },
-      });
-      if (data?.connected) {
+    pollRef.current = setInterval(async () => {
+      const { data } = await supabase
+        .from("bot_instances")
+        .select("status")
+        .eq("id", botInstanceId)
+        .maybeSingle();
+
+      if (data?.status === "open") {
         setIsConnected(true);
         setJustConnected(true);
-        clearInterval(poll);
-        await supabase
-          .from("bot_instances")
-          .update({ status: "open" })
-          .eq("id", botInstanceId);
+        if (pollRef.current) clearInterval(pollRef.current);
       }
     }, 5000);
 
-    return () => clearInterval(poll);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [open, botInstanceId, justConnected]);
 
+  // 4. Busca o QR code via Edge Function
   const fetchQR = useCallback(async () => {
     if (!botInstanceId) return;
     setLoading(true);
@@ -106,10 +112,10 @@ export function WhatsAppQRBanner() {
       } else if (data?.base64) {
         setQrBase64(data.base64);
       } else {
-        setError("QR code não disponível. Tente novamente.");
+        setError("QR code não disponível. A instância pode estar inicializando — tente em alguns segundos.");
       }
     } catch (e: any) {
-      setError(e.message || "Erro ao buscar QR code");
+      setError(e.message || "Erro ao buscar QR code. Verifique se a instância está ativa no Evolution.");
     } finally {
       setLoading(false);
     }
@@ -125,11 +131,9 @@ export function WhatsAppQRBanner() {
     setQrBase64(null);
     setJustConnected(false);
     setError(null);
-    // Verifica status real imediatamente ao fechar (por se o usuário conectou e fechou rápido)
-    checkConnection();
   };
 
-  // Não exibe: sem bot configurado, ainda carregando, ou já conectado
+  // Não exibe: sem chip configurado, ainda carregando, ou já conectado
   if (!botInstanceId || isConnected === null || isConnected === true) return null;
 
   return (
@@ -140,7 +144,10 @@ export function WhatsAppQRBanner() {
           <WifiOff className="w-4 h-4 text-red-400 shrink-0" />
           <div>
             <p className="text-sm font-semibold text-red-300">WhatsApp desconectado</p>
-            <p className="text-xs text-red-400/80">Seu bot não está enviando mensagens. Reconecte agora.</p>
+            <p className="text-xs text-red-400/80">
+              {instanceName ? `Instância "${instanceName}" offline.` : "Seu chip não está conectado."}{" "}
+              Escaneie o QR para reconectar.
+            </p>
           </div>
         </div>
         <Button
@@ -149,7 +156,7 @@ export function WhatsAppQRBanner() {
           className="shrink-0 bg-red-600 hover:bg-red-500 text-white text-xs gap-1.5"
         >
           <Smartphone className="w-3.5 h-3.5" />
-          Reconectar
+          Conectar
         </Button>
       </div>
 
@@ -159,7 +166,7 @@ export function WhatsAppQRBanner() {
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               <Smartphone className="w-4 h-4 text-green-400" />
-              Reconectar WhatsApp
+              Conectar WhatsApp{instanceName ? ` — ${instanceName}` : ""}
             </DialogTitle>
             <DialogDescription className="text-slate-400 text-sm">
               Abra o WhatsApp no celular → Menu → Aparelhos conectados → Conectar aparelho
@@ -178,7 +185,9 @@ export function WhatsAppQRBanner() {
               <div className="flex flex-col items-center gap-3 py-6">
                 <CheckCircle2 className="w-14 h-14 text-emerald-400" />
                 <p className="text-base font-bold text-emerald-300">WhatsApp conectado!</p>
-                <p className="text-xs text-slate-400 text-center">Seu bot está ativo e pronto para enviar mensagens.</p>
+                <p className="text-xs text-slate-400 text-center">
+                  Seu chip está ativo e pronto para enviar mensagens.
+                </p>
                 <Button onClick={handleClose} className="mt-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm">
                   Fechar
                 </Button>
