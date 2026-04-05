@@ -98,9 +98,26 @@ export default function Rework() {
   const handleRedistribute = async () => {
     if (!toBroker || selectedLeads.size === 0) return toast({ title: "Selecione destino e leads", variant: "destructive" });
     setRedistributing(true);
-    const { error } = await supabase.from("leads").update({ broker_id: toBroker }).in("id", Array.from(selectedLeads));
+    const selectedIds = Array.from(selectedLeads);
+    const { error } = await supabase.from("leads").update({ broker_id: toBroker }).in("id", selectedIds);
     setRedistributing(false);
     if (error) return toast({ title: "Erro ao redistribuir", description: error.message, variant: "destructive" });
+
+    // Notifica o corretor destino para tocar o som no dashboard
+    const redistributedLeads = leads.filter(l => selectedIds.includes(l.id));
+    if (redistributedLeads.length > 0) {
+      const notifTitle = redistributedLeads.length === 1
+        ? `🔄 Lead redistribuído: ${redistributedLeads[0].name}`
+        : `🔄 ${redistributedLeads.length} leads redistribuídos para você`;
+      await supabase.from("internal_notifications").insert({
+        to_id: toBroker,
+        type: "LEAD_REDISTRIBUTED",
+        title: notifTitle,
+        message: "Acesse sua fila e atenda o mais rápido possível!",
+        related_lead_id: redistributedLeads.length === 1 ? redistributedLeads[0].id : null,
+      });
+    }
+
     toast({ title: `✅ ${selectedLeads.size} lead${selectedLeads.size > 1 ? "s" : ""} redistribuído${selectedLeads.size > 1 ? "s" : ""}!` });
     setSelectedLeads(new Set());
     loadData();

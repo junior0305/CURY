@@ -22,6 +22,9 @@ import {
   Settings2,
   Sparkles,
   Bot,
+  Bell,
+  Flame,
+  Brain,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -176,6 +179,71 @@ const AGENTS: AgentDef[] = [
     fields: [],
     notes:
       "Score de 0-100 atualizado a cada hora. Leva em conta: resposta ao contato inicial, status no funil, tempo desde a última interação e acessibilidade via bot.",
+  },
+  {
+    id: "sentinela-quentes",
+    icon: Flame,
+    color: "text-orange-400",
+    bgColor: "bg-orange-900/20",
+    borderColor: "border-orange-500/30",
+    title: "Sentinela de Leads Quentes",
+    description:
+      "Alerta gerentes via WhatsApp quando leads classificados como 'quentes' ficam sem resposta do corretor.",
+    enabledKey: "agente_sentinela_quentes_enabled",
+    status: "available",
+    fields: [
+      {
+        key: "agente_sentinela_quentes_threshold_min",
+        label: "Alertar após (minutos sem resposta)",
+        type: "number",
+        default: 30,
+        min: 5,
+        max: 240,
+        hint: "Tempo sem resposta do corretor para um lead quente antes de alertar o gerente.",
+      },
+    ],
+    notes:
+      "Roda a cada 5 minutos via cron. Só alerta leads com intenção classificada como 'quente' pela IA (lead_state). Deduplica alertas — não reenvia para o mesmo lead dentro de 2h.",
+  },
+  {
+    id: "briefing-corretor",
+    icon: Bell,
+    color: "text-cyan-400",
+    bgColor: "bg-cyan-900/20",
+    borderColor: "border-cyan-500/30",
+    title: "Briefing Matinal do Corretor",
+    description:
+      "Envia às 08h BRT um resumo personalizado para cada corretor com leads quentes, ranking e tarefas do dia.",
+    enabledKey: "agente_briefing_corretor_enabled",
+    status: "available",
+    fields: [],
+    notes:
+      "Disparado diariamente às 08:00 BRT. Inclui: leads quentes aguardando resposta, fila ativa por status, posição no ranking mensal e tarefas do dia. Deduplica — só envia uma vez por corretor por dia.",
+  },
+  {
+    id: "classificacao-retro",
+    icon: Brain,
+    color: "text-violet-400",
+    bgColor: "bg-violet-900/20",
+    borderColor: "border-violet-500/30",
+    title: "Classificação Retroativa",
+    description:
+      "Classifica com IA leads ativos que ainda não possuem intenção definida (lead_state sem_info).",
+    enabledKey: "agente_classificacao_retro_enabled",
+    status: "available",
+    fields: [
+      {
+        key: "agente_classificacao_retro_batch",
+        label: "Leads por execução (batch)",
+        type: "number",
+        default: 50,
+        min: 10,
+        max: 200,
+        hint: "Quantos leads processar por vez. Valores menores reduzem custo de IA por execução.",
+      },
+    ],
+    notes:
+      "Usa Gemini Flash para classificar intenção, tema e momento com base no histórico de conversas. Roda diariamente às 09h BRT (ou manualmente). Processa apenas leads sem classificação prévia.",
   },
 ];
 

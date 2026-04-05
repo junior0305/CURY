@@ -12,11 +12,38 @@ serve(async (req) => {
   }
 
   try {
-    const clonedReq = req.clone();
-    const payload = await clonedReq.json().catch(() => null);
+    // Lê o body como texto primeiro para melhor diagnóstico de erros
+    const rawBody = await req.text().catch(() => '');
+    if (!rawBody || rawBody.trim() === '') {
+      return new Response(JSON.stringify({ error: 'Empty request body' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
-    if (!payload) {
-      return new Response(JSON.stringify({ error: 'Invalid or empty JSON' }), {
+    let payload: any = null;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      try {
+        // Facebook/Make às vezes envia newlines literais dentro de strings JSON.
+        // Sanitiza: substitui quebras de linha/tabs RAW dentro de valores de string.
+        const sanitized = rawBody.replace(/"(?:[^"\\]|\\.)*"/g, (match) =>
+          match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')
+        );
+        payload = JSON.parse(sanitized);
+        console.warn('[incoming-lead] JSON sanitizado (newlines em strings)');
+      } catch (parseErr2) {
+        console.error('[incoming-lead] JSON parse error. Body preview:', rawBody.substring(0, 300));
+        return new Response(JSON.stringify({ error: 'Invalid JSON', preview: rawBody.substring(0, 200) }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    if (!payload || typeof payload !== 'object') {
+      return new Response(JSON.stringify({ error: 'Payload must be a JSON object' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -158,17 +185,19 @@ serve(async (req) => {
     if (insertError) throw insertError;
 
     // ── Cria estado inicial do lead ────────────────────────────────────────
-    await supabase.rpc('upsert_lead_state', {
-      p_lead_id:        newLead.id,
-      p_intencao:       'sem_info',
-      p_tema:           'sem_info',
-      p_momento:        'explorando',
-      p_ultimo_evento:  'lead_criado',
-      p_modo:           'automatico',
-      p_proxima_acao:   'aguardar',
-      p_bloqueado:      false,
-      p_atualizado_por: 'incoming_lead',
-    }).catch(() => {}); // não bloqueia se tabela ainda não existir
+    try {
+      await supabase.rpc('upsert_lead_state', {
+        p_lead_id:        newLead.id,
+        p_intencao:       'sem_info',
+        p_tema:           'sem_info',
+        p_momento:        'explorando',
+        p_ultimo_evento:  'lead_criado',
+        p_modo:           'automatico',
+        p_proxima_acao:   'aguardar',
+        p_bloqueado:      false,
+        p_atualizado_por: 'incoming_lead',
+      });
+    } catch {} // não bloqueia se tabela ainda não existir
 
     await supabase.from('distribution_logs').insert({
       lead_name: name,
@@ -315,14 +344,16 @@ Responda APENAS em JSON válido, sem markdown, sem explicação:
               ].filter(l => l !== '').join('\n');
 
               // Salva classificação no lead_state
-              await supabase.rpc('upsert_lead_state', {
-                p_lead_id:        newLead.id,
-                p_intencao:       briefing.intencao,
-                p_tema:           briefing.tema,
-                p_momento:        briefing.momento,
-                p_ultimo_evento:  'handoff_gerado',
-                p_atualizado_por: 'handoff_ia',
-              }).catch(() => {});
+              try {
+                await supabase.rpc('upsert_lead_state', {
+                  p_lead_id:        newLead.id,
+                  p_intencao:       briefing.intencao,
+                  p_tema:           briefing.tema,
+                  p_momento:        briefing.momento,
+                  p_ultimo_evento:  'handoff_gerado',
+                  p_atualizado_por: 'handoff_ia',
+                });
+              } catch {}
 
             } catch (e: any) {
               console.warn('[incoming-lead] Handoff IA falhou, usando mensagem simples:', e.message);

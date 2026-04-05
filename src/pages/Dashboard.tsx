@@ -88,10 +88,14 @@ const Dashboard = () => {
       }, (payload) => {
         const msg = payload.new as any;
         setNotifications(prev => [msg, ...prev]);
-        const isVisit = msg.type === "QUALIFIED_VISIT";
-        toast.success(isVisit ? "📅 Lead quer agendar visita!" : "📄 Lead quer enviar documentos!", {
-          description: msg.message, duration: 8000,
-        });
+        if (msg.type === "LEAD_REDISTRIBUTED") {
+          toast.info(msg.title, { description: msg.message, duration: 8000 });
+        } else {
+          const isVisit = msg.type === "QUALIFIED_VISIT";
+          toast.success(isVisit ? "📅 Lead quer agendar visita!" : "📄 Lead quer enviar documentos!", {
+            description: msg.message, duration: 8000,
+          });
+        }
         playSound("NEW_LEAD");
       })
       .subscribe();
@@ -202,6 +206,52 @@ const Dashboard = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user?.id, playSound]);
+
+  // ── Som ao abrir o dashboard se chegaram leads enquanto estava fechado ────────
+  useEffect(() => {
+    if (!user?.id) return;
+    const STORAGE_KEY = `dashboard_last_open_${user.id}`;
+    const lastOpen = localStorage.getItem(STORAGE_KEY);
+    const since = lastOpen ?? new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+    // Atualiza imediatamente para não tocar duas vezes numa mesma sessão
+    localStorage.setItem(STORAGE_KEY, new Date().toISOString());
+
+    supabase
+      .from("leads")
+      .select("id, name")
+      .eq("broker_id", user.id)
+      .gte("created_at", since)
+      .then(({ data }) => {
+        if (!data?.length) return;
+
+        const msg = data.length === 1
+          ? `🚀 Lead novo enquanto você estava fora: ${data[0].name}`
+          : `🚀 ${data.length} leads novos chegaram enquanto você estava fora!`;
+
+        // Toast aparece imediatamente (sem restrição de áudio)
+        toast.info(msg, { description: "Acesse sua fila e atenda o mais rápido possível!", duration: 10000 });
+
+        // Som: tenta imediato (desktop com contexto já aberto) e registra
+        // fallback para primeira interação do usuário (mobile/fresh load)
+        let played = false;
+        const tryPlay = () => {
+          if (played) return;
+          played = true;
+          playSound("NEW_LEAD");
+          window.removeEventListener("click", tryPlay);
+          window.removeEventListener("touchstart", tryPlay);
+          window.removeEventListener("keydown", tryPlay);
+        };
+
+        // Tenta em 800ms (já basta para desktop com contexto ativo)
+        setTimeout(tryPlay, 800);
+        // Fallback: toca na primeira interação (necessário no mobile/fresh tab)
+        window.addEventListener("click", tryPlay, { once: true });
+        window.addEventListener("touchstart", tryPlay, { once: true });
+        window.addEventListener("keydown", tryPlay, { once: true });
+      });
+  }, [user?.id]);
 
   const handleLeadSelect = (id: string) => {
     setSelectedLeadId(id);
