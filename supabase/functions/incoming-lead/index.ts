@@ -217,7 +217,38 @@ serve(async (req) => {
           });
 
           notificationSent = result?.success || false;
-          console.log(`[incoming-lead] Notificação corretor ${chosenBroker.first_name}: ${notificationSent}`);
+          console.log(`[incoming-lead] Notificação corretor ${chosenBroker.first_name} via bot ${notifBotId}: ${notificationSent}`);
+
+          // ── FALLBACK: se falhou, tenta qualquer instância conectada diferente da atual ──
+          if (!notificationSent) {
+            console.log(`[incoming-lead] Falhou, buscando bot de fallback conectado...`);
+            const { data: fallbackBots } = await supabase
+              .from('bot_instances')
+              .select('id, name')
+              .eq('status', 'connected')
+              .neq('id', notifBotId)
+              .limit(3);
+
+            for (const fallback of (fallbackBots || [])) {
+              console.log(`[incoming-lead] Tentando fallback: ${fallback.name} (${fallback.id})`);
+              const { data: fbResult } = await supabase.functions.invoke('send_whatsapp_message', {
+                body: {
+                  botId: fallback.id,
+                  phone: chosenBroker.phone,
+                  message: notifMsg,
+                }
+              });
+              if (fbResult?.success) {
+                notificationSent = true;
+                console.log(`[incoming-lead] Notificação enviada via fallback ${fallback.name}`);
+                break;
+              }
+            }
+
+            if (!notificationSent) {
+              console.warn(`[incoming-lead] Todos os bots falharam. Corretor ${chosenBroker.first_name} não foi notificado.`);
+            }
+          }
         }
       }
     }
