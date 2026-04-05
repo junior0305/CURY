@@ -13,8 +13,9 @@ import {
   LogOut, Trophy, AlertTriangle, Zap,
   CheckCircle2, Clock, UserCheck, UserX, GitMerge,
   RefreshCw, TrendingUp, Target, Shield,
-  Bell, X, Send, Trash2, RotateCcw, ChevronDown, Filter,
+  Bell, X, Send, Trash2, RotateCcw, Filter, Eye,
 } from "lucide-react";
+import { LeadMonitorDrawer } from "./LeadMonitorDrawer";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
@@ -325,6 +326,7 @@ export default function ManagerDashboard() {
   const [rightTab, setRightTab]         = useState<RightTab>("alertas");
   const [leftPanel, setLeftPanel]       = useState<LeftPanel>("urgente");
   const [alertBroker, setAlertBroker]   = useState<User | null>(null);
+  const [monitorLead, setMonitorLead]   = useState<Lead | null>(null);
   const [teamId, setTeamId]             = useState<string | null>(null);
   const [redistFilter, setRedistFilter] = useState<string>("todos");
 
@@ -670,6 +672,14 @@ export default function ManagerDashboard() {
                                 </span>
                               </div>
                             </div>
+                            <button
+                              onClick={() => setMonitorLead(lead)}
+                              className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
+                              title="Monitorar conversa"
+                              style={{ background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
                             <Select
                               defaultValue={lead.brokerId || ""}
                               onValueChange={brokerId => assignMutation.mutate({ leadId: lead.id, brokerId })}
@@ -745,6 +755,14 @@ export default function ManagerDashboard() {
                                 </span>
                               </div>
                             </div>
+                            <button
+                              onClick={() => setMonitorLead(lead)}
+                              className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
+                              title="Monitorar conversa"
+                              style={{ background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
                             <Select
                               defaultValue={lead.brokerId || ""}
                               onValueChange={brokerId => assignMutation.mutate({ leadId: lead.id, brokerId })}
@@ -1133,6 +1151,17 @@ export default function ManagerDashboard() {
             broker={alertBroker}
             fromId={user!.id}
             onClose={() => setAlertBroker(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── MONITOR DE CONVERSAS ────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {monitorLead && (
+          <LeadMonitorDrawer
+            lead={monitorLead}
+            broker={monitorLead.brokerId ? (brokerMap[monitorLead.brokerId] ?? null) : null}
+            onClose={() => setMonitorLead(null)}
           />
         )}
       </AnimatePresence>
