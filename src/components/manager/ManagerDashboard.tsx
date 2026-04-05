@@ -276,10 +276,45 @@ function AlertModal({ broker, fromId, onClose }: {
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  // Busca bot_instance_id do próprio gerente
+  // Resolve bot do gerente: FK direto → busca por nome → qualquer conectado
   useEffect(() => {
-    supabase.from("profiles").select("bot_instance_id").eq("id", fromId).maybeSingle()
-      .then(({ data }) => setManagerBotId(data?.bot_instance_id ?? null));
+    (async () => {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("bot_instance_id, first_name, full_name")
+        .eq("id", fromId)
+        .maybeSingle();
+
+      // 1. FK já configurado
+      if (profile?.bot_instance_id) {
+        setManagerBotId(profile.bot_instance_id);
+        return;
+      }
+
+      // 2. Resolve pelo nome (instância tem mesmo nome do usuário)
+      const firstName = profile?.first_name || profile?.full_name?.split(" ")[0] || "";
+      if (firstName) {
+        const { data: botByName } = await supabase
+          .from("bot_instances")
+          .select("id, status")
+          .ilike("name", `%${firstName}%`)
+          .limit(1)
+          .maybeSingle();
+        if (botByName?.id) {
+          setManagerBotId(botByName.id);
+          return;
+        }
+      }
+
+      // 3. Fallback: qualquer instância conectada
+      const { data: anyBot } = await supabase
+        .from("bot_instances")
+        .select("id")
+        .eq("status", "connected")
+        .limit(1)
+        .maybeSingle();
+      if (anyBot?.id) setManagerBotId(anyBot.id);
+    })();
   }, [fromId]);
 
   const send = async () => {
