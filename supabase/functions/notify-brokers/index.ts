@@ -6,6 +6,52 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+/**
+ * Resolve o bot do gerente:
+ * 1. FK direto (profiles.bot_instance_id)
+ * 2. Busca por nome na tabela bot_instances (instância tem mesmo nome do usuário)
+ * 3. Qualquer instância conectada como último recurso
+ */
+async function resolveManagerBot(supabase: any, managerId: string): Promise<string | null> {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('bot_instance_id, first_name, full_name')
+    .eq('id', managerId)
+    .maybeSingle()
+
+  // 1. FK direto
+  if (profile?.bot_instance_id) return profile.bot_instance_id
+
+  // 2. Por nome
+  const firstName = profile?.first_name || profile?.full_name?.split(' ')[0] || ''
+  if (firstName) {
+    const { data: botByName } = await supabase
+      .from('bot_instances')
+      .select('id')
+      .ilike('name', `%${firstName}%`)
+      .limit(1)
+      .maybeSingle()
+    if (botByName?.id) {
+      console.log(`[notify-brokers] Bot do gerente "${firstName}" resolvido por nome: ${botByName.id}`)
+      return botByName.id
+    }
+  }
+
+  // 3. Qualquer conectado
+  const { data: anyBot } = await supabase
+    .from('bot_instances')
+    .select('id')
+    .eq('status', 'connected')
+    .limit(1)
+    .maybeSingle()
+  if (anyBot?.id) {
+    console.log(`[notify-brokers] Bot fallback (qualquer conectado): ${anyBot.id}`)
+    return anyBot.id
+  }
+
+  return null
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -24,16 +70,15 @@ serve(async (req) => {
     const staleHours: number = Number(thresholdSetting?.value) || 24
     const staleSince = new Date(Date.now() - staleHours * 3600000).toISOString()
 
-    // 2. Buscar managers ativos com bot configurado
+    // 2. Buscar TODOS os managers ativos (não filtra por bot_instance_id pois resolvemos por nome)
     const { data: managers } = await supabase
       .from('profiles')
       .select('id, first_name, bot_instance_id')
       .eq('role', 'MANAGER')
       .eq('is_active', true)
-      .not('bot_instance_id', 'is', null)
 
     if (!managers?.length) {
-      return new Response(JSON.stringify({ processed: 0, reason: 'no_managers_with_bot' }), {
+      return new Response(JSON.stringify({ processed: 0, reason: 'no_managers' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
@@ -42,7 +87,15 @@ serve(async (req) => {
     const results: any[] = []
 
     for (const manager of managers) {
-      // 3. Corretores desta equipe com telefone
+      // 3. Resolver bot do gerente (com fallback por nome)
+      const botId = await resolveManagerBot(supabase, manager.id)
+      if (!botId) {
+        results.push({ manager: manager.first_name, skipped: 'no_bot_resolved' })
+        console.log(`[notify-brokers] Gerente ${manager.first_name}: nenhum bot resolvido, pulando.`)
+        continue
+      }
+
+      // 4. Corretores desta equipe com telefone
       const { data: brokers } = await supabase
         .from('profiles')
         .select('id, first_name, phone')
@@ -57,7 +110,7 @@ serve(async (req) => {
       }
 
       for (const broker of brokers) {
-        // 4. Leads parados deste corretor
+        // 5. Leads parados deste corretor
         const { data: staleWithInteraction } = await supabase
           .from('leads')
           .select('id, name, last_interaction_at, created_at')
@@ -92,7 +145,7 @@ serve(async (req) => {
           continue
         }
 
-        // 5. Montar mensagem individual para o corretor
+        // 6. Montar mensagem para o corretor
         const now = new Date()
         const brokerName = broker.first_name || 'Corretor'
 
@@ -112,19 +165,20 @@ serve(async (req) => {
           `Entre em contato agora e mantenha o funil aquecido. 🔥`,
         ].join('\n')
 
-        // 6. Enviar via bot do manager
+        // 7. Enviar via bot do manager (resolvido acima)
         const { data: sendResult } = await supabase.functions.invoke('send_whatsapp_message', {
-          body: { botId: manager.bot_instance_id, phone: broker.phone, message }
+          body: { botId, phone: broker.phone, message }
         })
 
         const success = sendResult?.success || false
-        console.log(`[notify-brokers] ${manager.first_name} → ${brokerName} (${broker.phone}): ${success ? '✅' : '❌'} — ${staleLeads.length} leads`)
+        console.log(`[notify-brokers] ${manager.first_name} → ${brokerName} (${broker.phone}) via bot ${botId}: ${success ? '✅' : '❌'} — ${staleLeads.length} leads`)
 
         if (success) processed++
         results.push({
           manager: manager.first_name,
           broker: brokerName,
           phone: broker.phone,
+          bot_id: botId,
           stale_leads: staleLeads.length,
           sent: success,
         })
