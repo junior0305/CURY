@@ -190,15 +190,20 @@ serve(async (req) => {
       const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
 
       if (setting?.value === true || setting?.value === "true" || setting?.value === 1) {
-        // Prioridade: bot do manager do corretor → fallback: bot global
+        // Prioridade: 1) bot do próprio corretor → 2) bot do manager → 3) bot global
         let notifBotId: string | null = null;
 
-        if (chosenBroker.manager_id) {
+        // 1. Bot do próprio corretor
+        notifBotId = chosenBroker.bot_instance_id ?? null;
+
+        // 2. Bot do manager
+        if (!notifBotId && chosenBroker.manager_id) {
           const { data: managerData } = await supabase
             .from('profiles').select('bot_instance_id').eq('id', chosenBroker.manager_id).maybeSingle();
           notifBotId = managerData?.bot_instance_id ?? null;
         }
 
+        // 3. Bot global configurado
         if (!notifBotId) {
           const { data: botSetting } = await supabase.from('system_settings').select('value').eq('key', 'notification_bot_instance_id').maybeSingle();
           notifBotId = botSetting?.value ?? null;

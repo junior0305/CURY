@@ -140,32 +140,55 @@ function Panel({ children, className }: { children: React.ReactNode; className?:
 // ─── Metas Bar ───────────────────────────────────────────────────────────────
 
 function MetasBar({ teamId }: { teamId: string | null }) {
-  const [goal, setGoal] = useState<number | null>(null);
+  const [goal, setGoal]     = useState<number | null>(null);
   const [actual, setActual] = useState<number>(0);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!teamId) return;
     const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
     const monthEnd   = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().slice(0, 10);
 
-    supabase.from("team_goals").select("sales_target")
-      .eq("team_id", teamId).eq("goal_type", "monthly")
-      .gte("month", monthStart).lt("month", monthEnd)
-      .maybeSingle()
-      .then(({ data }) => setGoal(data?.sales_target ?? null));
-
-    supabase.from("leads").select("id", { count: "exact", head: true })
-      .eq("team_id", teamId).eq("status", "CONCLUDED")
-      .gte("updated_at", monthStart).lt("updated_at", monthEnd)
-      .then(({ count }) => setActual(count ?? 0));
+    Promise.all([
+      supabase.from("team_goals").select("sales_target")
+        .eq("team_id", teamId)
+        .gte("month", monthStart).lt("month", monthEnd)
+        .maybeSingle(),
+      supabase.from("leads").select("id", { count: "exact", head: true })
+        .eq("team_id", teamId).eq("status", "CONCLUDED")
+        .gte("updated_at", monthStart).lt("updated_at", monthEnd),
+    ]).then(([{ data: goalData }, { count }]) => {
+      setGoal(goalData?.sales_target ?? null);
+      setActual(count ?? 0);
+      setLoaded(true);
+    });
   }, [teamId]);
 
-  if (!goal) return null;
+  if (!loaded || !teamId) return null;
 
-  const pct     = Math.min(100, Math.round((actual / goal) * 100));
-  const color   = pct >= 90 ? "#10B981" : pct >= 60 ? "#F59E0B" : "#EF4444";
-  const label   = pct >= 90 ? "No Prazo" : pct >= 60 ? "Em Risco" : "Abaixo";
-  const month   = new Date().toLocaleDateString("pt-BR", { month: "long" });
+  const month = new Date().toLocaleDateString("pt-BR", { month: "long" });
+
+  // Sem meta cadastrada — mostra aviso
+  if (!goal) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="shrink-0 mx-4 mt-2 rounded-xl px-4 py-2 flex items-center gap-3"
+        style={{ background: "rgba(71,85,105,0.08)", border: "1px solid rgba(71,85,105,0.25)" }}
+      >
+        <Target className="w-3.5 h-3.5 shrink-0" style={{ color: "#475569" }} />
+        <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#475569" }}>
+          Meta de {month} não definida — peça ao seu admin para configurar em Financeiro → Metas
+        </span>
+        <span className="text-xs font-black ml-auto" style={{ color: "#334155" }}>{actual} vendas realizadas</span>
+      </motion.div>
+    );
+  }
+
+  const pct   = Math.min(100, Math.round((actual / goal) * 100));
+  const color = pct >= 90 ? "#10B981" : pct >= 60 ? "#F59E0B" : "#EF4444";
+  const label = pct >= 90 ? "No Prazo" : pct >= 60 ? "Em Risco" : "Abaixo";
 
   return (
     <motion.div
@@ -207,24 +230,65 @@ function MetasBar({ teamId }: { teamId: string | null }) {
 function AlertModal({ broker, fromId, onClose }: {
   broker: User; fromId: string; onClose: () => void;
 }) {
-  const [msg, setMsg]       = useState("");
+  const [msg, setMsg]         = useState("");
   const [sending, setSending] = useState(false);
+  const [managerBotId, setManagerBotId] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
+  // Busca bot_instance_id do próprio gerente
+  useEffect(() => {
+    supabase.from("profiles").select("bot_instance_id").eq("id", fromId).maybeSingle()
+      .then(({ data }) => setManagerBotId(data?.bot_instance_id ?? null));
+  }, [fromId]);
+
   const send = async () => {
     if (!msg.trim()) return;
     setSending(true);
+
+    // 1. Salva notificação interna
     const { error } = await supabase.from("internal_notifications").insert({
       from_id: fromId,
       to_id: broker.id,
       message: msg.trim(),
       type: "MANAGER_ALERT",
     });
+
+    if (error) { setSending(false); toast.error("Erro: " + error.message); return; }
+
+    // 2. Envia via WhatsApp pelo bot do gerente (se tiver phone e bot configurado)
+    let whatsappSent = false;
+    if (broker.phone && managerBotId) {
+      const { data: result } = await supabase.functions.invoke("send_whatsapp_message", {
+        body: {
+          botId: managerBotId,
+          phone: broker.phone,
+          message: `🔔 *Alerta do Gerente*\n\n${msg.trim()}`,
+        },
+      });
+      whatsappSent = result?.success || false;
+
+      // Fallback: se o bot do gerente falhou, tenta qualquer conectado
+      if (!whatsappSent) {
+        const { data: fallbacks } = await supabase
+          .from("bot_instances").select("id, name")
+          .eq("status", "connected").neq("id", managerBotId).limit(3);
+        for (const fb of fallbacks || []) {
+          const { data: fbRes } = await supabase.functions.invoke("send_whatsapp_message", {
+            body: { botId: fb.id, phone: broker.phone, message: `🔔 *Alerta do Gerente*\n\n${msg.trim()}` },
+          });
+          if (fbRes?.success) { whatsappSent = true; break; }
+        }
+      }
+    }
+
     setSending(false);
-    if (error) { toast.error("Erro ao enviar: " + error.message); return; }
-    toast.success(`Alerta enviado para ${broker.name.split(" ")[0]}!`);
+    toast.success(
+      whatsappSent
+        ? `Alerta enviado para ${broker.name.split(" ")[0]} via WhatsApp!`
+        : `Alerta salvo para ${broker.name.split(" ")[0]} (sem WhatsApp conectado)`
+    );
     onClose();
   };
 
