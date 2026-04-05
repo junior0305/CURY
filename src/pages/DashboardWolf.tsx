@@ -17,6 +17,7 @@ import type { Task } from "@/types/task";
 import type { User } from "@/types/user";
 import { toast } from "sonner";
 import { useAudioArena } from "@/hooks/use-audio-arena";
+import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 
 /* ─────────────────────────────────────────────
    STYLES
@@ -700,6 +701,9 @@ export default function DashboardWolf() {
 
         {/* ── TICKER ── */}
         <AchievementTicker items={tickerItems} highlight={tickerHL} />
+
+        {/* ── WHATSAPP CONNECTION BANNER ── */}
+        <WhatsAppQRBanner />
 
         {/* ── MAIN ── */}
         <main className="flex flex-1 overflow-hidden gap-3 p-3 min-h-0">

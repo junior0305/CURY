@@ -69,7 +69,7 @@ interface FailedMessage {
   lead_phone: string | null;
 }
 
-type Tab = "distribution" | "webhook" | "automation" | "ai" | "failed";
+type Tab = "distribution" | "webhook" | "automation" | "ai";
 
 export default function Logs() {
   const { toast } = useToast();
@@ -413,11 +413,6 @@ export default function Logs() {
           <Brain className="w-4 h-4" /> Análises IA
           <span className="text-xs bg-slate-700 rounded px-1.5">{aiAnalyses.length}</span>
         </button>
-        <button onClick={() => setTab("failed")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "failed" ? "bg-red-900/40 text-red-300 border border-red-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
-          <XCircle className="w-4 h-4" /> Não Enviadas
-          <span className="text-xs bg-slate-700 rounded px-1.5">{failedMessages.length}</span>
-        </button>
       </div>
 
       <div className="relative">
@@ -590,51 +585,7 @@ export default function Logs() {
             </div>
           )}
         </div>
-      ) : (
-        <div>
-          {filteredFailed.length === 0 ? (
-            <div className="text-center py-20 text-gray-500">
-              <XCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
-              <p>Nenhuma mensagem não enviada encontrada.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredFailed.map(msg => (
-                <div key={msg.id} className="bg-slate-800/40 border border-red-700/40 rounded-xl p-4">
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <XCircle className="w-4 h-4 text-red-400" />
-                      <span className="text-white font-semibold text-sm">{msg.bot_name || '—'}</span>
-                      <Badge className="text-xs bg-red-900/40 text-red-300 border-red-500/30">Falhou</Badge>
-                    </div>
-                    <span className="text-gray-500 text-xs">{fmt(msg.failed_at || new Date().toISOString())}</span>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-xs text-gray-500">Para</div>
-                      <div className="text-white font-mono">{msg.lead_phone || '—'}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-500">Mensagem</div>
-                      <div className="text-sm text-gray-300 bg-slate-900 p-2 rounded max-h-40 overflow-y-auto">{msg.message_text}</div>
-                    </div>
-                  </div>
-
-                  {msg.error_message && <div className="mt-3 text-xs text-red-400">{msg.error_message}</div>}
-
-                  <div className="mt-3 flex items-center gap-2">
-                    <Button onClick={() => resendFailed(msg)} disabled={!!resendingId} className="bg-red-600 hover:bg-red-500">
-                      {resendingId === msg.id ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Reenviando...</> : 'Reenviar'}
-                    </Button>
-                    <Button variant="outline" onClick={() => navigator.clipboard.writeText(msg.message_text || '')} className="border-gray-600 text-gray-300">Copiar Mensagem</Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      ) : null}
 
       <div className="flex justify-center gap-3">
         <Button variant="outline" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}

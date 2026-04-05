@@ -32,7 +32,7 @@ serve(async (req) => {
                    sourceData.campaign || sourceData.campaign_name || sourceData.ad_name ||
                    sourceData.channel || sourceData.platform || '';
     const message = sourceData.message || sourceData.mensagem || sourceData.Interesse || '';
-    const tag = sourceData.tag || sourceData.interest || sourceData.source || sourceData.origin || sourceData.origem || '';
+    const tag = sourceData.tag || sourceData.primary_tag || (Array.isArray(sourceData.tags) ? sourceData.tags[0] : null) || sourceData.interest || sourceData.source || sourceData.origin || sourceData.origem || '';
 
     if (!phone) {
       return new Response(JSON.stringify({ error: 'Phone is required' }), {

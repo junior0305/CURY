@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Users, DollarSign, LogOut, Crown,
-  Gauge, Activity, Zap, ChevronRight,
+  Gauge, Activity, BrainCircuit, Plug, ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
@@ -53,24 +54,32 @@ const GROUPS = [
     icon: Activity,
     roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"],
     subtabs: [
-      { value: "saude-leads",  label: "Saúde",        roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
-      { value: "filas",        label: "Filas",         roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "rework",       label: "Rework",        roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "logs",         label: "Logs",          roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
+      { value: "saude-leads", label: "Saúde",  roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
+      { value: "filas",       label: "Filas",  roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "rework",      label: "Rework", roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "logs",        label: "Logs",   roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
     ],
   },
   {
-    value: "automacao",
-    label: "Automação",
-    icon: Zap,
+    value: "ia",
+    label: "Central IA",
+    icon: BrainCircuit,
     roles: ["ADMIN", "SUPERINTENDENT"],
     subtabs: [
-      { value: "webhooks",   label: "Webhooks",     roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "ia-builder", label: "IA Builder",   roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "agentes",    label: "Agentes",      roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "prospeccao", label: "Prospecção",   roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "sons",       label: "Arena Sonora", roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "monitor",    label: "Sistema",      roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "ia-builder", label: "IA Builder",  roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "agentes",    label: "Agentes",     roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "prospeccao", label: "Prospecção",  roles: ["ADMIN", "SUPERINTENDENT"] },
+    ],
+  },
+  {
+    value: "integracoes",
+    label: "Integrações",
+    icon: Plug,
+    roles: ["ADMIN", "SUPERINTENDENT"],
+    subtabs: [
+      { value: "webhooks", label: "Webhooks",     roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "sons",     label: "Arena Sonora", roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "monitor",  label: "Sistema",      roles: ["ADMIN", "SUPERINTENDENT"] },
     ],
   },
   {
@@ -87,6 +96,40 @@ const GROUPS = [
 ] as const;
 
 type GroupValue = typeof GROUPS[number]["value"];
+
+// ─── SubTabs helper ───────────────────────────────────────────────────────────
+
+function SubTabs({
+  activeSub, onChangeSub, items, role, children,
+}: {
+  activeSub: string;
+  onChangeSub: (v: string) => void;
+  items: { v: string; l: string; roles: string[] }[];
+  role: string;
+  children: React.ReactNode;
+}) {
+  const visible = items.filter(s => s.roles.includes(role));
+  return (
+    <Tabs value={activeSub} onValueChange={onChangeSub}>
+      <TabsList
+        className="h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex"
+        style={{ background: "rgba(8,11,20,0.9)", border: "1px solid rgba(30,41,59,0.9)" }}
+      >
+        {visible.map(s => (
+          <TabsTrigger
+            key={s.v}
+            value={s.v}
+            className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all"
+            style={{ color: activeSub === s.v ? "#ffffff" : "#475569" }}
+          >
+            {s.l}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      {children}
+    </Tabs>
+  );
+}
 
 // ─── Labels de role ───────────────────────────────────────────────────────────
 
@@ -256,144 +299,113 @@ export default function AdminLayout() {
 
         {/* ── Navegação principal ──────────────────────────────────────────── */}
         <div className="flex gap-2 mb-6 flex-wrap">
-          {visibleGroups.map(({ value, label, icon: Icon }) => {
+          {visibleGroups.map(({ value, label, icon: Icon }, idx) => {
             const isActive = activeGroup === value;
             return (
-              <button
+              <motion.button
                 key={value}
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.05 }}
                 onClick={() => handleGroupChange(value)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200"
+                className="relative flex items-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200"
                 style={isActive ? {
-                  background: "linear-gradient(135deg, #0055cc 0%, #0066ff 100%)",
-                  borderColor: "rgba(0,170,255,0.5)",
+                  background: "linear-gradient(135deg, #0044cc 0%, #0066ff 60%, #00aaff 100%)",
+                  borderColor: "rgba(0,212,255,0.5)",
                   color: "#ffffff",
-                  boxShadow: "0 0 16px rgba(0,102,255,0.45), inset 0 1px 0 rgba(255,255,255,0.1)",
+                  boxShadow: "0 0 20px rgba(0,170,255,0.4), inset 0 1px 0 rgba(255,255,255,0.12)",
                 } : {
-                  background: "rgba(10,15,30,0.8)",
-                  borderColor: "rgba(26,39,68,0.8)",
-                  color: "#4a5a7a",
+                  background: "rgba(8,11,20,0.8)",
+                  borderColor: "rgba(30,41,59,0.8)",
+                  color: "#475569",
                 }}
               >
-                <Icon
-                  className="w-4 h-4"
-                  style={{ color: isActive ? "#00e5ff" : "#2a3a5a" }}
-                />
-                <span>{label}</span>
-              </button>
+                <Icon className="w-4 h-4" style={{ color: isActive ? "#00D4FF" : "#334155" }} />
+                <span className="uppercase tracking-wider text-xs">{label}</span>
+                {isActive && (
+                  <motion.div
+                    layoutId="nav-indicator"
+                    className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full"
+                    style={{ background: "#00D4FF", boxShadow: "0 0 8px #00D4FF" }}
+                  />
+                )}
+              </motion.button>
             );
           })}
         </div>
 
         {/* ── Conteúdo com sub-abas ────────────────────────────────────────── */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeGroup}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+          >
         {activeGroup === "cockpit" && <Cockpit />}
 
         {activeGroup === "equipe" && (
-          <Tabs value={activeSub} onValueChange={setActiveSub}>
-            <TabsList
-              className="h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex"
-              style={{ background: "rgba(10,15,30,0.9)", border: "1px solid rgba(26,39,68,0.9)" }}
-            >
-              {["tropas","equipes"].filter(v => {
-                const g = GROUPS.find(g => g.value === "equipe");
-                if (!g || !("subtabs" in g)) return false;
-                return g.subtabs.find(s => s.value === v)?.roles.includes(normalizedRole);
-              }).map(v => (
-                <TabsTrigger key={v} value={v}
-                  className="px-4 py-2 rounded-lg text-xs font-bold transition-all"
-                  style={{ color: activeSub === v ? "#ffffff" : "#4a5a7a" }}
-                  data-comandra-sub={activeSub === v ? "active" : ""}
-                >
-                  {v === "tropas" ? "Tropas" : "Equipes"}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
+            { v: "tropas",  l: "Tropas",  roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
+            { v: "equipes", l: "Equipes", roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
+          ]} role={normalizedRole}>
             <TabsContent value="tropas"><Tropas /></TabsContent>
             <TabsContent value="equipes"><Equipes /></TabsContent>
-          </Tabs>
+          </SubTabs>
         )}
 
         {activeGroup === "pipeline" && (
-          <Tabs value={activeSub} onValueChange={setActiveSub}>
-            <TabsList
-              className="h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex"
-              style={{ background: "rgba(10,15,30,0.9)", border: "1px solid rgba(26,39,68,0.9)" }}
-            >
-              {[
-                { v: "saude-leads", l: "Saúde",  roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
-                { v: "filas",       l: "Filas",  roles: ["ADMIN","SUPERINTENDENT"] },
-                { v: "rework",      l: "Rework", roles: ["ADMIN","SUPERINTENDENT"] },
-                { v: "logs",        l: "Logs",   roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
-              ].filter(s => s.roles.includes(normalizedRole)).map(s => (
-                <TabsTrigger key={s.v} value={s.v}
-                  className="px-4 py-2 rounded-lg text-xs font-bold transition-all"
-                  style={{ color: activeSub === s.v ? "#ffffff" : "#4a5a7a" }}
-                >
-                  {s.l}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
+            { v: "saude-leads", l: "Saúde",  roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
+            { v: "filas",       l: "Filas",  roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "rework",      l: "Rework", roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "logs",        l: "Logs",   roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
+          ]} role={normalizedRole}>
             <TabsContent value="saude-leads" className="p-0"><SaudeLeads /></TabsContent>
             <TabsContent value="filas" className="p-4"><LeadDistribution /></TabsContent>
             <TabsContent value="rework"><Rework /></TabsContent>
             <TabsContent value="logs"><Logs /></TabsContent>
-          </Tabs>
+          </SubTabs>
         )}
 
-        {activeGroup === "automacao" && (
-          <Tabs value={activeSub} onValueChange={setActiveSub}>
-            <TabsList
-              className="h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex"
-              style={{ background: "rgba(10,15,30,0.9)", border: "1px solid rgba(26,39,68,0.9)" }}
-            >
-              {[
-                { v: "webhooks",   l: "Webhooks" },
-                { v: "ia-builder", l: "IA Builder" },
-                { v: "agentes",    l: "Agentes" },
-                { v: "prospeccao", l: "Prospecção" },
-                { v: "sons",       l: "Arena Sonora" },
-                { v: "monitor",    l: "Sistema" },
-              ].map(s => (
-                <TabsTrigger key={s.v} value={s.v}
-                  className="px-4 py-2 rounded-lg text-xs font-bold transition-all"
-                  style={{ color: activeSub === s.v ? "#ffffff" : "#4a5a7a" }}
-                >
-                  {s.l}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            <TabsContent value="webhooks"><Webhooks /></TabsContent>
+        {activeGroup === "ia" && (
+          <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
+            { v: "ia-builder", l: "IA Builder",  roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "agentes",    l: "Agentes",     roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "prospeccao", l: "Prospecção",  roles: ["ADMIN","SUPERINTENDENT"] },
+          ]} role={normalizedRole}>
             <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>
             <TabsContent value="agentes" className="p-6"><Agentes /></TabsContent>
             <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>
+          </SubTabs>
+        )}
+
+        {activeGroup === "integracoes" && (
+          <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
+            { v: "webhooks", l: "Webhooks",     roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "sons",     l: "Arena Sonora", roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "monitor",  l: "Sistema",      roles: ["ADMIN","SUPERINTENDENT"] },
+          ]} role={normalizedRole}>
+            <TabsContent value="webhooks"><Webhooks /></TabsContent>
             <TabsContent value="sons" className="p-6"><AudioSettings /></TabsContent>
             <TabsContent value="monitor" className="p-6"><SistemaControl /></TabsContent>
-          </Tabs>
+          </SubTabs>
         )}
 
         {activeGroup === "financeiro" && (
-          <Tabs value={activeSub} onValueChange={setActiveSub}>
-            <TabsList
-              className="h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex"
-              style={{ background: "rgba(10,15,30,0.9)", border: "1px solid rgba(26,39,68,0.9)" }}
-            >
-              {[
-                { v: "economia", l: "Economia" },
-                { v: "premios",  l: "Prêmios" },
-                { v: "regras",   l: "Regras" },
-              ].map(s => (
-                <TabsTrigger key={s.v} value={s.v}
-                  className="px-4 py-2 rounded-lg text-xs font-bold transition-all"
-                  style={{ color: activeSub === s.v ? "#ffffff" : "#4a5a7a" }}
-                >
-                  {s.l}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
+            { v: "economia", l: "Economia", roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "premios",  l: "Prêmios",  roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "regras",   l: "Regras",   roles: ["ADMIN","SUPERINTENDENT"] },
+          ]} role={normalizedRole}>
             <TabsContent value="economia"><Economia /></TabsContent>
             <TabsContent value="premios"><Premios /></TabsContent>
             <TabsContent value="regras"><Regras /></TabsContent>
-          </Tabs>
+          </SubTabs>
         )}
+          </motion.div>
+        </AnimatePresence>
 
       </div>
 
