@@ -190,23 +190,34 @@ serve(async (req) => {
       const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
 
       if (setting?.value === true || setting?.value === "true" || setting?.value === 1) {
-        // Prioridade: 1) bot do próprio corretor → 2) bot do manager → 3) bot global
+        // Prioridade: 1) bot do corretor → 2) bot da equipe → 3) bot do manager → 4) bot global
         let notifBotId: string | null = null;
 
         // 1. Bot do próprio corretor
         notifBotId = chosenBroker.bot_instance_id ?? null;
+        if (notifBotId) console.log(`[incoming-lead] Bot: corretor próprio (${notifBotId})`);
 
-        // 2. Bot do manager
+        // 2. Bot da equipe (configurado em Admin → Equipes)
+        if (!notifBotId && chosenBroker.team_id) {
+          const { data: teamData } = await supabase
+            .from('teams').select('bot_instance_id').eq('id', chosenBroker.team_id).maybeSingle();
+          notifBotId = teamData?.bot_instance_id ?? null;
+          if (notifBotId) console.log(`[incoming-lead] Bot: instância da equipe (${notifBotId})`);
+        }
+
+        // 3. Bot do manager
         if (!notifBotId && chosenBroker.manager_id) {
           const { data: managerData } = await supabase
             .from('profiles').select('bot_instance_id').eq('id', chosenBroker.manager_id).maybeSingle();
           notifBotId = managerData?.bot_instance_id ?? null;
+          if (notifBotId) console.log(`[incoming-lead] Bot: manager (${notifBotId})`);
         }
 
-        // 3. Bot global configurado
+        // 4. Bot global configurado
         if (!notifBotId) {
           const { data: botSetting } = await supabase.from('system_settings').select('value').eq('key', 'notification_bot_instance_id').maybeSingle();
           notifBotId = botSetting?.value ?? null;
+          if (notifBotId) console.log(`[incoming-lead] Bot: global setting (${notifBotId})`);
         }
 
         if (notifBotId) {

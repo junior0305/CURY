@@ -56,6 +56,7 @@ interface BotInstance {
   id: string;
   name: string;
   phone: string;
+  status?: string;
 }
 
 interface Team {
@@ -111,7 +112,7 @@ export default function Equipes() {
       const [{ data: teamsData }, { data: profilesData }, { data: botsData }] = await Promise.all([
         supabase.from("teams").select("*").order("name"),
         supabase.from("profiles").select("id, full_name, email, role, team_id").order("full_name"),
-        supabase.from("bot_instances").select("id, name, phone").eq("status", "active").order("name"),
+        supabase.from("bot_instances").select("id, name, phone, status").order("name"),
       ]);
       setBots(botsData || []);
 
@@ -325,6 +326,17 @@ export default function Equipes() {
                           <Users className="w-3 h-3" />
                           {team.members?.length ?? 0} soldado{team.members?.length !== 1 ? "s" : ""}
                         </span>
+                        {team.bot_instance_id ? (
+                          <span className="text-xs text-green-400 flex items-center gap-1">
+                            <Smartphone className="w-3 h-3" />
+                            {bots.find(b => b.id === team.bot_instance_id)?.name || "Bot configurado"}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-600 flex items-center gap-1">
+                            <Smartphone className="w-3 h-3" />
+                            bot global
+                          </span>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -461,7 +473,7 @@ export default function Equipes() {
                   <SelectItem value="none" className="text-gray-400">Usar instância global</SelectItem>
                   {bots.map((b) => (
                     <SelectItem key={b.id} value={b.id} className="text-white">
-                      {b.name} ({b.phone})
+                      {b.status === "connected" ? "🟢" : "🔴"} {b.name}{b.phone ? ` · ${b.phone}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -526,7 +538,7 @@ export default function Equipes() {
                   <SelectItem value="none" className="text-gray-400">Usar instância global</SelectItem>
                   {bots.map((b) => (
                     <SelectItem key={b.id} value={b.id} className="text-white">
-                      {b.name} ({b.phone})
+                      {b.status === "connected" ? "🟢" : "🔴"} {b.name}{b.phone ? ` · ${b.phone}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
