@@ -282,11 +282,19 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      lead: newLead, 
+    // Log do webhook recebido (visível em Admin/Pipeline/Logs/Webhooks)
+    await supabase.from('webhook_logs').insert({
+      integration_key: 'make',
+      payload: { name, phone, email, tag, origin },
+      status_code: 200,
+      response_body: JSON.stringify({ lead_id: newLead.id, broker: chosenBroker?.first_name || null, queue: chosenQueue?.name || 'FALLBACK' }),
+    }).then(() => {}).catch(() => {}); // fire-and-forget, nunca bloqueia
+
+    return new Response(JSON.stringify({
+      success: true,
+      lead: newLead,
       notification_sent: notificationSent,
-      welcome_sent: welcomeSent 
+      welcome_sent: welcomeSent
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

@@ -63,6 +63,13 @@ serve(async (req) => {
     const payload = await req.json().catch(() => null);
     console.log('[webhook_receiver] payload:', JSON.stringify(payload).substring(0, 1000));
 
+    // Log do evento Evolution (visível em Admin/Pipeline/Logs/Webhooks)
+    supabase.from('webhook_logs').insert({
+      integration_key: 'evolution',
+      payload: payload ? JSON.parse(JSON.stringify(payload).substring(0, 4000)) : null,
+      status_code: 200,
+    }).then(() => {}).catch(() => {}); // fire-and-forget
+
     const phoneNumber = payload?.data?.key?.remoteJid?.replace('@s.whatsapp.net', '') ||
                         payload?.key?.remoteJid?.replace('@s.whatsapp.net', '');
     const fromMe = payload?.data?.key?.fromMe === true || payload?.key?.fromMe === true;
