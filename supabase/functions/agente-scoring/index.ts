@@ -7,7 +7,8 @@ const corsHeaders = {
 };
 
 /**
- * Calcula o score de um lead (0-100) com base em sinais de engajamento.
+ * Calcula o score de um lead (0-100) com base em sinais de engajamento
+ * e classificação de intenção do lead_state (IA).
  *
  * Fatores positivos:
  *  +25  Lead respondeu à mensagem de boas-vindas
@@ -18,12 +19,21 @@ const corsHeaders = {
  *  +8   Última interação entre 6-24h
  *  +3   Última interação entre 24-48h
  *
+ * Fatores da IA (lead_state):
+ *  +20  intencao = 'quente'
+ *  +5   intencao = 'morno'
+ *  -15  intencao = 'frio'
+ *  -30  intencao = 'desqualificado'
+ *  +15  momento = 'decidido'
+ *  +5   momento = 'comparando'
+ *  -20  momento = 'sumiu'
+ *
  * Fatores negativos:
  *  -15  Última interação > 48h (esfriando)
  *  -25  Última interação > 120h (muito frio)
  *  -10  Sem bot atribuído ao corretor (não consegue ser contatado)
  */
-function computeScore(lead: any): number {
+function computeScore(lead: any, state?: { intencao?: string; momento?: string } | null): number {
   let score = 50;
 
   // Engajamento inicial
@@ -45,6 +55,21 @@ function computeScore(lead: any): number {
   else if (hoursAgo < 48)  score += 3;
   else if (hoursAgo < 120) score -= 15;
   else                     score -= 25;
+
+  // Classificação IA (lead_state) — principal diferencial
+  if (state) {
+    switch (state.intencao) {
+      case 'quente':         score += 20; break;
+      case 'morno':          score += 5;  break;
+      case 'frio':           score -= 15; break;
+      case 'desqualificado': score -= 30; break;
+    }
+    switch (state.momento) {
+      case 'decidido':    score += 15; break;
+      case 'comparando':  score += 5;  break;
+      case 'sumiu':       score -= 20; break;
+    }
+  }
 
   // Acessibilidade (bot disponível)
   if (!lead.broker?.bot_instance_id) score -= 10;
@@ -87,11 +112,20 @@ serve(async (req) => {
       });
     }
 
+    // ── Buscar lead_state para enriquecer o score com intenção IA ────────────
+    const leadIds = leads.map(l => l.id);
+    const { data: statesData } = await supabase
+      .from('lead_state')
+      .select('lead_id, intencao, momento')
+      .in('lead_id', leadIds);
+
+    const stateMap = new Map((statesData || []).map(s => [s.lead_id, s]));
+
     // ── Calcular e atualizar scores em batch ──────────────────────────────────
     // Agrupa por score para minimizar updates
     const byScore: Record<number, string[]> = {};
     for (const lead of leads) {
-      const score = computeScore(lead);
+      const score = computeScore(lead, stateMap.get(lead.id) ?? null);
       if (!byScore[score]) byScore[score] = [];
       byScore[score].push(lead.id);
     }

@@ -86,6 +86,24 @@ serve(async (req) => {
           .not('status', 'in', '("ABANDONED","EXCLUDED")');
         console.log(`[webhook_receiver] corretor → lead ${phoneNumber}`);
 
+        // ── Ativa modo humano: pausa automações para este lead ────────────
+        const { data: humanLeads } = await supabase
+          .from('leads')
+          .select('id')
+          .eq('phone', phoneNumber)
+          .not('status', 'in', '("ABANDONED","EXCLUDED","CONCLUDED")')
+          .limit(5);
+        for (const l of humanLeads || []) {
+          await supabase.rpc('upsert_lead_state', {
+            p_lead_id:        l.id,
+            p_modo:           'humano_ativo',
+            p_bloqueado:      true,
+            p_ultimo_evento:  'corretor_respondeu',
+            p_proxima_acao:   'aguardar',
+            p_atualizado_por: 'webhook_receiver',
+          }).catch(() => {});
+        }
+
         // Pausar sessão Sentinela ativa se corretor assumiu a conversa
         const { data: brokerLead } = await supabase
           .from('leads')
@@ -266,6 +284,56 @@ serve(async (req) => {
             .update(updates)
             .eq('id', lead.id);
 
+          // ── Classificador de Intenção: reclassifica a cada resposta do lead ──
+          if (messageText) {
+            const geminiKey = Deno.env.get('GEMINI_API_KEY') || '';
+            if (geminiKey) {
+              try {
+                const classResp = await fetch(
+                  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      contents: [{ role: 'user', parts: [{ text: `Mensagem do lead: "${messageText}"` }] }],
+                      systemInstruction: { parts: [{ text:
+                        `Classifique a mensagem de um lead de imóvel MCMV.
+Responda APENAS em JSON válido, sem markdown:
+{"intencao":"quente|morno|frio","tema":"preco|entrada|localizacao|documentacao|sem_info","momento":"explorando|comparando|decidido|sumiu"}`
+                      }] },
+                      generationConfig: { maxOutputTokens: 60, temperature: 0.1 },
+                    }),
+                  }
+                );
+                const classJson = await classResp.json();
+                const rawClass = classJson.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+                const cls = JSON.parse(rawClass.replace(/```json|```/g, '').trim());
+
+                await supabase.rpc('upsert_lead_state', {
+                  p_lead_id:        lead.id,
+                  p_intencao:       cls.intencao,
+                  p_tema:           cls.tema,
+                  p_momento:        cls.momento,
+                  p_ultimo_evento:  'lead_respondeu',
+                  p_proxima_acao:   cls.intencao === 'quente' ? 'alertar_gerente' : 'aguardar',
+                  p_atualizado_por: 'classificador_ia',
+                }).catch(() => {});
+
+                console.log(`[webhook_receiver] Classificação: ${cls.intencao}/${cls.tema}/${cls.momento}`);
+              } catch (e: any) {
+                console.warn('[webhook_receiver] Classificador IA falhou:', e.message);
+              }
+            } else {
+              // Sem IA: marca evento mínimo
+              await supabase.rpc('upsert_lead_state', {
+                p_lead_id:        lead.id,
+                p_ultimo_evento:  'lead_respondeu',
+                p_proxima_acao:   'aguardar',
+                p_atualizado_por: 'webhook_receiver',
+              }).catch(() => {});
+            }
+          }
+
           // Cérebro: cancelar toques pendentes + agendar warmup e escalações
           await supabase
             .from('lead_activation_queue')
@@ -274,14 +342,28 @@ serve(async (req) => {
             .eq('status', 'pending')
             .in('action_type', ['toque_1', 'toque_2', 'sentinela', 'last_chance']);
 
-          const warmupAt = new Date(Date.now() + 35 * 60000).toISOString();
-          const alertAt  = new Date(Date.now() +  2 * 3600000).toISOString();
-          const managerAt = new Date(Date.now() + 4 * 3600000).toISOString();
-          try { await supabase.from('lead_activation_queue').insert([
-            { lead_id: lead.id, action_type: 'broker_warmup',  scheduled_for: warmupAt },
-            { lead_id: lead.id, action_type: 'broker_alert',   scheduled_for: alertAt },
-            { lead_id: lead.id, action_type: 'manager_alert',  scheduled_for: managerAt },
-          ]); } catch {} // tabela pode não existir em ambientes antigos
+          // Lê intenção do lead para ajustar urgência dos timers
+          const { data: ls } = await supabase
+            .from('lead_state').select('intencao')
+            .eq('lead_id', lead.id).maybeSingle();
+          const isHot = ls?.intencao === 'quente';
+
+          // Lead quente: timers agressivos (5min alerta, 15min auto-resposta, 30min gerente)
+          // Lead normal: timers conservadores (35min warmup, 2h alerta, 4h gerente)
+          const queueItems = isHot
+            ? [
+                { lead_id: lead.id, action_type: 'broker_alert',    scheduled_for: new Date(Date.now() +  5 * 60000).toISOString() },
+                { lead_id: lead.id, action_type: 'auto_resposta',   scheduled_for: new Date(Date.now() + 15 * 60000).toISOString() },
+                { lead_id: lead.id, action_type: 'manager_alert',   scheduled_for: new Date(Date.now() + 30 * 60000).toISOString() },
+              ]
+            : [
+                { lead_id: lead.id, action_type: 'broker_warmup',   scheduled_for: new Date(Date.now() + 35 * 60000).toISOString() },
+                { lead_id: lead.id, action_type: 'broker_alert',    scheduled_for: new Date(Date.now() +  2 * 3600000).toISOString() },
+                { lead_id: lead.id, action_type: 'manager_alert',   scheduled_for: new Date(Date.now() +  4 * 3600000).toISOString() },
+              ];
+
+          if (isHot) console.log(`[webhook_receiver] 🔥 Lead QUENTE — timers agressivos para ${lead.name}`);
+          try { await supabase.from('lead_activation_queue').insert(queueItems); } catch {}
         }
         console.log(`[webhook_receiver] lead → corretor ${phoneNumber}`);
       }

@@ -21,9 +21,6 @@ function isWithinWindow(): boolean {
   return brtTotal >= 8 * 60 && brtTotal <= 21 * 60 + 45;
 }
 
-// Returns ISO timestamp for 08:00 BRT the next valid opening.
-// Só avança para amanhã se já passou das 21:45 BRT (janela fechada).
-// Antes das 8h ou entre 8h-21h45, agenda para HOJE às 11:00 UTC.
 function nextWindowOpen(): string {
   const now = new Date();
   const brtH = (now.getUTCHours() - 3 + 24) % 24;
@@ -31,7 +28,7 @@ function nextWindowOpen(): string {
   const brtTotal = brtH * 60 + brtM;
   const next = new Date(now);
   if (brtTotal > 21 * 60 + 45) next.setUTCDate(next.getUTCDate() + 1);
-  next.setUTCHours(11, 0, 0, 0); // 08:00 BRT = 11:00 UTC
+  next.setUTCHours(11, 0, 0, 0);
   return next.toISOString();
 }
 
@@ -75,6 +72,111 @@ function interpolate(template: string, name: string, broker: string): string {
     .replace(/\{broker\}/gi, broker || 'nossa equipe');
 }
 
+// ── Lead State helpers ─────────────────────────────────────────────────────
+
+interface LeadState {
+  intencao:      string;
+  tema:          string;
+  momento:       string;
+  ultimo_evento: string;
+  modo:          string;
+  proxima_acao:  string;
+  bloqueado:     boolean;
+}
+
+async function getLeadState(supabase: any, leadId: string): Promise<LeadState | null> {
+  const { data } = await supabase
+    .from('lead_state')
+    .select('intencao,tema,momento,ultimo_evento,modo,proxima_acao,bloqueado')
+    .eq('lead_id', leadId)
+    .maybeSingle();
+  return data || null;
+}
+
+async function setLeadState(
+  supabase: any,
+  leadId: string,
+  patch: Partial<LeadState> & { atualizado_por?: string }
+): Promise<void> {
+  try {
+    await supabase.rpc('upsert_lead_state', {
+      p_lead_id:       leadId,
+      p_intencao:      patch.intencao      ?? null,
+      p_tema:          patch.tema          ?? null,
+      p_momento:       patch.momento       ?? null,
+      p_ultimo_evento: patch.ultimo_evento ?? null,
+      p_modo:          patch.modo          ?? null,
+      p_proxima_acao:  patch.proxima_acao  ?? null,
+      p_bloqueado:     patch.bloqueado     ?? null,
+      p_atualizado_por: patch.atualizado_por ?? 'cerebro',
+    });
+  } catch (e: any) {
+    console.warn('[cerebro] setLeadState error:', e.message);
+  }
+}
+
+// Classifica intenção com base no evento e estado atual
+function deriveNextState(
+  actionType: string,
+  currentState: LeadState | null,
+  hadLeadResponse: boolean
+): Partial<LeadState> {
+  const current = currentState ?? { intencao: 'sem_info', tema: 'sem_info', momento: 'explorando' } as LeadState;
+
+  switch (actionType) {
+    case 'toque_1':
+      return {
+        ultimo_evento: 'toque_1_enviado',
+        proxima_acao:  'aguardar',
+        modo:          current.modo === 'humano_ativo' ? 'humano_ativo' : 'automatico',
+      };
+    case 'toque_2':
+      return {
+        ultimo_evento: 'toque_2_enviado',
+        proxima_acao:  hadLeadResponse ? 'aguardar' : 'alertar_gerente',
+      };
+    case 'sentinela':
+      return {
+        ultimo_evento: 'sentinela_enviado',
+        momento:       'sumiu',
+        proxima_acao:  'aguardar',
+      };
+    case 'last_chance':
+      return {
+        ultimo_evento: 'ultima_tentativa_enviada',
+        proxima_acao:  'encerrar',
+        momento:       'sumiu',
+      };
+    case 'auto_resposta':
+      return {
+        ultimo_evento: 'auto_resposta_enviada',
+        proxima_acao:  'aguardar',
+      };
+    case 'broker_warmup':
+      return {
+        ultimo_evento: 'warmup_enviado',
+        proxima_acao:  'aguardar',
+      };
+    case 'docs_reminder':
+      return {
+        ultimo_evento: 'docs_reminder_enviado',
+        proxima_acao:  'aguardar',
+      };
+    case 'broker_alert':
+      return {
+        ultimo_evento: 'corretor_alertado',
+        proxima_acao:  'aguardar',
+      };
+    case 'manager_alert':
+      return {
+        ultimo_evento: 'gerente_alertado',
+        proxima_acao:  'aguardar',
+      };
+    default:
+      return { ultimo_evento: actionType };
+  }
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -104,11 +206,9 @@ serve(async (req) => {
     const brtHour = getBRTHour();
 
     // ── 2. Auto-queue: leads parados sem item pendente na fila ────────────
-    // Garante que todos os leads ativos parados 24h+ entrem na fila automaticamente
     const twentyFourAgo = new Date(Date.now() - 24 * 3600000).toISOString();
     const fortyEightAgo = new Date(Date.now() - 48 * 3600000).toISOString();
 
-    // NEW/IN_PROGRESS sem interação há 24h+
     const { data: staleLeadsForQueue } = await supabase
       .from('leads')
       .select('id')
@@ -126,7 +226,6 @@ serve(async (req) => {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      // Só cria novo item se não há pending E não há failed com menos de 5 tentativas
       const shouldQueue = !existing || (existing.status === 'failed' && (existing.attempts || 0) >= 5);
       if (shouldQueue) {
         await supabase.from('lead_activation_queue').insert({
@@ -138,7 +237,6 @@ serve(async (req) => {
       }
     }
 
-    // DOCS_REQUESTED sem docs_reminder agendado
     const { data: docsLeads } = await supabase
       .from('leads')
       .select('id')
@@ -176,7 +274,6 @@ serve(async (req) => {
       .order('scheduled_for', { ascending: true })
       .limit(60);
 
-    // Load templates once
     const { data: welcomeTemplates } = await supabase
       .from('welcome_templates').select('message').eq('is_active', true);
     const { data: cadenceTemplates } = await supabase
@@ -206,25 +303,44 @@ serve(async (req) => {
           continue;
         }
 
-        // Terminal lead → cancel all
         if (TERMINAL.includes((lead.status || '').toUpperCase())) {
           await supabase.from('lead_activation_queue')
             .update({ status: 'cancelled', cancel_reason: `lead_${lead.status}` })
             .eq('id', item.id);
+          // Marca estado como encerrado
+          await setLeadState(supabase, lead.id, {
+            ultimo_evento: `lead_${lead.status.toLowerCase()}`,
+            proxima_acao:  'encerrar',
+            atualizado_por: 'cerebro',
+          });
           cancelled++;
           continue;
         }
 
-        // Load broker
-        const { data: broker } = lead.broker_id ? await supabase
+        // ── LEITURA DO ESTADO ──────────────────────────────────────────────
+        const leadState = await getLeadState(supabase, lead.id);
+
+        // Se modo=humano_ativo ou bloqueado=true: pula ações outbound ao lead
+        const outboundToLead = ['toque_1','toque_2','sentinela','last_chance','broker_warmup','docs_reminder','auto_resposta'];
+        if (outboundToLead.includes(item.action_type)) {
+          if (leadState?.bloqueado === true || leadState?.modo === 'humano_ativo') {
+            await supabase.from('lead_activation_queue')
+              .update({ status: 'cancelled', cancel_reason: 'human_mode_active' })
+              .eq('id', item.id);
+            console.log(`[cerebro] ⏸ ${item.action_type} bloqueado (modo humano) → ${lead.name}`);
+            cancelled++;
+            continue;
+          }
+        }
+
+        const broker = lead.broker_id ? (await supabase
           .from('profiles')
           .select('id, first_name, bot_instance_id, manager_id, phone')
           .eq('id', lead.broker_id)
-          .maybeSingle() : { data: null };
+          .maybeSingle()).data : null;
 
         const isOutbound = !['broker_alert', 'manager_alert'].includes(item.action_type);
 
-        // Window enforcement for outbound messages
         if (isOutbound && !withinWindow) {
           await supabase.from('lead_activation_queue')
             .update({ scheduled_for: nextWindowOpen() })
@@ -242,7 +358,6 @@ serve(async (req) => {
           case 'toque_2': {
             if (!broker?.bot_instance_id || !lead.phone) { skipped++; break; }
             const bn = broker.first_name || 'nossa equipe';
-            const firstName = lead.name?.split(' ')[0] || 'você';
             const hadConv = !!lead.last_lead_response_at;
             let msg: string;
             if (!hadConv && welcomeTpls.length > 0) {
@@ -253,8 +368,8 @@ serve(async (req) => {
               msg = interpolate(step.content, lead.name, bn);
             } else {
               msg = item.action_type === 'toque_1'
-                ? `Olá ${firstName}! 👋 Vi seu interesse em nosso empreendimento. Estou separando as melhores condições para você. Posso te ajudar? 😊`
-                : `${firstName}! 🏠 Passando para ver se surgiu alguma dúvida. Estou aqui para ajudar!`;
+                ? `Olá ${lead.name?.split(' ')[0] || 'você'}! 👋 Vi seu interesse em nosso empreendimento. Estou separando as melhores condições para você. Posso te ajudar? 😊`
+                : `${lead.name?.split(' ')[0] || 'você'}! 🏠 Passando para ver se surgiu alguma dúvida. Estou aqui para ajudar!`;
             }
             success = await sendMsg(supabase, broker.bot_instance_id, lead.phone, msg);
             break;
@@ -263,7 +378,6 @@ serve(async (req) => {
           case 'sentinela': {
             if (!broker?.bot_instance_id || !lead.phone || !geminiKey) { skipped++; break; }
 
-            // Load conversation history
             const { data: conv } = await supabase
               .from('ia_conversations')
               .select('id')
@@ -287,6 +401,11 @@ serve(async (req) => {
               }
             }
 
+            // Usa tema do lead_state para personalizar a mensagem
+            const temaContext = leadState?.tema !== 'sem_info'
+              ? `O lead demonstrou interesse em: ${leadState?.tema}.`
+              : '';
+
             const hoursStale = Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 3600000);
 
             const aiText = await callGemini(
@@ -297,6 +416,7 @@ Objetivo: levar o lead a trazer documentos para análise GRATUITA de subsídio d
 Português do Brasil, tom casual e caloroso. Máximo 3 frases. 1 pergunta por mensagem.
 Baseie-se no histórico para NÃO repetir perguntas já feitas.`,
               `Lead: ${lead.name} | Tag: ${lead.tag || 'sem tag'} | ${hoursStale}h sem resposta
+${temaContext}
 
 HISTÓRICO:
 ${historyText}
@@ -332,7 +452,6 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
 
           case 'broker_warmup': {
             if (!broker?.bot_instance_id || !lead.phone) { skipped++; break; }
-            // Cancelar se corretor já respondeu depois que lead enviou mensagem
             if (lead.last_broker_whatsapp_at && lead.last_lead_response_at &&
                 new Date(lead.last_broker_whatsapp_at) > new Date(lead.last_lead_response_at)) {
               await supabase.from('lead_activation_queue')
@@ -360,9 +479,40 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
             break;
           }
 
+          case 'auto_resposta': {
+            // Disparado quando lead quente respondeu mas corretor ainda não agiu
+            // Só envia se corretor realmente não respondeu desde a última resposta do lead
+            if (!broker?.bot_instance_id || !lead.phone) { skipped++; break; }
+            if (
+              lead.last_broker_whatsapp_at && lead.last_lead_response_at &&
+              new Date(lead.last_broker_whatsapp_at) > new Date(lead.last_lead_response_at)
+            ) {
+              await supabase.from('lead_activation_queue')
+                .update({ status: 'cancelled', cancel_reason: 'broker_already_replied' })
+                .eq('id', item.id);
+              cancelled++;
+              continue;
+            }
+
+            const firstName = lead.name?.split(' ')[0] || 'você';
+            const tema = leadState?.tema ?? 'sem_info';
+            const temaMsg: Record<string, string> = {
+              preco:        `${firstName}, entendo que o valor é uma preocupação importante. Me conta: você já tem ideia de qual parcela caberia no seu orçamento?`,
+              entrada:      `${firstName}, a boa notícia é que temos opções com entrada bem facilitada. Posso te mostrar como funciona?`,
+              localizacao:  `${firstName}, a localização é ótima mesmo! Quer que eu te explique como chegar ou marque uma visita rápida?`,
+              documentacao: `${firstName}, a análise de documentos é gratuita e sem compromisso. Posso te ajudar a entender o que precisa?`,
+              sem_info:     `${firstName}, estou aqui para tirar qualquer dúvida. O que posso esclarecer para você? 😊`,
+            };
+            const autoMsg = temaMsg[tema] ?? temaMsg['sem_info'];
+            success = await sendMsg(supabase, broker.bot_instance_id, lead.phone, autoMsg);
+            if (success) {
+              console.log(`[cerebro] 🤖 auto_resposta (tema=${tema}) → ${lead.name}`);
+            }
+            break;
+          }
+
           case 'broker_alert': {
             if (!lead.broker_id) { skipped++; break; }
-            // Cancelar se corretor já respondeu
             if (lead.last_broker_whatsapp_at && lead.last_lead_response_at &&
                 new Date(lead.last_broker_whatsapp_at) > new Date(lead.last_lead_response_at)) {
               await supabase.from('lead_activation_queue')
@@ -384,7 +534,6 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
 
           case 'manager_alert': {
             if (!broker?.manager_id) { skipped++; break; }
-            // Cancelar se corretor já respondeu
             if (lead.last_broker_whatsapp_at && lead.last_lead_response_at &&
                 new Date(lead.last_broker_whatsapp_at) > new Date(lead.last_lead_response_at)) {
               await supabase.from('lead_activation_queue')
@@ -405,7 +554,7 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
           }
         }
 
-        // ── Update queue item ──────────────────────────────────────────────
+        // ── Atualiza fila ──────────────────────────────────────────────────
         if (success) {
           await supabase.from('lead_activation_queue').update({
             status: 'sent',
@@ -413,8 +562,6 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
             attempts: (item.attempts || 0) + 1,
           }).eq('id', item.id);
 
-          // Reset lead interaction counter for outbound messages to lead
-          const outboundToLead = ['toque_1','toque_2','sentinela','last_chance','broker_warmup','docs_reminder'];
           if (outboundToLead.includes(item.action_type)) {
             const ts = new Date().toISOString();
             await supabase.from('leads').update({
@@ -423,7 +570,17 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
             }).eq('id', lead.id);
           }
 
-          // Log to cerebro_learning
+          // ── ATUALIZA ESTADO DO LEAD ──────────────────────────────────────
+          const nextState = deriveNextState(
+            item.action_type,
+            leadState,
+            !!lead.last_lead_response_at
+          );
+          await setLeadState(supabase, lead.id, {
+            ...nextState,
+            atualizado_por: 'cerebro',
+          });
+
           try { await supabase.from('cerebro_learning').insert({
             lead_id: lead.id,
             action_type: item.action_type,
@@ -435,11 +592,11 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
 
           processed++;
           details.push({ action: item.action_type, lead: lead.name, status: 'sent' });
-          console.log(`[cerebro] ✅ ${item.action_type} → ${lead.name}`);
+          console.log(`[cerebro] ✅ ${item.action_type} → ${lead.name} | estado: ${nextState.ultimo_evento}`);
+
         } else if (isOutbound) {
           const newAttempts = (item.attempts || 0) + 1;
           if (newAttempts >= 5) {
-            // Falhou 5 vezes: marca como failed permanente
             await supabase.from('lead_activation_queue').update({
               status: 'failed',
               last_attempt_at: new Date().toISOString(),
@@ -447,7 +604,6 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
             }).eq('id', item.id);
             details.push({ action: item.action_type, lead: lead.name, status: 'failed' });
           } else {
-            // Reagenda para retry: se ainda dentro da janela, tenta em 30min; senão, próxima janela
             const retryTime = withinWindow
               ? new Date(Date.now() + 30 * 60000).toISOString()
               : nextWindowOpen();

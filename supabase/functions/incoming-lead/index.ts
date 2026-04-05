@@ -157,6 +157,19 @@ serve(async (req) => {
     const { data: newLead, error: insertError } = await supabase.from('leads').insert(insertPayload).select().single();
     if (insertError) throw insertError;
 
+    // ── Cria estado inicial do lead ────────────────────────────────────────
+    await supabase.rpc('upsert_lead_state', {
+      p_lead_id:        newLead.id,
+      p_intencao:       'sem_info',
+      p_tema:           'sem_info',
+      p_momento:        'explorando',
+      p_ultimo_evento:  'lead_criado',
+      p_modo:           'automatico',
+      p_proxima_acao:   'aguardar',
+      p_bloqueado:      false,
+      p_atualizado_por: 'incoming_lead',
+    }).catch(() => {}); // não bloqueia se tabela ainda não existir
+
     await supabase.from('distribution_logs').insert({
       lead_name: name,
       lead_phone: phone,
@@ -242,7 +255,79 @@ serve(async (req) => {
 
         if (notifBotId) {
           const originLabel = origin || tag || 'Sem origem';
-          const notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${originLabel}`;
+
+          // ── HANDOFF INTELIGENTE: gera briefing com IA ─────────────────
+          const geminiKey = Deno.env.get('GEMINI_API_KEY') || '';
+          let notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${originLabel}`;
+
+          if (geminiKey && (message || tag || origin)) {
+            try {
+              const context = [
+                message ? `Mensagem do lead: "${message}"` : '',
+                tag     ? `Tag/interesse: ${tag}` : '',
+                origin  ? `Origem: ${origin}` : '',
+              ].filter(Boolean).join('\n');
+
+              const geminiResp = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contents: [{ role: 'user', parts: [{ text: context }] }],
+                    systemInstruction: { parts: [{ text:
+                      `Você analisa leads de imóveis MCMV (Minha Casa Minha Vida) e gera um briefing CURTO para o corretor agir.
+Responda APENAS em JSON válido, sem markdown, sem explicação:
+{
+  "intencao": "quente|morno|frio",
+  "tema": "preco|entrada|localizacao|documentacao|sem_info",
+  "momento": "explorando|comparando|decidido",
+  "objecao": "texto curto da objeção provável ou null",
+  "abertura": "texto da mensagem de abertura sugerida para o corretor enviar"
+}`
+                    }] },
+                    generationConfig: { maxOutputTokens: 200, temperature: 0.3 },
+                  }),
+                }
+              );
+              const geminiJson = await geminiResp.json();
+              const rawText = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+              const briefing = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+
+              const intencaoEmoji = briefing.intencao === 'quente' ? '🔥' : briefing.intencao === 'morno' ? '🟡' : '🔵';
+              const temaLabel: Record<string,string> = { preco:'Preço/Parcela', entrada:'Valor de entrada', localizacao:'Localização', documentacao:'Documentação', sem_info:'Geral' };
+
+              notifMsg = [
+                `🎯 *Novo Lead — Briefing*`,
+                ``,
+                `👤 *${name}*`,
+                `📞 ${phone}`,
+                `🏷️ ${tag || 'Sem tag'} · 📍 ${originLabel}`,
+                ``,
+                `📊 *Análise:*`,
+                `${intencaoEmoji} Intenção: *${briefing.intencao}*`,
+                `💬 Tema: ${temaLabel[briefing.tema] || briefing.tema}`,
+                `🧠 Momento: ${briefing.momento}`,
+                briefing.objecao ? `⚠️ Objeção provável: ${briefing.objecao}` : '',
+                ``,
+                `💡 *Abertura sugerida:*`,
+                `_"${briefing.abertura}"_`,
+              ].filter(l => l !== '').join('\n');
+
+              // Salva classificação no lead_state
+              await supabase.rpc('upsert_lead_state', {
+                p_lead_id:        newLead.id,
+                p_intencao:       briefing.intencao,
+                p_tema:           briefing.tema,
+                p_momento:        briefing.momento,
+                p_ultimo_evento:  'handoff_gerado',
+                p_atualizado_por: 'handoff_ia',
+              }).catch(() => {});
+
+            } catch (e: any) {
+              console.warn('[incoming-lead] Handoff IA falhou, usando mensagem simples:', e.message);
+            }
+          }
 
           const { data: result } = await supabase.functions.invoke('send_whatsapp_message', {
             body: {
@@ -261,7 +346,7 @@ serve(async (req) => {
             const { data: fallbackBots } = await supabase
               .from('bot_instances')
               .select('id, name')
-              .eq('status', 'connected')
+              .in('status', ['connected', 'open'])
               .neq('id', notifBotId)
               .limit(3);
 

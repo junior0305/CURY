@@ -6,15 +6,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-/** Calcula início do dia atual em BRT (UTC-3) retornado como ISO UTC */
 function todayBRTStartUTC(): string {
-  const nowMs = Date.now();
-  const brtNow = new Date(nowMs - 3 * 3600000);
+  const brtNow = new Date(Date.now() - 3 * 3600000);
   const brtMidnight = new Date(Date.UTC(brtNow.getUTCFullYear(), brtNow.getUTCMonth(), brtNow.getUTCDate()));
   return new Date(brtMidnight.getTime() + 3 * 3600000).toISOString();
 }
 
-/** Formata data BRT para exibição DD/MM/YYYY */
+function yesterdayBRTStartUTC(): string {
+  return new Date(new Date(todayBRTStartUTC()).getTime() - 24 * 3600000).toISOString();
+}
+
 function formatDateBRT(): string {
   const brtNow = new Date(Date.now() - 3 * 3600000);
   return [
@@ -24,13 +25,17 @@ function formatDateBRT(): string {
   ].join('/');
 }
 
-/** Verifica se o horário BRT atual está dentro da janela de envio (±45 min) */
 function isWithinReportWindow(configTime: string): boolean {
   const brtNow = new Date(Date.now() - 3 * 3600000);
   const currentMin = brtNow.getUTCHours() * 60 + brtNow.getUTCMinutes();
   const [h, m] = configTime.split(':').map(Number);
   const configMin = (h || 21) * 60 + (m || 0);
   return Math.abs(currentMin - configMin) <= 45;
+}
+
+function minsToLabel(mins: number): string {
+  if (mins < 60) return `${Math.round(mins)}min`;
+  return `${(mins / 60).toFixed(1)}h`;
 }
 
 serve(async (req) => {
@@ -42,152 +47,295 @@ serve(async (req) => {
   );
 
   try {
-    // ── Configurações ──────────────────────────────────────────────────────────
-    const [{ data: enabledSetting }, { data: horaSetting }, { data: botSetting }] = await Promise.all([
+    // ── Configurações ──────────────────────────────────────────────────────
+    const [{ data: enabledSetting }, { data: horaSetting }] = await Promise.all([
       supabase.from('system_settings').select('value').eq('key', 'agente_relatorio_enabled').maybeSingle(),
       supabase.from('system_settings').select('value').eq('key', 'agente_relatorio_hora_brt').maybeSingle(),
-      supabase.from('system_settings').select('value').eq('key', 'notification_bot_instance_id').maybeSingle(),
     ]);
 
-    const enabled = String(enabledSetting?.value ?? 'false') === 'true';
-    if (!enabled) {
-      return new Response(JSON.stringify({ skipped: 'disabled', sent: 0 }), {
+    if (String(enabledSetting?.value ?? 'false') !== 'true') {
+      return new Response(JSON.stringify({ skipped: 'disabled' }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const configTime = String(horaSetting?.value ?? '21:00').replace(/"/g, '');
-    const notifBotId: string | null = botSetting?.value ? String(botSetting.value).replace(/"/g, '') : null;
-
-    if (!notifBotId) {
-      console.log('[agente-relatorio-diario] notification_bot_instance_id não configurado');
-      return new Response(JSON.stringify({ skipped: 'no_bot', sent: 0 }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ── Verificar janela de horário ────────────────────────────────────────────
     if (!isWithinReportWindow(configTime)) {
-      return new Response(JSON.stringify({ skipped: 'outside_window', sent: 0 }), {
+      return new Response(JSON.stringify({ skipped: 'outside_window' }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // ── Verificar se já enviou hoje ────────────────────────────────────────────
     const todayStart = todayBRTStartUTC();
-    const { data: alreadySent } = await supabase
-      .from('automation_logs')
-      .select('id')
-      .eq('entity_type', 'relatorio_diario')
-      .eq('status', 'success')
-      .gte('executed_at', todayStart)
-      .maybeSingle();
-
-    if (alreadySent) {
-      console.log('[agente-relatorio-diario] já enviado hoje');
-      return new Response(JSON.stringify({ skipped: 'already_sent', sent: 0 }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ── Coletar estatísticas do dia ────────────────────────────────────────────
-    const [
-      { count: newLeads },
-      { count: concluded },
-      { count: abandoned },
-      { count: activePipeline },
-      { count: followupsSent },
-      { count: redistribuicoes },
-      { data: botsData },
-      { count: queuePending },
-    ] = await Promise.all([
-      supabase.from('leads').select('id', { count: 'exact', head: true })
-        .gte('created_at', todayStart),
-      supabase.from('leads').select('id', { count: 'exact', head: true })
-        .eq('status', 'CONCLUDED').gte('updated_at', todayStart),
-      supabase.from('leads').select('id', { count: 'exact', head: true })
-        .eq('status', 'ABANDONED').gte('updated_at', todayStart),
-      supabase.from('leads').select('id', { count: 'exact', head: true })
-        .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED']),
-      supabase.from('automation_logs').select('id', { count: 'exact', head: true })
-        .eq('entity_type', 'followup').eq('status', 'success').gte('executed_at', todayStart),
-      supabase.from('automation_logs').select('id', { count: 'exact', head: true })
-        .eq('entity_type', 'redistribuicao').eq('status', 'success').gte('executed_at', todayStart),
-      supabase.from('bot_instances').select('status'),
-      supabase.from('lead_activation_queue').select('id', { count: 'exact', head: true })
-        .eq('status', 'pending'),
-    ]);
-
-    const botsTotal = botsData?.length ?? 0;
-    const botsOnline = (botsData as any[])?.filter(b => b.status === 'open').length ?? 0;
+    const yesterdayStart = yesterdayBRTStartUTC();
     const dateStr = formatDateBRT();
 
-    // ── Montar mensagem ────────────────────────────────────────────────────────
-    const message = [
-      `📊 *Relatório Diário — ${dateStr}*`,
-      '',
-      `📥 Leads novos: *${newLeads ?? 0}*`,
-      `✅ Conversões: *${concluded ?? 0}*`,
-      `❌ Abandonados: *${abandoned ?? 0}*`,
-      `📋 Pipeline ativo: *${activePipeline ?? 0}* leads`,
-      '',
-      `🤖 Automações do dia:`,
-      `• Follow-ups enviados: ${followupsSent ?? 0}`,
-      `• Redistribuições: ${redistribuicoes ?? 0}`,
-      '',
-      `⚡ Sistema:`,
-      `• Bots online: ${botsOnline}/${botsTotal}`,
-      `• Fila pendente: ${queuePending ?? 0} itens`,
-    ].join('\n');
+    // Evitar duplicata
+    const { data: alreadySent } = await supabase
+      .from('automation_logs').select('id')
+      .eq('entity_type', 'relatorio_diario').eq('status', 'success')
+      .gte('executed_at', todayStart).maybeSingle();
+    if (alreadySent) {
+      return new Response(JSON.stringify({ skipped: 'already_sent' }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-    // ── Buscar destinatários (ADMIN + SUPERINTENDENT + MANAGER com telefone) ──
+    // ── Leads do dia ───────────────────────────────────────────────────────
+    const { data: todayLeads } = await supabase
+      .from('leads')
+      .select('id, name, status, broker_id, created_at, last_lead_response_at, last_broker_whatsapp_at')
+      .gte('created_at', todayStart);
+
+    const total        = todayLeads?.length ?? 0;
+    const concluded    = todayLeads?.filter(l => l.status === 'CONCLUDED').length ?? 0;
+    const abandoned    = todayLeads?.filter(l => l.status === 'ABANDONED').length ?? 0;
+    const responded    = todayLeads?.filter(l => l.last_lead_response_at).length ?? 0;
+    const notResponded = total - responded;
+
+    // Tempo médio de primeiro contato (broker → lead): apenas leads que o broker respondeu
+    const contactTimes: number[] = (todayLeads || [])
+      .filter(l => l.last_broker_whatsapp_at && l.created_at)
+      .map(l => (new Date(l.last_broker_whatsapp_at).getTime() - new Date(l.created_at).getTime()) / 60000);
+    const avgContactMin = contactTimes.length
+      ? contactTimes.reduce((a, b) => a + b, 0) / contactTimes.length
+      : null;
+
+    // Leads sem nenhum contato do corretor (parados)
+    const staleLeads = (todayLeads || []).filter(l =>
+      !l.last_broker_whatsapp_at &&
+      ['NEW', 'IN_PROGRESS'].includes(l.status)
+    ).length;
+
+    // ── Pipeline geral ─────────────────────────────────────────────────────
+    const { count: activePipeline } = await supabase
+      .from('leads').select('id', { count: 'exact', head: true })
+      .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED']);
+
+    // Leads quentes sem resposta do corretor (estado = quente, sem last_broker_whatsapp)
+    const { count: hotStale } = await supabase
+      .from('lead_state').select('id', { count: 'exact', head: true })
+      .eq('intencao', 'quente')
+      .in('lead_id',
+        (todayLeads || []).filter(l => !l.last_broker_whatsapp_at).map(l => l.id)
+      );
+
+    // ── Performance por corretor ───────────────────────────────────────────
+    const brokerMap: Record<string, { name: string; leads: number; responded: number; avgMin: number | null }> = {};
+    for (const l of todayLeads || []) {
+      if (!l.broker_id) continue;
+      if (!brokerMap[l.broker_id]) brokerMap[l.broker_id] = { name: l.broker_id, leads: 0, responded: 0, avgMin: null };
+      brokerMap[l.broker_id].leads++;
+      if (l.last_broker_whatsapp_at) brokerMap[l.broker_id].responded++;
+    }
+
+    // Busca nomes dos corretores
+    const brokerIds = Object.keys(brokerMap);
+    if (brokerIds.length) {
+      const { data: brokerProfiles } = await supabase
+        .from('profiles').select('id, first_name').in('id', brokerIds);
+      for (const p of brokerProfiles || []) {
+        if (brokerMap[p.id]) brokerMap[p.id].name = p.first_name || p.id;
+      }
+    }
+
+    const brokerRanking = Object.values(brokerMap)
+      .sort((a, b) => b.responded - a.responded || b.leads - a.leads);
+
+    const topBroker    = brokerRanking[0] ?? null;
+    const bottomBroker = brokerRanking.length > 1 ? brokerRanking[brokerRanking.length - 1] : null;
+
+    // ── Bots ──────────────────────────────────────────────────────────────
+    const { data: botsData } = await supabase.from('bot_instances').select('name, status');
+    const botsTotal  = botsData?.length ?? 0;
+    const botsOnline = botsData?.filter(b => b.status === 'open').length ?? 0;
+    const botsOffline = botsData?.filter(b => b.status === 'offline').length ?? 0;
+
+    // ── Montar diagnóstico ─────────────────────────────────────────────────
+    const lines: string[] = [
+      `📊 *Diagnóstico do Dia — ${dateStr}*`,
+      ``,
+      `📥 *Leads recebidos:* ${total}`,
+      `💬 Responderam: ${responded} | Silêncio: ${notResponded}`,
+      concluded ? `✅ Vendas fechadas: *${concluded}*` : `✅ Vendas fechadas: 0`,
+      abandoned  ? `❌ Abandonados: ${abandoned}` : '',
+      ``,
+    ];
+
+    // Diagnóstico de velocidade
+    if (avgContactMin !== null) {
+      const label = avgContactMin <= 5 ? '🟢 Excelente' : avgContactMin <= 15 ? '🟡 Aceitável' : '🔴 Lento';
+      lines.push(`⏱ *Tempo médio de contato:* ${minsToLabel(avgContactMin)} ${label}`);
+    }
+
+    if (staleLeads > 0) {
+      lines.push(`⚠️ *Leads sem contato do corretor hoje:* ${staleLeads}`);
+    }
+
+    if ((hotStale ?? 0) > 0) {
+      lines.push(`🔥 *Leads QUENTES sem resposta:* ${hotStale} — URGENTE`);
+    }
+
+    lines.push(`📋 Pipeline total ativo: ${activePipeline ?? 0} leads`, ``);
+
+    // Performance corretores
+    if (topBroker) {
+      lines.push(`🏆 *Melhor do dia:* ${topBroker.name} — ${topBroker.responded}/${topBroker.leads} respondidos`);
+    }
+    if (bottomBroker && bottomBroker.responded === 0 && bottomBroker.leads > 0) {
+      lines.push(`⚠️ *Atenção:* ${bottomBroker.name} recebeu ${bottomBroker.leads} lead(s) e não respondeu nenhum`);
+    }
+
+    lines.push(``);
+
+    // Saúde dos bots
+    if (botsOffline > 0) {
+      lines.push(`🔴 *${botsOffline} bot(s) offline* — verifique conexão WhatsApp`);
+    } else {
+      lines.push(`🟢 Todos os ${botsTotal} bots conectados`);
+    }
+
+    // Insight principal
+    const convRate = total > 0 ? ((concluded / total) * 100).toFixed(1) : '0';
+    lines.push(``, `📈 *Taxa de conversão do dia:* ${convRate}%`);
+
+    if (Number(convRate) === 0 && total > 0) {
+      lines.push(`💡 Nenhuma venda hoje. Foco: corretores com leads quentes parados.`);
+    } else if (Number(convRate) > 5) {
+      lines.push(`💡 Boa taxa hoje! Continue o ritmo de atendimento rápido.`);
+    }
+
+    const message = lines.filter(l => l !== null && l !== undefined).join('\n').trim();
+
+    // ── Busca bot global como fallback ────────────────────────────────────
+    const { data: globalBotSetting } = await supabase
+      .from('system_settings').select('value')
+      .eq('key', 'notification_bot_instance_id').maybeSingle();
+    const { data: anyConnectedBot } = await supabase
+      .from('bot_instances').select('id')
+      .in('status', ['open', 'connected']).limit(1).maybeSingle();
+    const fallbackBotId: string | null = globalBotSetting?.value ?? anyConnectedBot?.id ?? null;
+
+    const resolveBotId = (botInstanceId: string | null): string | null =>
+      botInstanceId ?? fallbackBotId;
+
+    // ── Busca destinatários ────────────────────────────────────────────────
     const { data: recipients } = await supabase
       .from('profiles')
-      .select('id, first_name, phone')
+      .select('id, first_name, phone, role, bot_instance_id')
       .in('role', ['ADMIN', 'SUPERINTENDENT', 'MANAGER'])
-      .not('phone', 'is', null)
-      .neq('phone', '');
+      .not('phone', 'is', null).neq('phone', '');
 
-    console.log(`[agente-relatorio-diario] ${recipients?.length ?? 0} destinatários | data=${dateStr}`);
-
-    // ── Enviar ─────────────────────────────────────────────────────────────────
     let sent = 0;
+
     for (const recipient of recipients || []) {
+      const botId = resolveBotId(recipient.bot_instance_id);
+      if (!botId) continue;
+
+      let msgToSend = message; // padrão: relatório global
+
+      // ── MANAGER recebe diagnóstico personalizado da sua equipe ─────────
+      if (recipient.role === 'MANAGER') {
+        const { data: teamBrokers } = await supabase
+          .from('profiles').select('id, first_name')
+          .eq('manager_id', recipient.id).eq('role', 'BROKER');
+
+        const teamIds = (teamBrokers || []).map(b => b.id);
+
+        if (teamIds.length === 0) {
+          msgToSend = `📊 *Seu Diagnóstico — ${dateStr}*\n\nNenhum corretor na equipe ainda.`;
+        } else {
+          const { data: teamLeads } = await supabase
+            .from('leads')
+            .select('id, status, broker_id, created_at, last_lead_response_at, last_broker_whatsapp_at')
+            .in('broker_id', teamIds)
+            .gte('created_at', todayStart);
+
+          const tTotal     = teamLeads?.length ?? 0;
+          const tConcluded = teamLeads?.filter(l => l.status === 'CONCLUDED').length ?? 0;
+          const tResponded = teamLeads?.filter(l => l.last_lead_response_at).length ?? 0;
+          const tStale     = teamLeads?.filter(l => !l.last_broker_whatsapp_at && ['NEW','IN_PROGRESS'].includes(l.status)).length ?? 0;
+
+          // Tempo médio de contato da equipe
+          const tTimes = (teamLeads || [])
+            .filter(l => l.last_broker_whatsapp_at && l.created_at)
+            .map(l => (new Date(l.last_broker_whatsapp_at).getTime() - new Date(l.created_at).getTime()) / 60000);
+          const tAvgMin = tTimes.length ? tTimes.reduce((a,b) => a+b, 0) / tTimes.length : null;
+
+          // Leads quentes sem resposta da equipe
+          const { count: tHotStale } = await supabase
+            .from('lead_state').select('id', { count: 'exact', head: true })
+            .eq('intencao', 'quente')
+            .in('lead_id', (teamLeads || []).filter(l => !l.last_broker_whatsapp_at).map(l => l.id));
+
+          // Ranking da equipe
+          const brokerPerf: Record<string, { name: string; responded: number; leads: number }> = {};
+          for (const l of teamLeads || []) {
+            if (!l.broker_id) continue;
+            if (!brokerPerf[l.broker_id]) {
+              const b = teamBrokers?.find(b => b.id === l.broker_id);
+              brokerPerf[l.broker_id] = { name: b?.first_name || '?', responded: 0, leads: 0 };
+            }
+            brokerPerf[l.broker_id].leads++;
+            if (l.last_broker_whatsapp_at) brokerPerf[l.broker_id].responded++;
+          }
+          const ranked = Object.values(brokerPerf).sort((a,b) => b.responded - a.responded);
+          const top    = ranked[0];
+          const worst  = ranked.length > 1 ? ranked[ranked.length - 1] : null;
+
+          const speedLabel = tAvgMin !== null
+            ? (tAvgMin <= 5 ? `${minsToLabel(tAvgMin)} 🟢` : tAvgMin <= 15 ? `${minsToLabel(tAvgMin)} 🟡` : `${minsToLabel(tAvgMin)} 🔴`)
+            : 'N/A';
+
+          const lines = [
+            `📊 *Diagnóstico da Equipe — ${dateStr}*`,
+            ``,
+            `📥 Leads hoje: *${tTotal}* · Responderam: ${tResponded}`,
+            tConcluded > 0 ? `✅ Vendas: *${tConcluded}*` : `✅ Vendas: 0`,
+            tStale > 0     ? `⚠️ Sem contato do corretor: *${tStale}*` : '',
+            (tHotStale ?? 0) > 0 ? `🔥 Leads QUENTES parados: *${tHotStale}* — URGENTE` : '',
+            ``,
+            `⏱ Tempo médio de contato: ${speedLabel}`,
+            ``,
+            top    ? `🏆 Destaque: ${top.name} — ${top.responded}/${top.leads} respondidos` : '',
+            worst && worst.responded === 0 && worst.leads > 0
+              ? `⚠️ Atenção: ${worst.name} — ${worst.leads} lead(s) sem resposta` : '',
+          ].filter(Boolean).join('\n');
+
+          msgToSend = lines;
+        }
+      }
+
       try {
         const { data: result } = await supabase.functions.invoke('send_whatsapp_message', {
-          body: { botId: notifBotId, phone: recipient.phone, message },
+          body: { botId, phone: recipient.phone, message: msgToSend },
         });
         if (result?.success) {
           sent++;
-          console.log(`[agente-relatorio-diario] ✅ ${recipient.first_name} (${recipient.phone})`);
-        } else {
-          console.log(`[agente-relatorio-diario] ⚠️ falha ${recipient.first_name}: ${JSON.stringify(result)}`);
+          console.log(`[relatorio-diario] ✅ ${recipient.first_name} (${recipient.role})`);
         }
       } catch (e: any) {
-        console.error(`[agente-relatorio-diario] erro ${recipient.first_name}:`, e.message);
+        console.error(`[relatorio-diario] erro ${recipient.first_name}:`, e.message);
       }
       await new Promise(r => setTimeout(r, 300));
     }
 
-    // ── Registrar para evitar duplicata ───────────────────────────────────────
     if (sent > 0) {
       await supabase.from('automation_logs').insert({
         entity_type: 'relatorio_diario',
         entity_id: dateStr,
         status: 'success',
-        message_sent: `Relatório ${dateStr} — ${sent} destinatário(s)`,
+        message_sent: `Diagnóstico ${dateStr} — ${sent} destinatário(s)`,
         executed_at: new Date().toISOString(),
       });
     }
 
-    console.log(`[agente-relatorio-diario] done — sent=${sent}`);
-
-    return new Response(JSON.stringify({ sent, date: dateStr }), {
+    return new Response(JSON.stringify({ sent, date: dateStr, total, concluded, staleLeads }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error: any) {
-    console.error('[agente-relatorio-diario] fatal:', error.message);
+    console.error('[relatorio-diario] fatal:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

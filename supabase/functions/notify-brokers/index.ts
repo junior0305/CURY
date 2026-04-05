@@ -37,11 +37,11 @@ async function resolveManagerBot(supabase: any, managerId: string): Promise<stri
     }
   }
 
-  // 3. Qualquer conectado
+  // 3. Qualquer conectado (Evolution API usa "open" para conectado)
   const { data: anyBot } = await supabase
     .from('bot_instances')
     .select('id')
-    .eq('status', 'connected')
+    .in('status', ['connected', 'open'])
     .limit(1)
     .maybeSingle()
   if (anyBot?.id) {

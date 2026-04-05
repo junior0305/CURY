@@ -5,7 +5,8 @@ import { useNavigate } from "react-router-dom";
 import {
   MessageSquare, Phone, Calendar, X, Send, Zap,
   Flame, Trophy, Star, TrendingUp,
-  Shield, Volume2, VolumeX, LogOut, Bell, CheckCircle2, Loader2
+  Shield, Volume2, VolumeX, LogOut, Bell, CheckCircle2, Loader2,
+  Bot, UserCheck, Brain
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -141,6 +142,31 @@ const FILTER_OPTIONS: { id:"ALL"|LeadStatus; label:string; emoji:string }[] = [
   { id:"VISIT_SCHEDULED", label:"VISITA", emoji:"📅" },
   { id:"DOCS_REQUESTED",  label:"DOCS",   emoji:"📄" },
 ];
+
+const INTENT_STYLE: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
+  quente:        { label: "QUENTE",  emoji: "🔥", color: "#EF4444", bg: "rgba(239,68,68,.15)"   },
+  morno:         { label: "MORNO",   emoji: "🟡", color: "#F59E0B", bg: "rgba(245,158,11,.13)"  },
+  frio:          { label: "FRIO",    emoji: "🔵", color: "#38BDF8", bg: "rgba(56,189,248,.12)"  },
+  desqualificado:{ label: "DESQ.",   emoji: "⚫", color: "#64748B", bg: "rgba(100,116,139,.1)"  },
+  sem_info:      { label: "?",       emoji: "⚪", color: "#475569", bg: "rgba(71,85,105,.1)"    },
+};
+
+const TEMA_LABEL: Record<string, string> = {
+  preco: "Preço", entrada: "Entrada", localizacao: "Localização",
+  documentacao: "Docs", sem_info: "—",
+};
+const TEMA_COLOR: Record<string, string> = {
+  preco: "#EF4444", entrada: "#F59E0B", localizacao: "#10B981",
+  documentacao: "#818CF8", sem_info: "#475569",
+};
+
+/** Dica contextual por tema — sem chamada de IA, custo zero */
+const TEMA_DICA: Record<string, string> = {
+  preco:         "Foco em preço. Destaque a valorização e o baixo custo de entrada do programa.",
+  entrada:       "Dúvida sobre entrada. Apresente simulações de financiamento e subsídio MCMV.",
+  localizacao:   "Quer saber do entorno. Compartilhe fotos do bairro, acesso e equipamentos próximos.",
+  documentacao:  "Pendência documental. Envie o checklist de documentos e ofereça ajuda para agilizar.",
+};
 
 // Pontuação por status (espelha o sistema de XP)
 const XP_BY_STATUS: Partial<Record<LeadStatus, number>> = {
@@ -396,6 +422,8 @@ export default function DashboardWolf() {
   const [dismissed, setDismissed]       = useState<Set<string>>(new Set());
   const [tickerItems, setTickerItems]   = useState(TICKER_FALLBACK);
   const [mutating, setMutating]         = useState(false);
+  const [humanMode, setHumanMode]       = useState(false);
+  const [humanModeLoading, setHumanModeLoading] = useState(false);
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const isBroker = role === "BROKER";
@@ -428,6 +456,26 @@ export default function DashboardWolf() {
     enabled: !!user,
   });
 
+  // ── Lead states (intencao / tema / momento) ────────────────────────────────
+  const myLeadsIds = useMemo(() => allLeads.filter(l => isPower || l.brokerId === user?.id).map(l => l.id), [allLeads, user?.id, isPower]);
+  const { data: statesData = [] } = useQuery({
+    queryKey: ["wolfLeadStates", myLeadsIds.join(",")],
+    queryFn: async () => {
+      if (!myLeadsIds.length) return [];
+      const { data } = await supabase
+        .from("lead_state")
+        .select("lead_id, intencao, tema, momento")
+        .in("lead_id", myLeadsIds);
+      return (data || []) as { lead_id: string; intencao: string; tema: string; momento: string }[];
+    },
+    enabled: myLeadsIds.length > 0,
+    refetchInterval: 60000,
+  });
+  const leadStateMap = useMemo(
+    () => new Map(statesData.map(s => [s.lead_id, s])),
+    [statesData]
+  );
+
   // ── My profile ─────────────────────────────────────────────────────────────
   const myProfile = profiles.find(p => p.id === user?.id);
   const myName    = myProfile?.name || user?.email?.split("@")[0] || "Corretor";
@@ -454,11 +502,18 @@ export default function DashboardWolf() {
   })), [myLeads, tasks]);
 
   // ── Fila filtrada ──────────────────────────────────────────────────────────
+  const intentRank: Record<string, number> = { quente: 0, morno: 1, frio: 2, sem_info: 3, desqualificado: 4 };
   const filteredLeads = useMemo(() => {
     const base = enriched.filter(l => !dismissed.has(l.id));
     const scoped = filter === "ALL" ? base : base.filter(l => l.status === filter);
-    return [...scoped].sort((a, b) => a.priority - b.priority);
-  }, [enriched, filter, dismissed]);
+    return [...scoped].sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      const ia = leadStateMap.get(a.id)?.intencao || "sem_info";
+      const ib = leadStateMap.get(b.id)?.intencao || "sem_info";
+      return (intentRank[ia] ?? 3) - (intentRank[ib] ?? 3);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enriched, filter, dismissed, leadStateMap]);
 
   // ── Contagens por status ───────────────────────────────────────────────────
   const counts = useMemo(() => {
@@ -524,6 +579,34 @@ export default function DashboardWolf() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Carrega modo humano quando lead muda ──────────────────────────────────
+  useEffect(() => {
+    if (!activeLead?.id) { setHumanMode(false); return; }
+    supabase
+      .from("lead_state")
+      .select("modo, bloqueado")
+      .eq("lead_id", activeLead.id)
+      .maybeSingle()
+      .then(({ data }) => setHumanMode(data?.modo === "humano_ativo" || !!data?.bloqueado));
+  }, [activeLead?.id]);
+
+  const handleToggleHumanMode = async () => {
+    if (!activeLead?.id || !user?.id) return;
+    setHumanModeLoading(true);
+    const newMode = !humanMode;
+    await supabase.rpc("upsert_lead_state", {
+      p_lead_id:        activeLead.id,
+      p_modo:           newMode ? "humano_ativo" : "automatico",
+      p_bloqueado:      newMode,
+      p_bloqueado_por:  newMode ? user.id : null,
+      p_ultimo_evento:  newMode ? "override_manual" : "override_liberado",
+      p_atualizado_por: "corretor",
+    });
+    setHumanMode(newMode);
+    setHumanModeLoading(false);
+    toast.success(newMode ? "Automação pausada — você está no controle" : "Automação reativada");
+  };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleSelect = (lead: typeof filteredLeads[number]) => {
@@ -738,6 +821,27 @@ export default function DashboardWolf() {
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded"
                           style={{ background: st.bg, color: st.text }}>{st.emoji} {st.label}</span>
+                        {(() => {
+                          const ls = leadStateMap.get(activeLead.id);
+                          if (!ls || ls.intencao === "sem_info") return null;
+                          const is = INTENT_STYLE[ls.intencao] || INTENT_STYLE.sem_info;
+                          return (
+                            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded"
+                              style={{ background: is.bg, color: is.color, border: `1px solid ${is.color}50` }}>
+                              {is.emoji} {is.label}
+                            </span>
+                          );
+                        })()}
+                        {(() => {
+                          const ls = leadStateMap.get(activeLead.id);
+                          if (!ls || !ls.tema || ls.tema === "sem_info") return null;
+                          return (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded"
+                              style={{ background: "rgba(255,255,255,.05)", color: TEMA_COLOR[ls.tema] || "#64748B", border: "1px solid rgba(255,255,255,.1)" }}>
+                              {TEMA_LABEL[ls.tema] || ls.tema}
+                            </span>
+                          );
+                        })()}
                         <span className="text-[10px] text-slate-500 font-semibold">{activeLead.tag || "Lead"}</span>
                       </div>
                       <h2 className="wolf-display text-lg font-bold text-white leading-tight truncate">{activeLead.name}</h2>
@@ -745,6 +849,20 @@ export default function DashboardWolf() {
                     </div>
                     <UrgencyBadge lastInteractionAt={activeLead.lastInteractionAt} />
                   </div>
+
+                  {/* AI insight by tema */}
+                  {(() => {
+                    const ls = leadStateMap.get(activeLead.id);
+                    const dica = ls?.tema ? TEMA_DICA[ls.tema] : null;
+                    if (!dica) return null;
+                    return (
+                      <div className="flex items-start gap-2 px-3 py-2 rounded-xl"
+                        style={{ background: "rgba(124,58,237,.08)", border: "1px solid rgba(124,58,237,.2)" }}>
+                        <Brain className="w-3.5 h-3.5 text-violet-400 shrink-0 mt-0.5" />
+                        <span className="text-xs text-violet-200 leading-relaxed">{dica}</span>
+                      </div>
+                    );
+                  })()}
 
                   {/* Next action hint */}
                   <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
@@ -798,6 +916,38 @@ export default function DashboardWolf() {
                       <span className="text-[9px] uppercase font-bold">Agendar</span>
                     </button>
                   </div>
+
+                  {/* Override de automação */}
+                  <button
+                    onClick={handleToggleHumanMode}
+                    disabled={humanModeLoading}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all"
+                    style={{
+                      background: humanMode ? "rgba(124,58,237,0.15)" : "rgba(255,255,255,0.03)",
+                      border: `1px solid ${humanMode ? "rgba(124,58,237,0.5)" : "rgba(255,255,255,0.07)"}`,
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      {humanMode
+                        ? <UserCheck className="w-3.5 h-3.5" style={{ color: "#7C3AED" }} />
+                        : <Bot className="w-3.5 h-3.5" style={{ color: "#475569" }} />
+                      }
+                      <span className="text-[10px] font-bold uppercase tracking-widest"
+                        style={{ color: humanMode ? "#A78BFA" : "#475569" }}>
+                        {humanMode ? "Modo Manual — automação pausada" : "Modo Automático"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {humanModeLoading
+                        ? <Loader2 className="w-3 h-3 animate-spin" style={{ color: "#475569" }} />
+                        : <div className="w-7 h-4 rounded-full relative transition-all"
+                            style={{ background: humanMode ? "#7C3AED" : "rgba(255,255,255,0.1)" }}>
+                            <div className="w-3 h-3 rounded-full bg-white absolute top-0.5 transition-all"
+                              style={{ left: humanMode ? "14px" : "2px" }} />
+                          </div>
+                      }
+                    </div>
+                  </button>
 
                   {/* Note + Discard */}
                   <div className="flex gap-2">
@@ -896,10 +1046,19 @@ export default function DashboardWolf() {
 
                       {/* Info */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <span className="text-sm font-bold text-white truncate leading-tight">{lead.name}</span>
                           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 uppercase"
                             style={{ background: s?.bg, color: s?.text }}>{s?.label}</span>
+                          {(() => {
+                            const ls = leadStateMap.get(lead.id);
+                            if (!ls || ls.intencao === "sem_info") return null;
+                            const is = INTENT_STYLE[ls.intencao] || INTENT_STYLE.sem_info;
+                            return (
+                              <span className="text-[8px] font-bold px-1 py-0.5 rounded shrink-0"
+                                style={{ background: is.bg, color: is.color }}>{is.emoji}</span>
+                            );
+                          })()}
                         </div>
                         <div className="text-[10px] text-slate-500 truncate mt-0.5">
                           {(lead as any).nextAction || calcNextAction(lead, tasks)}

@@ -14,14 +14,14 @@ import {
   CheckCircle2, Clock, UserCheck, UserX, GitMerge,
   RefreshCw, TrendingUp, Target, Shield,
   Bell, X, Send, Trash2, RotateCcw, Filter, Eye,
-  Search, MessageSquare, Phone,
+  Search, MessageSquare, Phone, Brain, Bot, Flame, Minus,
+  Loader2,
 } from "lucide-react";
 import { LeadMonitorDrawer } from "./LeadMonitorDrawer";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Loader2 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -269,9 +269,10 @@ function MetasBar({ teamId, brokerIds }: { teamId: string | null; brokerIds: str
 function AlertModal({ broker, fromId, onClose }: {
   broker: User; fromId: string; onClose: () => void;
 }) {
-  const [msg, setMsg]         = useState("");
-  const [sending, setSending] = useState(false);
+  const [msg, setMsg]                   = useState("");
+  const [sending, setSending]           = useState(false);
   const [managerBotId, setManagerBotId] = useState<string | null>(null);
+  const [botReady, setBotReady]         = useState<boolean | null>(null); // null=loading
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -288,6 +289,7 @@ function AlertModal({ broker, fromId, onClose }: {
       // 1. FK já configurado
       if (profile?.bot_instance_id) {
         setManagerBotId(profile.bot_instance_id);
+        setBotReady(true);
         return;
       }
 
@@ -302,18 +304,24 @@ function AlertModal({ broker, fromId, onClose }: {
           .maybeSingle();
         if (botByName?.id) {
           setManagerBotId(botByName.id);
+          setBotReady(true);
           return;
         }
       }
 
-      // 3. Fallback: qualquer instância conectada
+      // 3. Fallback: qualquer instância ativa (connected OU open — Evolution API usa "open")
       const { data: anyBot } = await supabase
         .from("bot_instances")
         .select("id")
-        .eq("status", "connected")
+        .in("status", ["connected", "open"])
         .limit(1)
         .maybeSingle();
-      if (anyBot?.id) setManagerBotId(anyBot.id);
+      if (anyBot?.id) {
+        setManagerBotId(anyBot.id);
+        setBotReady(true);
+      } else {
+        setBotReady(false);
+      }
     })();
   }, [fromId]);
 
@@ -333,36 +341,49 @@ function AlertModal({ broker, fromId, onClose }: {
 
     // 2. Envia via WhatsApp pelo bot do gerente (se tiver phone e bot configurado)
     let whatsappSent = false;
-    if (broker.phone && managerBotId) {
-      const { data: result } = await supabase.functions.invoke("send_whatsapp_message", {
+    let whatsappError = "";
+
+    if (!broker.phone) {
+      whatsappError = "corretor sem telefone";
+    } else if (!managerBotId) {
+      whatsappError = "nenhum bot configurado";
+    } else {
+      console.log("[AlertModal] Enviando WhatsApp — botId:", managerBotId, "phone:", broker.phone);
+      const { data: result, error: fnError } = await supabase.functions.invoke("send_whatsapp_message", {
         body: {
           botId: managerBotId,
           phone: broker.phone,
           message: `🔔 *Alerta do Gerente*\n\n${msg.trim()}`,
         },
       });
+      console.log("[AlertModal] Resultado:", result, "Erro fn:", fnError);
       whatsappSent = result?.success || false;
+      if (!whatsappSent) whatsappError = fnError?.message || result?.error || `HTTP ${result?.status || "?"}`;
 
       // Fallback: se o bot do gerente falhou, tenta qualquer conectado
       if (!whatsappSent) {
+        console.log("[AlertModal] Bot primário falhou, tentando fallback...");
         const { data: fallbacks } = await supabase
           .from("bot_instances").select("id, name")
-          .eq("status", "connected").neq("id", managerBotId).limit(3);
+          .in("status", ["connected", "open"]).neq("id", managerBotId).limit(3);
         for (const fb of fallbacks || []) {
-          const { data: fbRes } = await supabase.functions.invoke("send_whatsapp_message", {
+          const { data: fbRes, error: fbErr } = await supabase.functions.invoke("send_whatsapp_message", {
             body: { botId: fb.id, phone: broker.phone, message: `🔔 *Alerta do Gerente*\n\n${msg.trim()}` },
           });
-          if (fbRes?.success) { whatsappSent = true; break; }
+          console.log("[AlertModal] Fallback", fb.name, ":", fbRes, fbErr);
+          if (fbRes?.success) { whatsappSent = true; whatsappError = ""; break; }
         }
       }
     }
 
     setSending(false);
-    toast.success(
-      whatsappSent
-        ? `Alerta enviado para ${broker.name.split(" ")[0]} via WhatsApp!`
-        : `Alerta salvo para ${broker.name.split(" ")[0]} (sem WhatsApp conectado)`
-    );
+    if (whatsappSent) {
+      toast.success(`✅ Alerta enviado para ${broker.name.split(" ")[0]} — Dashboard + WhatsApp`);
+    } else if (whatsappError) {
+      toast.warning(`🔔 Alerta salvo no Dashboard. WhatsApp falhou: ${whatsappError}`);
+    } else {
+      toast.success(`🔔 Alerta salvo para ${broker.name.split(" ")[0]} no Dashboard`);
+    }
     onClose();
   };
 
@@ -408,6 +429,33 @@ function AlertModal({ broker, fromId, onClose }: {
           </button>
         </div>
 
+        {/* Channel indicators */}
+        <div className="flex items-center gap-2 mb-4 p-2.5 rounded-xl" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+          <span className="text-[10px] uppercase tracking-widest font-bold" style={{ color: "#475569" }}>Canais:</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)" }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span className="text-[10px] font-bold text-emerald-400">Dashboard</span>
+          </div>
+          {botReady === null ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "rgba(100,116,139,0.12)", border: "1px solid rgba(100,116,139,0.2)" }}>
+              <Loader2 className="w-2.5 h-2.5 animate-spin" style={{ color: "#64748B" }} />
+              <span className="text-[10px] font-bold" style={{ color: "#64748B" }}>WhatsApp</span>
+            </div>
+          ) : botReady && broker.phone ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)" }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="text-[10px] font-bold text-emerald-400">WhatsApp</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.2)" }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              <span className="text-[10px] font-bold text-red-400">
+                {!broker.phone ? "Sem telefone" : "Sem bot"}
+              </span>
+            </div>
+          )}
+        </div>
+
         {/* Quick messages */}
         <div className="flex flex-wrap gap-1.5 mb-3">
           {QUICK.map(q => (
@@ -444,7 +492,7 @@ function AlertModal({ broker, fromId, onClose }: {
           }}
         >
           {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          {sending ? "Enviando..." : "Enviar Alerta"}
+          {sending ? "Enviando..." : botReady && broker.phone ? "Enviar — Dashboard + WhatsApp" : "Enviar — Dashboard"}
         </button>
       </motion.div>
     </motion.div>
@@ -453,7 +501,7 @@ function AlertModal({ broker, fromId, onClose }: {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-type RightTab  = "alertas" | "presenca" | "fila" | "ranking";
+type RightTab  = "alertas" | "presenca" | "fila" | "ranking" | "intel";
 type LeftPanel = "urgente" | "redistribuir" | "descarte" | "busca";
 
 export default function ManagerDashboard() {
@@ -499,6 +547,28 @@ export default function ManagerDashboard() {
     queryFn: fetchUnassignedLeads,
     refetchInterval: 30000,
   });
+
+  // Lead states da equipe para o painel de Inteligência
+  const teamLeadIds = useMemo(() => teamLeads.map(l => l.id), [teamLeads]);
+  const { data: leadStates = [] } = useQuery<any[]>({
+    queryKey: ["teamLeadStates", teamLeadIds],
+    queryFn: async () => {
+      if (!teamLeadIds.length) return [];
+      const { data } = await supabase
+        .from("lead_state")
+        .select("lead_id, intencao, tema, momento, modo, bloqueado, ultimo_evento, atualizado_em")
+        .in("lead_id", teamLeadIds);
+      return data || [];
+    },
+    enabled: teamLeadIds.length > 0,
+    refetchInterval: 30000,
+  });
+
+  const leadStateMap = useMemo(() => {
+    const map: Record<string, any> = {};
+    leadStates.forEach(s => { map[s.lead_id] = s; });
+    return map;
+  }, [leadStates]);
 
   // XP
   useEffect(() => {
@@ -1175,6 +1245,7 @@ export default function ManagerDashboard() {
             {([
               { v: "alertas",  label: "Semáforo",  icon: Shield },
               { v: "ranking",  label: "Ranking",   icon: Trophy },
+              { v: "intel",    label: "Inteligência", icon: Brain },
               { v: "presenca", label: "Presença",  icon: UserCheck },
               { v: "fila",     label: "Fila",      icon: GitMerge },
             ] as { v: RightTab; label: string; icon: React.ElementType }[]).map(tab => (
@@ -1319,6 +1390,125 @@ export default function ManagerDashboard() {
                   </div>
                 </Panel>
               )}
+
+              {/* INTELIGÊNCIA */}
+              {rightTab === "intel" && (() => {
+                const activeLeads = teamLeads.filter(l => !["CONCLUDED","ABANDONED","EXCLUDED"].includes(l.status));
+                const withState   = activeLeads.map(l => ({ lead: l, state: leadStateMap[l.id] ?? null }));
+                const hot    = withState.filter(x => x.state?.intencao === "quente");
+                const warm   = withState.filter(x => x.state?.intencao === "morno");
+                const cold   = withState.filter(x => x.state?.intencao === "frio");
+                const noState = withState.filter(x => !x.state);
+
+                const TEMA_LABEL: Record<string,string> = {
+                  preco: "Preço", entrada: "Entrada", localizacao: "Local",
+                  documentacao: "Docs", visita: "Visita", sem_info: "",
+                };
+
+                const renderGroup = (items: typeof withState, color: string, label: string, icon: React.ReactNode) => (
+                  items.length > 0 && (
+                    <div className="mb-3">
+                      <div className="flex items-center gap-2 mb-1.5 px-1">
+                        {icon}
+                        <span className="text-[10px] font-black uppercase tracking-wider" style={{ color }}>
+                          {label} ({items.length})
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {items.map(({ lead, state }) => {
+                          const broker = brokers.find(b => b.id === lead.brokerId);
+                          const isHuman = state?.modo === "humano_ativo" || state?.bloqueado;
+                          const tema = state?.tema && state.tema !== "sem_info" ? TEMA_LABEL[state.tema] : null;
+                          const mins = state?.atualizado_em
+                            ? Math.round((Date.now() - new Date(state.atualizado_em).getTime()) / 60000)
+                            : null;
+                          return (
+                            <div key={lead.id} className="rounded-xl px-3 py-2 flex items-center gap-2"
+                              style={{ background: `${color}08`, border: `1px solid ${color}25` }}>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-xs font-bold text-white truncate">{lead.name?.split(" ")[0]}</p>
+                                  {tema && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                                      style={{ background: `${color}18`, color }}>
+                                      {tema}
+                                    </span>
+                                  )}
+                                  {isHuman && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                                      style={{ background: "rgba(124,58,237,0.15)", color: "#A78BFA" }}>
+                                      manual
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[9px] mt-0.5 truncate" style={{ color: "#475569" }}>
+                                  {broker?.name?.split(" ")[0] ?? "?"}
+                                  {state?.momento && state.momento !== "explorando" ? ` · ${state.momento}` : ""}
+                                  {mins !== null ? ` · ${mins < 60 ? `${mins}min` : `${Math.round(mins/60)}h`}` : ""}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => setMonitorLead(lead)}
+                                className="p-1.5 rounded-lg transition-all hover:scale-105 shrink-0"
+                                style={{ background: `${color}15`, color }}
+                                title="Ver lead">
+                                <Eye className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )
+                );
+
+                return (
+                  <Panel className="h-full overflow-y-auto">
+                    <SectionHeader label="Inteligência de Leads" icon={Brain} color="#7C3AED" />
+                    {/* Resumo */}
+                    <div className="grid grid-cols-3 gap-1.5 mb-3">
+                      {[
+                        { label: "Quentes", count: hot.length, color: "#EF4444" },
+                        { label: "Mornos",  count: warm.length, color: "#F59E0B" },
+                        { label: "Frios",   count: cold.length, color: "#3B82F6" },
+                      ].map(({ label, count, color }) => (
+                        <div key={label} className="rounded-xl px-2 py-2 text-center"
+                          style={{ background: `${color}08`, border: `1px solid ${color}25` }}>
+                          <p className="text-lg font-black" style={{ color }}>{count}</p>
+                          <p className="text-[9px] uppercase font-bold" style={{ color: "#475569" }}>{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {hot.length === 0 && warm.length === 0 && cold.length === 0 && noState.length === 0 && (
+                      <p className="text-xs text-center py-8" style={{ color: "#334155" }}>
+                        Nenhum lead ativo com classificação ainda.
+                      </p>
+                    )}
+                    {renderGroup(hot,  "#EF4444", "Quentes — Ação Imediata", <Flame className="w-3 h-3" style={{ color: "#EF4444" }} />)}
+                    {renderGroup(warm, "#F59E0B", "Mornos — Acompanhar",     <Zap   className="w-3 h-3" style={{ color: "#F59E0B" }} />)}
+                    {renderGroup(cold, "#3B82F6", "Frios — Cadência",        <Minus className="w-3 h-3" style={{ color: "#3B82F6" }} />)}
+                    {noState.length > 0 && (
+                      <div className="mt-2 pt-2" style={{ borderTop: "1px solid #1E293B" }}>
+                        <p className="text-[9px] uppercase font-bold mb-1.5 px-1" style={{ color: "#334155" }}>
+                          Sem classificação ({noState.length})
+                        </p>
+                        {noState.slice(0, 5).map(({ lead }) => (
+                          <div key={lead.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg mb-1"
+                            style={{ background: "var(--crm-glass)", border: "1px solid var(--crm-border-mid)" }}>
+                            <p className="text-xs" style={{ color: "#475569" }}>{lead.name?.split(" ")[0]}</p>
+                            <Bot className="w-3 h-3" style={{ color: "#334155" }} />
+                          </div>
+                        ))}
+                        {noState.length > 5 && (
+                          <p className="text-[9px] text-center mt-1" style={{ color: "#334155" }}>
+                            +{noState.length - 5} leads aguardando classificação
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </Panel>
+                );
+              })()}
 
               {/* PRESENÇA */}
               {rightTab === "presenca" && (
