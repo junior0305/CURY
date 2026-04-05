@@ -45,6 +45,7 @@ serve(async (req) => {
       .select('id, name, broker_id, status, broker:profiles!broker_id(id, first_name, protect_own_leads, bot_instance_id, manager_id)')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .not('broker_id', 'is', null)
+      .eq('no_redistribute', false)   // respeita lock de fila e campanhas pessoais
       .lt('created_at', thresholdAgo)
       .or(`last_broker_whatsapp_at.is.null,last_broker_whatsapp_at.lt.${thresholdAgo}`)
       .limit(20);

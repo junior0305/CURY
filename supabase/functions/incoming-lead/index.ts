@@ -148,6 +148,8 @@ serve(async (req) => {
       last_interaction_at: nowIso,
       created_at: nowIso,
       received_at: nowIso,
+      // Travar redistribuição se a fila tiver lock_after_assignment = true
+      no_redistribute: chosenQueue?.lock_after_assignment === true,
     };
 
     if (chosenBroker) insertPayload.broker_id = chosenBroker.id;

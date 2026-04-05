@@ -144,7 +144,7 @@ serve(async (req) => {
         // ── Lead enviou mensagem → atualiza last_lead_response_at
         const { data: lead } = await supabase
           .from('leads')
-          .select('id, broker_id, name, welcome_responded_at, welcome_template_id')
+          .select('id, broker_id, name, welcome_responded_at, welcome_template_id, broker:profiles!broker_id(id, first_name, phone, bot_instance_id, manager_id)')
           .eq('phone', phoneNumber)
           .not('status', 'in', '("ABANDONED","EXCLUDED")')
           .order('created_at', { ascending: false })
@@ -223,6 +223,34 @@ serve(async (req) => {
                 message: `${lead.name} respondeu à mensagem de boas-vindas e está esperando você. Não perca esse momento!`,
                 related_lead_id: lead.id,
               });
+
+              // ── WhatsApp pro corretor — mesmo padrão do new-lead ──────────
+              try {
+                const broker = (lead as any).broker;
+                if (broker?.phone) {
+                  // Bot prioritário: manager do corretor → fallback global
+                  let notifBotId: string | null = null;
+                  if (broker.manager_id) {
+                    const { data: mgr } = await supabase
+                      .from('profiles').select('bot_instance_id').eq('id', broker.manager_id).maybeSingle();
+                    notifBotId = mgr?.bot_instance_id ?? null;
+                  }
+                  if (!notifBotId) {
+                    const { data: bs } = await supabase
+                      .from('system_settings').select('value').eq('key', 'notification_bot_instance_id').maybeSingle();
+                    notifBotId = bs?.value ?? null;
+                  }
+                  if (notifBotId) {
+                    const msg = `🔥 *Lead respondeu!*\n\n👤 *${lead.name}* acabou de responder a mensagem de boas-vindas e está esperando você.\n\n⚡ Abra o Comandra agora e atenda!`;
+                    await supabase.functions.invoke('send_whatsapp_message', {
+                      body: { botId: notifBotId, phone: broker.phone, message: msg }
+                    });
+                    console.log(`[webhook_receiver] WhatsApp enviado para corretor ${broker.first_name}`);
+                  }
+                }
+              } catch (wErr: any) {
+                console.error('[webhook_receiver] Falha WhatsApp corretor:', wErr.message);
+              }
             }
           }
 

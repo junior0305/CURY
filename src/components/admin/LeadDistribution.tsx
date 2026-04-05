@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DistributionQueue } from "@/types/queue";
-import { Plus, Trash2, Loader2, Save, ChevronRight, Zap, RefreshCw, Edit, Users } from "lucide-react";
+import { Plus, Trash2, Loader2, Save, ChevronRight, Zap, RefreshCw, Edit, Users, Lock, Unlock } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchTeams, fetchProfiles } from "@/integrations/supabase/profiles";
@@ -56,6 +56,7 @@ const LeadDistribution = () => {
         brokerIds: q.broker_ids || [],
         isActive: q.is_active,
         lastAssignedIndex: q.last_assigned_index,
+        lockAfterAssignment: q.lock_after_assignment ?? false,
         teamIds: [],
       }));
     },
@@ -69,6 +70,7 @@ const LeadDistribution = () => {
     matchValue: "",
     brokerIds: [],
     isActive: true,
+    lockAfterAssignment: false,
   });
 
   const saveQueueMutation = useMutation({
@@ -82,6 +84,7 @@ const LeadDistribution = () => {
             match_value: payload.matchValue,
             broker_ids: payload.brokerIds,
             is_active: payload.isActive,
+            lock_after_assignment: payload.lockAfterAssignment ?? false,
           })
           .eq("id", editingQueueId);
         if (error) throw error;
@@ -92,6 +95,7 @@ const LeadDistribution = () => {
           match_value: payload.matchValue,
           broker_ids: payload.brokerIds,
           is_active: payload.isActive,
+          lock_after_assignment: payload.lockAfterAssignment ?? false,
         });
         if (error) throw error;
       }
@@ -139,6 +143,7 @@ const LeadDistribution = () => {
       matchValue: q.matchValue,
       brokerIds: (q as any).brokerIds || [],
       isActive: q.isActive,
+      lockAfterAssignment: q.lockAfterAssignment ?? false,
     });
   };
 
@@ -296,6 +301,39 @@ const LeadDistribution = () => {
           </div>
         </div>
 
+        {/* Lock after assignment */}
+        <button
+          type="button"
+          onClick={() => setForm(f => ({ ...f, lockAfterAssignment: !f.lockAfterAssignment }))}
+          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all"
+          style={{
+            background: form.lockAfterAssignment ? "rgba(245,158,11,.1)" : "rgba(255,255,255,.03)",
+            border: form.lockAfterAssignment ? "1px solid rgba(245,158,11,.35)" : "1px solid rgba(26,39,68,.9)",
+          }}
+        >
+          <div className="flex items-center gap-2">
+            {form.lockAfterAssignment
+              ? <Lock className="w-3.5 h-3.5 text-amber-400" />
+              : <Unlock className="w-3.5 h-3.5" style={{ color: "#4a5a7a" }} />
+            }
+            <div className="text-left">
+              <p className="text-xs font-bold" style={{ color: form.lockAfterAssignment ? "#FBBF24" : "#4a5a7a" }}>
+                Travar após atribuição
+              </p>
+              <p className="text-[9px]" style={{ color: "#2a3a5a" }}>
+                {form.lockAfterAssignment
+                  ? "Lead fica com o corretor — sem redistribuição"
+                  : "Redistribuição automática permitida"}
+              </p>
+            </div>
+          </div>
+          <div className="w-8 h-4 rounded-full relative transition-all shrink-0"
+            style={{ background: form.lockAfterAssignment ? "rgba(245,158,11,.6)" : "rgba(26,39,68,.9)" }}>
+            <div className="absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all"
+              style={{ left: form.lockAfterAssignment ? "calc(100% - 14px)" : "2px" }} />
+          </div>
+        </button>
+
         {/* Ações */}
         <div className="flex gap-2 pt-1">
           {editingQueueId && (
@@ -367,7 +405,15 @@ const LeadDistribution = () => {
                     <Zap className="w-4 h-4" style={{ color: "#00aaff" }} />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-black text-white text-sm truncate">{q.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-white text-sm truncate">{q.name}</h3>
+                      {q.lockAfterAssignment && (
+                        <span className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                          style={{ background: "rgba(245,158,11,.15)", color: "#FBBF24", border: "1px solid rgba(245,158,11,.3)" }}>
+                          <Lock className="w-2.5 h-2.5" /> TRAVADA
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[11px] mt-0.5" style={{ color: "#4a5a7a" }}>
                       Se <span style={{ color: "#00aaff" }}>{q.matchField}</span> contém{" "}
                       <span

@@ -6,4 +6,5 @@ export interface DistributionQueue {
   teamIds: string[]; // IDs das equipes participantes
   isActive: boolean;
   lastAssignedIndex: number;
+  lockAfterAssignment: boolean; // leads desta fila não são redistribuídos
 }
