@@ -218,6 +218,17 @@ export default function SaudeLeads() {
       .eq("id", reassignLeadId);
     setReassigning(false);
     if (error) { toast.error("Erro ao redistribuir"); return; }
+
+    // Notifica o corretor destino para tocar o som no dashboard
+    const lead = leads.find(l => l.id === reassignLeadId);
+    if (lead) {
+      await supabase.from("internal_notifications").insert({
+        to_id: selectedBrokerId,
+        type: "LEAD_REDISTRIBUTED",
+        message: `🔄 Lead redistribuído: ${lead.name}. Acesse sua fila e atenda agora!`,
+      });
+    }
+
     toast.success("Lead redistribuído!");
     removeLead(reassignLeadId);
     setReassignLeadId(null);
