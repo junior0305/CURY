@@ -13,16 +13,25 @@ ALTER TABLE public.team_goals
   UNIQUE (team_id, goal_type, month, week_start);
 
 -- Política: manager pode inserir/atualizar metas da própria equipe
-CREATE POLICY IF NOT EXISTS "Managers can manage own team goals" ON public.team_goals
-FOR ALL TO authenticated
-USING (
-  EXISTS (
-    SELECT 1 FROM profiles
-    WHERE profiles.id = auth.uid()
-    AND profiles.role = 'MANAGER'
-    AND profiles.team_id = team_goals.team_id
-  )
-);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+    AND tablename = 'team_goals'
+    AND policyname = 'Managers can manage own team goals'
+  ) THEN
+    CREATE POLICY "Managers can manage own team goals" ON public.team_goals
+    FOR ALL TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM profiles
+        WHERE profiles.id = auth.uid()
+        AND profiles.role = 'MANAGER'
+        AND profiles.team_id = team_goals.team_id
+      )
+    );
+  END IF;
+END $$;
 
 -- ─── Extender team_investments ────────────────────────────────────────────────
 ALTER TABLE public.team_investments

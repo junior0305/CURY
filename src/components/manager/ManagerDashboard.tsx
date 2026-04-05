@@ -139,32 +139,53 @@ function Panel({ children, className }: { children: React.ReactNode; className?:
 
 // ─── Metas Bar ───────────────────────────────────────────────────────────────
 
-function MetasBar({ teamId }: { teamId: string | null }) {
+function MetasBar({ teamId, brokerIds }: { teamId: string | null; brokerIds: string[] }) {
   const [goal, setGoal]     = useState<number | null>(null);
   const [actual, setActual] = useState<number>(0);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (!teamId) return;
+    if (!teamId) { setLoaded(true); return; }
     const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
     const monthEnd   = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().slice(0, 10);
 
     Promise.all([
       supabase.from("team_goals").select("sales_target")
         .eq("team_id", teamId)
+        .eq("goal_type", "monthly")
         .gte("month", monthStart).lt("month", monthEnd)
-        .maybeSingle(),
-      supabase.from("leads").select("id", { count: "exact", head: true })
-        .eq("team_id", teamId).eq("status", "CONCLUDED")
-        .gte("updated_at", monthStart).lt("updated_at", monthEnd),
-    ]).then(([{ data: goalData }, { count }]) => {
-      setGoal(goalData?.sales_target ?? null);
+        .order("created_at", { ascending: false })
+        .limit(1),
+      brokerIds.length > 0
+        ? supabase.from("leads").select("id", { count: "exact", head: true })
+            .in("broker_id", brokerIds).eq("status", "CONCLUDED")
+            .gte("updated_at", monthStart).lt("updated_at", monthEnd)
+        : Promise.resolve({ count: 0 }),
+    ]).then(([{ data: goalRows }, { count }]) => {
+      setGoal((goalRows as any)?.[0]?.sales_target ?? null);
       setActual(count ?? 0);
       setLoaded(true);
     });
-  }, [teamId]);
+  }, [teamId, brokerIds.join(",")]);
 
-  if (!loaded || !teamId) return null;
+  if (!loaded) return null;
+
+  // Se não tem equipe vinculada ao perfil do gerente
+  if (!teamId) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="shrink-0 mx-4 mt-2 rounded-xl px-4 py-2 flex items-center gap-3"
+        style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}
+      >
+        <Target className="w-3.5 h-3.5 shrink-0" style={{ color: "#EF4444" }} />
+        <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#EF4444" }}>
+          Perfil sem equipe vinculada — peça ao admin para associar sua equipe em Usuários
+        </span>
+      </motion.div>
+    );
+  }
 
   const month = new Date().toLocaleDateString("pt-BR", { month: "long" });
 
@@ -609,7 +630,7 @@ export default function ManagerDashboard() {
       <WhatsAppQRBanner />
 
       {/* ── META BAR ────────────────────────────────────────────────────────── */}
-      <MetasBar teamId={teamId} />
+      <MetasBar teamId={teamId} brokerIds={brokers.map(b => b.id)} />
 
       {/* ── KPI BAR ─────────────────────────────────────────────────────────── */}
       <div className="shrink-0 grid grid-cols-3 sm:grid-cols-7 gap-2 px-4 pt-2 pb-0">
