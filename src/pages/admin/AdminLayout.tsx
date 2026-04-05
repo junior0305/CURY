@@ -15,6 +15,7 @@ import Cockpit      from "./Cockpit";
 import Tropas       from "./Tropas";
 import Equipes      from "./Equipes";
 import Economia     from "./Economia";
+import Metas        from "./Metas";
 import Regras       from "./Regras";
 import Logs         from "./Logs";
 import Rework       from "./Rework";
@@ -88,6 +89,7 @@ const GROUPS = [
     icon: DollarSign,
     roles: ["ADMIN", "SUPERINTENDENT"],
     subtabs: [
+      { value: "metas",    label: "Metas",    roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "economia", label: "Economia", roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "premios",  label: "Prêmios",  roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "regras",   label: "Regras",   roles: ["ADMIN", "SUPERINTENDENT"] },
@@ -395,10 +397,12 @@ export default function AdminLayout() {
 
         {activeGroup === "financeiro" && (
           <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
+            { v: "metas",    l: "Metas",    roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "economia", l: "Economia", roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "premios",  l: "Prêmios",  roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "regras",   l: "Regras",   roles: ["ADMIN","SUPERINTENDENT"] },
           ]} role={normalizedRole}>
+            <TabsContent value="metas" className="p-0"><Metas /></TabsContent>
             <TabsContent value="economia"><Economia /></TabsContent>
             <TabsContent value="premios"><Premios /></TabsContent>
             <TabsContent value="regras"><Regras /></TabsContent>
