@@ -14,6 +14,7 @@ import {
   CheckCircle2, Clock, UserCheck, UserX, GitMerge,
   RefreshCw, TrendingUp, Target, Shield,
   Bell, X, Send, Trash2, RotateCcw, Filter, Eye,
+  Search, MessageSquare, Phone,
 } from "lucide-react";
 import { LeadMonitorDrawer } from "./LeadMonitorDrawer";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -31,6 +32,21 @@ function hoursAgo(dateStr: string | null | undefined): number {
 
 function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+}
+
+function highlightMatch(text: string, query: string): React.ReactNode {
+  if (!query || !text) return text;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark style={{ background: "rgba(16,185,129,0.3)", color: "inherit", borderRadius: 2, padding: "0 1px" }}>
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
 }
 
 function brokerSemaphore(broker: User, leads: Lead[]): "green" | "yellow" | "red" | "off" {
@@ -403,7 +419,7 @@ function AlertModal({ broker, fromId, onClose }: {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 type RightTab  = "alertas" | "presenca" | "fila" | "ranking";
-type LeftPanel = "urgente" | "redistribuir" | "descarte";
+type LeftPanel = "urgente" | "redistribuir" | "descarte" | "busca";
 
 export default function ManagerDashboard() {
   const { user, signOut } = useAuth();
@@ -417,6 +433,7 @@ export default function ManagerDashboard() {
   const [monitorLead, setMonitorLead]   = useState<Lead | null>(null);
   const [teamId, setTeamId]             = useState<string | null>(null);
   const [redistFilter, setRedistFilter] = useState<string>("todos");
+  const [searchQuery, setSearchQuery]   = useState<string>("");
 
   // Manager's team_id
   useEffect(() => {
@@ -564,6 +581,22 @@ export default function ManagerDashboard() {
 
   const presentBrokers = brokers.filter(b => b.leadAssignmentEnabled);
 
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return teamLeads.filter(lead => {
+      const broker = lead.brokerId ? brokerMap[lead.brokerId] : null;
+      return (
+        lead.name?.toLowerCase().includes(q) ||
+        lead.phone?.replace(/\D/g, "").includes(q.replace(/\D/g, "")) ||
+        lead.tag?.toLowerCase().includes(q) ||
+        (lead as any).origin?.toLowerCase().includes(q) ||
+        broker?.name?.toLowerCase().includes(q) ||
+        STATUS_LABELS[lead.status]?.label?.toLowerCase().includes(q)
+      );
+    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [searchQuery, teamLeads, brokerMap]);
+
   if (loadingBrokers) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: t.bg }}>
@@ -661,6 +694,7 @@ export default function ManagerDashboard() {
               { v: "urgente",      label: "Urgentes",     icon: AlertTriangle, color: "#EF4444" },
               { v: "redistribuir", label: "Redistribuir", icon: RotateCcw,     color: "#00D4FF" },
               { v: "descarte",     label: "Descarte",     icon: Trash2,        color: "#F59E0B", badge: stats.discarded },
+              { v: "busca",        label: "Buscar",       icon: Search,        color: "#10B981" },
             ] as { v: LeftPanel; label: string; icon: React.ElementType; color: string; badge?: number }[]).map(tab => (
               <button key={tab.v} onClick={() => setLeftPanel(tab.v)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex-1 justify-center relative"
@@ -928,6 +962,173 @@ export default function ManagerDashboard() {
                 </Panel>
               </motion.div>
             )}
+            {/* ── BUSCA ──────────────────────────────────────────────────────── */}
+            {leftPanel === "busca" && (
+              <motion.div key="busca" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 8 }} transition={{ duration: 0.18 }}
+                className="flex-1 min-h-0 overflow-hidden flex flex-col gap-2">
+
+                {/* Campo de busca */}
+                <div className="relative shrink-0">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: "#10B981" }} />
+                  <input
+                    autoFocus
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Nome, telefone, tag, corretor ou status..."
+                    className="w-full pl-9 pr-10 py-2.5 rounded-xl text-sm outline-none transition-all"
+                    style={{
+                      background: "var(--crm-surface)",
+                      border: searchQuery ? "1px solid rgba(16,185,129,0.5)" : "1px solid var(--crm-border-mid)",
+                      color: "var(--crm-text)",
+                      boxShadow: searchQuery ? "0 0 0 3px rgba(16,185,129,0.08)" : "none",
+                    }}
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center transition hover:opacity-80"
+                      style={{ background: "var(--crm-glass)", color: "var(--crm-text-muted)" }}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Resultados */}
+                <Panel className="flex-1 min-h-0 flex flex-col">
+                  {!searchQuery ? (
+                    <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8">
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)" }}>
+                        <Search className="w-5 h-5" style={{ color: "#10B981" }} />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-bold" style={{ color: "var(--crm-text)" }}>Buscar na base da equipe</p>
+                        <p className="text-[11px] mt-1" style={{ color: "var(--crm-text-muted)" }}>
+                          {teamLeads.length} leads disponíveis para busca
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 justify-center">
+                        {["Nome", "Telefone", "Tag", "Corretor", "Status"].map(hint => (
+                          <span key={hint} className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide"
+                            style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)", color: "#10B981" }}>
+                            {hint}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : searchResults.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center flex-1 gap-2 py-8">
+                      <Search className="w-8 h-8 opacity-20" style={{ color: "var(--crm-text-muted)" }} />
+                      <p className="text-sm font-bold" style={{ color: "var(--crm-text-muted)" }}>
+                        Nenhum resultado para "{searchQuery}"
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between mb-2 shrink-0">
+                        <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#10B981" }}>
+                          {searchResults.length} resultado{searchResults.length !== 1 ? "s" : ""}
+                        </span>
+                        <span className="text-[10px]" style={{ color: "var(--crm-text-muted)" }}>
+                          "{searchQuery}"
+                        </span>
+                      </div>
+                      <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 min-h-0">
+                        {searchResults.map((lead, i) => {
+                          const broker  = lead.brokerId ? brokerMap[lead.brokerId] : null;
+                          const st      = STATUS_LABELS[lead.status];
+                          const h       = hoursAgo(lead.lastInteractionAt || lead.createdAt);
+                          const stale   = h > 24;
+                          const phone   = lead.phone?.replace(/\D/g, "");
+                          const waLink  = phone ? `https://wa.me/55${phone}` : null;
+                          return (
+                            <motion.div key={lead.id}
+                              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: Math.min(i * 0.03, 0.3) }}
+                              className="rounded-xl px-3 py-2.5"
+                              style={{ background: "var(--crm-glass)", border: "1px solid var(--crm-border)" }}
+                            >
+                              <div className="flex items-start gap-2">
+                                {/* Status dot */}
+                                <div className="w-2 h-2 rounded-full mt-1.5 shrink-0"
+                                  style={{ background: st?.color || "#475569", boxShadow: stale ? "0 0 5px #EF4444" : "none" }} />
+
+                                <div className="flex-1 min-w-0">
+                                  {/* Nome + badge */}
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-sm font-bold truncate" style={{ color: "var(--crm-text)" }}>
+                                      {highlightMatch(lead.name, searchQuery)}
+                                    </span>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase"
+                                      style={{ background: `${st?.color}18`, color: st?.color, border: `1px solid ${st?.color}30` }}>
+                                      {st?.label}
+                                    </span>
+                                    {stale && (
+                                      <span className="text-[9px] font-bold text-red-400">⚡ {Math.floor(h)}h</span>
+                                    )}
+                                  </div>
+
+                                  {/* Telefone + tag */}
+                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    <span className="text-[11px]" style={{ color: "#00D4FF" }}>
+                                      {highlightMatch(lead.phone || "", searchQuery)}
+                                    </span>
+                                    {lead.tag && (
+                                      <>
+                                        <span style={{ color: "var(--crm-text-subtle)" }}>·</span>
+                                        <span className="text-[11px]" style={{ color: "var(--crm-text-muted)" }}>
+                                          {highlightMatch(lead.tag, searchQuery)}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+
+                                  {/* Corretor */}
+                                  {broker && (
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                      <div className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-black"
+                                        style={{ background: "linear-gradient(135deg,#7C3AED,#00D4FF)", color: "#fff" }}>
+                                        {initials(broker.name)}
+                                      </div>
+                                      <span className="text-[11px]" style={{ color: "var(--crm-text-muted)" }}>
+                                        {highlightMatch(broker.name.split(" ")[0], searchQuery)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Ações */}
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {waLink && (
+                                    <a href={waLink} target="_blank" rel="noopener noreferrer"
+                                      className="w-7 h-7 rounded-lg flex items-center justify-center transition hover:scale-105"
+                                      style={{ background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.3)" }}
+                                      title="WhatsApp"
+                                    >
+                                      <MessageSquare className="w-3.5 h-3.5" style={{ color: "#10B981" }} />
+                                    </a>
+                                  )}
+                                  <button
+                                    onClick={() => setMonitorLead(lead)}
+                                    className="w-7 h-7 rounded-lg flex items-center justify-center transition hover:scale-105"
+                                    style={{ background: "rgba(0,212,255,0.1)", border: "1px solid rgba(0,212,255,0.25)" }}
+                                    title="Ver conversa"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" style={{ color: "#00D4FF" }} />
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </Panel>
+              </motion.div>
+            )}
+
           </AnimatePresence>
         </div>
 
