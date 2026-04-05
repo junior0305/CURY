@@ -89,7 +89,7 @@ const Dashboard = () => {
         const msg = payload.new as any;
         setNotifications(prev => [msg, ...prev]);
         if (msg.type === "LEAD_REDISTRIBUTED") {
-          toast.info(msg.title, { description: msg.message, duration: 8000 });
+          toast.info(msg.message, { duration: 8000 });
         } else {
           const isVisit = msg.type === "QUALIFIED_VISIT";
           toast.success(isVisit ? "📅 Lead quer agendar visita!" : "📄 Lead quer enviar documentos!", {

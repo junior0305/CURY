@@ -106,15 +106,13 @@ export default function Rework() {
     // Notifica o corretor destino para tocar o som no dashboard
     const redistributedLeads = leads.filter(l => selectedIds.includes(l.id));
     if (redistributedLeads.length > 0) {
-      const notifTitle = redistributedLeads.length === 1
-        ? `🔄 Lead redistribuído: ${redistributedLeads[0].name}`
-        : `🔄 ${redistributedLeads.length} leads redistribuídos para você`;
+      const notifMsg = redistributedLeads.length === 1
+        ? `🔄 Lead redistribuído: ${redistributedLeads[0].name}. Acesse sua fila e atenda agora!`
+        : `🔄 ${redistributedLeads.length} leads redistribuídos para você. Acesse sua fila agora!`;
       await supabase.from("internal_notifications").insert({
         to_id: toBroker,
         type: "LEAD_REDISTRIBUTED",
-        title: notifTitle,
-        message: "Acesse sua fila e atenda o mais rápido possível!",
-        related_lead_id: redistributedLeads.length === 1 ? redistributedLeads[0].id : null,
+        message: notifMsg,
       });
     }
 
