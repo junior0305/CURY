@@ -16,6 +16,8 @@ import {
   Bell, X, Send, Trash2, RotateCcw, Filter, Eye,
 } from "lucide-react";
 import { LeadMonitorDrawer } from "./LeadMonitorDrawer";
+import { useTheme } from "@/contexts/ThemeContext";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
@@ -131,7 +133,7 @@ function SectionHeader({ label, icon: Icon, color = "#00D4FF", count }: {
 function Panel({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={`rounded-2xl p-4 ${className ?? ""}`}
-      style={{ background: "rgba(8,11,20,0.7)", border: "1px solid #1E293B" }}>
+      style={{ background: "var(--crm-surface, rgba(8,11,20,0.7))", border: "1px solid var(--crm-border-mid, #1E293B)" }}>
       {children}
     </div>
   );
@@ -335,7 +337,7 @@ function AlertModal({ broker, fromId, onClose }: {
         exit={{ scale: 0.92, y: 12 }}
         transition={{ type: "spring", stiffness: 300, damping: 24 }}
         className="w-full max-w-md rounded-2xl p-5"
-        style={{ background: "#0D1117", border: "1px solid rgba(0,212,255,0.25)", boxShadow: "0 0 40px rgba(0,212,255,0.12)" }}
+        style={{ background: "var(--crm-surface-hex, #0D1117)", border: "1px solid rgba(0,212,255,0.25)", boxShadow: "0 0 40px rgba(0,212,255,0.12)" }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -405,6 +407,7 @@ type LeftPanel = "urgente" | "redistribuir" | "descarte";
 
 export default function ManagerDashboard() {
   const { user, signOut } = useAuth();
+  const { t } = useTheme();
   const queryClient       = useQueryClient();
   const [lastUpdated, setLastUpdated]   = useState(new Date());
   const [xpData, setXpData]             = useState<Record<string, { xp: number; level: number; levelName: string }>>({});
@@ -563,7 +566,7 @@ export default function ManagerDashboard() {
 
   if (loadingBrokers) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#080B14" }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: t.bg }}>
         <Loader2 className="w-8 h-8 animate-spin" style={{ color: "#00D4FF" }} />
       </div>
     );
@@ -571,32 +574,32 @@ export default function ManagerDashboard() {
 
   return (
     <div
-      className="flex flex-col h-screen overflow-hidden"
+      className="crm-themed flex flex-col h-screen overflow-hidden"
       style={{
-        background: "#080B14",
+        background: t.bg,
         backgroundImage: `
-          linear-gradient(rgba(0,212,255,0.015) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(0,212,255,0.015) 1px, transparent 1px)
+          linear-gradient(${t.gridLine} 1px, transparent 1px),
+          linear-gradient(90deg, ${t.gridLine} 1px, transparent 1px)
         `,
         backgroundSize: "48px 48px",
-        color: "#E2E8F0",
+        color: t.text,
       }}
     >
 
       {/* ── HEADER ──────────────────────────────────────────────────────────── */}
       <header
         className="shrink-0 flex items-center justify-between px-5 h-12 z-10"
-        style={{ borderBottom: "1px solid rgba(0,212,255,0.1)", background: "rgba(8,11,20,0.8)" }}
+        style={{ borderBottom: "1px solid rgba(0,212,255,0.1)", background: t.surfaceAlpha }}
       >
         <div className="flex items-center gap-3">
           <img src="/comandra-logo.png" alt="Comandra" className="h-7 w-7 object-contain"
             style={{ filter: "drop-shadow(0 0 8px rgba(0,212,255,0.7))" }} />
           <div>
             <p className="font-black text-xs uppercase tracking-[0.2em]"
-              style={{ color: "#fff", textShadow: "0 0 12px rgba(0,212,255,0.4)" }}>
+              style={{ color: t.text, textShadow: "0 0 12px rgba(0,212,255,0.4)" }}>
               Centro de Comando
             </p>
-            <p className="text-[9px] uppercase tracking-widest" style={{ color: "#334155" }}>
+            <p className="text-[9px] uppercase tracking-widest" style={{ color: t.textSubtle }}>
               {brokers.length} corretores · {lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
             </p>
           </div>
@@ -616,14 +619,17 @@ export default function ManagerDashboard() {
           })}
         </div>
 
-        <button onClick={signOut}
-          className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
-          style={{ color: "#334155" }}
-          onMouseEnter={e => (e.currentTarget.style.color = "#EF4444")}
-          onMouseLeave={e => (e.currentTarget.style.color = "#334155")}
-        >
-          <LogOut className="w-3.5 h-3.5" /> Sair
-        </button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle compact />
+          <button onClick={signOut}
+            className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+            style={{ color: t.textSubtle }}
+            onMouseEnter={e => (e.currentTarget.style.color = "#EF4444")}
+            onMouseLeave={e => (e.currentTarget.style.color = t.textSubtle)}
+          >
+            <LogOut className="w-3.5 h-3.5" /> Sair
+          </button>
+        </div>
       </header>
 
       {/* ── WHATSAPP BANNER ─────────────────────────────────────────────────── */}
@@ -664,9 +670,9 @@ export default function ManagerDashboard() {
                   border: `1px solid ${tab.color}40`,
                   boxShadow: `0 0 10px ${tab.color}20`,
                 } : {
-                  background: "rgba(8,11,20,0.6)",
-                  color: "#334155",
-                  border: "1px solid #1E293B",
+                  background: "var(--crm-glass, rgba(8,11,20,0.6))",
+                  color: "var(--crm-text-subtle, #334155)",
+                  border: "1px solid var(--crm-border-mid, #1E293B)",
                 }}
               >
                 <tab.icon className="w-3 h-3" />
@@ -706,7 +712,7 @@ export default function ManagerDashboard() {
                           </div>
                           <Select onValueChange={brokerId => assignMutation.mutate({ leadId: lead.id, brokerId })}>
                             <SelectTrigger className="w-28 h-7 text-xs rounded-lg"
-                              style={{ borderColor: "rgba(239,68,68,0.3)", background: "rgba(8,11,20,0.8)", color: "#94A3B8" }}>
+                              style={{ borderColor: "rgba(239,68,68,0.3)", background: "var(--crm-surface)", color: "var(--crm-text-muted,#94A3B8)" }}>
                               <SelectValue placeholder="Atribuir..." />
                             </SelectTrigger>
                             <SelectContent>
@@ -770,7 +776,7 @@ export default function ManagerDashboard() {
                               onValueChange={brokerId => assignMutation.mutate({ leadId: lead.id, brokerId })}
                             >
                               <SelectTrigger className="w-28 h-7 text-xs rounded-lg shrink-0"
-                                style={{ borderColor: urgent ? "rgba(239,68,68,0.3)" : "rgba(245,158,11,0.3)", background: "rgba(8,11,20,0.8)", color: "#94A3B8" }}>
+                                style={{ borderColor: urgent ? "rgba(239,68,68,0.3)" : "rgba(245,158,11,0.3)", background: "var(--crm-surface)", color: "var(--crm-text-muted,#94A3B8)" }}>
                                 <SelectValue placeholder="Mover..." />
                               </SelectTrigger>
                               <SelectContent>
@@ -853,7 +859,7 @@ export default function ManagerDashboard() {
                               onValueChange={brokerId => assignMutation.mutate({ leadId: lead.id, brokerId })}
                             >
                               <SelectTrigger className="w-28 h-7 text-xs rounded-lg shrink-0"
-                                style={{ borderColor: "rgba(0,212,255,0.2)", background: "rgba(8,11,20,0.8)", color: "#94A3B8" }}>
+                                style={{ borderColor: "rgba(0,212,255,0.2)", background: "var(--crm-surface)", color: "var(--crm-text-muted,#94A3B8)" }}>
                                 <SelectValue placeholder="Mover..." />
                               </SelectTrigger>
                               <SelectContent>
@@ -944,9 +950,9 @@ export default function ManagerDashboard() {
                   border: "1px solid rgba(0,212,255,0.4)",
                   boxShadow: "0 0 12px rgba(0,170,255,0.3)",
                 } : {
-                  background: "rgba(8,11,20,0.6)",
-                  color: "#334155",
-                  border: "1px solid #1E293B",
+                  background: "var(--crm-glass, rgba(8,11,20,0.6))",
+                  color: "var(--crm-text-subtle, #334155)",
+                  border: "1px solid var(--crm-border-mid, #1E293B)",
                 }}
               >
                 <tab.icon className="w-3 h-3" />
@@ -1041,8 +1047,8 @@ export default function ManagerDashboard() {
                           transition={{ delay: i * 0.04 }}
                           className="rounded-xl px-3 py-2.5"
                           style={{
-                            background: i === 0 ? "rgba(245,158,11,0.06)" : "rgba(8,11,20,0.5)",
-                            border: `1px solid ${i === 0 ? "rgba(245,158,11,0.2)" : "#1E293B"}`,
+                            background: i === 0 ? "rgba(245,158,11,0.06)" : "var(--crm-glass)",
+                            border: `1px solid ${i === 0 ? "rgba(245,158,11,0.2)" : "var(--crm-border-mid,#1E293B)"}`,
                           }}
                         >
                           <div className="flex items-center gap-2.5">
@@ -1092,7 +1098,7 @@ export default function ManagerDashboard() {
                       </div>
                     </div>
                     <div className="rounded-xl px-3 py-2 flex items-center gap-2"
-                      style={{ background: "rgba(8,11,20,0.6)", border: "1px solid #1E293B" }}>
+                      style={{ background: "var(--crm-glass)", border: "1px solid var(--crm-border-mid,#1E293B)" }}>
                       <UserX className="w-4 h-4" style={{ color: "#334155" }} />
                       <div>
                         <p className="text-xl font-black" style={{ color: "#475569" }}>{stats.total - stats.present}</p>
@@ -1110,8 +1116,8 @@ export default function ManagerDashboard() {
                           transition={{ delay: i * 0.04 }}
                           className="flex items-center gap-3 rounded-xl px-3 py-2.5"
                           style={{
-                            background: isPresent ? "rgba(16,185,129,0.06)" : "rgba(8,11,20,0.4)",
-                            border: `1px solid ${isPresent ? "rgba(16,185,129,0.2)" : "#1E293B"}`,
+                            background: isPresent ? "rgba(16,185,129,0.06)" : "var(--crm-glass)",
+                            border: `1px solid ${isPresent ? "rgba(16,185,129,0.2)" : "var(--crm-border-mid,#1E293B)"}`,
                             opacity: isPresent ? 1 : 0.6,
                           }}
                         >
@@ -1162,7 +1168,7 @@ export default function ManagerDashboard() {
                             initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: i * 0.04 }}
                             className="flex items-center gap-3 rounded-xl px-3 py-2.5"
-                            style={{ background: "rgba(8,11,20,0.5)", border: "1px solid #1E293B" }}
+                            style={{ background: "var(--crm-glass)", border: "1px solid var(--crm-border-mid,#1E293B)" }}
                           >
                             <span className="text-xs font-black w-5 text-center shrink-0" style={{ color: "#334155" }}>{i + 1}</span>
                             <div className="w-7 h-7 rounded-full flex items-center justify-center font-black text-[10px] shrink-0"
@@ -1208,7 +1214,7 @@ export default function ManagerDashboard() {
       {/* ── FOOTER ──────────────────────────────────────────────────────────── */}
       <footer
         className="shrink-0 flex items-center gap-6 px-5 h-10"
-        style={{ borderTop: "1px solid rgba(0,212,255,0.08)", background: "rgba(8,11,20,0.6)" }}
+        style={{ borderTop: "1px solid rgba(0,212,255,0.08)", background: "var(--crm-surface)" }}
       >
         <div className="flex items-center gap-1.5">
           <TrendingUp className="w-3 h-3" style={{ color: "#00D4FF" }} />

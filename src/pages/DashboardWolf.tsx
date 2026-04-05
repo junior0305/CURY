@@ -8,6 +8,8 @@ import {
   Shield, Volume2, VolumeX, LogOut, Bell, CheckCircle2, Loader2
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
+import { useTheme } from "@/contexts/ThemeContext";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchLeadsForDashboard, updateLeadStatus } from "@/integrations/supabase/leads";
 import { fetchOpenTasks, createTask } from "@/integrations/supabase/tasks";
@@ -29,15 +31,16 @@ const WOLF_STYLES = `
   .wolf-display { font-family:'Orbitron',monospace; letter-spacing:0.05em; }
 
   .hex-bg {
-    background-color:#080B14;
+    background-color: var(--crm-bg, #080B14);
     background-image:
       radial-gradient(ellipse 80% 50% at 50% -20%,rgba(0,212,255,.06) 0%,transparent 60%),
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='48'%3E%3Cpolygon points='28,2 54,16 54,44 28,58 2,44 2,16' fill='none' stroke='%2300D4FF' stroke-width='0.4' opacity='0.12'/%3E%3C/svg%3E");
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='48'%3E%3Cpolygon points='28,2 54,16 54,44 28,58 2,44 2,16' fill='none' stroke='%2300D4FF' stroke-width='0.4' opacity='var(--crm-hex-poly-op,0.12)'/%3E%3C/svg%3E");
     background-size:auto,56px 48px;
   }
   .scanlines::after {
     content:'';position:absolute;inset:0;pointer-events:none;
     background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,212,255,.018) 3px,rgba(0,212,255,.018) 4px);
+    opacity: var(--crm-scan, 1);
   }
 
   @keyframes neonBreathe {
@@ -276,14 +279,14 @@ function AchievementTicker({ items, highlight }: { items: typeof TICKER_FALLBACK
       height: 38,
       background: highlight
         ? "linear-gradient(90deg,rgba(245,158,11,.2),rgba(245,158,11,.08),rgba(245,158,11,.2))"
-        : "rgba(5,8,18,.9)",
+        : "var(--crm-ticker-bg, rgba(5,8,18,.9))",
       borderTop: "1px solid rgba(0,212,255,.15)",
       borderBottom: "1px solid rgba(0,212,255,.15)",
       boxShadow: highlight ? "0 0 20px rgba(245,158,11,.25)" : "none",
       transition: "all .5s ease",
     }}>
       <div className="absolute left-0 top-0 bottom-0 z-10 flex items-center px-3 gap-2 shrink-0"
-        style={{ background: "linear-gradient(90deg,#080B14 65%,transparent)", minWidth: 120 }}>
+        style={{ background: "linear-gradient(90deg,var(--crm-ticker-fade,#080B14) 65%,transparent)", minWidth: 120 }}>
         <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" style={{ filter: "drop-shadow(0 0 4px #F59E0B)" }} />
         <span className="wolf-display text-[9px] font-bold tracking-widest whitespace-nowrap" style={{ color: "#F59E0B" }}>WALL OF FAME</span>
       </div>
@@ -297,7 +300,7 @@ function AchievementTicker({ items, highlight }: { items: typeof TICKER_FALLBACK
         ))}
       </div>
       <div className="absolute right-0 top-0 bottom-0 w-12 pointer-events-none"
-        style={{ background: "linear-gradient(270deg,#080B14,transparent)" }} />
+        style={{ background: "linear-gradient(270deg,var(--crm-ticker-fade,#080B14),transparent)" }} />
     </div>
   );
 }
@@ -375,6 +378,7 @@ function UrgencyBadge({ lastInteractionAt }: { lastInteractionAt: string }) {
 ───────────────────────────────────────────── */
 export default function DashboardWolf() {
   const { user, role, loading: authLoading, signOut } = useAuth();
+  const { t } = useTheme();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { playSound } = useAudioArena();
@@ -609,7 +613,7 @@ export default function DashboardWolf() {
   // ── Loading / redirect ─────────────────────────────────────────────────────
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#080B14" }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: t.bg }}>
         <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
       </div>
     );
@@ -643,11 +647,11 @@ export default function DashboardWolf() {
         )}
       </AnimatePresence>
 
-      <div className="wolf-ui hex-bg scanlines relative flex flex-col h-screen overflow-hidden" style={{ color: "#E2E8F0" }}>
+      <div className="wolf-ui hex-bg scanlines relative flex flex-col h-screen overflow-hidden" style={{ color: t.text }}>
 
         {/* ── HEADER ── */}
         <header className="shrink-0 flex items-center justify-between px-4 h-12 z-10"
-          style={{ background: "rgba(8,11,20,.95)", borderBottom: "1px solid rgba(0,212,255,.15)", backdropFilter: "blur(12px)" }}>
+          style={{ background: t.surfaceAlpha, borderBottom: "1px solid rgba(0,212,255,.15)", backdropFilter: "blur(12px)" }}>
           <div className="flex items-center gap-2.5">
             <ComandraLogo size={30} />
             <div>
@@ -687,6 +691,7 @@ export default function DashboardWolf() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <ThemeToggle compact />
             <button onClick={() => setIsMuted(m => !m)} className="btn-ghost w-7 h-7 rounded-lg flex items-center justify-center">
               {isMuted ? <VolumeX className="w-3.5 h-3.5 text-slate-500" /> : <Volume2 className="w-3.5 h-3.5 text-cyan-400" />}
             </button>
@@ -713,7 +718,7 @@ export default function DashboardWolf() {
 
             {/* Loading skeleton */}
             {leadsLoading && (
-              <div className="border-neon-cyan rounded-2xl p-4 flex items-center justify-center" style={{ minHeight: 200, background: "rgba(8,11,20,.85)" }}>
+              <div className="border-neon-cyan rounded-2xl p-4 flex items-center justify-center" style={{ minHeight: 200, background: t.surfaceAlpha }}>
                 <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
               </div>
             )}
@@ -725,7 +730,7 @@ export default function DashboardWolf() {
                   initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: .2 }}
                   className="border-neon-cyan rounded-2xl p-4 flex flex-col gap-3 shrink-0"
-                  style={{ background: "rgba(8,11,20,.85)" }}>
+                  style={{ background: t.surfaceAlpha }}>
 
                   {/* Lead info */}
                   <div className="flex items-start justify-between gap-3">
@@ -761,9 +766,9 @@ export default function DashboardWolf() {
                           disabled={mutating}
                           className={`pipeline-btn flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-xl text-[9px] font-bold uppercase ${active ? "active" : ""}`}
                           style={{
-                            background: active ? step.bg : passed ? "rgba(255,255,255,.04)" : "rgba(255,255,255,.02)",
-                            border: active ? `1px solid ${step.color}50` : "1px solid rgba(255,255,255,.05)",
-                            color: active ? step.color : passed ? "rgba(255,255,255,.3)" : "rgba(255,255,255,.15)",
+                            background: active ? step.bg : passed ? t.glass : "rgba(255,255,255,.02)",
+                            border: active ? `1px solid ${step.color}50` : `1px solid ${t.border}`,
+                            color: active ? step.color : passed ? t.textMuted : t.textSubtle,
                             opacity: mutating ? .6 : 1,
                           }}>
                           {active && <div className="w-1.5 h-1.5 rounded-full"
@@ -797,11 +802,12 @@ export default function DashboardWolf() {
                   {/* Note + Discard */}
                   <div className="flex gap-2">
                     <div className="flex-1 flex gap-2 rounded-xl px-3 py-2 items-center"
-                      style={{ background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)" }}>
+                      style={{ background: t.glass, border: `1px solid ${t.border}` }}>
                       <input value={noteText} onChange={e => setNoteText(e.target.value)}
                         onKeyDown={e => e.key === "Enter" && handleSaveNote()}
                         placeholder="Nota rápida (Enter para salvar como tarefa)..."
-                        className="flex-1 bg-transparent text-sm text-white placeholder-slate-600 outline-none" />
+                        className="flex-1 bg-transparent text-sm placeholder-slate-600 outline-none"
+                        style={{ color: t.text }} />
                       <button onClick={handleSaveNote} disabled={!noteText.trim()}
                         className="w-7 h-7 rounded-lg flex items-center justify-center disabled:opacity-30 transition-all hover:bg-cyan-500/20"
                         style={{ color: "#00D4FF" }}>
@@ -820,7 +826,7 @@ export default function DashboardWolf() {
 
             {/* Empty state */}
             {!leadsLoading && !activeLead && (
-              <div className="border-neon-cyan rounded-2xl p-8 flex flex-col items-center justify-center gap-3" style={{ background: "rgba(8,11,20,.85)" }}>
+              <div className="border-neon-cyan rounded-2xl p-8 flex flex-col items-center justify-center gap-3" style={{ background: t.surfaceAlpha }}>
                 <CheckCircle2 className="w-10 h-10 text-emerald-400 opacity-60" />
                 <p className="wolf-display text-sm text-slate-400">Fila limpa — bom trabalho!</p>
                 <p className="text-xs text-slate-600">Todos os leads foram atendidos</p>
@@ -839,8 +845,8 @@ export default function DashboardWolf() {
                     onClick={() => setFilter(opt.id)}
                     className="filter-chip flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold"
                     style={{
-                      background: active ? `${col}20` : "rgba(255,255,255,.04)",
-                      border: active ? `1px solid ${col}60` : "1px solid rgba(255,255,255,.08)",
+                      background: active ? `${col}20` : t.glass,
+                      border: active ? `1px solid ${col}60` : `1px solid ${t.border}`,
                       color: active ? col : "#475569",
                       boxShadow: active ? `0 0 10px ${col}30` : "none",
                     }}>
@@ -877,8 +883,8 @@ export default function DashboardWolf() {
                       onClick={() => handleSelect(lead)}
                       className="queue-item flex items-center gap-3 px-3 py-2.5 rounded-xl"
                       style={{
-                        background: isActive ? "rgba(0,212,255,.1)" : "rgba(255,255,255,.03)",
-                        border: isActive ? "1px solid rgba(0,212,255,.4)" : "1px solid rgba(255,255,255,.05)",
+                        background: isActive ? "rgba(0,212,255,.1)" : t.glass,
+                        border: isActive ? "1px solid rgba(0,212,255,.4)" : `1px solid ${t.border}`,
                       }}>
 
                       {/* Priority dot */}
@@ -933,7 +939,7 @@ export default function DashboardWolf() {
 
             {/* Podium */}
             <div className={`border-neon-gold rounded-2xl p-4 flex flex-col gap-3 ${rankFlash ? "anim-overtake" : ""}`}
-              style={{ background: "rgba(8,11,20,.85)" }}>
+              style={{ background: t.surfaceAlpha }}>
 
               {ranking.length === 0 ? (
                 <div className="text-center py-6 text-slate-600 text-xs">
@@ -982,7 +988,7 @@ export default function DashboardWolf() {
                       <motion.div key={r.id} layout
                         initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: .1 * (i + 1) }}
                         className="rounded-xl p-3 flex items-center gap-3"
-                        style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)" }}>
+                        style={{ background: t.glass, border: `1px solid ${t.border}` }}>
                         <div className="w-9 h-9 rounded-full flex items-center justify-center font-black text-xs wolf-display text-slate-300 shrink-0"
                           style={{ background: i === 0 ? "rgba(148,163,184,.12)" : "rgba(180,83,9,.08)", border: i === 0 ? "1px solid rgba(148,163,184,.2)" : "1px solid rgba(180,83,9,.2)" }}>
                           {r.avatar}
@@ -1036,7 +1042,7 @@ export default function DashboardWolf() {
                   { label: "Visitas",        value: counts.VISIT_SCHEDULED || 0,        color: "#34D399" },
                 ].map(stat => (
                   <div key={stat.label} className="flex flex-col px-3 py-2.5 rounded-xl"
-                    style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.06)" }}>
+                    style={{ background: t.glass, border: `1px solid ${t.border}` }}>
                     <span className="wolf-display text-xl font-black" style={{ color: stat.color }}>{stat.value}</span>
                     <span className="text-[9px] text-slate-500 uppercase font-bold">{stat.label}</span>
                   </div>

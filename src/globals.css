@@ -10,6 +10,97 @@
   }
 }
 
+/* ── CRM Theme Variables ──────────────────────────────────────────────────── */
+
+html[data-theme="dark"] {
+  --crm-bg:           #080B14;
+  --crm-bg-alt:       #0B0F1A;
+  --crm-surface:      rgba(8,11,20,0.88);
+  --crm-surface-hex:  #0D1117;
+  --crm-glass:        rgba(255,255,255,0.04);
+  --crm-border:       rgba(255,255,255,0.07);
+  --crm-border-mid:   rgba(255,255,255,0.12);
+  --crm-text:         #F1F5F9;
+  --crm-text-muted:   #64748B;
+  --crm-text-subtle:  #334155;
+  --crm-scan:         1;
+  --crm-ticker-bg:    rgba(5,8,18,0.9);
+  --crm-ticker-fade:  #080B14;
+  --crm-nav-bg:       radial-gradient(ellipse at 15% 0%, #001040 0%, #050810 45%, #020508 100%);
+  --crm-nav-surface:  rgba(8,11,20,0.9);
+  --crm-nav-border:   rgba(30,41,59,0.9);
+  --crm-grid-line:    rgba(0,102,255,0.03);
+  --crm-header-glow:  rgba(0,102,255,0.12);
+}
+
+html[data-theme="light"] {
+  --crm-bg:           #EEF2F7;
+  --crm-bg-alt:       #E4EAF3;
+  --crm-surface:      rgba(255,255,255,0.95);
+  --crm-surface-hex:  #FFFFFF;
+  --crm-glass:        rgba(255,255,255,0.75);
+  --crm-border:       rgba(15,23,42,0.08);
+  --crm-border-mid:   rgba(15,23,42,0.14);
+  --crm-text:         #0F172A;
+  --crm-text-muted:   #475569;
+  --crm-text-subtle:  #94A3B8;
+  --crm-scan:         0;
+  --crm-ticker-bg:    rgba(226,232,240,0.96);
+  --crm-ticker-fade:  #EEF2F7;
+  --crm-nav-bg:       linear-gradient(135deg, #E4EAF3 0%, #EEF2F7 100%);
+  --crm-nav-surface:  rgba(255,255,255,0.96);
+  --crm-nav-border:   rgba(15,23,42,0.10);
+  --crm-grid-line:    rgba(0,102,255,0.04);
+  --crm-header-glow:  rgba(0,102,255,0.07);
+}
+
+/* ── Light theme: remap Tailwind slate utilities inside .wolf-ui & manager ── */
+
+html[data-theme="light"] .wolf-ui,
+html[data-theme="light"] .crm-themed {
+  color: var(--crm-text);
+}
+
+html[data-theme="light"] .wolf-ui .text-white,
+html[data-theme="light"] .crm-themed .text-white {
+  color: #0F172A !important;
+}
+html[data-theme="light"] .wolf-ui .text-slate-200,
+html[data-theme="light"] .crm-themed .text-slate-200 { color: #1E293B !important; }
+html[data-theme="light"] .wolf-ui .text-slate-300,
+html[data-theme="light"] .crm-themed .text-slate-300 { color: #334155 !important; }
+html[data-theme="light"] .wolf-ui .text-slate-400,
+html[data-theme="light"] .crm-themed .text-slate-400 { color: #475569 !important; }
+html[data-theme="light"] .wolf-ui .text-slate-500,
+html[data-theme="light"] .crm-themed .text-slate-500 { color: #64748B !important; }
+html[data-theme="light"] .wolf-ui .text-slate-600,
+html[data-theme="light"] .crm-themed .text-slate-600 { color: #94A3B8 !important; }
+html[data-theme="light"] .wolf-ui .text-slate-700,
+html[data-theme="light"] .crm-themed .text-slate-700 { color: #CBD5E1 !important; }
+
+html[data-theme="light"] .wolf-ui .bg-slate-700,
+html[data-theme="light"] .crm-themed .bg-slate-700 { background: #CBD5E1 !important; }
+html[data-theme="light"] .wolf-ui .bg-slate-800,
+html[data-theme="light"] .crm-themed .bg-slate-800 { background: rgba(15,23,42,0.08) !important; }
+html[data-theme="light"] .wolf-ui .bg-slate-900,
+html[data-theme="light"] .crm-themed .bg-slate-900 { background: rgba(15,23,42,0.06) !important; }
+
+/* placeholder em input */
+html[data-theme="light"] .wolf-ui .placeholder-slate-600::placeholder { color: #94A3B8; }
+
+/* scrollbar light */
+html[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(15,23,42,0.15); }
+
+/* btn-ghost light overrides */
+html[data-theme="light"] .wolf-ui .btn-ghost {
+  background: rgba(15,23,42,0.05) !important;
+  border: 1px solid rgba(15,23,42,0.12) !important;
+}
+html[data-theme="light"] .wolf-ui .btn-ghost:hover {
+  background: rgba(0,212,255,0.10) !important;
+  border-color: rgba(0,212,255,0.3) !important;
+}
+
 @layer utilities {
   .dashboard-tilt {
     transform-style: preserve-3d;

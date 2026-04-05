@@ -6,6 +6,8 @@ import {
   Gauge, Activity, BrainCircuit, Plug, ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
+import { useTheme } from "@/contexts/ThemeContext";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -110,19 +112,20 @@ function SubTabs({
   role: string;
   children: React.ReactNode;
 }) {
+  const { t } = useTheme();
   const visible = items.filter(s => s.roles.includes(role));
   return (
     <Tabs value={activeSub} onValueChange={onChangeSub}>
       <TabsList
         className="h-auto p-1 gap-1 rounded-xl mb-4 w-auto inline-flex"
-        style={{ background: "rgba(8,11,20,0.9)", border: "1px solid rgba(30,41,59,0.9)" }}
+        style={{ background: t.navSurface, border: `1px solid ${t.navBorder}` }}
       >
         {visible.map(s => (
           <TabsTrigger
             key={s.v}
             value={s.v}
             className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all"
-            style={{ color: activeSub === s.v ? "#ffffff" : "#475569" }}
+            style={{ color: activeSub === s.v ? t.text : t.textMuted }}
           >
             {s.l}
           </TabsTrigger>
@@ -145,6 +148,7 @@ const ROLE_LABELS: Record<string, { label: string }> = {
 
 export default function AdminLayout() {
   const { role, user, signOut } = useAuth();
+  const { t } = useTheme();
   const normalizedRole = role?.toUpperCase() ?? "";
 
   const visibleGroups = GROUPS.filter(g => g.roles.includes(normalizedRole));
@@ -176,18 +180,16 @@ export default function AdminLayout() {
 
   return (
     <div
-      className="min-h-screen p-4 md:p-6"
-      style={{
-        background: "radial-gradient(ellipse at 15% 0%, #001040 0%, #050810 45%, #020508 100%)",
-      }}
+      className="crm-themed min-h-screen p-4 md:p-6"
+      style={{ background: t.navBg, color: t.text }}
     >
       {/* ── Grade sutil de fundo (efeito HUD) ─────────────────────────────── */}
       <div
         className="fixed inset-0 pointer-events-none"
         style={{
           backgroundImage: `
-            linear-gradient(rgba(0,102,255,0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0,102,255,0.03) 1px, transparent 1px)
+            linear-gradient(${t.gridLine} 1px, transparent 1px),
+            linear-gradient(90deg, ${t.gridLine} 1px, transparent 1px)
           `,
           backgroundSize: "60px 60px",
           zIndex: 0,
@@ -223,7 +225,7 @@ export default function AdminLayout() {
                 <h1
                   className="text-2xl md:text-3xl font-black tracking-[0.18em] uppercase"
                   style={{
-                    color: "#ffffff",
+                    color: t.text,
                     textShadow: "0 0 20px rgba(0,170,255,0.5), 0 0 40px rgba(0,102,255,0.3)",
                     fontFamily: "'Segoe UI', system-ui, sans-serif",
                   }}
@@ -241,9 +243,10 @@ export default function AdminLayout() {
 
             {/* Direita: seletor + usuário + sair */}
             <div className="flex items-center gap-3">
+              <ThemeToggle />
               <CompanySelector compact />
               <div className="text-right hidden sm:block">
-                <p className="text-white text-sm font-semibold">{user?.email}</p>
+                <p className="text-sm font-semibold" style={{ color: t.text }}>{user?.email}</p>
                 {roleInfo && (
                   <Badge
                     className="text-xs border mt-0.5"
