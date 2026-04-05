@@ -7,4 +7,6 @@ export interface DistributionQueue {
   isActive: boolean;
   lastAssignedIndex: number;
   lockAfterAssignment: boolean; // leads desta fila não são redistribuídos
+  region?: string | null;       // Ex: "Jaguaré", "Zona Oeste"
+  canal?: string | null;        // Ex: "Facebook", "Google", "Indicação"
 }
