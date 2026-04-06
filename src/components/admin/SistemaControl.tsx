@@ -11,6 +11,7 @@ import {
   MessageSquare, Webhook, Smartphone, Bell, Zap, Shield,
   Activity, Inbox, Users, AlertTriangle, HeartPulse,
 } from "lucide-react";
+import RaioXLeads from "./RaioXLeads";
 
 type Status = "ok" | "ocioso" | "erro" | "desabilitado";
 
@@ -624,6 +625,9 @@ export default function SistemaControl() {
           )}
         </Card>
       </section>
+
+      {/* ── Raio-X dos Leads ───────────────────────────────────────────────── */}
+      <RaioXLeads />
 
     </div>
   );
