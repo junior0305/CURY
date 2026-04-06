@@ -53,40 +53,58 @@ serve(async (req) => {
 
     if (createError) throw createError
 
-    // Auto-cria bot_instance para BROKER se não foi passado botInstanceId
+    // Auto-cria bot_instance para BROKER ou MANAGER se não foi passado botInstanceId
     let resolvedBotInstanceId = (botInstanceId === 'none' || !botInstanceId) ? null : botInstanceId;
 
-    if (role === 'BROKER' && !resolvedBotInstanceId) {
-      // Busca URL e key da Evolution API de uma instância existente
-      const { data: refBot } = await supabaseAdmin
+    if ((role === 'BROKER' || role === 'MANAGER') && !resolvedBotInstanceId) {
+      // Nome da instância = primeiro nome com 1ª letra maiúscula (padrão obrigatório)
+      const instanceName = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+
+      // Verifica se já existe instância com esse nome (idempotente)
+      const { data: existingBot } = await supabaseAdmin
         .from('bot_instances')
-        .select('evolution_api_url, evolution_api_key')
-        .limit(1)
+        .select('id')
+        .eq('instance_name', instanceName)
         .maybeSingle();
 
-      if (refBot?.evolution_api_url) {
-        const instanceName = firstName; // nome da instância = primeiro nome do corretor
-        const { data: newBot } = await supabaseAdmin
+      if (existingBot?.id) {
+        // Reaproveita instância existente com mesmo nome
+        resolvedBotInstanceId = existingBot.id;
+        console.log(`[create-user] bot_instance existente reutilizada: ${instanceName} (${existingBot.id})`);
+      } else {
+        // Busca URL e key da Evolution API de uma instância de referência
+        const { data: refBot } = await supabaseAdmin
           .from('bot_instances')
-          .insert({
-            name: firstName,
-            instance_name: instanceName,
-            phone: `inst_${instanceName}_${Date.now()}`, // placeholder único
-            evolution_api_url: refBot.evolution_api_url,
-            evolution_api_key: refBot.evolution_api_key,
-            status: 'active',
-            weight: 50,
-            priority: 5,
-            health_score: 100,
-            instance_type: 'prospecting',
-            persona_style: 'formal',
-          })
-          .select('id')
-          .single();
+          .select('evolution_api_url, evolution_api_key')
+          .not('evolution_api_url', 'is', null)
+          .limit(1)
+          .maybeSingle();
 
-        if (newBot?.id) {
-          resolvedBotInstanceId = newBot.id;
-          console.log(`[create-user] bot_instance criada: ${instanceName} (${newBot.id})`);
+        if (refBot?.evolution_api_url) {
+          const { data: newBot } = await supabaseAdmin
+            .from('bot_instances')
+            .insert({
+              name: instanceName,
+              instance_name: instanceName,
+              phone: phone || null, // usa o telefone real do corretor/gerente
+              evolution_api_url: refBot.evolution_api_url,
+              evolution_api_key: refBot.evolution_api_key,
+              status: 'active',
+              weight: 50,
+              priority: 5,
+              health_score: 100,
+              instance_type: 'prospecting',
+              persona_style: 'formal',
+            })
+            .select('id')
+            .single();
+
+          if (newBot?.id) {
+            resolvedBotInstanceId = newBot.id;
+            console.log(`[create-user] bot_instance criada: ${instanceName} (${newBot.id})`);
+          }
+        } else {
+          console.warn(`[create-user] Nenhuma instância de referência encontrada para copiar credenciais Evolution API`);
         }
       }
     }

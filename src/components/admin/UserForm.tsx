@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { User, UserRole, Team } from "@/types/user";
-import { Save, Loader2, UserPlus, Shield, Users, RefreshCw, Phone, Mail, Lock, Briefcase, Zap, Bot } from "lucide-react";
+import { Save, Loader2, UserPlus, Shield, Users, RefreshCw, Phone, Mail, Lock, Briefcase, Zap, Bot, Info } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchManagers, fetchTeams } from "@/integrations/supabase/profiles";
 import { supabase } from "@/integrations/supabase/client";
@@ -208,14 +208,20 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
                   <Label className="text-xs font-bold text-slate-700">WhatsApp (Com DDD)</Label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <Input 
+                    <Input
                       type="tel"
-                      value={formData.phone || ""} 
+                      value={formData.phone || ""}
                       onChange={(e) => handleChange("phone", e.target.value)}
                       className="pl-10 h-12 rounded-xl border-slate-200 bg-white focus:ring-indigo-500"
-                      placeholder="11999999999"
+                      placeholder="5511999999999"
                     />
                   </div>
+                  {!isEditing && (formData.role === 'BROKER' || formData.role === 'MANAGER') && (
+                    <p className="text-[11px] text-indigo-600 font-medium flex items-center gap-1.5">
+                      <Info className="w-3 h-3 flex-shrink-0" />
+                      Este número será usado para criar a instância WhatsApp automaticamente
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -252,7 +258,29 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
                   </Select>
                 </div>
 
-                {(formData.role === 'BROKER' || formData.role === 'MANAGER') && (
+                {(formData.role === 'BROKER' || formData.role === 'MANAGER') && !isEditing && (
+                  // MODO CRIAÇÃO: instância criada automaticamente — mostra preview
+                  <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-100 flex items-start gap-3">
+                    <Bot className="w-4 h-4 text-indigo-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold text-indigo-800">Instância criada automaticamente</p>
+                      <p className="text-[11px] text-indigo-600 mt-0.5">
+                        Nome: <span className="font-bold">
+                          {formData.name
+                            ? (formData.name.trim().split(/\s+/)[0].charAt(0).toUpperCase() +
+                               formData.name.trim().split(/\s+/)[0].slice(1).toLowerCase())
+                            : "— preencha o nome"}
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-indigo-500 mt-0.5">
+                        Após criar, acesse Bot Management para conectar o QR Code.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {(formData.role === 'BROKER' || formData.role === 'MANAGER') && isEditing && (
+                  // MODO EDIÇÃO: permite trocar instância manualmente
                   <div className="space-y-2">
                     <Label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                       <Bot className="w-3.5 h-3.5 text-slate-400" /> Instância WhatsApp
