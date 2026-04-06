@@ -37,6 +37,106 @@ import { RadarAcao } from "@/components/broker/RadarAcao";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 import { DailyBriefing } from "@/components/broker/DailyBriefing";
 
+// ── Meta Diária do Corretor ───────────────────────────────────────────────────
+function MetaDiariaBroker({ userId, profile, leads, profiles }: {
+  userId: string;
+  profile: User;
+  leads: Lead[];
+  profiles: User[];
+}) {
+  const [teamGoal, setTeamGoal] = useState<number | null>(null);
+  const [loaded, setLoaded]     = useState(false);
+
+  const now         = new Date();
+  const monthStart  = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd    = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const dayOfMonth  = now.getDate();
+  const daysLeft    = Math.max(1, daysInMonth - dayOfMonth);
+
+  useEffect(() => {
+    if (!profile.teamId) { setLoaded(true); return; }
+    const ms = monthStart.toISOString().slice(0, 10);
+    const me = monthEnd.toISOString().slice(0, 10);
+    supabase.from("team_goals").select("sales_target")
+      .eq("team_id", profile.teamId)
+      .eq("goal_type", "monthly")
+      .gte("month", ms).lt("month", me)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .then(({ data }) => { setTeamGoal((data as any)?.[0]?.sales_target ?? null); setLoaded(true); });
+  }, [profile.teamId]);
+
+  if (!loaded || !teamGoal) return null;
+
+  const teamBrokers = profiles.filter(p => p.role === "BROKER" && p.teamId === profile.teamId).length;
+  const indTarget   = teamBrokers > 0 ? Math.ceil(teamGoal / teamBrokers) : teamGoal;
+
+  const myLeads  = leads.filter(l => l.brokerId === userId);
+  const vendasMes = myLeads.filter(l => {
+    if (l.status !== "CONCLUDED") return false;
+    const d = new Date(l.lastInteractionAt || l.createdAt);
+    return d >= monthStart && d < monthEnd;
+  }).length;
+  const emDocs   = myLeads.filter(l => l.status === "DOCS_REQUESTED").length;
+  const emVisita = myLeads.filter(l => ["VISIT_SCHEDULED","VISITA_AGENDADA"].includes(l.status)).length;
+
+  const remaining     = Math.max(0, indTarget - vendasMes);
+  const pct           = Math.min(100, Math.round((vendasMes / indTarget) * 100));
+  const dailyVendas   = remaining / daysLeft;
+  // ~3 visitas necessárias para 1 venda (taxa de conversão estimada 33%)
+  const visitasHoje   = Math.max(1, Math.ceil(dailyVendas * 3));
+  const color         = pct >= 90 ? "#10B981" : pct >= 50 ? "#F59E0B" : "#EF4444";
+  const month         = now.toLocaleDateString("pt-BR", { month: "long" });
+
+  return (
+    <div className="rounded-2xl p-4 border" style={{ background: `${color}07`, borderColor: `${color}25` }}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Target className="w-4 h-4" style={{ color }} />
+          <p className="text-sm font-black uppercase tracking-wider" style={{ color }}>
+            Meta {month}
+          </p>
+        </div>
+        <span className="text-[10px] font-black px-2 py-0.5 rounded-full"
+          style={{ background: `${color}15`, color, border: `1px solid ${color}30` }}>
+          {vendasMes}/{indTarget} vendas · {pct}%
+        </span>
+      </div>
+
+      {/* Barra de progresso */}
+      <div className="h-2 rounded-full overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
+        <div className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${color}70, ${color})`, boxShadow: `0 0 6px ${color}50` }} />
+      </div>
+
+      {/* KPIs compactos */}
+      <div className="grid grid-cols-4 gap-2">
+        {[
+          { label: "Vendas", value: vendasMes,   sub: `meta: ${indTarget}`, c: color },
+          { label: "Em Docs", value: emDocs,     sub: "próximas vendas",   c: emDocs > 0 ? "#10B981" : "#334155" },
+          { label: "Visitas", value: emVisita,   sub: "pipeline",          c: emVisita > 0 ? "#F59E0B" : "#334155" },
+          { label: "Hoje", value: `${visitasHoje}v`, sub: "visitas p/ ritmo", c: "#7C3AED" },
+        ].map(item => (
+          <div key={item.label} className="rounded-xl p-2 text-center"
+            style={{ background: `${item.c}08`, border: `1px solid ${item.c}18` }}>
+            <p className="text-[9px] uppercase tracking-wider mb-0.5" style={{ color: "#475569" }}>{item.label}</p>
+            <p className="text-base font-black" style={{ color: item.c }}>{item.value}</p>
+            <p className="text-[9px]" style={{ color: "#334155" }}>{item.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {remaining > 0 && (
+        <p className="text-[10px] mt-2 text-center" style={{ color: "#475569" }}>
+          Faltam <span className="font-black" style={{ color }}>{remaining} vendas</span> em {daysLeft} dias.
+          {emDocs + emVisita > 0 && <> Pipeline aquecido: <span className="font-black text-emerald-400">{emDocs + emVisita} leads</span> próximos de fechar.</>}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const Dashboard = () => {
   const { user, role, loading, signOut } = useAuth();
   const [isIntelOpen, setIsIntelOpen] = useState(false);
@@ -656,6 +756,63 @@ const Dashboard = () => {
       {/* ── Conteúdo ──────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-[1800px] mx-auto p-4 space-y-4">
+
+          {/* ── Onboarding checklist (novos corretores) ── */}
+          {isBroker && user?.id && (() => {
+            const profile = profiles.find(p => p.id === user.id);
+            const myLeads = leads.filter(l => l.brokerId === user.id);
+            const hasWA = !!profile?.botInstanceId;
+            const hasLead = myLeads.length > 0;
+            const hasContact = myLeads.some(l => !!l.lastBrokerWhatsappAt);
+            const allDone = hasWA && hasLead && hasContact;
+            const dismissKey = `onboarding_done_${user.id}`;
+            const isDismissed = localStorage.getItem(dismissKey) === "true";
+            if (allDone) localStorage.setItem(dismissKey, "true");
+            if (isDismissed || allDone) return null;
+            const steps = [
+              { done: hasWA,      icon: "📱", label: "Conectar WhatsApp",          hint: "Vá em Config → WhatsApp" },
+              { done: hasLead,    icon: "🎯", label: "Receber primeiro lead",       hint: "Aguarde atribuição do gestor" },
+              { done: hasContact, icon: "⚡", label: "Fazer 1º contato em < 5 min", hint: hasLead ? "Responda seu lead agora!" : "Após receber um lead" },
+            ];
+            const done = steps.filter(s => s.done).length;
+            return (
+              <div className="rounded-2xl p-4 border" style={{ background: "rgba(124,58,237,0.07)", borderColor: "rgba(124,58,237,0.25)" }}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🚀</span>
+                    <p className="text-sm font-black text-white uppercase tracking-wider">Ativação do Corretor</p>
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full" style={{ background: "rgba(124,58,237,0.2)", color: "#7C3AED" }}>
+                      {done}/3
+                    </span>
+                  </div>
+                  <button onClick={() => { localStorage.setItem(dismissKey, "true"); window.location.reload(); }}
+                    className="text-gray-600 hover:text-gray-400 transition-colors p-1 rounded-lg hover:bg-slate-700">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {steps.map((step, i) => (
+                    <div key={i} className="rounded-xl p-3 flex flex-col gap-1.5"
+                      style={{ background: step.done ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)", border: `1px solid ${step.done ? "rgba(16,185,129,0.3)" : "rgba(255,255,255,0.06)"}` }}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm">{step.done ? "✅" : step.icon}</span>
+                        <p className="text-[10px] font-black uppercase tracking-wide" style={{ color: step.done ? "#10B981" : "#94A3B8" }}>
+                          {step.label}
+                        </p>
+                      </div>
+                      {!step.done && <p className="text-[10px]" style={{ color: "#475569" }}>{step.hint}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ── Meta diária do corretor ── */}
+          {isBroker && user?.id && (() => {
+            const profile = profiles.find(p => p.id === user.id);
+            return profile ? <MetaDiariaBroker userId={user.id} profile={profile} leads={leads} profiles={profiles} /> : null;
+          })()}
 
           {isBroker && (
             <GamificationBar

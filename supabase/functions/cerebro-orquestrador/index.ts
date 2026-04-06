@@ -18,7 +18,7 @@ function isWithinWindow(): boolean {
   const brtH = (now.getUTCHours() - 3 + 24) % 24;
   const brtM = now.getUTCMinutes();
   const brtTotal = brtH * 60 + brtM;
-  return brtTotal >= 8 * 60 && brtTotal <= 21 * 60 + 45;
+  return brtTotal >= 7 * 60 && brtTotal <= 21 * 60 + 30;
 }
 
 function nextWindowOpen(): string {
@@ -27,8 +27,8 @@ function nextWindowOpen(): string {
   const brtM = now.getUTCMinutes();
   const brtTotal = brtH * 60 + brtM;
   const next = new Date(now);
-  if (brtTotal > 21 * 60 + 45) next.setUTCDate(next.getUTCDate() + 1);
-  next.setUTCHours(11, 0, 0, 0);
+  if (brtTotal > 21 * 60 + 30) next.setUTCDate(next.getUTCDate() + 1);
+  next.setUTCHours(10, 0, 0, 0); // 07:00 BRT = 10:00 UTC
   return next.toISOString();
 }
 
@@ -172,6 +172,11 @@ function deriveNextState(
         ultimo_evento: 'gerente_alertado',
         proxima_acao:  'aguardar',
       };
+    case 'sla_first_contact':
+      return {
+        ultimo_evento: 'sla_alerta_enviado',
+        proxima_acao:  'aguardar',
+      };
     default:
       return { ultimo_evento: actionType };
   }
@@ -211,22 +216,37 @@ serve(async (req) => {
 
     const { data: staleLeadsForQueue } = await supabase
       .from('leads')
-      .select('id')
+      .select('id, last_lead_response_at, last_broker_whatsapp_at')
       .in('status', ['NEW', 'IN_PROGRESS'])
       .not('broker_id', 'is', null)
       .or(`last_interaction_at.lt.${twentyFourAgo},and(last_interaction_at.is.null,created_at.lt.${twentyFourAgo})`)
       .limit(60);
 
     for (const sl of staleLeadsForQueue || []) {
+      // Não enfileirar se o cliente respondeu DEPOIS da última mensagem do corretor
+      // (cliente está aguardando o corretor — não enviar automação)
+      const clientWaitingBroker = sl.last_lead_response_at && (
+        !sl.last_broker_whatsapp_at ||
+        new Date(sl.last_lead_response_at) > new Date(sl.last_broker_whatsapp_at)
+      );
+      if (clientWaitingBroker) continue;
+
       const { data: existing } = await supabase
         .from('lead_activation_queue')
-        .select('id, status, attempts')
+        .select('id, status, attempts, last_attempt_at')
         .eq('lead_id', sl.id)
-        .in('status', ['pending', 'failed'])
-        .order('created_at', { ascending: false })
+        .in('status', ['pending', 'processing', 'sent', 'failed'])
+        .order('last_attempt_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      const shouldQueue = !existing || (existing.status === 'failed' && (existing.attempts || 0) >= 5);
+
+      // Não re-enfileirar se já tem item ativo ou foi enviado nas últimas 24h
+      const hasActive = existing && ['pending', 'processing'].includes(existing.status);
+      const sentRecently = existing?.status === 'sent' && existing?.last_attempt_at &&
+        new Date(existing.last_attempt_at).getTime() > Date.now() - 24 * 3600000;
+      const failedExhausted = existing?.status === 'failed' && (existing.attempts || 0) >= 5;
+      const shouldQueue = !hasActive && !sentRecently && (!existing || failedExhausted);
+
       if (shouldQueue) {
         await supabase.from('lead_activation_queue').insert({
           lead_id: sl.id,
@@ -245,17 +265,21 @@ serve(async (req) => {
       .limit(20);
 
     for (const dl of docsLeads || []) {
-      const { data: existing } = await supabase
+      const { data: existingDocs } = await supabase
         .from('lead_activation_queue')
-        .select('id, status, attempts')
+        .select('id, status, attempts, last_attempt_at')
         .eq('lead_id', dl.id)
         .eq('action_type', 'docs_reminder')
-        .in('status', ['pending', 'failed'])
-        .order('created_at', { ascending: false })
+        .in('status', ['pending', 'processing', 'sent', 'failed'])
+        .order('last_attempt_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      const shouldQueue = !existing || (existing.status === 'failed' && (existing.attempts || 0) >= 5);
-      if (shouldQueue) {
+      const hasActiveDocs = existingDocs && ['pending', 'processing'].includes(existingDocs.status);
+      const docsSentRecently = existingDocs?.status === 'sent' && existingDocs?.last_attempt_at &&
+        new Date(existingDocs.last_attempt_at).getTime() > Date.now() - 48 * 3600000;
+      const docsFailedExhausted = existingDocs?.status === 'failed' && (existingDocs.attempts || 0) >= 5;
+      const shouldQueueDocs = !hasActiveDocs && !docsSentRecently && (!existingDocs || docsFailedExhausted);
+      if (shouldQueueDocs) {
         await supabase.from('lead_activation_queue').insert({
           lead_id: dl.id,
           action_type: 'docs_reminder',
@@ -265,7 +289,46 @@ serve(async (req) => {
       }
     }
 
+    // ── 2b. SLA: leads com broker atribuído mas sem 1º contato (15-90 min) ──
+    if (withinWindow) {
+      const fifteenMinAgo = new Date(Date.now() - 15 * 60000).toISOString();
+      const ninetyMinAgo  = new Date(Date.now() - 90 * 60000).toISOString();
+      const { data: slaLeads } = await supabase
+        .from('leads')
+        .select('id')
+        .in('status', ['NEW', 'IN_PROGRESS'])
+        .not('broker_id', 'is', null)
+        .is('last_broker_whatsapp_at', null)
+        .lte('created_at', fifteenMinAgo)
+        .gte('created_at', ninetyMinAgo)
+        .limit(30);
+
+      for (const sla of slaLeads || []) {
+        const { data: existingSla } = await supabase
+          .from('lead_activation_queue')
+          .select('id')
+          .eq('lead_id', sla.id)
+          .eq('action_type', 'sla_first_contact')
+          .in('status', ['pending', 'sent'])
+          .limit(1).maybeSingle();
+        if (!existingSla) {
+          await supabase.from('lead_activation_queue').insert({
+            lead_id: sla.id,
+            action_type: 'sla_first_contact',
+            scheduled_for: now,
+            status: 'pending',
+          });
+        }
+      }
+    }
+
     // ── 3. Fetch pending queue items ───────────────────────────────────────
+    // Recover stuck 'processing' items (> 10 min sem atualização) back to pending
+    await supabase.from('lead_activation_queue')
+      .update({ status: 'pending' })
+      .eq('status', 'processing')
+      .lt('last_attempt_at', new Date(Date.now() - 10 * 60000).toISOString());
+
     const { data: items } = await supabase
       .from('lead_activation_queue')
       .select('id, lead_id, action_type, scheduled_for, metadata, attempts')
@@ -288,6 +351,16 @@ serve(async (req) => {
 
     for (const item of items || []) {
       try {
+        // ── Claim atômico: evita processamento duplicado em execuções concorrentes ──
+        const { data: claimed } = await supabase
+          .from('lead_activation_queue')
+          .update({ status: 'processing', last_attempt_at: new Date().toISOString() })
+          .eq('id', item.id)
+          .eq('status', 'pending')
+          .select('id')
+          .maybeSingle();
+        if (!claimed) { skipped++; continue; } // já foi reclamado por outra execução
+
         // Load lead
         const { data: lead } = await supabase
           .from('leads')
@@ -331,6 +404,21 @@ serve(async (req) => {
             cancelled++;
             continue;
           }
+
+          // ── PROTEÇÃO ANTI-SPAM: não disparar se o cliente já respondeu e está
+          //    aguardando o corretor (last_lead_response_at > last_broker_whatsapp_at)
+          const clientWaitingBroker = lead.last_lead_response_at && (
+            !lead.last_broker_whatsapp_at ||
+            new Date(lead.last_lead_response_at) > new Date(lead.last_broker_whatsapp_at)
+          );
+          if (clientWaitingBroker) {
+            await supabase.from('lead_activation_queue')
+              .update({ status: 'cancelled', cancel_reason: 'client_already_replied_awaiting_broker' })
+              .eq('id', item.id);
+            console.log(`[cerebro] 🛑 ${item.action_type} cancelado — ${lead.name} já respondeu e aguarda corretor`);
+            cancelled++;
+            continue;
+          }
         }
 
         const broker = lead.broker_id ? (await supabase
@@ -339,7 +427,22 @@ serve(async (req) => {
           .eq('id', lead.broker_id)
           .maybeSingle()).data : null;
 
-        const isOutbound = !['broker_alert', 'manager_alert'].includes(item.action_type);
+        // Verifica se a instância do corretor está marcada como notification_only
+        // Se sim, não pode ser usada para enviar mensagens a leads
+        if (broker?.bot_instance_id) {
+          const { data: botInst } = await supabase
+            .from('bot_instances')
+            .select('notification_only')
+            .eq('id', broker.bot_instance_id)
+            .maybeSingle();
+          if (botInst?.notification_only === true) {
+            console.warn(`[cerebro] ⛔ bot ${broker.bot_instance_id} é notification_only — skipping lead ${lead.name}`);
+            skipped++;
+            continue;
+          }
+        }
+
+        const isOutbound = !['broker_alert', 'manager_alert', 'sla_first_contact'].includes(item.action_type);
 
         if (isOutbound && !withinWindow) {
           await supabase.from('lead_activation_queue')
@@ -524,10 +627,38 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
             await supabase.from('internal_notifications').insert({
               to_id: lead.broker_id,
               type: 'CEREBRO_BROKER_ALERT',
-              title: '⚡ Lead aguardando retorno urgente',
-              message: `${lead.name} respondeu sua mensagem há mais de 2h e está aguardando. Atenda agora!`,
-              related_lead_id: lead.id,
+              message: `⚡ ${lead.name} respondeu sua mensagem há mais de 2h e está aguardando. Atenda agora!`,
             });
+            success = true;
+            break;
+          }
+
+          case 'sla_first_contact': {
+            if (!lead.broker_id) { skipped++; break; }
+            // Se broker já contatou, cancela
+            if (lead.last_broker_whatsapp_at) {
+              await supabase.from('lead_activation_queue')
+                .update({ status: 'cancelled', cancel_reason: 'broker_already_contacted' })
+                .eq('id', item.id);
+              cancelled++;
+              continue;
+            }
+            const minutesWaiting = Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 60000);
+            const brokerName = broker?.first_name || 'Corretor';
+            // Alerta para o corretor
+            await supabase.from('internal_notifications').insert({
+              to_id: lead.broker_id,
+              type: 'SLA_BREACH',
+              message: `⚡ SLA: ${lead.name} aguarda seu 1º contato há ${minutesWaiting} min! Contate agora.`,
+            });
+            // Alerta para o gerente (se tiver)
+            if (broker?.manager_id) {
+              await supabase.from('internal_notifications').insert({
+                to_id: broker.manager_id,
+                type: 'SLA_BREACH',
+                message: `⏱️ SLA breach: ${lead.name} aguarda contato há ${minutesWaiting} min. Corretor: ${brokerName}.`,
+              });
+            }
             success = true;
             break;
           }
@@ -545,9 +676,7 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
             await supabase.from('internal_notifications').insert({
               to_id: broker.manager_id,
               type: 'CEREBRO_MANAGER_ALERT',
-              title: '🚨 Lead crítico sem atendimento',
-              message: `${lead.name} está há mais de 4h sem resposta do corretor ${broker.first_name || ''}. Intervenha!`,
-              related_lead_id: lead.id,
+              message: `🚨 ${lead.name} está há mais de 4h sem resposta do corretor ${broker.first_name || ''}. Intervenha!`,
             });
             success = true;
             break;
@@ -608,6 +737,7 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
               ? new Date(Date.now() + 30 * 60000).toISOString()
               : nextWindowOpen();
             await supabase.from('lead_activation_queue').update({
+              status: 'pending', // volta para pending para ser reprocessado no horário agendado
               scheduled_for: retryTime,
               last_attempt_at: new Date().toISOString(),
               attempts: newAttempts,
@@ -615,6 +745,11 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
             rescheduled++;
             details.push({ action: item.action_type, lead: lead.name, status: `retry_${newAttempts}` });
           }
+        } else {
+          // Ação não-outbound que não setou success (skipped) — libera o item
+          await supabase.from('lead_activation_queue')
+            .update({ status: 'cancelled', cancel_reason: 'skipped_no_broker_or_manager' })
+            .eq('id', item.id);
         }
 
         await new Promise(r => setTimeout(r, 300));

@@ -155,111 +155,305 @@ function Panel({ children, className }: { children: React.ReactNode; className?:
   );
 }
 
-// ─── Metas Bar ───────────────────────────────────────────────────────────────
+// ─── Corrida para a Meta ─────────────────────────────────────────────────────
 
-function MetasBar({ teamId, brokerIds }: { teamId: string | null; brokerIds: string[] }) {
-  const [goal, setGoal]     = useState<number | null>(null);
-  const [actual, setActual] = useState<number>(0);
-  const [loaded, setLoaded] = useState(false);
+function MetaCorrida({ teamId, brokers, teamLeads }: {
+  teamId: string | null;
+  brokers: User[];
+  teamLeads: Lead[];
+}) {
+  const [goal, setGoal]       = useState<number | null>(null);
+  const [loaded, setLoaded]   = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  // Início e fim do mês atual
+  const now        = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const monthStr   = monthStart.toLocaleDateString("pt-BR", { month: "long" });
+
+  // Dias restantes no mês
+  const daysInMonth    = monthEnd.getDate() === 1
+    ? new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    : 30;
+  const dayOfMonth     = now.getDate();
+  const daysRemaining  = Math.max(1, daysInMonth - dayOfMonth);
 
   useEffect(() => {
     if (!teamId) { setLoaded(true); return; }
-    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
-    const monthEnd   = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().slice(0, 10);
+    const ms = monthStart.toISOString().slice(0, 10);
+    const me = monthEnd.toISOString().slice(0, 10);
+    supabase.from("team_goals").select("sales_target")
+      .eq("team_id", teamId)
+      .eq("goal_type", "monthly")
+      .gte("month", ms).lt("month", me)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        setGoal((data as any)?.[0]?.sales_target ?? null);
+        setLoaded(true);
+      });
+  }, [teamId]);
 
-    Promise.all([
-      supabase.from("team_goals").select("sales_target")
-        .eq("team_id", teamId)
-        .eq("goal_type", "monthly")
-        .gte("month", monthStart).lt("month", monthEnd)
-        .order("created_at", { ascending: false })
-        .limit(1),
-      brokerIds.length > 0
-        ? supabase.from("leads").select("id", { count: "exact", head: true })
-            .in("broker_id", brokerIds).eq("status", "CONCLUDED")
-            .gte("updated_at", monthStart).lt("updated_at", monthEnd)
-        : Promise.resolve({ count: 0 }),
-    ]).then(([{ data: goalRows }, { count }]) => {
-      setGoal((goalRows as any)?.[0]?.sales_target ?? null);
-      setActual(count ?? 0);
-      setLoaded(true);
-    });
-  }, [teamId, brokerIds.join(",")]);
+  // Vendas do mês por corretor (CONCLUDED com last_interaction_at no mês)
+  const brokerStats = useMemo(() => {
+    return brokers.map(b => {
+      const myLeads   = teamLeads.filter(l => l.brokerId === b.id);
+      const vendas    = myLeads.filter(l => {
+        if (l.status !== "CONCLUDED") return false;
+        const d = new Date(l.lastInteractionAt || l.createdAt);
+        return d >= monthStart && d < monthEnd;
+      }).length;
+      const emDocs    = myLeads.filter(l => l.status === "DOCS_REQUESTED").length;
+      const emVisita  = myLeads.filter(l => ["VISIT_SCHEDULED","VISITA_AGENDADA"].includes(l.status)).length;
+      const pipeline  = emDocs + emVisita;
+      return { broker: b, vendas, emDocs, emVisita, pipeline };
+    }).sort((a, b) => b.vendas - a.vendas || b.pipeline - a.pipeline);
+  }, [brokers, teamLeads]);
+
+  const totalVendas   = brokerStats.reduce((s, b) => s + b.vendas, 0);
+  const totalPipeline = brokerStats.reduce((s, b) => s + b.pipeline, 0);
+
+  // Ritmo
+  const ritmoAtual    = dayOfMonth > 0 ? (totalVendas / dayOfMonth) : 0;
+  const ritmoNecessario = goal ? Math.max(0, (goal - totalVendas) / daysRemaining) : 0;
+  const metaIndividual  = goal && brokers.length > 0 ? Math.ceil(goal / brokers.length) : null;
 
   if (!loaded) return null;
 
-  // Se não tem equipe vinculada ao perfil do gerente
   if (!teamId) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: -6 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="shrink-0 mx-4 mt-2 rounded-xl px-4 py-2 flex items-center gap-3"
-        style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}
-      >
-        <Target className="w-3.5 h-3.5 shrink-0" style={{ color: "#EF4444" }} />
+      <div className="shrink-0 mx-4 mt-2 rounded-xl px-4 py-2 flex items-center gap-3"
+        style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
+        <Target className="w-3.5 h-3.5" style={{ color: "#EF4444" }} />
         <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#EF4444" }}>
           Perfil sem equipe vinculada — peça ao admin para associar sua equipe em Usuários
         </span>
-      </motion.div>
+      </div>
     );
   }
 
-  const month = new Date().toLocaleDateString("pt-BR", { month: "long" });
-
-  // Sem meta cadastrada — mostra aviso
-  if (!goal) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: -6 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="shrink-0 mx-4 mt-2 rounded-xl px-4 py-2 flex items-center gap-3"
-        style={{ background: "rgba(71,85,105,0.08)", border: "1px solid rgba(71,85,105,0.25)" }}
-      >
-        <Target className="w-3.5 h-3.5 shrink-0" style={{ color: "#475569" }} />
-        <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#475569" }}>
-          Meta de {month} não definida — peça ao seu admin para configurar em Financeiro → Metas
-        </span>
-        <span className="text-xs font-black ml-auto" style={{ color: "#334155" }}>{actual} vendas realizadas</span>
-      </motion.div>
-    );
-  }
-
-  const pct   = Math.min(100, Math.round((actual / goal) * 100));
-  const color = pct >= 90 ? "#10B981" : pct >= 60 ? "#F59E0B" : "#EF4444";
-  const label = pct >= 90 ? "No Prazo" : pct >= 60 ? "Em Risco" : "Abaixo";
+  const pct   = goal ? Math.min(100, Math.round((totalVendas / goal) * 100)) : 0;
+  const color = !goal ? "#475569" : pct >= 90 ? "#10B981" : pct >= 60 ? "#F59E0B" : "#EF4444";
+  const statusLabel = !goal ? "Sem Meta" : pct >= 90 ? "No Prazo" : pct >= 60 ? "Em Risco" : "Abaixo";
 
   return (
     <motion.div
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="shrink-0 mx-4 mt-2 rounded-xl px-4 py-2.5 flex items-center gap-4"
-      style={{ background: `${color}0a`, border: `1px solid ${color}30` }}
+      className="shrink-0 mx-4 mt-2 rounded-xl overflow-hidden"
+      style={{ border: `1px solid ${color}30`, background: `${color}08` }}
     >
-      <Target className="w-4 h-4 shrink-0" style={{ color }} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-black uppercase tracking-widest" style={{ color }}>
-            Meta {month}: {actual} / {goal} vendas
-          </span>
-          <span className="text-[10px] font-black px-2 py-0.5 rounded-full"
-            style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>
-            {label} · {pct}%
-          </span>
+      {/* ── Barra compacta ── */}
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full px-4 py-2.5 flex items-center gap-3 hover:opacity-90 transition-opacity"
+      >
+        <Target className="w-4 h-4 shrink-0" style={{ color }} />
+
+        {/* Barra de progresso */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color }}>
+              Meta {monthStr}: {totalVendas} / {goal ?? "—"} vendas
+            </span>
+            <div className="flex items-center gap-2">
+              {goal && (
+                <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full"
+                  style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>
+                  {statusLabel} · {pct}%
+                </span>
+              )}
+              {totalPipeline > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                  style={{ background: "rgba(16,185,129,0.15)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}>
+                  🔥 {totalPipeline} no pipeline
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className="h-full rounded-full"
+              style={{ background: `linear-gradient(90deg, ${color}70, ${color})`, boxShadow: `0 0 8px ${color}50` }}
+            />
+          </div>
         </div>
-        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+
+        {/* Ritmo */}
+        {goal && (
+          <div className="shrink-0 text-right hidden sm:block">
+            <p className="text-[9px] uppercase tracking-wider" style={{ color: "#475569" }}>Ritmo</p>
+            <p className="text-[11px] font-black" style={{ color: ritmoAtual >= ritmoNecessario ? "#10B981" : "#EF4444" }}>
+              {ritmoAtual.toFixed(1)}<span className="font-normal text-[9px]">/dia</span>
+            </p>
+          </div>
+        )}
+
+        {/* Dias restantes */}
+        <div className="shrink-0 text-right hidden sm:block">
+          <p className="text-[9px] uppercase tracking-wider" style={{ color: "#475569" }}>Restam</p>
+          <p className="text-[11px] font-black" style={{ color: "#94A3B8" }}>{daysRemaining}d</p>
+        </div>
+
+        {/* Toggle */}
+        <motion.div
+          animate={{ rotate: expanded ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+          className="shrink-0"
+          style={{ color: "#334155" }}
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+            <path d="M19 9l-7 7-7-7" />
+          </svg>
+        </motion.div>
+      </button>
+
+      {/* ── Seção expandida ── */}
+      <AnimatePresence>
+        {expanded && (
           <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${pct}%` }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className="h-full rounded-full"
-            style={{ background: `linear-gradient(90deg, ${color}80, ${color})`, boxShadow: `0 0 8px ${color}60` }}
-          />
-        </div>
-      </div>
-      <span className="text-xl font-black shrink-0" style={{ color, textShadow: `0 0 12px ${color}50` }}>
-        {pct}%
-      </span>
+            key="expanded"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-3 border-t" style={{ borderColor: `${color}20` }}>
+
+              {/* ── Painel de ritmo ── */}
+              <div className="grid grid-cols-4 gap-2 py-3">
+                {[
+                  { label: "Vendas no mês",  value: totalVendas,  sub: `meta: ${goal ?? "—"}`,        c: color },
+                  { label: "Ritmo atual",    value: `${ritmoAtual.toFixed(1)}/d`,  sub: "vendas/dia",   c: ritmoAtual >= ritmoNecessario ? "#10B981" : "#EF4444" },
+                  { label: "Ritmo necessário", value: `${ritmoNecessario.toFixed(1)}/d`, sub: `em ${daysRemaining} dias`, c: "#F59E0B" },
+                  { label: "Pipeline quente",value: totalPipeline, sub: "docs + visitas",              c: "#10B981" },
+                ].map(item => (
+                  <div key={item.label} className="rounded-lg p-2 text-center"
+                    style={{ background: `${item.c}08`, border: `1px solid ${item.c}20` }}>
+                    <p className="text-[9px] uppercase tracking-wider mb-0.5" style={{ color: "#475569" }}>{item.label}</p>
+                    <p className="text-base font-black" style={{ color: item.c }}>{item.value}</p>
+                    <p className="text-[9px]" style={{ color: "#334155" }}>{item.sub}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Tabela de corretores ── */}
+              {!goal && (
+                <p className="text-[10px] text-center py-2" style={{ color: "#475569" }}>
+                  Meta não definida — acesse Admin → Financeiro → Metas para configurar
+                </p>
+              )}
+
+              {brokerStats.length > 0 && (
+                <div className="rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.05)" }}>
+                  {/* Cabeçalho */}
+                  <div className="grid text-[9px] font-black uppercase tracking-wider px-3 py-1.5"
+                    style={{ background: "rgba(255,255,255,0.03)", color: "#334155",
+                      gridTemplateColumns: "1fr 60px 60px 60px 100px 50px 50px" }}>
+                    <span>Corretor</span>
+                    <span className="text-center">Meta Ind.</span>
+                    <span className="text-center">Vendas</span>
+                    <span className="text-center">%</span>
+                    <span className="text-center">Progresso</span>
+                    <span className="text-center">Docs</span>
+                    <span className="text-center">Visita</span>
+                  </div>
+
+                  {/* Linhas */}
+                  {brokerStats.map(({ broker, vendas, emDocs, emVisita }, i) => {
+                    const indTarget = metaIndividual ?? 0;
+                    const indPct    = indTarget > 0 ? Math.min(100, Math.round((vendas / indTarget) * 100)) : 0;
+                    const rowColor  = !indTarget ? "#475569" : indPct >= 90 ? "#10B981" : indPct >= 50 ? "#F59E0B" : "#EF4444";
+                    const isLast    = i === brokerStats.length - 1;
+
+                    return (
+                      <motion.div
+                        key={broker.id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.04 }}
+                        className="grid items-center px-3 py-2 text-xs"
+                        style={{
+                          gridTemplateColumns: "1fr 60px 60px 60px 100px 50px 50px",
+                          borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.03)",
+                          borderBottom: isLast ? "none" : undefined,
+                        }}
+                      >
+                        {/* Nome */}
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-black shrink-0"
+                            style={{ background: `${rowColor}20`, color: rowColor, border: `1px solid ${rowColor}40` }}>
+                            {initials(broker.name)}
+                          </div>
+                          <span className="font-semibold truncate" style={{ color: "#CBD5E1" }}>
+                            {broker.name.split(" ")[0]}
+                          </span>
+                        </div>
+
+                        {/* Meta individual */}
+                        <span className="text-center font-bold" style={{ color: "#475569" }}>
+                          {indTarget || "—"}
+                        </span>
+
+                        {/* Vendas */}
+                        <span className="text-center font-black" style={{ color: rowColor }}>
+                          {vendas}
+                        </span>
+
+                        {/* % */}
+                        <span className="text-center font-bold text-[10px]" style={{ color: rowColor }}>
+                          {indTarget > 0 ? `${indPct}%` : "—"}
+                        </span>
+
+                        {/* Barra */}
+                        <div className="px-1">
+                          <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${indPct}%` }}
+                              transition={{ duration: 0.6, delay: i * 0.05, ease: "easeOut" }}
+                              className="h-full rounded-full"
+                              style={{ background: rowColor, boxShadow: `0 0 4px ${rowColor}60` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Docs */}
+                        <span className="text-center font-bold text-[11px]"
+                          style={{ color: emDocs > 0 ? "#10B981" : "#1E293B" }}>
+                          {emDocs > 0 ? `${emDocs} 📄` : "—"}
+                        </span>
+
+                        {/* Visita */}
+                        <span className="text-center font-bold text-[11px]"
+                          style={{ color: emVisita > 0 ? "#F59E0B" : "#1E293B" }}>
+                          {emVisita > 0 ? `${emVisita} 🏠` : "—"}
+                        </span>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Nota de alerta se muito abaixo do ritmo */}
+              {goal && ritmoNecessario > ritmoAtual * 1.5 && (
+                <div className="mt-2 rounded-lg px-3 py-2 flex items-center gap-2"
+                  style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                  <span className="text-[10px]" style={{ color: "#EF4444" }}>
+                    ⚡ Ritmo necessário ({ritmoNecessario.toFixed(1)}/dia) é {Math.round(ritmoNecessario / Math.max(ritmoAtual, 0.1))}x o ritmo atual.
+                    Foque em converter os {totalPipeline} leads do pipeline (docs + visita) — são os mais próximos da venda.
+                  </span>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -501,7 +695,7 @@ function AlertModal({ broker, fromId, onClose }: {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-type RightTab  = "alertas" | "presenca" | "fila" | "ranking" | "intel";
+type RightTab  = "alertas" | "presenca" | "fila" | "ranking" | "intel" | "velocidade";
 type LeftPanel = "urgente" | "redistribuir" | "descarte" | "busca";
 
 export default function ManagerDashboard() {
@@ -672,6 +866,32 @@ export default function ManagerDashboard() {
 
   const brokerMap = useMemo(() => Object.fromEntries(brokers.map(b => [b.id, b])), [brokers]);
 
+  // Velocidade de resposta
+  const velocidadeStats = useMemo(() => {
+    const now = Date.now();
+    const weekAgo = now - 7 * 86400000;
+    const uncontacted = teamLeads
+      .filter(l => l.brokerId && !l.lastBrokerWhatsappAt && !["CONCLUDED","ABANDONED","EXCLUDED"].includes(l.status))
+      .map(l => ({ ...l, minsWaiting: Math.floor((now - new Date(l.createdAt).getTime()) / 60000) }))
+      .sort((a, b) => b.minsWaiting - a.minsWaiting);
+    const brokerTimes: Record<string, number[]> = {};
+    teamLeads
+      .filter(l => l.lastBrokerWhatsappAt && new Date(l.createdAt).getTime() > weekAgo && l.brokerId)
+      .forEach(l => {
+        const mins = Math.floor((new Date(l.lastBrokerWhatsappAt!).getTime() - new Date(l.createdAt).getTime()) / 60000);
+        if (mins >= 0 && mins < 1440) {
+          if (!brokerTimes[l.brokerId!]) brokerTimes[l.brokerId!] = [];
+          brokerTimes[l.brokerId!].push(mins);
+        }
+      });
+    const brokerAvg = Object.fromEntries(
+      Object.entries(brokerTimes).map(([id, times]) => [
+        id, Math.round(times.reduce((a, b) => a + b, 0) / times.length)
+      ])
+    );
+    return { uncontacted, brokerAvg };
+  }, [teamLeads]);
+
   const rankingRows = useMemo(() =>
     brokers.map(broker => {
       const bl        = teamLeads.filter(l => l.brokerId === broker.id);
@@ -773,8 +993,8 @@ export default function ManagerDashboard() {
       {/* ── WHATSAPP BANNER ─────────────────────────────────────────────────── */}
       <WhatsAppQRBanner />
 
-      {/* ── META BAR ────────────────────────────────────────────────────────── */}
-      <MetasBar teamId={teamId} brokerIds={brokers.map(b => b.id)} />
+      {/* ── CORRIDA PARA A META ─────────────────────────────────────────────── */}
+      <MetaCorrida teamId={teamId} brokers={brokers} teamLeads={teamLeads} />
 
       {/* ── KPI BAR ─────────────────────────────────────────────────────────── */}
       <div className="shrink-0 grid grid-cols-3 sm:grid-cols-7 gap-2 px-4 pt-2 pb-0">
@@ -1243,14 +1463,15 @@ export default function ManagerDashboard() {
           {/* Tab selector */}
           <div className="flex gap-1.5 shrink-0">
             {([
-              { v: "alertas",  label: "Semáforo",  icon: Shield },
-              { v: "ranking",  label: "Ranking",   icon: Trophy },
-              { v: "intel",    label: "Inteligência", icon: Brain },
-              { v: "presenca", label: "Presença",  icon: UserCheck },
-              { v: "fila",     label: "Fila",      icon: GitMerge },
-            ] as { v: RightTab; label: string; icon: React.ElementType }[]).map(tab => (
+              { v: "alertas",    label: "Semáforo",  icon: Shield },
+              { v: "velocidade", label: "SLA",       icon: Zap, badge: velocidadeStats.uncontacted.filter(l => l.minsWaiting > 15).length },
+              { v: "ranking",    label: "Ranking",   icon: Trophy },
+              { v: "intel",      label: "Intel",     icon: Brain },
+              { v: "presenca",   label: "Presença",  icon: UserCheck },
+              { v: "fila",       label: "Fila",      icon: GitMerge },
+            ] as { v: RightTab; label: string; icon: React.ElementType; badge?: number }[]).map(tab => (
               <button key={tab.v} onClick={() => setRightTab(tab.v)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex-1 justify-center"
+                className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex-1 justify-center"
                 style={rightTab === tab.v ? {
                   background: "linear-gradient(135deg, #0044cc, #0066ff)",
                   color: "#fff",
@@ -1264,6 +1485,10 @@ export default function ManagerDashboard() {
               >
                 <tab.icon className="w-3 h-3" />
                 {tab.label}
+                {(tab.badge ?? 0) > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center animate-pulse"
+                    style={{ background: "#EF4444", color: "#fff" }}>{tab.badge}</span>
+                )}
               </button>
             ))}
           </div>
@@ -1629,6 +1854,112 @@ export default function ManagerDashboard() {
                       ))}
                     </div>
                   )}
+                </Panel>
+              )}
+
+              {/* VELOCIDADE / SLA */}
+              {rightTab === "velocidade" && (
+                <Panel className="h-full overflow-y-auto">
+                  <SectionHeader label="SLA — Velocidade de Resposta" icon={Zap} color="#F59E0B" />
+
+                  {/* Leads aguardando 1º contato */}
+                  {velocidadeStats.uncontacted.length > 0 ? (
+                    <div className="mb-4">
+                      <p className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: "#F59E0B" }}>
+                        ⏱ Aguardando 1º contato ({velocidadeStats.uncontacted.length})
+                      </p>
+                      <div className="space-y-1.5">
+                        {velocidadeStats.uncontacted.slice(0, 12).map((lead, i) => {
+                          const mins = lead.minsWaiting;
+                          const slaBreach = mins > 30;
+                          const slaWarn   = mins > 10;
+                          const c = slaBreach ? "#EF4444" : slaWarn ? "#F59E0B" : "#10B981";
+                          const broker = lead.brokerId ? brokerMap[lead.brokerId] : null;
+                          return (
+                            <motion.div key={lead.id}
+                              initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: i * 0.03 }}
+                              className="flex items-center gap-2 rounded-xl px-3 py-2"
+                              style={{ background: `${c}08`, border: `1px solid ${c}25` }}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-white truncate">{lead.name}</p>
+                                <p className="text-[10px]" style={{ color: "#475569" }}>
+                                  {broker?.name.split(" ")[0] || "—"} · {lead.tag || "sem tag"}
+                                </p>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <p className="text-sm font-black" style={{ color: c }}>
+                                  {mins < 60 ? `${mins}min` : `${Math.floor(mins / 60)}h${mins % 60 > 0 ? `${mins % 60}m` : ""}`}
+                                </p>
+                                <p className="text-[9px] font-bold uppercase" style={{ color: c }}>
+                                  {slaBreach ? "SLA BREACH" : slaWarn ? "Atenção" : "OK"}
+                                </p>
+                              </div>
+                              <button onClick={() => setAlertBroker(broker!)} disabled={!broker}
+                                className="shrink-0 p-1.5 rounded-lg transition hover:scale-105"
+                                style={{ background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}>
+                                <Bell className="w-3 h-3" />
+                              </button>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-6 gap-2 mb-4">
+                      <CheckCircle2 className="w-8 h-8" style={{ color: "#10B981" }} />
+                      <p className="text-sm font-bold" style={{ color: "#10B981" }}>Todos os leads foram contatados!</p>
+                    </div>
+                  )}
+
+                  {/* Velocidade média por corretor */}
+                  <div style={{ borderTop: "1px solid #1E293B", paddingTop: 12 }}>
+                    <p className="text-[10px] font-black uppercase tracking-widest mb-2" style={{ color: "#475569" }}>
+                      Tempo médio de resposta (7 dias)
+                    </p>
+                    <div className="space-y-2">
+                      {brokers.map((broker, i) => {
+                        const avg = velocidadeStats.brokerAvg[broker.id];
+                        const hasData = avg !== undefined;
+                        const c = !hasData ? "#334155" : avg <= 10 ? "#10B981" : avg <= 30 ? "#F59E0B" : "#EF4444";
+                        const label = !hasData ? "sem dados" : avg <= 10 ? "Excelente" : avg <= 30 ? "Atenção" : "Crítico";
+                        return (
+                          <motion.div key={broker.id}
+                            initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.04 }}
+                            className="flex items-center gap-3 rounded-xl px-3 py-2"
+                            style={{ background: "var(--crm-glass)", border: "1px solid var(--crm-border-mid,#1E293B)" }}
+                          >
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center font-black text-[10px] shrink-0"
+                              style={{ background: `${c}18`, color: c, border: `1px solid ${c}30` }}>
+                              {initials(broker.name)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-white truncate">{broker.name.split(" ")[0]}</p>
+                              <div className="h-1 rounded-full overflow-hidden mt-1" style={{ background: "rgba(255,255,255,0.05)", width: "80%" }}>
+                                {hasData && (
+                                  <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${Math.min(100, (avg / 60) * 100)}%` }}
+                                    transition={{ duration: 0.6, delay: i * 0.04 }}
+                                    className="h-full rounded-full"
+                                    style={{ background: c }}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-sm font-black" style={{ color: c }}>
+                                {hasData ? (avg < 60 ? `${avg}min` : `${Math.floor(avg / 60)}h`) : "—"}
+                              </p>
+                              <p className="text-[9px] uppercase font-bold" style={{ color: c }}>{label}</p>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </Panel>
               )}
 
