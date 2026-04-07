@@ -6,7 +6,7 @@ import {
   MessageSquare, Phone, Calendar, X, Send, Zap,
   Flame, Trophy, Star, TrendingUp,
   Shield, Volume2, VolumeX, LogOut, Bell, CheckCircle2, Loader2,
-  Bot, UserCheck, Brain
+  Bot, UserCheck, Brain, PlusCircle
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -21,6 +21,8 @@ import type { User } from "@/types/user";
 import { toast } from "sonner";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
+import { Sheet, SheetTrigger } from "@/components/ui/sheet";
+import LeadForm from "@/components/broker/LeadForm";
 
 /* ─────────────────────────────────────────────
    STYLES
@@ -424,6 +426,7 @@ export default function DashboardWolf() {
   const [mutating, setMutating]         = useState(false);
   const [humanMode, setHumanMode]       = useState(false);
   const [humanModeLoading, setHumanModeLoading] = useState(false);
+  const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const isBroker = role === "BROKER";
@@ -774,6 +777,18 @@ export default function DashboardWolf() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <Sheet open={isLeadFormOpen} onOpenChange={setIsLeadFormOpen}>
+              <SheetTrigger asChild>
+                <button className="flex items-center gap-1.5 px-2.5 h-7 rounded-lg text-xs font-bold uppercase tracking-wider transition-all"
+                  style={{ background: "rgba(16,185,129,.15)", border: "1px solid rgba(16,185,129,.35)", color: "#10B981" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,.28)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,.15)"; }}>
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span className="wolf-display hidden sm:inline">Novo Lead</span>
+                </button>
+              </SheetTrigger>
+              <LeadForm onOpenChange={setIsLeadFormOpen} brokerId={user?.id ?? ""} managerId={myProfile?.managerId ?? null} />
+            </Sheet>
             <ThemeToggle compact />
             <button onClick={() => setIsMuted(m => !m)} className="btn-ghost w-7 h-7 rounded-lg flex items-center justify-center">
               {isMuted ? <VolumeX className="w-3.5 h-3.5 text-slate-500" /> : <Volume2 className="w-3.5 h-3.5 text-cyan-400" />}
