@@ -53,6 +53,81 @@ function detectOptOut(text: string): boolean {
   return OPT_OUT_PATTERNS.some(pattern => normalized.includes(pattern));
 }
 
+// ── Palavras-chave que indicam possível avanço de pipeline ─────────────────
+const PIPELINE_KEYWORDS = [
+  'visita', 'visit', 'agend', 'amanha', 'semana que vem', 'proxima semana',
+  'tour', 'conhecer o imovel', 'ver o imovel',
+  'document', 'rg', ' cpf', 'comprovante', 'renda', 'contrato', 'proposta',
+  'assinar', 'mandei', 'enviei', 'mando', 'vou enviar', 'ja enviei',
+];
+
+function hasPipelineKeyword(text: string): boolean {
+  if (!text) return false;
+  const norm = normalizeText(text);
+  return PIPELINE_KEYWORDS.some(kw => norm.includes(kw));
+}
+
+// ── Análise de avanço de pipeline via Gemini ──────────────────────────────
+async function analyzeConversationStatus(
+  supabase: any,
+  leadId: string,
+  lastMessage: string,
+  geminiKey: string
+): Promise<{ suggested_status: string | null; reason: string } | null> {
+  try {
+    const { data: conv } = await supabase
+      .from('ia_conversations')
+      .select('id')
+      .eq('lead_id', leadId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!conv?.id) return null;
+
+    const { data: msgs } = await supabase
+      .from('ia_messages')
+      .select('direction, message_text')
+      .eq('conversation_id', conv.id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (!msgs || msgs.length < 2) return null;
+
+    const history = [...msgs].reverse()
+      .map((m: any) => `[${m.direction === 'incoming' ? 'LEAD' : 'BOT'}] ${m.message_text}`)
+      .join('\n');
+
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: `Histórico:\n${history}\n\nÚltima mensagem do lead: "${lastMessage}"` }] }],
+          systemInstruction: { parts: [{ text:
+            `Identifique avanço no pipeline de venda de imóvel MCMV.
+Responda APENAS em JSON válido, sem markdown:
+{"suggested_status":"VISIT_SCHEDULED"|"DOCS_REQUESTED"|null,"reason":"motivo curto"}
+
+Regras:
+- "VISIT_SCHEDULED": lead confirmou visita ou tour presencial
+- "DOCS_REQUESTED": lead enviou ou confirmou envio de documentos (RG, CPF, comprovante de renda)
+- null: sem evidência clara de avanço de pipeline`
+          }] },
+          generationConfig: { maxOutputTokens: 80, temperature: 0.1 },
+        }),
+      }
+    );
+    const respJson = await resp.json();
+    const rawText = respJson.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    const parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+    return { suggested_status: parsed.suggested_status || null, reason: parsed.reason || '' };
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -331,6 +406,61 @@ Responda APENAS em JSON válido, sem markdown:
                 p_proxima_acao:   'aguardar',
                 p_atualizado_por: 'webhook_receiver',
               }).catch(() => {});
+            }
+          }
+
+          // ── Análise de avanço de pipeline ─────────────────────────────
+          // Só roda se mensagem tem palavras-chave relevantes + cooldown 2h
+          if (messageText && hasPipelineKeyword(messageText)) {
+            const geminiKey2 = Deno.env.get('GEMINI_API_KEY') || '';
+            if (geminiKey2) {
+              try {
+                const { data: recentCheck } = await supabase
+                  .from('automation_logs')
+                  .select('id')
+                  .eq('entity_id', lead.id)
+                  .eq('entity_type', 'ia_status_analysis')
+                  .gte('executed_at', new Date(Date.now() - 2 * 3600000).toISOString())
+                  .limit(1)
+                  .maybeSingle();
+
+                if (!recentCheck) {
+                  const statusAnalysis = await analyzeConversationStatus(supabase, lead.id, messageText, geminiKey2);
+
+                  // Log cooldown (independente de ter mudado o status)
+                  await supabase.from('automation_logs').insert({
+                    entity_type: 'ia_status_analysis',
+                    entity_id: lead.id,
+                    status: 'success',
+                    message_sent: statusAnalysis?.suggested_status
+                      ? `${lead.status} → ${statusAnalysis.suggested_status}: ${statusAnalysis.reason}`
+                      : `sem mudança: ${statusAnalysis?.reason || 'nenhuma evidência'}`,
+                    recipient_phone: lead.phone,
+                  }).catch(() => {});
+
+                  if (statusAnalysis?.suggested_status) {
+                    const PIPELINE_ORDER = ['NEW', 'IN_PROGRESS', 'VISIT_SCHEDULED', 'DOCS_REQUESTED', 'CONCLUDED'];
+                    const curIdx = PIPELINE_ORDER.indexOf((lead.status || 'NEW').toUpperCase());
+                    const newIdx = PIPELINE_ORDER.indexOf(statusAnalysis.suggested_status);
+
+                    if (newIdx > curIdx) {
+                      await supabase.from('leads')
+                        .update({ status: statusAnalysis.suggested_status })
+                        .eq('id', lead.id);
+
+                      await supabase.from('lead_notes').insert({
+                        lead_id: lead.id,
+                        content: `📊 Status atualizado pela IA: ${lead.status} → ${statusAnalysis.suggested_status}. Motivo: ${statusAnalysis.reason}`,
+                        type: 'SYSTEM',
+                      }).catch(() => {});
+
+                      console.log(`[webhook_receiver] 📊 ${lead.name}: ${lead.status} → ${statusAnalysis.suggested_status}`);
+                    }
+                  }
+                }
+              } catch (e: any) {
+                console.warn('[webhook_receiver] Análise pipeline IA falhou:', e.message);
+              }
             }
           }
 

@@ -55,7 +55,7 @@ async function callGemini(apiKey: string, system: string, user: string): Promise
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: user }] }],
           systemInstruction: { parts: [{ text: system }] },
-          generationConfig: { maxOutputTokens: 150, temperature: 0.7 },
+          generationConfig: { maxOutputTokens: 200, temperature: 0.7 },
         }),
       }
     );
@@ -75,11 +75,12 @@ function interpolate(template: string, name: string, broker: string): string {
 // ── Análise de conversa por IA ─────────────────────────────────────────────
 // Retorna decisão: 'ok' | 'nao_perturbar' | 'agendado_N' | 'negociando' | 'docs_enviados'
 // 'agendado_N' = pausar N horas (ex: 'agendado_48')
+// suggested_status: pipeline status a atualizar se avanço detectado
 async function analyzeConversation(
   supabase: any,
   leadId: string,
   geminiKey: string
-): Promise<{ decision: string; reason: string } | null> {
+): Promise<{ decision: string; reason: string; suggested_status?: string | null } | null> {
   if (!geminiKey) return null;
 
   // Busca conversa mais recente do lead
@@ -111,28 +112,39 @@ async function analyzeConversation(
     .join('\n');
 
   const system = `Você analisa conversas de WhatsApp entre corretores de imóveis e leads.
-Sua tarefa: decidir se o sistema de automação DEVE ou NÃO enviar uma nova mensagem automática agora.
+Sua tarefa: (1) decidir se o sistema de automação deve enviar mensagem agora, e (2) identificar avanço no pipeline.
 
 Responda APENAS em JSON válido, sem markdown:
 {
   "decision": "ok" | "nao_perturbar" | "agendado_48" | "agendado_72" | "negociando" | "docs_enviados",
+  "suggested_status": "VISIT_SCHEDULED" | "DOCS_REQUESTED" | "IN_PROGRESS" | null,
   "reason": "motivo curto em português"
 }
 
-Regras:
+Regras para decision:
 - "ok": conversa inativa, sem compromissos, pode enviar
 - "nao_perturbar": lead pediu para parar, ficou irritado ou disse que não tem interesse
 - "agendado_48": existe visita, ligação ou reunião combinada nos próximos 2 dias
 - "agendado_72": existe visita, ligação ou reunião combinada em 3+ dias
-- "negociando": conversa ativa, corretor e lead estão trocando mensagens sobre proposta/condições
-- "docs_enviados": lead disse que já enviou ou vai enviar documentos`;
+- "negociando": conversa ativa, corretor e lead trocando mensagens sobre proposta/condições
+- "docs_enviados": lead disse que já enviou ou vai enviar documentos
+
+Regras para suggested_status (só quando há evidência clara na conversa):
+- "VISIT_SCHEDULED": lead confirmou visita ou tour presencial
+- "DOCS_REQUESTED": lead enviou ou confirmou envio de documentos (RG, CPF, comprovante de renda)
+- "IN_PROGRESS": conversa ativa sem evento específico de avanço
+- null: sem evidência de avanço de pipeline`;
 
   const result = await callGemini(geminiKey, system, `Histórico da conversa:\n${history}`);
   if (!result) return null;
 
   try {
     const parsed = JSON.parse(result.replace(/```json|```/g, '').trim());
-    return { decision: parsed.decision || 'ok', reason: parsed.reason || '' };
+    return {
+      decision: parsed.decision || 'ok',
+      reason: parsed.reason || '',
+      suggested_status: parsed.suggested_status || null,
+    };
   } catch {
     return null;
   }
@@ -490,8 +502,33 @@ serve(async (req) => {
           // Lê as últimas mensagens do WhatsApp e decide se deve enviar
           const convAnalysis = await analyzeConversation(supabase, lead.id, geminiKey);
           if (convAnalysis) {
-            const { decision, reason } = convAnalysis;
+            const { decision, reason, suggested_status } = convAnalysis;
             console.log(`[cerebro] 🧠 análise conversa ${lead.name}: ${decision} — ${reason}`);
+
+            // ── Atualização automática de status do pipeline ──────────────
+            if (suggested_status) {
+              const PIPELINE_ORDER = ['NEW', 'IN_PROGRESS', 'VISIT_SCHEDULED', 'DOCS_REQUESTED', 'CONCLUDED'];
+              const curIdx = PIPELINE_ORDER.indexOf((lead.status || 'NEW').toUpperCase());
+              const newIdx = PIPELINE_ORDER.indexOf(suggested_status);
+              if (newIdx > curIdx) {
+                await supabase.from('leads')
+                  .update({ status: suggested_status })
+                  .eq('id', lead.id);
+                await supabase.from('automation_logs').insert({
+                  entity_type: 'ia_status_analysis',
+                  entity_id: lead.id,
+                  status: 'success',
+                  message_sent: `${lead.status} → ${suggested_status}: ${reason}`,
+                  recipient_phone: lead.phone,
+                }).catch(() => {});
+                await supabase.from('lead_notes').insert({
+                  lead_id: lead.id,
+                  content: `📊 Status atualizado automaticamente pela IA: ${lead.status} → ${suggested_status}. Motivo: ${reason}`,
+                  type: 'SYSTEM',
+                }).catch(() => {});
+                console.log(`[cerebro] 📊 ${lead.name}: ${lead.status} → ${suggested_status}`);
+              }
+            }
 
             if (decision === 'nao_perturbar') {
               // Marca como EXCLUDED e cancela tudo
