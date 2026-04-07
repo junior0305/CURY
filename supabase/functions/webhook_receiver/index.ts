@@ -66,7 +66,7 @@ serve(async (req) => {
     // Log do evento Evolution (visível em Admin/Pipeline/Logs/Webhooks)
     supabase.from('webhook_logs').insert({
       integration_key: 'evolution',
-      payload: payload ? JSON.parse(JSON.stringify(payload).substring(0, 4000)) : null,
+      payload: payload ?? null,
       status_code: 200,
     }).then(() => {}).catch(() => {}); // fire-and-forget
 

@@ -114,7 +114,7 @@ export default function Logs() {
     const [dRes, wRes, aRes, aiRes] = await Promise.all([
       supabase.from("distribution_logs").select("*").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
       supabase.from("webhook_logs").select("*").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
-      supabase.from("automation_logs").select("*, automation_rules(name, type)").order("executed_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
+      supabase.from("automation_logs").select("*").order("executed_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
       supabase.from("ai_context_analysis").select("*").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
     ]);
 
