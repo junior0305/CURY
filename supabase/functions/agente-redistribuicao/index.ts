@@ -37,17 +37,17 @@ serve(async (req) => {
     console.log(`[agente-redistribuicao] threshold=${thresholdH}h threshold_ago=${thresholdAgo}`);
 
     // ── Buscar leads elegíveis para redistribuição ─────────────────────────────
-    // Condição: lead ativo, atribuído a um corretor,
-    // mas o corretor não enviou nada há mais de X horas (ou nunca enviou)
-    // E o lead foi criado há mais de X horas (não redistribuir leads recém-criados)
+    // NOVO CRITÉRIO: só redistribui quando o lead RESPONDEU mas o corretor ignorou.
+    // Leads que ainda não responderam estão sendo tratados pela automação (cérebro/sentinela)
+    // e NÃO devem ser redistribuídos — o bot está agindo por eles.
     const { data: staleLeads } = await supabase
       .from('leads')
-      .select('id, name, broker_id, status, broker:profiles!broker_id(id, first_name, protect_own_leads, bot_instance_id, manager_id)')
+      .select('id, name, broker_id, status, last_lead_response_at, last_broker_whatsapp_at, broker:profiles!broker_id(id, first_name, protect_own_leads, bot_instance_id, manager_id)')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .not('broker_id', 'is', null)
-      .eq('no_redistribute', false)   // respeita lock de fila e campanhas pessoais
-      .lt('created_at', thresholdAgo)
-      .or(`last_broker_whatsapp_at.is.null,last_broker_whatsapp_at.lt.${thresholdAgo}`)
+      .eq('no_redistribute', false)          // respeita campanhas exclusivas
+      .not('last_lead_response_at', 'is', null) // lead deve ter respondido (está quente)
+      .lt('last_lead_response_at', thresholdAgo) // resposta foi há mais de X horas
       .limit(20);
 
     console.log(`[agente-redistribuicao] ${staleLeads?.length ?? 0} leads elegíveis`);
@@ -96,7 +96,41 @@ serve(async (req) => {
         continue;
       }
 
-      // Anti-spam: não redistribuir o mesmo lead mais de uma vez por execução do threshold
+      // ── PROTEÇÃO 1: Corretor já respondeu após a última mensagem do lead ──────
+      // Se last_broker_whatsapp_at > last_lead_response_at, o corretor está no controle
+      const leadResponseAt = (lead as any).last_lead_response_at;
+      const brokerReplyAt  = (lead as any).last_broker_whatsapp_at;
+      if (brokerReplyAt && leadResponseAt && new Date(brokerReplyAt) > new Date(leadResponseAt)) {
+        console.log(`[agente-redistribuicao] SKIP ${lead.id} (${lead.name}) — corretor respondeu após o lead`);
+        continue;
+      }
+
+      // ── PROTEÇÃO 2: Automação (cérebro) já tocou o lead ─────────────────────
+      // Se existe toque completado, o sistema está cuidando — não redistribuir
+      const { count: cerebroTouches } = await supabase
+        .from('lead_activation_queue')
+        .select('id', { count: 'exact', head: true })
+        .eq('lead_id', lead.id)
+        .eq('status', 'completed')
+        .in('action_type', ['toque_1', 'toque_2', 'sentinela', 'last_chance']);
+      if ((cerebroTouches ?? 0) > 0) {
+        console.log(`[agente-redistribuicao] SKIP ${lead.id} (${lead.name}) — automação já tocou o lead (${cerebroTouches} toques)`);
+        continue;
+      }
+
+      // ── PROTEÇÃO 3: Sentinela ativa (IA em conversa com o lead) ─────────────
+      const { data: activeSentinela } = await supabase
+        .from('ai_sentinela_sessions')
+        .select('id')
+        .eq('lead_id', lead.id)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (activeSentinela) {
+        console.log(`[agente-redistribuicao] SKIP ${lead.id} (${lead.name}) — sentinela ativa, IA em conversa`);
+        continue;
+      }
+
+      // ── Anti-spam: não redistribuir o mesmo lead mais de uma vez por threshold ──
       const { data: recentLog } = await supabase
         .from('automation_logs')
         .select('id')
@@ -137,7 +171,7 @@ serve(async (req) => {
         entity_type: 'redistribuicao',
         entity_id: lead.id,
         status: 'success',
-        message_sent: `Lead redistribuído de ${broker.first_name ?? 'corretor anterior'} para ${newBroker.first_name} após ${thresholdH}h sem contato`,
+        message_sent: `Lead redistribuído de ${broker.first_name ?? 'corretor anterior'} para ${newBroker.first_name} — lead respondeu há ${thresholdH}h+ e corretor não retornou`,
         executed_at: now,
       });
 
@@ -146,16 +180,16 @@ serve(async (req) => {
         to_id: newBroker.id,
         type: 'LEAD_REDISTRIBUTED',
         title: '📥 Lead redistribuído para você',
-        message: `${lead.name} foi direcionado para você após ${thresholdH}h sem atendimento. Responda logo para não perder!`,
+        message: `${lead.name} respondeu mas o corretor anterior não retornou em ${thresholdH}h. Lead está esperando atendimento!`,
         related_lead_id: lead.id,
       });
 
-      // Notificar corretor anterior
+      // Notificar corretor anterior com motivo claro
       await supabase.from('internal_notifications').insert({
         to_id: oldBrokerId,
         type: 'LEAD_REDISTRIBUTED',
-        title: '⚠️ Lead redistribuído',
-        message: `${lead.name} foi repassado para outro corretor após ${thresholdH}h sem resposta.`,
+        title: '⚠️ Lead redistribuído por falta de retorno',
+        message: `${lead.name} respondeu sua mensagem mas você não retornou em ${thresholdH}h. O lead foi repassado para outro corretor.`,
         related_lead_id: lead.id,
       });
 
