@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { COMPANIES, getSelectedCompanyId } from '@/integrations/supabase/companies';
 import { useNavigate } from 'react-router-dom';
 
 interface AuthContextType {
@@ -58,6 +59,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setRole(data.role);
         setMustChangePassword(!!data.must_change_password);
         setAuthDebug({ profileRow: data, role: data.role, resolvedBy: 'id' });
+        // Trava a empresa para não-superintendentes:
+        // Salva a empresa autenticada — o CompanySelector só muda para SUPERINTENDENT
+        if (data.role !== 'SUPERINTENDENT') {
+          const currentCompany = getSelectedCompanyId();
+          localStorage.setItem('arena_company_locked', currentCompany);
+          // Se por algum motivo o localStorage tiver uma empresa diferente da autenticada,
+          // força de volta para a empresa correta e recarrega
+          const supabaseUrl = (supabase as any).supabaseUrl as string ?? '';
+          const detectedId = Object.keys(COMPANIES).find(id =>
+            supabaseUrl.includes((COMPANIES as any)[id].url.replace('https://', ''))
+          );
+          if (detectedId && detectedId !== currentCompany) {
+            console.log(`[AuthProvider] arena_company incorreto (${currentCompany}), corrigindo para ${detectedId}`);
+            localStorage.setItem('arena_company', detectedId);
+            window.location.reload();
+          }
+        }
         return;
       }
 
@@ -150,6 +168,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       } else if (event === 'SIGNED_OUT') {
         setRole(null);
         setUser(null);
+        setMustChangePassword(false);
+        localStorage.removeItem('arena_company_locked'); // libera troca de empresa no próximo login
         setLoading(false);
         setAuthDebug({ sessionId: null, role: null });
       }

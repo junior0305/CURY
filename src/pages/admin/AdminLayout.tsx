@@ -244,7 +244,7 @@ export default function AdminLayout() {
             {/* Direita: seletor + usuário + sair */}
             <div className="flex items-center gap-3">
               <ThemeToggle />
-              <CompanySelector compact />
+              {normalizedRole === "SUPERINTENDENT" && <CompanySelector compact />}
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-semibold" style={{ color: t.text }}>{user?.email}</p>
                 {roleInfo && (

@@ -27,6 +27,12 @@ export function getSelectedCompanyId(): CompanyId {
 }
 
 export function setSelectedCompany(id: CompanyId) {
+  // Respeita o lock: se não-SUPERINTENDENT logou, a empresa fica travada
+  const locked = localStorage.getItem('arena_company_locked') as CompanyId | null;
+  if (locked && COMPANIES[locked]) {
+    console.warn(`[CompanySelector] Troca bloqueada — usuário travado em "${locked}"`);
+    return;
+  }
   localStorage.setItem(STORAGE_KEY, id);
   window.location.reload();
 }
