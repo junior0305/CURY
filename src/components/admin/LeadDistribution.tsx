@@ -350,7 +350,7 @@ const LeadDistribution = () => {
           </div>
         </div>
 
-        {/* Lock */}
+        {/* Campanha Exclusiva */}
         <button type="button" onClick={() => setForm(f => ({ ...f, lockAfterAssignment: !f.lockAfterAssignment }))}
           className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all"
           style={{
@@ -363,10 +363,12 @@ const LeadDistribution = () => {
               : <Unlock className="w-3.5 h-3.5" style={{ color: "#4a5a7a" }} />}
             <div className="text-left">
               <p className="text-xs font-bold" style={{ color: form.lockAfterAssignment ? "#FBBF24" : "#4a5a7a" }}>
-                Travar após atribuição
+                🔒 Campanha Exclusiva dos Corretores
               </p>
-              <p className="text-[9px]" style={{ color: "#2a3a5a" }}>
-                {form.lockAfterAssignment ? "Lead fica com o corretor" : "Redistribuição permitida"}
+              <p className="text-[9px]" style={{ color: form.lockAfterAssignment ? "#d97706" : "#2a3a5a" }}>
+                {form.lockAfterAssignment
+                  ? "Leads pertencem APENAS aos corretores selecionados — nunca redistribuído"
+                  : "Leads podem ser redistribuídos para outros corretores da equipe"}
               </p>
             </div>
           </div>
@@ -376,6 +378,14 @@ const LeadDistribution = () => {
               style={{ left: form.lockAfterAssignment ? "calc(100% - 14px)" : "2px" }} />
           </div>
         </button>
+
+        {/* Aviso quando campanha exclusiva está ativa */}
+        {form.lockAfterAssignment && form.brokerIds.length > 0 && (
+          <div className="px-3 py-2 rounded-lg text-[9px] leading-relaxed"
+            style={{ background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.2)", color: "#d97706" }}>
+            <span className="font-black">⚠️ Campanha de investimento próprio:</span> os {form.brokerIds.length} corretor(es) selecionado(s) receberão os leads em rodízio e o sistema nunca os redistribuirá para outros.
+          </div>
+        )}
 
         {/* Ações */}
         <div className="flex gap-2 pt-1">
@@ -442,7 +452,7 @@ const LeadDistribution = () => {
                       {q.lockAfterAssignment && (
                         <span className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0"
                           style={{ background: "rgba(245,158,11,.15)", color: "#FBBF24", border: "1px solid rgba(245,158,11,.3)" }}>
-                          <Lock className="w-2.5 h-2.5" /> TRAVADA
+                          <Lock className="w-2.5 h-2.5" /> EXCLUSIVA
                         </span>
                       )}
                     </div>
