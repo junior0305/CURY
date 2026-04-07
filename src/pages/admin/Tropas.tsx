@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Users, Plus, Pencil, Trash2, Phone, Mail, Shield, Bot, MessageSquare, RefreshCw, Smartphone, Settings, Bell, Save, UserCheck, Building, Eye, EyeOff, KeyRound, AlertTriangle, CheckCircle2, Clock, Send } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Phone, Mail, Shield, Bot, MessageSquare, RefreshCw, Smartphone, Settings, Bell, Save, UserCheck, Building, Eye, EyeOff, KeyRound, AlertTriangle, CheckCircle2, Clock, Send, Search, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Profile {
@@ -63,6 +63,10 @@ export default function Tropas() {
   const [botModalOpen, setBotModalOpen] = useState(false);
   const [editUser, setEditUser] = useState<Profile | null>(null);
   
+  const [userSearch, setUserSearch] = useState("");
+  const [filterTeamId, setFilterTeamId] = useState<string>("all");
+
+  const notifyManagers_init = true;
   const [notifyManagers, setNotifyManagers] = useState(true);
   const [notifyBrokers, setNotifyBrokers] = useState(true);
   const [supBotId, setSupBotId] = useState<string>("");
@@ -407,6 +411,21 @@ export default function Tropas() {
     setModalOpen(true);
   };
 
+  // Usuários filtrados por busca e equipe
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.toLowerCase();
+    return users.filter(u => {
+      if (!u.is_active) return false;
+      if (filterTeamId === "none" && u.team_id !== null) return false;
+      if (filterTeamId !== "all" && filterTeamId !== "none" && u.team_id !== filterTeamId) return false;
+      if (q) {
+        const name = `${u.first_name ?? ""} ${u.full_name ?? ""} ${u.email}`.toLowerCase();
+        if (!name.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [users, userSearch, filterTeamId]);
+
   const openCreate = () => {
     resetForm();
     setModalOpen(true);
@@ -466,8 +485,54 @@ export default function Tropas() {
       </div>
 
       {tab === "users" ? (
+        <div className="space-y-4">
+          {/* Barra de busca + filtro por equipe */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <Input
+                value={userSearch}
+                onChange={e => setUserSearch(e.target.value)}
+                placeholder="Buscar por nome ou e-mail..."
+                className="pl-9 bg-slate-800 border-gray-700 text-white placeholder:text-gray-500 h-9"
+              />
+              {userSearch && (
+                <button onClick={() => setUserSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              <button
+                onClick={() => setFilterTeamId("all")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${filterTeamId === "all" ? "bg-blue-900/50 text-blue-300 border-blue-500/40" : "bg-slate-800 text-gray-400 border-gray-700 hover:text-gray-300"}`}
+              >
+                Todas ({users.filter(u => u.is_active).length})
+              </button>
+              {teams.map(t => {
+                const count = users.filter(u => u.is_active && u.team_id === t.id).length;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setFilterTeamId(filterTeamId === t.id ? "all" : t.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${filterTeamId === t.id ? "bg-orange-900/50 text-orange-300 border-orange-500/40" : "bg-slate-800 text-gray-400 border-gray-700 hover:text-gray-300"}`}
+                  >
+                    {t.name} ({count})
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setFilterTeamId("none")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${filterTeamId === "none" ? "bg-slate-700 text-gray-200 border-gray-500" : "bg-slate-800 text-gray-500 border-gray-700 hover:text-gray-300"}`}
+              >
+                Sem equipe ({users.filter(u => u.is_active && !u.team_id).length})
+              </button>
+            </div>
+            <span className="text-xs text-gray-500 ml-1">{filteredUsers.length} encontrado{filteredUsers.length !== 1 ? "s" : ""}</span>
+          </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-          {users.filter(u => u.is_active).map(user => (
+          {filteredUsers.map(user => (
             <Card key={user.id} className="border-2 border-gray-700/50 bg-slate-800/40 hover:border-blue-500/50 transition-all">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3">
@@ -552,6 +617,7 @@ export default function Tropas() {
               </CardContent>
             </Card>
           ))}
+        </div>
         </div>
       ) : tab === "bots" ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

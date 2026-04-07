@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, UserX, PhoneOff, Clock, CalendarX, RefreshCw, ChevronDown, ChevronUp, ArrowRightLeft, Phone, Trash2 } from "lucide-react";
+import { AlertTriangle, UserX, PhoneOff, Clock, CalendarX, RefreshCw, ChevronDown, ChevronUp, ArrowRightLeft, Phone, Trash2, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -193,17 +194,41 @@ export default function SaudeLeads() {
     refetchInterval: 60000,
   });
 
-  const { data: brokers = [] } = useQuery<{ id: string; first_name: string; last_name: string }[]>({
+  const [brokerSearch, setBrokerSearch] = useState("");
+
+  const { data: brokers = [] } = useQuery<{ id: string; first_name: string; last_name: string; team_id: string | null; team_name: string | null }[]>({
     queryKey: ["active-brokers-list"],
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("id, first_name, last_name")
+        .select("id, first_name, last_name, team_id, teams:team_id(name)")
         .eq("role", "BROKER")
-        .eq("lead_assignment_enabled", true);
-      return data || [];
+        .eq("lead_assignment_enabled", true)
+        .order("first_name");
+      return (data || []).map((b: any) => ({
+        id: b.id,
+        first_name: b.first_name,
+        last_name: b.last_name,
+        team_id: b.team_id,
+        team_name: b.teams?.name ?? null,
+      }));
     },
   });
+
+  // Brokers filtrados pela busca e agrupados por equipe
+  const brokersByTeam = useMemo(() => {
+    const q = brokerSearch.toLowerCase();
+    const filtered = q
+      ? brokers.filter(b => `${b.first_name} ${b.last_name ?? ""}`.toLowerCase().includes(q))
+      : brokers;
+    const groups: Record<string, typeof filtered> = {};
+    for (const b of filtered) {
+      const key = b.team_name ?? "Sem equipe";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(b);
+    }
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [brokers, brokerSearch]);
 
   const removeLead = (id: string) => {
     queryClient.setQueryData<Lead[]>(["health-leads-v2"], old => (old ?? []).filter(l => l.id !== id));
@@ -422,28 +447,59 @@ export default function SaudeLeads() {
       )}
 
       {/* Dialog redistribuição */}
-      <Dialog open={!!reassignLeadId} onOpenChange={open => { if (!open) { setReassignLeadId(null); setSelectedBrokerId(""); }}}>
-        <DialogContent className="bg-slate-900 border border-gray-700 text-white">
+      <Dialog open={!!reassignLeadId} onOpenChange={open => { if (!open) { setReassignLeadId(null); setSelectedBrokerId(""); setBrokerSearch(""); }}}>
+        <DialogContent className="bg-slate-900 border border-gray-700 text-white max-w-md">
           <DialogHeader>
             <DialogTitle>Redistribuir Lead</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <p className="text-gray-400 text-sm">Escolha o corretor que vai receber este lead:</p>
-            <Select value={selectedBrokerId} onValueChange={setSelectedBrokerId}>
-              <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
-                <SelectValue placeholder="Selecionar corretor..." />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-800 border-gray-600">
-                {brokers.map(b => (
-                  <SelectItem key={b.id} value={b.id} className="text-white hover:bg-slate-700">
-                    {b.first_name} {b.last_name ?? ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Busca */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <Input
+                value={brokerSearch}
+                onChange={e => setBrokerSearch(e.target.value)}
+                placeholder="Buscar corretor..."
+                className="pl-9 bg-slate-800 border-gray-600 text-white placeholder:text-gray-500 h-9"
+              />
+            </div>
+
+            {/* Lista agrupada por equipe */}
+            <div className="max-h-72 overflow-y-auto space-y-3 pr-1">
+              {brokersByTeam.length === 0 && (
+                <p className="text-gray-500 text-sm text-center py-4">Nenhum corretor encontrado</p>
+              )}
+              {brokersByTeam.map(([teamName, members]) => (
+                <div key={teamName}>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-1 mb-1">{teamName}</p>
+                  <div className="space-y-1">
+                    {members.map(b => (
+                      <button
+                        key={b.id}
+                        onClick={() => setSelectedBrokerId(b.id)}
+                        className={cn(
+                          "w-full text-left px-3 py-2 rounded-lg text-sm transition-all",
+                          selectedBrokerId === b.id
+                            ? "bg-indigo-600 text-white font-bold"
+                            : "bg-slate-800 text-gray-300 hover:bg-slate-700"
+                        )}
+                      >
+                        {b.first_name} {b.last_name ?? ""}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {selectedBrokerId && (
+              <p className="text-xs text-indigo-400 font-medium">
+                ✓ {brokers.find(b => b.id === selectedBrokerId)?.first_name} selecionado
+              </p>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => { setReassignLeadId(null); setSelectedBrokerId(""); }} className="text-gray-400">
+            <Button variant="ghost" onClick={() => { setReassignLeadId(null); setSelectedBrokerId(""); setBrokerSearch(""); }} className="text-gray-400">
               Cancelar
             </Button>
             <Button
