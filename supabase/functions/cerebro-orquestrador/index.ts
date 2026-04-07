@@ -72,6 +72,72 @@ function interpolate(template: string, name: string, broker: string): string {
     .replace(/\{broker\}/gi, broker || 'nossa equipe');
 }
 
+// ── Análise de conversa por IA ─────────────────────────────────────────────
+// Retorna decisão: 'ok' | 'nao_perturbar' | 'agendado_N' | 'negociando' | 'docs_enviados'
+// 'agendado_N' = pausar N horas (ex: 'agendado_48')
+async function analyzeConversation(
+  supabase: any,
+  leadId: string,
+  geminiKey: string
+): Promise<{ decision: string; reason: string } | null> {
+  if (!geminiKey) return null;
+
+  // Busca conversa mais recente do lead
+  const { data: conv } = await supabase
+    .from('ia_conversations')
+    .select('id')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!conv?.id) return null;
+
+  // Busca últimas 12 mensagens
+  const { data: msgs } = await supabase
+    .from('ia_messages')
+    .select('direction, sender_type, message_text, created_at')
+    .eq('conversation_id', conv.id)
+    .order('created_at', { ascending: false })
+    .limit(12);
+
+  if (!msgs?.length) return null;
+
+  const history = [...msgs].reverse()
+    .map((m: any) => {
+      const role = m.direction === 'incoming' ? 'LEAD' : 'CORRETOR/BOT';
+      return `[${role}] ${m.message_text}`;
+    })
+    .join('\n');
+
+  const system = `Você analisa conversas de WhatsApp entre corretores de imóveis e leads.
+Sua tarefa: decidir se o sistema de automação DEVE ou NÃO enviar uma nova mensagem automática agora.
+
+Responda APENAS em JSON válido, sem markdown:
+{
+  "decision": "ok" | "nao_perturbar" | "agendado_48" | "agendado_72" | "negociando" | "docs_enviados",
+  "reason": "motivo curto em português"
+}
+
+Regras:
+- "ok": conversa inativa, sem compromissos, pode enviar
+- "nao_perturbar": lead pediu para parar, ficou irritado ou disse que não tem interesse
+- "agendado_48": existe visita, ligação ou reunião combinada nos próximos 2 dias
+- "agendado_72": existe visita, ligação ou reunião combinada em 3+ dias
+- "negociando": conversa ativa, corretor e lead estão trocando mensagens sobre proposta/condições
+- "docs_enviados": lead disse que já enviou ou vai enviar documentos`;
+
+  const result = await callGemini(geminiKey, system, `Histórico da conversa:\n${history}`);
+  if (!result) return null;
+
+  try {
+    const parsed = JSON.parse(result.replace(/```json|```/g, '').trim());
+    return { decision: parsed.decision || 'ok', reason: parsed.reason || '' };
+  } catch {
+    return null;
+  }
+}
+
 // ── Lead State helpers ─────────────────────────────────────────────────────
 
 interface LeadState {
@@ -418,6 +484,60 @@ serve(async (req) => {
             console.log(`[cerebro] 🛑 ${item.action_type} cancelado — ${lead.name} já respondeu e aguarda corretor`);
             cancelled++;
             continue;
+          }
+
+          // ── ANÁLISE DE CONVERSA POR IA ────────────────────────────────────
+          // Lê as últimas mensagens do WhatsApp e decide se deve enviar
+          const convAnalysis = await analyzeConversation(supabase, lead.id, geminiKey);
+          if (convAnalysis) {
+            const { decision, reason } = convAnalysis;
+            console.log(`[cerebro] 🧠 análise conversa ${lead.name}: ${decision} — ${reason}`);
+
+            if (decision === 'nao_perturbar') {
+              // Marca como EXCLUDED e cancela tudo
+              await supabase.from('leads').update({ status: 'EXCLUDED' }).eq('id', lead.id);
+              await supabase.from('lead_activation_queue')
+                .update({ status: 'cancelled', cancel_reason: 'opt_out_detected_by_ia' })
+                .eq('lead_id', lead.id).eq('status', 'pending');
+              await supabase.from('lead_activation_queue')
+                .update({ status: 'cancelled', cancel_reason: 'opt_out_detected_by_ia' })
+                .eq('id', item.id);
+              console.log(`[cerebro] 🚫 ${lead.name} marcado EXCLUDED por opt-out detectado pela IA`);
+              cancelled++;
+              continue;
+            }
+
+            if (decision === 'negociando' || decision === 'docs_enviados') {
+              // Pausa 48h — corretor está ativo, não perturbar
+              const pauseUntil = new Date(Date.now() + 48 * 3600000).toISOString();
+              await supabase.from('lead_activation_queue')
+                .update({ status: 'pending', scheduled_for: pauseUntil })
+                .eq('id', item.id);
+              console.log(`[cerebro] ⏸ ${item.action_type} pausado 48h (${decision}) → ${lead.name}`);
+              rescheduled++;
+              continue;
+            }
+
+            if (decision === 'agendado_48') {
+              const pauseUntil = new Date(Date.now() + 48 * 3600000).toISOString();
+              await supabase.from('lead_activation_queue')
+                .update({ status: 'pending', scheduled_for: pauseUntil })
+                .eq('id', item.id);
+              console.log(`[cerebro] 📅 ${item.action_type} pausado 48h (compromisso agendado) → ${lead.name}`);
+              rescheduled++;
+              continue;
+            }
+
+            if (decision === 'agendado_72') {
+              const pauseUntil = new Date(Date.now() + 72 * 3600000).toISOString();
+              await supabase.from('lead_activation_queue')
+                .update({ status: 'pending', scheduled_for: pauseUntil })
+                .eq('id', item.id);
+              console.log(`[cerebro] 📅 ${item.action_type} pausado 72h (compromisso agendado) → ${lead.name}`);
+              rescheduled++;
+              continue;
+            }
+            // decision === 'ok' → prossegue normalmente
           }
         }
 
