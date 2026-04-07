@@ -371,18 +371,20 @@ Responda APENAS em JSON válido, sem markdown, sem explicação:
           notificationSent = result?.success || false;
           console.log(`[incoming-lead] Notificação corretor ${chosenBroker.first_name} via bot ${notifBotId}: ${notificationSent}`);
 
-          // ── FALLBACK: se falhou, tenta qualquer instância conectada diferente da atual ──
+          // ── FALLBACK: se falhou, tenta apenas bots dedicados de notificação ──
+          // NUNCA usa bot pessoal de outro corretor — evita mensagens cruzadas
           if (!notificationSent) {
-            console.log(`[incoming-lead] Falhou, buscando bot de fallback conectado...`);
+            console.log(`[incoming-lead] Bot primário falhou, buscando bot notification_only...`);
             const { data: fallbackBots } = await supabase
               .from('bot_instances')
               .select('id, name')
               .in('status', ['connected', 'open'])
+              .eq('notification_only', true)
               .neq('id', notifBotId)
               .limit(3);
 
             for (const fallback of (fallbackBots || [])) {
-              console.log(`[incoming-lead] Tentando fallback: ${fallback.name} (${fallback.id})`);
+              console.log(`[incoming-lead] Tentando bot dedicado: ${fallback.name} (${fallback.id})`);
               const { data: fbResult } = await supabase.functions.invoke('send_whatsapp_message', {
                 body: {
                   botId: fallback.id,
@@ -392,13 +394,21 @@ Responda APENAS em JSON válido, sem markdown, sem explicação:
               });
               if (fbResult?.success) {
                 notificationSent = true;
-                console.log(`[incoming-lead] Notificação enviada via fallback ${fallback.name}`);
+                console.log(`[incoming-lead] Notificação enviada via bot dedicado ${fallback.name}`);
                 break;
               }
             }
 
             if (!notificationSent) {
-              console.warn(`[incoming-lead] Todos os bots falharam. Corretor ${chosenBroker.first_name} não foi notificado.`);
+              // Último recurso: notificação interna no app (sem WhatsApp)
+              console.warn(`[incoming-lead] Nenhum bot disponível. Criando notificação interna para ${chosenBroker.first_name}.`);
+              await supabase.from('internal_notifications').insert({
+                to_id: chosenBroker.id,
+                type: 'NEW_LEAD',
+                title: '🎯 Novo Lead',
+                message: `${name} (${phone}) foi atribuído a você. Configure um bot de notificação para receber alertas via WhatsApp.`,
+                related_lead_id: newLead.id,
+              }).catch(() => {});
             }
           }
         }
