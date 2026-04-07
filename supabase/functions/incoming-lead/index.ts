@@ -227,60 +227,36 @@ serve(async (req) => {
     }
 
     // NOTIFICAR CORRETOR via bot do manager
+    // Hierarquia ESTRITA: 1) bot do gerente → 2) Junior (superintendente/backup)
+    // Nunca usa bot de equipe, busca por nome, ou bot de outro corretor.
     let notificationSent = false;
     if (chosenBroker?.phone) {
       const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
 
       if (setting?.value === true || setting?.value === "true" || setting?.value === 1) {
-        // Helper: resolve instância pelo nome do usuário quando FK está nulo
-        const resolveBotByName = async (firstName: string): Promise<string | null> => {
-          if (!firstName) return null;
-          const { data } = await supabase
-            .from('bot_instances')
-            .select('id')
-            .ilike('name', `%${firstName}%`)
-            .limit(1)
-            .maybeSingle();
-          return data?.id ?? null;
-        };
-
-        // Prioridade: 1) manager → 2) equipe → 3) bot global → 4) qualquer conectado
-        // (notificação de novo lead deve SEMPRE sair do gerente, não do corretor)
         let notifBotId: string | null = null;
+        let notifSource = '';
 
-        // 1. Bot do manager (direto pelo FK ou busca por nome)
+        // 1. Bot do gerente direto — ÚNICO autorizado a notificar sua equipe
         if (chosenBroker.manager_id) {
           const { data: managerProfile } = await supabase
             .from('profiles')
-            .select('bot_instance_id, first_name, full_name')
+            .select('bot_instance_id')
             .eq('id', chosenBroker.manager_id)
             .maybeSingle();
-
           notifBotId = managerProfile?.bot_instance_id ?? null;
-
-          if (!notifBotId) {
-            const mgFirstName = managerProfile?.first_name || managerProfile?.full_name?.split(' ')[0] || '';
-            notifBotId = await resolveBotByName(mgFirstName);
-            if (notifBotId) console.log(`[incoming-lead] Bot: manager por nome "${mgFirstName}" (${notifBotId})`);
-          } else {
-            console.log(`[incoming-lead] Bot: manager FK (${notifBotId})`);
-          }
+          if (notifBotId) notifSource = 'gerente';
         }
 
-        // 2. Bot da equipe (configurado em Admin → Equipes)
-        if (!notifBotId && chosenBroker.team_id) {
-          const { data: teamData } = await supabase
-            .from('teams').select('bot_instance_id').eq('id', chosenBroker.team_id).maybeSingle();
-          notifBotId = teamData?.bot_instance_id ?? null;
-          if (notifBotId) console.log(`[incoming-lead] Bot: instância da equipe (${notifBotId})`);
-        }
-
-        // 3. Bot global configurado
+        // 2. Backup: Junior (superintendente) — só se gerente não tiver bot configurado
         if (!notifBotId) {
-          const { data: botSetting } = await supabase.from('system_settings').select('value').eq('key', 'notification_bot_instance_id').maybeSingle();
-          notifBotId = botSetting?.value ?? null;
-          if (notifBotId) console.log(`[incoming-lead] Bot: global setting (${notifBotId})`);
+          const { data: backupSetting } = await supabase
+            .from('system_settings').select('value').eq('key', 'notification_bot_instance_id').maybeSingle();
+          notifBotId = backupSetting?.value ?? null;
+          if (notifBotId) notifSource = 'superintendente_backup';
         }
+
+        console.log(`[incoming-lead] Bot notif: ${notifSource || 'nenhum'} (${notifBotId || 'null'})`);
 
         if (notifBotId) {
           const originLabel = origin || tag || 'Sem origem';
@@ -371,45 +347,21 @@ Responda APENAS em JSON válido, sem markdown, sem explicação:
           notificationSent = result?.success || false;
           console.log(`[incoming-lead] Notificação corretor ${chosenBroker.first_name} via bot ${notifBotId}: ${notificationSent}`);
 
-          // ── FALLBACK: se falhou, tenta apenas bots dedicados de notificação ──
-          // NUNCA usa bot pessoal de outro corretor — evita mensagens cruzadas
+          // Se WhatsApp falhou: notificação interna no app
           if (!notificationSent) {
-            console.log(`[incoming-lead] Bot primário falhou, buscando bot notification_only...`);
-            const { data: fallbackBots } = await supabase
-              .from('bot_instances')
-              .select('id, name')
-              .in('status', ['connected', 'open'])
-              .eq('notification_only', true)
-              .neq('id', notifBotId)
-              .limit(3);
-
-            for (const fallback of (fallbackBots || [])) {
-              console.log(`[incoming-lead] Tentando bot dedicado: ${fallback.name} (${fallback.id})`);
-              const { data: fbResult } = await supabase.functions.invoke('send_whatsapp_message', {
-                body: {
-                  botId: fallback.id,
-                  phone: chosenBroker.phone,
-                  message: notifMsg,
-                }
-              });
-              if (fbResult?.success) {
-                notificationSent = true;
-                console.log(`[incoming-lead] Notificação enviada via bot dedicado ${fallback.name}`);
-                break;
-              }
-            }
-
-            if (!notificationSent) {
-              // Último recurso: notificação interna no app (sem WhatsApp)
-              console.warn(`[incoming-lead] Nenhum bot disponível. Criando notificação interna para ${chosenBroker.first_name}.`);
-              await supabase.from('internal_notifications').insert({
-                to_id: chosenBroker.id,
-                type: 'NEW_LEAD',
-                title: '🎯 Novo Lead',
-                message: `${name} (${phone}) foi atribuído a você. Configure um bot de notificação para receber alertas via WhatsApp.`,
-                related_lead_id: newLead.id,
-              }).catch(() => {});
-            }
+            const motivo = notifSource === 'gerente'
+              ? 'Bot do gerente falhou. Verifique a conexão da instância.'
+              : notifBotId
+                ? 'Bot do superintendente (backup) também falhou.'
+                : 'Corretor sem gerente configurado e sem bot backup disponível.';
+            console.warn(`[incoming-lead] WhatsApp falhou para ${chosenBroker.first_name}: ${motivo}`);
+            await supabase.from('internal_notifications').insert({
+              to_id: chosenBroker.id,
+              type: 'NEW_LEAD',
+              title: '🎯 Novo Lead atribuído',
+              message: `${name} (${phone}) chegou para você. ${motivo}`,
+              related_lead_id: newLead.id,
+            }).catch(() => {});
           }
         }
       }
