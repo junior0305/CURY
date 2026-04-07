@@ -10,6 +10,7 @@ interface AuthContextType {
   user: User | null;
   role: string | null;
   loading: boolean;
+  mustChangePassword: boolean;
   signOut: () => Promise<void>;
 }
 
@@ -20,6 +21,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
   const navigate = useNavigate();
 
   // helper to keep debug info on window for inspection
@@ -54,6 +56,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (data && data.role) {
         console.log("[AuthProvider] Role found by id:", data.role);
         setRole(data.role);
+        setMustChangePassword(!!data.must_change_password);
         setAuthDebug({ profileRow: data, role: data.role, resolvedBy: 'id' });
         return;
       }
@@ -98,6 +101,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
           console.log("[AuthProvider] Upsert successful. Role set to:", payload.role);
           setRole(payload.role);
+          setMustChangePassword(!!byEmail.must_change_password);
           setAuthDebug({ profileRow: payload, role: payload.role, resolvedBy: 'email-upsert' });
           return;
         }
@@ -259,7 +263,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [session, role, user]);
 
   return (
-    <AuthContext.Provider value={{ session, user, role, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, role, loading, mustChangePassword, signOut }}>
       {children}
     </AuthContext.Provider>
   );

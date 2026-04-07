@@ -123,6 +123,8 @@ serve(async (req) => {
         phone: phone,
         lead_assignment_enabled: leadAssignmentEnabled || false,
         bot_instance_id: resolvedBotInstanceId,
+        // Força troca de senha no primeiro login para BROKER e MANAGER
+        must_change_password: (role === 'BROKER' || role === 'MANAGER'),
         updated_at: new Date().toISOString()
       })
 
