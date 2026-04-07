@@ -119,24 +119,34 @@ serve(async (req) => {
 
     // Round-robin otimista
     if (chosenQueue && chosenQueue.broker_ids?.length > 0) {
-      const maxAttempts = 3;
+      const isExclusive = chosenQueue.lock_after_assignment === true;
+      const maxAttempts = chosenQueue.broker_ids.length + 2; // tenta todos os corretores da fila
+
       for (let i = 0; i < maxAttempts; i++) {
         const { data: freshQ } = await supabase.from('distribution_queues').select('*').eq('id', chosenQueue.id).maybeSingle();
         if (freshQ?.broker_ids?.length > 0) {
           const oldIndex = freshQ.last_assigned_index || 0;
           const idx = oldIndex % freshQ.broker_ids.length;
-          
+
           const { data: updated } = await supabase.from('distribution_queues')
             .update({ last_assigned_index: oldIndex + 1 })
             .eq('id', chosenQueue.id)
             .eq('last_assigned_index', oldIndex)
             .select()
             .maybeSingle();
-          
+
           if (updated) {
             const { data: broker } = await supabase.from('profiles').select('*').eq('id', freshQ.broker_ids[idx]).maybeSingle();
+
+            // Fila exclusiva (corretor pagou): sempre atribui, independente de presença
+            // Fila do gerente: respeita lead_assignment_enabled (presença marcada pelo gerente)
+            if (!isExclusive && broker?.lead_assignment_enabled === false) {
+              console.log(`[DISTRIBUTION] SKIP ${broker.first_name} — ausente (fila do gerente), tentando próximo`);
+              continue;
+            }
+
             chosenBroker = broker;
-            console.log(`[DISTRIBUTION] Corretor escolhido via round-robin: ${broker?.first_name}`);
+            console.log(`[DISTRIBUTION] Corretor escolhido via round-robin: ${broker?.first_name} (exclusiva=${isExclusive})`);
             break;
           }
         }
