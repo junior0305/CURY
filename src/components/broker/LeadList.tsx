@@ -20,6 +20,7 @@ interface LeadListProps {
   filter: LeadStatus | "ACTIVE" | "ALL";
   compact?: boolean;
   iaRepliedLeadIds?: Set<string>;
+  botActiveLeadIds?: Set<string>;
   redistributionThresholdH?: number;
 }
 
@@ -48,7 +49,7 @@ const REDIST_STATUSES: LeadStatus[] = ["NEW", "IN_PROGRESS", "DOCS_REQUESTED"];
 
 const LeadList = ({
   selectedLeadId, onSelectLead, currentUserRole, filter, compact,
-  iaRepliedLeadIds = new Set(), redistributionThresholdH,
+  iaRepliedLeadIds = new Set(), botActiveLeadIds = new Set(), redistributionThresholdH,
 }: LeadListProps) => {
   const { session } = useAuth();
 
@@ -78,7 +79,9 @@ const LeadList = ({
       const lastAction = new Date(lead.lastInteractionAt || lead.createdAt || now);
       const diffMs = now - lastAction.getTime();
       const hoursSinceLastAction = Math.max(0, Math.floor(diffMs / 3600000));
-      const isStale = hoursSinceLastAction >= 4 && lead.status !== "CONCLUDED" && lead.status !== "EXCLUDED";
+      const isBotActive = botActiveLeadIds.has(lead.id);
+      // Stale só conta se o bot NÃO estiver cuidando — bot ativo = não está abandonado
+      const isStale = !isBotActive && hoursSinceLastAction >= 4 && lead.status !== "CONCLUDED" && lead.status !== "EXCLUDED";
 
       // Redistribution countdown
       const isRedistEligible = REDIST_STATUSES.includes(lead.status as LeadStatus) && !!redistributionThresholdH;
@@ -99,7 +102,7 @@ const LeadList = ({
       // 🏠 Visita = VISIT_SCHEDULED (compromisso real)
       // ❄️ Frio   = IN_PROGRESS / NEW (ainda só falando)
       let priority = 0;
-      let urgencyTag: "docs" | "visit" | "ia" | "new_fast" | "new" | "stale" | null = null;
+      let urgencyTag: "docs" | "visit" | "ia" | "new_fast" | "new" | "stale" | "bot" | null = null;
 
       if (lead.status === "DOCS_REQUESTED") {
         priority = 10; // Quente — mais próximo do fechamento
@@ -109,6 +112,10 @@ const LeadList = ({
       } else if (lead.status === "VISIT_SCHEDULED") {
         priority = 8; // Visita marcada
         urgencyTag = "visit";
+      } else if (isBotActive) {
+        // Bot está cuidando — não urgente, mas visível
+        priority = lead.status === "NEW" ? 6 : 3;
+        urgencyTag = "bot";
       } else if (hoursSinceLastAction < 2 && lead.status === "NEW") {
         priority = 7; // Lead acabou de chegar — resposta rápida aumenta conversão
         urgencyTag = "new_fast";
@@ -128,7 +135,7 @@ const LeadList = ({
         priority = Math.max(priority, 8);
       }
 
-      return { ...lead, nextTask, priority, urgencyTag, isStale, hoursSinceLastAction, respondeuIA, hoursUntilRedist };
+      return { ...lead, nextTask, priority, urgencyTag, isStale, isBotActive, hoursSinceLastAction, respondeuIA, hoursUntilRedist };
     });
 
     let filtered = leadsWithMeta;
@@ -197,9 +204,11 @@ const LeadList = ({
                   ? "bg-red-500/5 border-red-500/30 hover:border-red-500/50"
                   : lead.isStale
                     ? "bg-amber-500/5 border-amber-500/20 hover:border-amber-500/30"
-                    : lead.respondeuIA
-                      ? "bg-violet-500/5 border-violet-500/20 hover:border-violet-500/30"
-                      : "bg-slate-700/30 border-gray-700/40 hover:border-gray-600/60 hover:bg-slate-700/50"
+                    : lead.isBotActive
+                      ? "bg-cyan-500/5 border-cyan-500/20 hover:border-cyan-500/35"
+                      : lead.respondeuIA
+                        ? "bg-violet-500/5 border-violet-500/20 hover:border-violet-500/30"
+                        : "bg-slate-700/30 border-gray-700/40 hover:border-gray-600/60 hover:bg-slate-700/50"
             )}>
 
             {/* Linha principal */}
@@ -232,6 +241,11 @@ const LeadList = ({
                   {lead.urgencyTag === "new_fast" && (
                     <Badge className="bg-sky-500/20 text-sky-300 border-sky-500/30 text-[9px] font-black uppercase animate-pulse px-1.5 h-4 flex items-center gap-0.5">
                       <Zap className="w-2 h-2" /> Chegou agora
+                    </Badge>
+                  )}
+                  {lead.urgencyTag === "bot" && (
+                    <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-[9px] font-black uppercase px-1.5 h-4 flex items-center gap-0.5">
+                      <Bot className="w-2 h-2" /> Bot ativo
                     </Badge>
                   )}
                   {lead.urgencyTag === "stale" && (

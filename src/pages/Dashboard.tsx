@@ -234,6 +234,27 @@ const Dashboard = () => {
     queryFn: fetchProfiles,
   });
 
+  // Leads com automação ativa (cérebro, sentinela, follow-up)
+  const { data: botActiveLeadIds = new Set<string>() } = useQuery<Set<string>>({
+    queryKey: ["bot-active-leads"],
+    queryFn: async () => {
+      try {
+        const [{ data: queueItems }, { data: sentinelaSessions }] = await Promise.all([
+          supabase.from("lead_activation_queue").select("lead_id").eq("status", "pending"),
+          supabase.from("ai_sentinela_sessions").select("lead_id").eq("status", "active"),
+        ]);
+        const ids = new Set<string>();
+        (queueItems || []).forEach((q: any) => ids.add(q.lead_id));
+        (sentinelaSessions || []).forEach((s: any) => ids.add(s.lead_id));
+        return ids;
+      } catch {
+        return new Set<string>();
+      }
+    },
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: 3 * 60 * 1000,
+  });
+
   // Leads que responderam à IA nas últimas 48h
   const { data: iaRepliedLeadIds = new Set<string>() } = useQuery<Set<string>>({
     queryKey: ["ia-replied-leads"],
@@ -524,7 +545,7 @@ const Dashboard = () => {
           {activeTab === "mission" && (
             <>
               {/* 1. Radar — ação imediata: o corretor sabe o que fazer SEM PENSAR */}
-              <RadarAcao onSelectLead={handleLeadSelect} />
+              <RadarAcao onSelectLead={handleLeadSelect} botActiveLeadIds={botActiveLeadIds} />
 
               {/* 2. Pipeline — acesso rápido à fila por status */}
               <div className="grid grid-cols-2 gap-2">
@@ -574,7 +595,7 @@ const Dashboard = () => {
                       ✕ Fechar
                     </button>
                   </div>
-                  <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} iaRepliedLeadIds={iaRepliedLeadIds} redistributionThresholdH={redistributionThresholdH} />
+                  <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} iaRepliedLeadIds={iaRepliedLeadIds} botActiveLeadIds={botActiveLeadIds} redistributionThresholdH={redistributionThresholdH} />
                 </div>
               )
               : (
@@ -839,7 +860,7 @@ const Dashboard = () => {
             <div className="lg:col-span-4 flex flex-col gap-3">
 
               {/* 1. Radar — próxima ação urgente: primeiro elemento visível */}
-              <RadarAcao onSelectLead={handleLeadSelect} />
+              <RadarAcao onSelectLead={handleLeadSelect} botActiveLeadIds={botActiveLeadIds} />
 
               {/* 2. Pipeline — acesso à fila por status */}
               <div>
@@ -873,7 +894,7 @@ const Dashboard = () => {
                       </button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-2">
-                      <LeadList selectedLeadId={selectedLeadId} onSelectLead={handleLeadSelect} currentUserRole={role} filter="ACTIVE" compact iaRepliedLeadIds={iaRepliedLeadIds} redistributionThresholdH={redistributionThresholdH} />
+                      <LeadList selectedLeadId={selectedLeadId} onSelectLead={handleLeadSelect} currentUserRole={role} filter="ACTIVE" compact iaRepliedLeadIds={iaRepliedLeadIds} botActiveLeadIds={botActiveLeadIds} redistributionThresholdH={redistributionThresholdH} />
                     </div>
                   </div>
                   {/* Painel de detalhe */}
@@ -899,7 +920,7 @@ const Dashboard = () => {
                     </button>
                   </div>
                   <div className="flex-1 overflow-y-auto p-3">
-                    <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact iaRepliedLeadIds={iaRepliedLeadIds} redistributionThresholdH={redistributionThresholdH} />
+                    <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact iaRepliedLeadIds={iaRepliedLeadIds} botActiveLeadIds={botActiveLeadIds} redistributionThresholdH={redistributionThresholdH} />
                   </div>
                 </div>
               ) : (

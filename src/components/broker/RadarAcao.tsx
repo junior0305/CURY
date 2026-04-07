@@ -6,7 +6,7 @@ import { Lead, LeadStatus } from "@/types/lead";
 import { Task } from "@/types/task";
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, Flame, Calendar, FileText, Zap, Clock, ChevronLeft } from "lucide-react";
+import { ChevronRight, Flame, Calendar, FileText, Zap, Clock, ChevronLeft, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type UrgentAction = {
@@ -17,10 +17,11 @@ type UrgentAction = {
   icon: React.ElementType;
 };
 
-function getUrgencyLevel(lead: Lead, tasks: Task[], now: number): UrgentAction | null {
+function getUrgencyLevel(lead: Lead, tasks: Task[], now: number, botActiveIds: Set<string>): UrgentAction | null {
   if (lead.status === "ABANDONED" || lead.status === "EXCLUDED" || lead.status === "CONCLUDED") return null;
 
   const hoursSince = (now - new Date(lead.lastInteractionAt || lead.createdAt || now).getTime()) / 3600000;
+  const isBotActive = botActiveIds.has(lead.id);
 
   // DOCS SOLICITADOS — máxima prioridade: lead pronto para fechar
   if (lead.status === "DOCS_REQUESTED") {
@@ -44,7 +45,7 @@ function getUrgencyLevel(lead: Lead, tasks: Task[], now: number): UrgentAction |
     };
   }
 
-  // FALANDO AGORA — respondeu recentemente (NEW ou IN_PROGRESS < 2h): ainda frio, mas ativo
+  // FALANDO AGORA — respondeu recentemente (< 2h): ativo
   if (hoursSince < 2 && (lead.status === "NEW" || lead.status === "IN_PROGRESS")) {
     return {
       lead,
@@ -55,13 +56,24 @@ function getUrgencyLevel(lead: Lead, tasks: Task[], now: number): UrgentAction |
     };
   }
 
-  // NOVO LEAD sem contato
-  if (lead.status === "NEW" && hoursSince >= 2) {
+  // BOT ATIVO — automação cuidando, não precisa de ação do corretor agora
+  if (isBotActive) {
     return {
       lead,
       level: "novo",
+      label: `🤖 Bot em contato`,
+      action: "A automação está cuidando deste lead. Acompanhe a conversa e assuma quando o lead responder.",
+      icon: Bot,
+    };
+  }
+
+  // NOVO LEAD sem contato e sem bot
+  if (lead.status === "NEW" && hoursSince >= 2) {
+    return {
+      lead,
+      level: "importante",
       label: `Novo — ${Math.floor(hoursSince)}h sem contato`,
-      action: "Primeiro contato: envie a mensagem de apresentação",
+      action: "Atenção: nenhum contato foi feito. Envie a mensagem de apresentação agora.",
       icon: Zap,
     };
   }
@@ -90,9 +102,10 @@ const LEVEL_STYLES = {
 
 interface RadarAcaoProps {
   onSelectLead: (id: string) => void;
+  botActiveLeadIds?: Set<string>;
 }
 
-export function RadarAcao({ onSelectLead }: RadarAcaoProps) {
+export function RadarAcao({ onSelectLead, botActiveLeadIds = new Set() }: RadarAcaoProps) {
   const { session } = useAuth();
   const [index, setIndex] = useState(0);
   const now = Date.now();
@@ -112,7 +125,7 @@ export function RadarAcao({ onSelectLead }: RadarAcaoProps) {
 
     const actions: UrgentAction[] = [];
     for (const lead of myLeads) {
-      const action = getUrgencyLevel(lead, tasks, now);
+      const action = getUrgencyLevel(lead, tasks, now, botActiveLeadIds);
       if (action) actions.push(action);
     }
 
