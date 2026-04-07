@@ -21,6 +21,7 @@ import type { User } from "@/types/user";
 import { toast } from "sonner";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
+import { RadarAcao } from "@/components/broker/RadarAcao";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
 import LeadForm from "@/components/broker/LeadForm";
 
@@ -478,6 +479,23 @@ export default function DashboardWolf() {
     () => new Map(statesData.map(s => [s.lead_id, s])),
     [statesData]
   );
+
+  // ── Bot-active lead IDs (automação / sentinela em andamento) ──────────────
+  const { data: botActiveLeadIds = new Set<string>() } = useQuery<Set<string>>({
+    queryKey: ["wolfBotActiveLeads"],
+    queryFn: async () => {
+      const [{ data: queueItems }, { data: sentinelaSessions }] = await Promise.all([
+        supabase.from("lead_activation_queue").select("lead_id").eq("status", "pending"),
+        supabase.from("ai_sentinela_sessions").select("lead_id").eq("status", "active"),
+      ]);
+      const ids = new Set<string>();
+      (queueItems || []).forEach((q: any) => ids.add(q.lead_id));
+      (sentinelaSessions || []).forEach((s: any) => ids.add(s.lead_id));
+      return ids;
+    },
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: 3 * 60 * 1000,
+  });
 
   // ── My profile ─────────────────────────────────────────────────────────────
   const myProfile = profiles.find(p => p.id === user?.id);
@@ -1026,6 +1044,9 @@ export default function DashboardWolf() {
                 );
               })}
             </div>
+
+            {/* ── RADAR DE AÇÃO ── */}
+            <RadarAcao onSelectLead={(id) => { const lead = filteredLeads.find(l => l.id === id); if (lead) handleSelect(lead); }} botActiveLeadIds={botActiveLeadIds} />
 
             {/* ── LEAD QUEUE ── */}
             <div className="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5 min-h-0">
