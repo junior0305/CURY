@@ -4,21 +4,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { 
-  Flame, 
-  Crosshair, 
-  Skull, 
-  Trophy, 
+import {
+  Flame,
+  Crosshair,
+  Skull,
+  Trophy,
   Users,
   TrendingUp,
   Swords,
   Plus,
   Shield,
   Activity,
-  ArrowLeft
+  ArrowLeft,
+  WifiOff,
+  Send,
+  Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 interface WarStats {
   new_leads: number;
@@ -54,7 +58,28 @@ export default function CommandCenter() {
   });
   const [warriors, setWarriors] = useState<Warrior[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notifying, setNotifying] = useState(false);
+  const [notifyResult, setNotifyResult] = useState<{ sent: number; skipped: number } | null>(null);
   const navigate = useNavigate();
+
+  async function handleNotifyDisconnected() {
+    setNotifying(true);
+    setNotifyResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('notify-disconnected-brokers');
+      if (error) throw error;
+      setNotifyResult({ sent: data.sent ?? 0, skipped: data.skipped ?? 0 });
+      if ((data.sent ?? 0) > 0) {
+        toast.success(`✅ ${data.sent} corretor(es) notificados via WhatsApp do gerente`);
+      } else {
+        toast.info('Nenhuma notificação necessária (todos conectados ou já notificados hoje)');
+      }
+    } catch (err: any) {
+      toast.error(`Erro ao notificar: ${err.message}`);
+    } finally {
+      setNotifying(false);
+    }
+  }
 
   useEffect(() => {
     loadWarData();
@@ -280,6 +305,42 @@ export default function CommandCenter() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── ALERTA: CORRETORES DESCONECTADOS ── */}
+      <Card className="border-2 border-orange-500 bg-orange-950/20 mb-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base md:text-lg font-black text-white flex items-center gap-2">
+            <WifiOff className="w-5 h-5 text-orange-400" />
+            CORRETORES COM WHATSAPP DESCONECTADO
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-gray-400 mb-4">
+            Corretores com chip offline não recebem nem enviam mensagens automáticas.
+            Ao clicar abaixo, o sistema envia um WhatsApp pelo chip do gerente responsável
+            avisando cada corretor para reconectar o QR Code.
+            <span className="text-orange-300 font-semibold"> Não reenvia para quem já foi notificado nas últimas 8h.</span>
+          </p>
+          <div className="flex items-center gap-4 flex-wrap">
+            <Button
+              onClick={handleNotifyDisconnected}
+              disabled={notifying}
+              className="bg-orange-600 hover:bg-orange-500 text-white font-bold gap-2"
+            >
+              {notifying
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
+                : <><Send className="w-4 h-4" /> Notificar Desconectados</>
+              }
+            </Button>
+            {notifyResult && (
+              <span className="text-sm text-gray-300">
+                Último disparo: <span className="text-green-400 font-bold">{notifyResult.sent} enviados</span>
+                {notifyResult.skipped > 0 && <span className="text-gray-500"> · {notifyResult.skipped} pulados</span>}
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="soldiers" className="w-full">
         <TabsList className="grid w-full grid-cols-3 bg-slate-900/50 border border-gray-700">

@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./components/AuthProvider";
+import { WhatsAppGatekeeper } from "./components/WhatsAppGatekeeper";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useEffect } from "react";
 import { syncAudioSettings } from "@/hooks/use-audio-arena";
@@ -55,7 +56,7 @@ const ProtectedManagerRoute = ({ children }: { children: React.ReactNode }) => {
   if (role === "ADMIN" || role === "SUPERINTENDENT") return <Navigate to="/admin" />;
   if (role !== "MANAGER") return <Navigate to="/dashboard" />;
   if (mustChangePassword) return <Navigate to="/force-password-change" replace />;
-  return <>{children}</>;
+  return <WhatsAppGatekeeper>{children}</WhatsAppGatekeeper>;
 };
 
 const ProtectedBrokerRoute = ({ children }: { children: React.ReactNode }) => {
@@ -65,7 +66,7 @@ const ProtectedBrokerRoute = ({ children }: { children: React.ReactNode }) => {
   if (role === "ADMIN" || role === "SUPERINTENDENT") return <Navigate to="/admin" />;
   if (role === "MANAGER") return <Navigate to="/manager" />;
   if (mustChangePassword) return <Navigate to="/force-password-change" replace />;
-  return <>{children}</>;
+  return <WhatsAppGatekeeper>{children}</WhatsAppGatekeeper>;
 };
 
 const App = () => (

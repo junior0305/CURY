@@ -426,6 +426,9 @@ serve(async (req) => {
 
     let processed = 0, rescheduled = 0, cancelled = 0, skipped = 0;
     const details: any[] = [];
+    // Rastreia leads já tocados neste run para evitar envio duplo quando
+    // duas instâncias concorrentes processam itens diferentes do mesmo lead
+    const touchedLeadIds = new Set<string>();
 
     for (const item of items || []) {
       try {
@@ -438,6 +441,17 @@ serve(async (req) => {
           .select('id')
           .maybeSingle();
         if (!claimed) { skipped++; continue; } // já foi reclamado por outra execução
+
+        // ── Evita 2 mensagens outbound para o mesmo lead no mesmo run ──────────
+        const isOutboundCheck = !['broker_alert', 'manager_alert', 'sla_first_contact'].includes(item.action_type);
+        if (isOutboundCheck && touchedLeadIds.has(item.lead_id)) {
+          // Libera o item para o próximo ciclo
+          await supabase.from('lead_activation_queue')
+            .update({ status: 'pending', last_attempt_at: null })
+            .eq('id', item.id);
+          skipped++;
+          continue;
+        }
 
         // Load lead
         const { data: lead } = await supabase
@@ -877,6 +891,7 @@ Responda APENAS com o texto da mensagem, sem prefixos, sem aspas.`
           }); } catch {}
 
           processed++;
+          if (isOutbound) touchedLeadIds.add(lead.id);
           details.push({ action: item.action_type, lead: lead.name, status: 'sent' });
           console.log(`[cerebro] ✅ ${item.action_type} → ${lead.name} | estado: ${nextState.ultimo_evento}`);
 

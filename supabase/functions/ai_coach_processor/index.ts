@@ -130,20 +130,35 @@ serve(async (req) => {
         const { data: broker } = await supabaseClient.from('profiles').select('first_name, full_name, email').eq('id', item.broker_id).single();
         const brokerName = broker?.first_name || broker?.full_name || 'Corretor';
 
-        // Buscar leads do CRM (is_crm_lead = true) recentes
-        const { data: conversations } = await supabaseClient
+        // Buscar leads do broker no CRM (via tabela leads → broker_id)
+        const { data: brokerLeads } = await supabaseClient
+          .from('leads')
+          .select('id')
+          .eq('broker_id', item.broker_id)
+          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+
+        const brokerLeadIds = (brokerLeads || []).map(l => l.id);
+
+        // Buscar conversas desses leads
+        let convQuery = supabaseClient
           .from('ia_conversations')
           .select('*')
           .eq('is_crm_lead', true)
-          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()) // últimos 30 dias
+          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
           .order('created_at', { ascending: false })
           .limit(item.sample_size || 5);
 
+        if (brokerLeadIds.length > 0) {
+          convQuery = convQuery.in('lead_id', brokerLeadIds);
+        }
+
+        const { data: conversations } = await convQuery;
+
         if (!conversations || conversations.length === 0) {
-          await supabaseClient.from('ai_coach_queue').update({ 
-            status: 'skipped', 
-            error_message: 'No CRM leads found in last 7 days',
-            processed_at: new Date().toISOString() 
+          await supabaseClient.from('ai_coach_queue').update({
+            status: 'skipped',
+            error_message: 'No CRM conversations found in last 30 days',
+            processed_at: new Date().toISOString()
           }).eq('id', item.id);
           continue;
         }

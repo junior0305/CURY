@@ -156,7 +156,7 @@ serve(async (req) => {
         }
       }
     }
-    const fullSystemPrompt = `${systemPrompt}\n\nVocê está conversando com ${conversation.lead_name || 'Cliente'}.`;
+    const fullSystemPrompt = `${systemPrompt}\n\nVocê está conversando com ${conversation.lead_name || 'Cliente'}.\n\nREGRAS ABSOLUTAS:\n- Responda APENAS com o texto da mensagem para o cliente. Nada mais.\n- NUNCA inclua notas, anotações, comentários internos, colchetes, asteriscos explicativos ou meta-texto de qualquer tipo.\n- NUNCA escreva coisas como "[Nota: ...]", "(Observação: ...)", "---", ou qualquer marcação que não seja parte natural da conversa.\n- Sua resposta vai direto para o WhatsApp do cliente sem revisão humana.`;
     const userPrompt = `Histórico:\n${historyText}\n\nCliente: ${incomingMessage}\n\nResponda naturalmente:`;
 
     // ── Chamar Anthropic ──────────────────────────────────────────────────

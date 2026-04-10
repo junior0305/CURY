@@ -1,0 +1,317 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Loader2, RefreshCw, Wifi, WifiOff, CheckCircle2, Smartphone } from "lucide-react";
+import { useAuth } from "@/components/AuthProvider";
+import { supabase } from "@/integrations/supabase/client";
+
+const STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@500;600;700&display=swap');
+  .gk-display { font-family:'Orbitron',monospace; letter-spacing:0.05em; }
+  .gk-ui { font-family:'Rajdhani',sans-serif; }
+  @keyframes gkPulse {
+    0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,212,255,.4);}
+    50%{opacity:.8;box-shadow:0 0 0 12px rgba(0,212,255,0);}
+  }
+  @keyframes gkSpin {
+    to { transform: rotate(360deg); }
+  }
+  @keyframes gkFadeIn {
+    from{opacity:0;transform:translateY(12px);}
+    to{opacity:1;transform:translateY(0);}
+  }
+  @keyframes gkConnected {
+    0%{transform:scale(.8);opacity:0;}
+    60%{transform:scale(1.15);}
+    100%{transform:scale(1);opacity:1;}
+  }
+  .gk-pulse { animation: gkPulse 2s ease-in-out infinite; }
+  .gk-fadein { animation: gkFadeIn .4s ease both; }
+  .gk-connected-icon { animation: gkConnected .5s ease both; }
+  .gk-hex {
+    background-color:#080B14;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%,rgba(0,212,255,.06) 0%,transparent 60%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='48'%3E%3Cpolygon points='28,2 54,16 54,44 28,58 2,44 2,16' fill='none' stroke='%2300D4FF' stroke-width='0.3' opacity='0.08'/%3E%3C/svg%3E");
+    background-size:auto,56px 48px;
+  }
+`;
+
+type GkStatus = "loading" | "no_instance" | "connected" | "disconnected" | "success";
+
+const SESSION_KEY = (userId: string) => `wha_ok_${userId}`;
+
+function useBotStatus(userId: string | undefined, role: string | null) {
+  const [botInstanceId, setBotInstanceId] = useState<string | null | "none">(null);
+  const [status, setStatus] = useState<GkStatus>("loading");
+  const [qrBase64, setQrBase64] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Only block BROKER and MANAGER — admins/superintendents bypass
+  const shouldCheck = role === "BROKER" || role === "MANAGER";
+
+  // Fetch bot_instance_id once
+  useEffect(() => {
+    if (!userId || !shouldCheck) {
+      setStatus("connected");
+      return;
+    }
+    // Se já confirmamos conexão nesta sessão, pular verificação
+    if (sessionStorage.getItem(SESSION_KEY(userId)) === "1") {
+      setStatus("connected");
+      return;
+    }
+    supabase
+      .from("profiles")
+      .select("bot_instance_id")
+      .eq("id", userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        const id = data?.bot_instance_id ?? null;
+        if (!id) {
+          setBotInstanceId("none");
+          setStatus("no_instance");
+        } else {
+          setBotInstanceId(id);
+        }
+      });
+  }, [userId, shouldCheck]);
+
+  const checkConnection = useCallback(async (showRefreshing = false) => {
+    if (!botInstanceId || botInstanceId === "none") return;
+    if (showRefreshing) setRefreshing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("get-whatsapp-qr", {
+        body: { botInstanceId },
+      });
+      if (error || !data) return;
+      if (data.connected) {
+        if (userId) sessionStorage.setItem(SESSION_KEY(userId), "1");
+        setStatus("success");
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        setTimeout(() => setStatus("connected"), 2000);
+      } else {
+        if (userId) sessionStorage.removeItem(SESSION_KEY(userId));
+        setStatus("disconnected");
+        if (data.base64) setQrBase64(data.base64);
+      }
+    } finally {
+      if (showRefreshing) setRefreshing(false);
+    }
+  }, [botInstanceId, userId]);
+
+  // First check when botInstanceId becomes available
+  useEffect(() => {
+    if (!botInstanceId || botInstanceId === "none") return;
+    checkConnection();
+  }, [botInstanceId, checkConnection]);
+
+  // Poll every 3 seconds while disconnected (detecta conexão mais rápido após scan)
+  useEffect(() => {
+    if (status !== "disconnected") {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      return;
+    }
+    intervalRef.current = setInterval(() => checkConnection(), 3000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [status, checkConnection]);
+
+  return { status, qrBase64, refreshing, checkConnection };
+}
+
+// ── Loading screen ────────────────────────────────────────────────────────────
+function GkLoading() {
+  return (
+    <div className="gk-hex gk-ui min-h-screen flex items-center justify-center">
+      <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+    </div>
+  );
+}
+
+// ── Success screen ────────────────────────────────────────────────────────────
+function GkSuccess() {
+  return (
+    <div className="gk-hex gk-ui min-h-screen flex flex-col items-center justify-center gap-4">
+      <CheckCircle2
+        className="w-16 h-16 text-emerald-400 gk-connected-icon"
+        style={{ filter: "drop-shadow(0 0 16px rgba(16,185,129,.7))" }}
+      />
+      <p className="gk-display text-base font-black text-white uppercase tracking-widest">
+        WhatsApp Conectado!
+      </p>
+      <p className="text-slate-500 text-sm">Entrando no sistema...</p>
+    </div>
+  );
+}
+
+// ── No instance configured screen ────────────────────────────────────────────
+function GkNoInstance() {
+  return (
+    <div className="gk-hex gk-ui min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
+      <WifiOff className="w-12 h-12 text-amber-400" />
+      <p className="gk-display text-sm font-black text-white uppercase tracking-widest">
+        Sem instância configurada
+      </p>
+      <p className="text-slate-400 text-sm max-w-xs">
+        Sua conta não tem uma instância WhatsApp vinculada. Fale com o administrador.
+      </p>
+    </div>
+  );
+}
+
+// ── QR Code screen ────────────────────────────────────────────────────────────
+function GkQRCode({
+  qrBase64,
+  refreshing,
+  onRefresh,
+}: {
+  qrBase64: string | null;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <>
+      <style>{STYLES}</style>
+      <div className="gk-hex gk-ui min-h-screen flex flex-col items-center justify-center p-4">
+
+        {/* Header */}
+        <div className="flex flex-col items-center mb-8 gk-fadein">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 gk-pulse"
+            style={{
+              background: "rgba(0,212,255,.1)",
+              border: "1px solid rgba(0,212,255,.3)",
+            }}>
+            <Smartphone className="w-7 h-7 text-cyan-400" />
+          </div>
+          <h1 className="gk-display text-base font-black text-white uppercase tracking-widest">
+            Conectar WhatsApp
+          </h1>
+          <p className="text-[11px] text-slate-500 uppercase tracking-widest mt-1">
+            Obrigatório para acessar o sistema
+          </p>
+        </div>
+
+        {/* Card */}
+        <div
+          className="w-full max-w-sm rounded-2xl p-6 gk-fadein"
+          style={{
+            background: "rgba(8,14,28,0.96)",
+            border: "1px solid rgba(0,212,255,.2)",
+            boxShadow: "0 0 60px rgba(0,212,255,.05)",
+            animationDelay: "0.1s",
+          }}
+        >
+          {/* Status bar */}
+          <div className="flex items-center gap-2 mb-5">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+              style={{ background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.25)" }}>
+              <WifiOff className="w-3.5 h-3.5 text-red-400" />
+              <span className="text-[11px] font-bold text-red-400 uppercase tracking-wider">
+                Instância Desconectada
+              </span>
+            </div>
+          </div>
+
+          {/* QR Code area */}
+          <div className="flex flex-col items-center gap-4">
+            {qrBase64 ? (
+              <div className="relative">
+                <div className="absolute inset-0 rounded-xl"
+                  style={{ boxShadow: "0 0 30px rgba(0,212,255,.15)", border: "1px solid rgba(0,212,255,.2)", borderRadius: "12px" }}
+                />
+                <img
+                  src={qrBase64}
+                  alt="QR Code WhatsApp"
+                  className="w-52 h-52 rounded-xl relative z-10"
+                  style={{ imageRendering: "pixelated" }}
+                />
+              </div>
+            ) : (
+              <div className="w-52 h-52 rounded-xl flex items-center justify-center"
+                style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(0,212,255,.1)" }}>
+                <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+              </div>
+            )}
+
+            {/* Instructions */}
+            <div className="w-full space-y-2 mt-1">
+              {[
+                "Abra o WhatsApp no celular",
+                'Toque em "Dispositivos Conectados"',
+                "Aponte a câmera para o QR Code",
+              ].map((step, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-black"
+                    style={{
+                      background: "rgba(0,212,255,.15)",
+                      border: "1px solid rgba(0,212,255,.3)",
+                      color: "#00D4FF",
+                    }}
+                  >
+                    {i + 1}
+                  </div>
+                  <span className="text-[12px] text-slate-400">{step}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="h-px w-full" style={{ background: "rgba(0,212,255,.1)" }} />
+
+            {/* Refresh button */}
+            <button
+              onClick={() => onRefresh()}
+              disabled={refreshing}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+              style={{
+                background: "rgba(0,212,255,.08)",
+                border: "1px solid rgba(0,212,255,.2)",
+                color: refreshing ? "#334155" : "#00D4FF",
+                cursor: refreshing ? "not-allowed" : "pointer",
+              }}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? "Atualizando..." : "Novo QR Code"}
+            </button>
+
+            <p className="text-[10px] text-slate-600 text-center">
+              O QR Code expira em ~30 segundos. O sistema detecta a conexão automaticamente.
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <p className="text-[10px] text-slate-700 mt-6 uppercase tracking-widest">
+          Comandra War Room — Conexão obrigatória
+        </p>
+      </div>
+    </>
+  );
+}
+
+// ── Main gatekeeper ───────────────────────────────────────────────────────────
+export function WhatsAppGatekeeper({ children }: { children: React.ReactNode }) {
+  const { user, role, loading: authLoading } = useAuth();
+  const { status, qrBase64, refreshing, checkConnection } = useBotStatus(
+    user?.id,
+    role
+  );
+
+  if (authLoading || status === "loading") return <GkLoading />;
+  if (status === "success") return <GkSuccess />;
+  if (status === "no_instance") return <GkNoInstance />;
+  if (status === "disconnected") {
+    return (
+      <GkQRCode
+        qrBase64={qrBase64}
+        refreshing={refreshing}
+        onRefresh={() => checkConnection(true)}
+      />
+    );
+  }
+
+  return <>{children}</>;
+}

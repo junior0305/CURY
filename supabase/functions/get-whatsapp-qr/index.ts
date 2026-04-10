@@ -49,10 +49,21 @@ serve(async (req) => {
       headers: { apikey: apiKey },
     });
     const stateJson = await stateResp.json().catch(() => ({}));
-    const state = stateJson?.instance?.state || stateJson?.state || 'unknown';
+    // Normalizar para lowercase para comparação case-insensitive
+    const rawState = stateJson?.instance?.state || stateJson?.state || 'unknown';
+    const state = String(rawState).toLowerCase();
+
+    console.log(`[get-whatsapp-qr] instance=${instance} state=${state}`);
 
     if (state === 'open') {
-      return new Response(JSON.stringify({ connected: true, state }), {
+      return new Response(JSON.stringify({ connected: true, state: rawState }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Estado transitório após scan — não gerar novo QR, aguardar
+    if (state === 'connecting') {
+      return new Response(JSON.stringify({ connected: false, state: rawState, connecting: true, base64: null }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -75,7 +86,7 @@ serve(async (req) => {
     const base64 = qrJson?.base64 || qrJson?.qrcode?.base64 || null;
     const code   = qrJson?.code   || qrJson?.qrcode?.code   || null;
 
-    return new Response(JSON.stringify({ connected: false, state, base64, code }), {
+    return new Response(JSON.stringify({ connected: false, state: rawState, base64, code }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 

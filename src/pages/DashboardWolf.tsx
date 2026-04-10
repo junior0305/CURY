@@ -428,6 +428,7 @@ export default function DashboardWolf() {
   const [humanMode, setHumanMode]       = useState(false);
   const [humanModeLoading, setHumanModeLoading] = useState(false);
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"battle" | "arena">("battle");
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const isBroker = role === "BROKER";
@@ -827,10 +828,10 @@ export default function DashboardWolf() {
         <WhatsAppQRBanner />
 
         {/* ── MAIN ── */}
-        <main className="flex flex-1 overflow-hidden gap-3 p-3 min-h-0">
+        <main className="flex flex-1 overflow-hidden gap-3 p-3 pb-16 md:pb-3 min-h-0">
 
-          {/* LEFT — 60% */}
-          <div className="flex flex-col gap-2.5 flex-[60] min-h-0 overflow-hidden">
+          {/* LEFT — Campo de Batalha */}
+          <div className={`flex-col gap-2.5 min-h-0 overflow-hidden w-full md:flex-[60] ${mobileTab === "battle" ? "flex" : "hidden md:flex"}`}>
 
             {/* Loading skeleton */}
             {leadsLoading && (
@@ -1121,8 +1122,8 @@ export default function DashboardWolf() {
             </div>
           </div>
 
-          {/* RIGHT — ARENA 40% */}
-          <div className="flex flex-col gap-3 flex-[40] overflow-y-auto min-h-0 pr-0.5">
+          {/* RIGHT — ARENA */}
+          <div className={`flex-col gap-3 overflow-y-auto min-h-0 pr-0.5 w-full md:flex-[40] ${mobileTab === "arena" ? "flex" : "hidden md:flex"}`}>
 
             <div className="flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
@@ -1246,6 +1247,27 @@ export default function DashboardWolf() {
             </div>
           </div>
         </main>
+
+        {/* ── MOBILE BOTTOM TAB BAR ── */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex h-14 shrink-0"
+          style={{ background: "rgba(8,11,20,0.97)", borderTop: "1px solid rgba(0,212,255,.15)", backdropFilter: "blur(12px)" }}>
+          <button
+            onClick={() => setMobileTab("battle")}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 transition-all"
+            style={{ color: mobileTab === "battle" ? "#00D4FF" : "#475569" }}>
+            <Shield className="w-5 h-5" />
+            <span className="text-[9px] font-bold uppercase tracking-wider">Campo</span>
+          </button>
+          <div className="w-px my-3" style={{ background: "rgba(0,212,255,.1)" }} />
+          <button
+            onClick={() => setMobileTab("arena")}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 transition-all"
+            style={{ color: mobileTab === "arena" ? "#F59E0B" : "#475569" }}>
+            <Trophy className="w-5 h-5" />
+            <span className="text-[9px] font-bold uppercase tracking-wider">Arena</span>
+          </button>
+        </nav>
+
       </div>
     </>
   );
