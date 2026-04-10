@@ -80,6 +80,27 @@ export default function SistemaControl() {
   const [checkedAt, setCheckedAt] = useState(new Date());
   const [alertPhone, setAlertPhone] = useState("");
   const [savingPhone, setSavingPhone] = useState(false);
+  const [notifying, setNotifying] = useState(false);
+  const [notifyResult, setNotifyResult] = useState<{ sent: number; skipped: number } | null>(null);
+
+  async function handleNotifyDisconnected() {
+    setNotifying(true);
+    setNotifyResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("notify-disconnected-brokers");
+      if (error) throw error;
+      setNotifyResult({ sent: data.sent ?? 0, skipped: data.skipped ?? 0 });
+      if ((data.sent ?? 0) > 0) {
+        toast.success(`✅ ${data.sent} corretor(es) notificados via WhatsApp do gerente`);
+      } else {
+        toast.info("Nenhuma notificação enviada — todos conectados ou já notificados nas últimas 8h");
+      }
+    } catch (err: any) {
+      toast.error(`Erro ao notificar: ${err.message}`);
+    } finally {
+      setNotifying(false);
+    }
+  }
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -425,6 +446,38 @@ export default function SistemaControl() {
             }
           />
         </div>
+
+        {/* Notificar corretores desconectados */}
+        {errorBots.length > 0 && (
+          <Card className="mt-3 p-4 bg-orange-950/20 border border-orange-500/40 flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-orange-300">
+                📵 {errorBots.length} chip(s) desconectado(s)
+              </span>
+              <span className="text-xs text-slate-500">— corretores sem atendimento automático</span>
+            </div>
+            <p className="text-xs text-slate-400">
+              Envia um WhatsApp pelo chip do gerente responsável avisando cada corretor para reconectar o QR Code.
+              Não reenvia para quem já foi notificado nas últimas 8h.
+            </p>
+            <div className="flex items-center gap-4 flex-wrap">
+              <Button
+                size="sm"
+                onClick={handleNotifyDisconnected}
+                disabled={notifying}
+                className="bg-orange-600 hover:bg-orange-500 text-white font-bold gap-2 text-xs"
+              >
+                {notifying ? "Enviando..." : "📲 Notificar Desconectados"}
+              </Button>
+              {notifyResult && (
+                <span className="text-xs text-slate-400">
+                  <span className="text-green-400 font-bold">{notifyResult.sent} enviados</span>
+                  {notifyResult.skipped > 0 && <span className="text-slate-500"> · {notifyResult.skipped} pulados</span>}
+                </span>
+              )}
+            </div>
+          </Card>
+        )}
       </section>
 
       {/* ── Guardian ───────────────────────────────────────────────────────── */}
