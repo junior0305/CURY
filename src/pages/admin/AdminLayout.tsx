@@ -30,6 +30,7 @@ import AudioSettings from "@/components/admin/AudioSettings";
 import SistemaControl from "@/components/admin/SistemaControl";
 import Agentes from "./Agentes";
 import LeadDistribution from "@/components/admin/LeadDistribution";
+import Inteligencia from "./Inteligencia";
 
 // ─── Grupos principais ────────────────────────────────────────────────────────
 
@@ -73,6 +74,13 @@ const GROUPS = [
       { value: "agentes",    label: "Agentes",     roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "prospeccao", label: "Prospecção",  roles: ["ADMIN", "SUPERINTENDENT"] },
     ],
+  },
+  {
+    value: "inteligencia",
+    label: "Inteligência",
+    icon: BrainCircuit,
+    roles: ["ADMIN", "SUPERINTENDENT"],
+    single: true,
   },
   {
     value: "integracoes",
@@ -385,6 +393,8 @@ export default function AdminLayout() {
             <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>
           </SubTabs>
         )}
+
+        {activeGroup === "inteligencia" && <Inteligencia />}
 
         {activeGroup === "integracoes" && (
           <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
