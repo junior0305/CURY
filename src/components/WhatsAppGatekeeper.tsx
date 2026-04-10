@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Loader2, RefreshCw, Wifi, WifiOff, CheckCircle2, Smartphone } from "lucide-react";
+import { Loader2, RefreshCw, Wifi, WifiOff, CheckCircle2, Smartphone, AlertTriangle, Clock } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -25,9 +25,16 @@ const STYLES = `
     60%{transform:scale(1.15);}
     100%{transform:scale(1);opacity:1;}
   }
+  @keyframes gkDot {
+    0%,80%,100%{transform:scale(0);opacity:0;}
+    40%{transform:scale(1);opacity:1;}
+  }
   .gk-pulse { animation: gkPulse 2s ease-in-out infinite; }
   .gk-fadein { animation: gkFadeIn .4s ease both; }
   .gk-connected-icon { animation: gkConnected .5s ease both; }
+  .gk-dot1 { animation: gkDot 1.4s ease-in-out infinite; }
+  .gk-dot2 { animation: gkDot 1.4s ease-in-out .2s infinite; }
+  .gk-dot3 { animation: gkDot 1.4s ease-in-out .4s infinite; }
   .gk-hex {
     background-color:#080B14;
     background-image:
@@ -37,7 +44,10 @@ const STYLES = `
   }
 `;
 
-type GkStatus = "loading" | "no_instance" | "connected" | "disconnected" | "success";
+// Quantas tentativas sem QR antes de mostrar erro
+const MAX_FAIL_COUNT = 4;
+
+type GkStatus = "loading" | "no_instance" | "connected" | "disconnected" | "connecting" | "qr_error" | "success";
 
 const SESSION_KEY = (userId: string) => `wha_ok_${userId}`;
 
@@ -45,19 +55,19 @@ function useBotStatus(userId: string | undefined, role: string | null) {
   const [botInstanceId, setBotInstanceId] = useState<string | null | "none">(null);
   const [status, setStatus] = useState<GkStatus>("loading");
   const [qrBase64, setQrBase64] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const failCountRef = useRef(0);
 
-  // Only block BROKER and MANAGER — admins/superintendents bypass
   const shouldCheck = role === "BROKER" || role === "MANAGER";
 
-  // Fetch bot_instance_id once
+  // Busca bot_instance_id uma vez
   useEffect(() => {
     if (!userId || !shouldCheck) {
       setStatus("connected");
       return;
     }
-    // Se já confirmamos conexão nesta sessão, pular verificação
     if (sessionStorage.getItem(SESSION_KEY(userId)) === "1") {
       setStatus("connected");
       return;
@@ -80,36 +90,87 @@ function useBotStatus(userId: string | undefined, role: string | null) {
 
   const checkConnection = useCallback(async (showRefreshing = false) => {
     if (!botInstanceId || botInstanceId === "none") return;
-    if (showRefreshing) setRefreshing(true);
+    if (showRefreshing) {
+      setRefreshing(true);
+      failCountRef.current = 0; // reset ao forçar atualização manual
+      setErrorDetail(null);
+      setQrBase64(null);
+    }
     try {
       const { data, error } = await supabase.functions.invoke("get-whatsapp-qr", {
         body: { botInstanceId },
       });
-      if (error || !data) return;
+
+      if (error || !data) {
+        failCountRef.current++;
+        if (failCountRef.current >= MAX_FAIL_COUNT) {
+          setStatus("qr_error");
+          setErrorDetail("Não foi possível contatar o serviço WhatsApp. Verifique a conexão com a Evolution API.");
+        }
+        return;
+      }
+
+      // Conectado
       if (data.connected) {
+        failCountRef.current = 0;
         if (userId) sessionStorage.setItem(SESSION_KEY(userId), "1");
         setStatus("success");
         if (intervalRef.current) clearInterval(intervalRef.current);
         setTimeout(() => setStatus("connected"), 2000);
-      } else {
-        if (userId) sessionStorage.removeItem(SESSION_KEY(userId));
-        setStatus("disconnected");
-        if (data.base64) setQrBase64(data.base64);
+        return;
       }
+
+      // Estado transitório pós-scan — aguardar sem gerar novo QR
+      if (data.connecting) {
+        failCountRef.current = 0; // conectando não é falha
+        setStatus("connecting");
+        return;
+      }
+
+      // Erro específico da Evolution API
+      if (data.error) {
+        failCountRef.current++;
+        if (failCountRef.current >= MAX_FAIL_COUNT) {
+          setStatus("qr_error");
+          setErrorDetail(data.error_detail || `Erro ao gerar QR: ${data.error}`);
+        } else {
+          setStatus("disconnected");
+        }
+        return;
+      }
+
+      // QR recebido com sucesso
+      if (data.base64) {
+        failCountRef.current = 0;
+        setQrBase64(data.base64);
+        setStatus("disconnected");
+        if (userId) sessionStorage.removeItem(SESSION_KEY(userId));
+        return;
+      }
+
+      // Resposta sem base64 e sem erro explícito — contar como falha
+      failCountRef.current++;
+      setStatus("disconnected"); // manter na tela de QR com spinner
+      if (failCountRef.current >= MAX_FAIL_COUNT) {
+        setStatus("qr_error");
+        setErrorDetail("A instância WhatsApp não está gerando o QR Code. Verifique se o chip está configurado corretamente na Evolution API.");
+      }
+
     } finally {
       if (showRefreshing) setRefreshing(false);
     }
   }, [botInstanceId, userId]);
 
-  // First check when botInstanceId becomes available
+  // Primeira verificação quando botInstanceId ficar disponível
   useEffect(() => {
     if (!botInstanceId || botInstanceId === "none") return;
     checkConnection();
   }, [botInstanceId, checkConnection]);
 
-  // Poll every 3 seconds while disconnected (detecta conexão mais rápido após scan)
+  // Polling a cada 3s enquanto desconectado ou em connecting
   useEffect(() => {
-    if (status !== "disconnected") {
+    const shouldPoll = status === "disconnected" || status === "connecting";
+    if (!shouldPoll) {
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
     }
@@ -119,10 +180,17 @@ function useBotStatus(userId: string | undefined, role: string | null) {
     };
   }, [status, checkConnection]);
 
-  return { status, qrBase64, refreshing, checkConnection };
+  const resetAndRetry = useCallback(() => {
+    failCountRef.current = 0;
+    setErrorDetail(null);
+    setQrBase64(null);
+    setStatus("disconnected");
+  }, []);
+
+  return { status, qrBase64, errorDetail, refreshing, checkConnection, resetAndRetry };
 }
 
-// ── Loading screen ────────────────────────────────────────────────────────────
+// ── Loading ───────────────────────────────────────────────────────────────────
 function GkLoading() {
   return (
     <div className="gk-hex gk-ui min-h-screen flex items-center justify-center">
@@ -131,7 +199,7 @@ function GkLoading() {
   );
 }
 
-// ── Success screen ────────────────────────────────────────────────────────────
+// ── Success ───────────────────────────────────────────────────────────────────
 function GkSuccess() {
   return (
     <div className="gk-hex gk-ui min-h-screen flex flex-col items-center justify-center gap-4">
@@ -147,7 +215,7 @@ function GkSuccess() {
   );
 }
 
-// ── No instance configured screen ────────────────────────────────────────────
+// ── Sem instância ─────────────────────────────────────────────────────────────
 function GkNoInstance() {
   return (
     <div className="gk-hex gk-ui min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
@@ -162,7 +230,85 @@ function GkNoInstance() {
   );
 }
 
-// ── QR Code screen ────────────────────────────────────────────────────────────
+// ── Conectando (pós-scan) ─────────────────────────────────────────────────────
+function GkConnecting() {
+  return (
+    <>
+      <style>{STYLES}</style>
+      <div className="gk-hex gk-ui min-h-screen flex flex-col items-center justify-center gap-6 p-6">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center gk-pulse"
+          style={{ background: "rgba(16,185,129,.1)", border: "1px solid rgba(16,185,129,.3)" }}>
+          <Wifi className="w-7 h-7 text-emerald-400" />
+        </div>
+        <div className="text-center">
+          <p className="gk-display text-base font-black text-white uppercase tracking-widest mb-2">
+            Conectando...
+          </p>
+          <p className="text-slate-400 text-sm">QR Code escaneado. Aguarde a confirmação.</p>
+        </div>
+        {/* Dots animados */}
+        <div className="flex gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 gk-dot1" />
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 gk-dot2" />
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 gk-dot3" />
+        </div>
+        <p className="text-[10px] text-slate-600 uppercase tracking-widest">
+          Estabelecendo sessão WhatsApp
+        </p>
+      </div>
+    </>
+  );
+}
+
+// ── Erro de QR ────────────────────────────────────────────────────────────────
+function GkQRError({
+  errorDetail,
+  onRetry,
+  refreshing,
+}: {
+  errorDetail: string | null;
+  onRetry: () => void;
+  refreshing: boolean;
+}) {
+  return (
+    <>
+      <style>{STYLES}</style>
+      <div className="gk-hex gk-ui min-h-screen flex flex-col items-center justify-center gap-6 p-6 text-center">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
+          style={{ background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.3)" }}>
+          <AlertTriangle className="w-7 h-7 text-red-400" />
+        </div>
+        <div>
+          <p className="gk-display text-sm font-black text-white uppercase tracking-widest mb-2">
+            Não foi possível gerar o QR
+          </p>
+          <p className="text-slate-400 text-sm max-w-xs mx-auto">
+            {errorDetail || "Houve um problema ao conectar com o serviço WhatsApp."}
+          </p>
+        </div>
+        <button
+          onClick={onRetry}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+          style={{
+            background: "rgba(239,68,68,.1)",
+            border: "1px solid rgba(239,68,68,.3)",
+            color: refreshing ? "#475569" : "#F87171",
+            cursor: refreshing ? "not-allowed" : "pointer",
+          }}
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          Tentar novamente
+        </button>
+        <p className="text-[10px] text-slate-600 max-w-xs">
+          Se o problema persistir, contate o administrador para verificar a instância WhatsApp.
+        </p>
+      </div>
+    </>
+  );
+}
+
+// ── QR Code ───────────────────────────────────────────────────────────────────
 function GkQRCode({
   qrBase64,
   refreshing,
@@ -204,7 +350,7 @@ function GkQRCode({
             animationDelay: "0.1s",
           }}
         >
-          {/* Status bar */}
+          {/* Status */}
           <div className="flex items-center gap-2 mb-5">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
               style={{ background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.25)" }}>
@@ -230,9 +376,10 @@ function GkQRCode({
                 />
               </div>
             ) : (
-              <div className="w-52 h-52 rounded-xl flex items-center justify-center"
+              <div className="w-52 h-52 rounded-xl flex flex-col items-center justify-center gap-3"
                 style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(0,212,255,.1)" }}>
                 <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+                <p className="text-[10px] text-slate-500">Gerando QR Code...</p>
               </div>
             )}
 
@@ -292,10 +439,10 @@ function GkQRCode({
   );
 }
 
-// ── Main gatekeeper ───────────────────────────────────────────────────────────
+// ── Main Gatekeeper ───────────────────────────────────────────────────────────
 export function WhatsAppGatekeeper({ children }: { children: React.ReactNode }) {
   const { user, role, loading: authLoading } = useAuth();
-  const { status, qrBase64, refreshing, checkConnection } = useBotStatus(
+  const { status, qrBase64, errorDetail, refreshing, checkConnection, resetAndRetry } = useBotStatus(
     user?.id,
     role
   );
@@ -303,6 +450,14 @@ export function WhatsAppGatekeeper({ children }: { children: React.ReactNode }) 
   if (authLoading || status === "loading") return <GkLoading />;
   if (status === "success") return <GkSuccess />;
   if (status === "no_instance") return <GkNoInstance />;
+  if (status === "connecting") return <GkConnecting />;
+  if (status === "qr_error") return (
+    <GkQRError
+      errorDetail={errorDetail}
+      onRetry={resetAndRetry}
+      refreshing={refreshing}
+    />
+  );
   if (status === "disconnected") {
     return (
       <GkQRCode

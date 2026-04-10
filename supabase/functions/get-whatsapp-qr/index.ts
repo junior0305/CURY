@@ -39,52 +39,125 @@ serve(async (req) => {
     const apiKey = bot.evolution_api_key || '';
 
     if (!base || !instance) {
-      return new Response(JSON.stringify({ error: 'Bot instance not configured' }), {
+      return new Response(JSON.stringify({
+        error: 'Bot instance not configured',
+        error_detail: 'A instância não tem URL da Evolution API ou nome configurado. Verifique as configurações do chip.',
+      }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Verifica status atual da instância
-    const stateResp = await fetch(`${base}/instance/connectionState/${instance}`, {
-      headers: { apikey: apiKey },
-    });
-    const stateJson = await stateResp.json().catch(() => ({}));
-    // Normalizar para lowercase para comparação case-insensitive
-    const rawState = stateJson?.instance?.state || stateJson?.state || 'unknown';
-    const state = String(rawState).toLowerCase();
+    // ── 1. Verificar estado atual da instância ───────────────────────────────
+    let rawState = 'unknown';
+    let state = 'unknown';
+
+    try {
+      const stateResp = await fetch(`${base}/instance/connectionState/${instance}`, {
+        headers: { apikey: apiKey },
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (stateResp.ok) {
+        const stateJson = await stateResp.json().catch(() => ({}));
+        rawState = stateJson?.instance?.state || stateJson?.state || 'unknown';
+        state = String(rawState).toLowerCase();
+      } else {
+        // Evolution API não respondeu ao estado — tratar como desconectado e tentar QR
+        console.warn(`[get-whatsapp-qr] connectionState retornou ${stateResp.status} para ${instance}`);
+        state = 'unknown';
+      }
+    } catch (fetchErr: any) {
+      console.error(`[get-whatsapp-qr] Timeout ou erro ao checar estado: ${fetchErr.message}`);
+      return new Response(JSON.stringify({
+        error: 'evolution_api_unreachable',
+        error_detail: 'Não foi possível contatar a Evolution API. Verifique se o servidor está online.',
+        connected: false,
+      }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     console.log(`[get-whatsapp-qr] instance=${instance} state=${state}`);
 
+    // ── 2. Conectado ─────────────────────────────────────────────────────────
     if (state === 'open') {
       return new Response(JSON.stringify({ connected: true, state: rawState }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Estado transitório após scan — não gerar novo QR, aguardar
+    // ── 3. Transitório pós-scan — não gerar novo QR, aguardar ───────────────
     if (state === 'connecting') {
-      return new Response(JSON.stringify({ connected: false, state: rawState, connecting: true, base64: null }), {
+      return new Response(JSON.stringify({
+        connected: false,
+        connecting: true,
+        state: rawState,
+        base64: null,
+      }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Busca QR code
-    const qrResp = await fetch(`${base}/instance/connect/${instance}`, {
-      headers: { apikey: apiKey },
-    });
-
-    if (!qrResp.ok) {
-      const txt = await qrResp.text();
-      console.error('[get-whatsapp-qr] Evolution error:', qrResp.status, txt);
-      return new Response(JSON.stringify({ error: `Evolution API error: ${qrResp.status}` }), {
-        status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // ── 4. Buscar QR Code ────────────────────────────────────────────────────
+    let qrResp: Response;
+    try {
+      qrResp = await fetch(`${base}/instance/connect/${instance}`, {
+        headers: { apikey: apiKey },
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch (fetchErr: any) {
+      console.error(`[get-whatsapp-qr] Timeout ao buscar QR: ${fetchErr.message}`);
+      return new Response(JSON.stringify({
+        connected: false,
+        error: 'qr_fetch_timeout',
+        error_detail: 'A Evolution API demorou demais para responder ao gerar o QR Code.',
+        base64: null,
+      }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const qrJson = await qrResp.json();
-    // Evolution API v2 retorna { base64: "data:image/png;base64,..." } ou { code: "2@..." }
+    if (!qrResp.ok) {
+      const txt = await qrResp.text().catch(() => '');
+      console.error('[get-whatsapp-qr] Evolution error:', qrResp.status, txt);
+
+      let errorDetail = `A Evolution API retornou erro ${qrResp.status} ao tentar gerar o QR Code.`;
+      if (qrResp.status === 404) {
+        errorDetail = `A instância "${bot.instance_name || bot.name}" não foi encontrada na Evolution API. Ela pode ter sido deletada ou o nome está incorreto.`;
+      } else if (qrResp.status === 401 || qrResp.status === 403) {
+        errorDetail = 'Chave de API da Evolution inválida ou sem permissão.';
+      } else if (qrResp.status >= 500) {
+        errorDetail = 'A Evolution API está com problemas internos. Tente novamente em alguns instantes.';
+      }
+
+      return new Response(JSON.stringify({
+        connected: false,
+        error: `evolution_error_${qrResp.status}`,
+        error_detail: errorDetail,
+        base64: null,
+      }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const qrJson = await qrResp.json().catch(() => ({}));
+
+    // Evolution API v2: { base64: "data:image/png;base64,..." } ou { qrcode: { base64: ... } }
     const base64 = qrJson?.base64 || qrJson?.qrcode?.base64 || null;
     const code   = qrJson?.code   || qrJson?.qrcode?.code   || null;
+
+    if (!base64 && !code) {
+      console.warn('[get-whatsapp-qr] QR gerado mas sem base64/code:', JSON.stringify(qrJson).slice(0, 200));
+      return new Response(JSON.stringify({
+        connected: false,
+        error: 'qr_empty_response',
+        error_detail: 'A Evolution API respondeu mas não retornou o QR Code. A instância pode precisar ser reiniciada.',
+        base64: null,
+        raw: qrJson,
+      }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     return new Response(JSON.stringify({ connected: false, state: rawState, base64, code }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -92,7 +165,11 @@ serve(async (req) => {
 
   } catch (err: any) {
     console.error('[get-whatsapp-qr] error:', err.message);
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({
+      error: err.message,
+      error_detail: 'Erro interno ao processar a requisição.',
+      connected: false,
+    }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
