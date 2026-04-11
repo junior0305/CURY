@@ -51,6 +51,9 @@ type GkStatus = "loading" | "no_instance" | "connected" | "disconnected" | "conn
 
 const SESSION_KEY = (userId: string) => `wha_ok_${userId}`;
 
+// Tempo máximo em "connecting" antes de voltar para QR (ms)
+const CONNECTING_TIMEOUT_MS = 45000;
+
 function useBotStatus(userId: string | undefined, role: string | null) {
   const [botInstanceId, setBotInstanceId] = useState<string | null | "none">(null);
   const [status, setStatus] = useState<GkStatus>("loading");
@@ -58,6 +61,7 @@ function useBotStatus(userId: string | undefined, role: string | null) {
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const connectingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failCountRef = useRef(0);
 
   const shouldCheck = role === "BROKER" || role === "MANAGER";
@@ -172,8 +176,27 @@ function useBotStatus(userId: string | undefined, role: string | null) {
     const shouldPoll = status === "disconnected" || status === "connecting";
     if (!shouldPoll) {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (connectingTimeoutRef.current) clearTimeout(connectingTimeoutRef.current);
       return;
     }
+
+    // Se entrou em "connecting", inicia timeout de 45s para voltar ao QR
+    if (status === "connecting") {
+      if (!connectingTimeoutRef.current) {
+        connectingTimeoutRef.current = setTimeout(() => {
+          connectingTimeoutRef.current = null;
+          setStatus("disconnected");
+          setQrBase64(null);
+        }, CONNECTING_TIMEOUT_MS);
+      }
+    } else {
+      // Saiu de connecting — limpa timeout
+      if (connectingTimeoutRef.current) {
+        clearTimeout(connectingTimeoutRef.current);
+        connectingTimeoutRef.current = null;
+      }
+    }
+
     intervalRef.current = setInterval(() => checkConnection(), 3000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -182,6 +205,10 @@ function useBotStatus(userId: string | undefined, role: string | null) {
 
   const resetAndRetry = useCallback(() => {
     failCountRef.current = 0;
+    if (connectingTimeoutRef.current) {
+      clearTimeout(connectingTimeoutRef.current);
+      connectingTimeoutRef.current = null;
+    }
     setErrorDetail(null);
     setQrBase64(null);
     setStatus("disconnected");
@@ -232,6 +259,14 @@ function GkNoInstance() {
 
 // ── Conectando (pós-scan) ─────────────────────────────────────────────────────
 function GkConnecting() {
+  const [secondsLeft, setSecondsLeft] = useState(Math.round(CONNECTING_TIMEOUT_MS / 1000));
+
+  useEffect(() => {
+    if (secondsLeft <= 0) return;
+    const t = setInterval(() => setSecondsLeft(s => s - 1), 1000);
+    return () => clearInterval(t);
+  }, [secondsLeft]);
+
   return (
     <>
       <style>{STYLES}</style>
@@ -255,6 +290,11 @@ function GkConnecting() {
         <p className="text-[10px] text-slate-600 uppercase tracking-widest">
           Estabelecendo sessão WhatsApp
         </p>
+        {secondsLeft > 0 && (
+          <p className="text-[10px] text-slate-700">
+            Novo QR em {secondsLeft}s caso não conecte
+          </p>
+        )}
       </div>
     </>
   );
