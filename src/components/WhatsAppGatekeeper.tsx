@@ -65,6 +65,8 @@ function useBotStatus(userId: string | undefined, role: string | null) {
   const failCountRef = useRef(0);
   // true somente quando o usuário viu um QR e pode ter escaneado
   const qrWasDisplayedRef = useRef(false);
+  // quantas vezes seguidas Evolution retornou "connecting" sem QR exibido
+  const stuckConnectingCountRef = useRef(0);
 
   const shouldCheck = role === "BROKER" || role === "MANAGER";
 
@@ -98,13 +100,16 @@ function useBotStatus(userId: string | undefined, role: string | null) {
     if (!botInstanceId || botInstanceId === "none") return;
     if (showRefreshing) {
       setRefreshing(true);
-      failCountRef.current = 0; // reset ao forçar atualização manual
+      failCountRef.current = 0;
+      stuckConnectingCountRef.current = 0;
       setErrorDetail(null);
       setQrBase64(null);
     }
     try {
+      // Após 2 polls com "connecting" sem QR, forçar geração de QR ignorando o estado
+      const forceQR = !qrWasDisplayedRef.current && stuckConnectingCountRef.current >= 2;
       const { data, error } = await supabase.functions.invoke("get-whatsapp-qr", {
-        body: { botInstanceId },
+        body: { botInstanceId, forceQR },
       });
 
       if (error || !data) {
@@ -127,15 +132,15 @@ function useBotStatus(userId: string | undefined, role: string | null) {
       }
 
       // Estado transitório pós-scan — só respeitar se o usuário de fato viu um QR
-      // Se a instância está "connecting" mas nunca exibimos QR, ela está presa no Evolution
       if (data.connecting) {
         if (qrWasDisplayedRef.current) {
           failCountRef.current = 0;
+          stuckConnectingCountRef.current = 0;
           setStatus("connecting");
         } else {
           // Instância presa em "connecting" no Evolution sem ação do usuário
-          // Forçar exibição de QR no próximo ciclo tratando como desconectado
-          failCountRef.current++;
+          // Incrementar contador — após 2x a próxima poll envia forceQR=true
+          stuckConnectingCountRef.current++;
           setStatus("disconnected");
         }
         return;
@@ -156,6 +161,7 @@ function useBotStatus(userId: string | undefined, role: string | null) {
       // QR recebido com sucesso
       if (data.base64) {
         failCountRef.current = 0;
+        stuckConnectingCountRef.current = 0;
         qrWasDisplayedRef.current = true; // usuário pode escanear a partir daqui
         setQrBase64(data.base64);
         setStatus("disconnected");
@@ -217,6 +223,7 @@ function useBotStatus(userId: string | undefined, role: string | null) {
 
   const resetAndRetry = useCallback(() => {
     failCountRef.current = 0;
+    stuckConnectingCountRef.current = 0;
     qrWasDisplayedRef.current = false;
     if (connectingTimeoutRef.current) {
       clearTimeout(connectingTimeoutRef.current);

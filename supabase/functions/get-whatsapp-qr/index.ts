@@ -15,7 +15,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
     );
 
-    const { botInstanceId } = await req.json();
+    const { botInstanceId, forceQR } = await req.json();
     if (!botInstanceId) {
       return new Response(JSON.stringify({ error: 'botInstanceId required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -86,8 +86,8 @@ serve(async (req) => {
       });
     }
 
-    // ── 3. Transitório pós-scan — não gerar novo QR, aguardar ───────────────
-    if (state === 'connecting') {
+    // ── 3. Transitório pós-scan — aguardar, a menos que forceQR esteja ativo ──
+    if (state === 'connecting' && !forceQR) {
       return new Response(JSON.stringify({
         connected: false,
         connecting: true,
