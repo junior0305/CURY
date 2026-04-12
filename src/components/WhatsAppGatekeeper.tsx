@@ -63,6 +63,8 @@ function useBotStatus(userId: string | undefined, role: string | null) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const connectingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failCountRef = useRef(0);
+  // true somente quando o usuário viu um QR e pode ter escaneado
+  const qrWasDisplayedRef = useRef(false);
 
   const shouldCheck = role === "BROKER" || role === "MANAGER";
 
@@ -124,10 +126,18 @@ function useBotStatus(userId: string | undefined, role: string | null) {
         return;
       }
 
-      // Estado transitório pós-scan — aguardar sem gerar novo QR
+      // Estado transitório pós-scan — só respeitar se o usuário de fato viu um QR
+      // Se a instância está "connecting" mas nunca exibimos QR, ela está presa no Evolution
       if (data.connecting) {
-        failCountRef.current = 0; // conectando não é falha
-        setStatus("connecting");
+        if (qrWasDisplayedRef.current) {
+          failCountRef.current = 0;
+          setStatus("connecting");
+        } else {
+          // Instância presa em "connecting" no Evolution sem ação do usuário
+          // Forçar exibição de QR no próximo ciclo tratando como desconectado
+          failCountRef.current++;
+          setStatus("disconnected");
+        }
         return;
       }
 
@@ -146,6 +156,7 @@ function useBotStatus(userId: string | undefined, role: string | null) {
       // QR recebido com sucesso
       if (data.base64) {
         failCountRef.current = 0;
+        qrWasDisplayedRef.current = true; // usuário pode escanear a partir daqui
         setQrBase64(data.base64);
         setStatus("disconnected");
         if (userId) sessionStorage.removeItem(SESSION_KEY(userId));
@@ -185,6 +196,7 @@ function useBotStatus(userId: string | undefined, role: string | null) {
       if (!connectingTimeoutRef.current) {
         connectingTimeoutRef.current = setTimeout(() => {
           connectingTimeoutRef.current = null;
+          qrWasDisplayedRef.current = false; // sessão de escaneamento expirou
           setStatus("disconnected");
           setQrBase64(null);
         }, CONNECTING_TIMEOUT_MS);
@@ -205,6 +217,7 @@ function useBotStatus(userId: string | undefined, role: string | null) {
 
   const resetAndRetry = useCallback(() => {
     failCountRef.current = 0;
+    qrWasDisplayedRef.current = false;
     if (connectingTimeoutRef.current) {
       clearTimeout(connectingTimeoutRef.current);
       connectingTimeoutRef.current = null;
