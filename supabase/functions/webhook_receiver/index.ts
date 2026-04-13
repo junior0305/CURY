@@ -138,10 +138,17 @@ serve(async (req) => {
     const payload = await req.json().catch(() => null);
     console.log('[webhook_receiver] payload:', JSON.stringify(payload).substring(0, 1000));
 
-    // Log do evento Evolution (visível em Admin/Pipeline/Logs/Webhooks)
+    // Log do evento Evolution — salva apenas resumo para evitar TOAST gigante
+    const slimPayload = payload ? {
+      event:    payload.event || payload.type || null,
+      instance: payload.instance || payload.data?.instance || null,
+      phone:    payload?.data?.key?.remoteJid || payload?.key?.remoteJid || null,
+      fromMe:   payload?.data?.key?.fromMe ?? payload?.key?.fromMe ?? null,
+      msgPreview: (payload?.data?.message?.conversation || payload?.data?.message?.extendedTextMessage?.text || '').substring(0, 200) || null,
+    } : null;
     supabase.from('webhook_logs').insert({
       integration_key: 'evolution',
-      payload: payload ?? null,
+      payload: slimPayload,
       status_code: 200,
     }).then(() => {}).catch(() => {}); // fire-and-forget
 

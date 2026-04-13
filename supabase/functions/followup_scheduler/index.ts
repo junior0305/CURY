@@ -519,6 +519,32 @@ serve(async (req) => {
       }
     }
 
+    // ── BLOCO 6.5: Limpeza automática de logs antigos ────────────────────────
+    // Mantém apenas 7 dias de webhook_logs e 30 dias de automation_logs
+    // Roda em lotes pequenos para não travar o banco
+    try {
+      const sevenDaysAgo = new Date(nowMs - 7 * 24 * 3600000).toISOString();
+      const thirtyDaysAgo = new Date(nowMs - 30 * 24 * 3600000).toISOString();
+
+      // webhook_logs: deleta lote de 3000 mais antigos que 7 dias
+      const { data: oldWebhooks } = await supabase
+        .from('webhook_logs').select('id').lt('created_at', sevenDaysAgo).limit(3000);
+      if (oldWebhooks && oldWebhooks.length > 0) {
+        await supabase.from('webhook_logs').delete().in('id', oldWebhooks.map((r: any) => r.id));
+        console.log(`[followup_scheduler] Bloco 6.5 — webhook_logs limpos: ${oldWebhooks.length}`);
+      }
+
+      // automation_logs: deleta lote de 1000 mais antigos que 30 dias
+      const { data: oldAutoLogs } = await supabase
+        .from('automation_logs').select('id').lt('created_at', thirtyDaysAgo).limit(1000);
+      if (oldAutoLogs && oldAutoLogs.length > 0) {
+        await supabase.from('automation_logs').delete().in('id', oldAutoLogs.map((r: any) => r.id));
+        console.log(`[followup_scheduler] Bloco 6.5 — automation_logs limpos: ${oldAutoLogs.length}`);
+      }
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 6.5 error:', e.message);
+    }
+
     // ── BLOCO 7: Health check das instâncias WhatsApp ─────────────────────────
     let botHealthChecked = 0, botHealthUpdated = 0;
     try {
