@@ -85,8 +85,18 @@ serve(async (req) => {
       const targetAudience = campaign.target_audience || {};
       const daysWithoutContact = targetAudience.days_without_contact || 3;
       const leadStatus = targetAudience.lead_status || [];
-      let leadsQuery = supabaseClient.from('leads').select('id, name, phone, broker_id');
-      if (leadStatus.length > 0) leadsQuery = leadsQuery.in('status', leadStatus);
+      // Statuses que NUNCA devem receber mensagem, independente da configuração da campanha
+      const NEVER_CONTACT = ['CONCLUDED', 'EXCLUDED', 'ABANDONED', 'VISIT_SCHEDULED'];
+      let leadsQuery = supabaseClient.from('leads').select('id, name, phone, broker_id, status');
+      if (leadStatus.length > 0) {
+        // Remove da seleção qualquer status proibido que o admin possa ter incluído por engano
+        const safeStatuses = leadStatus.filter((s: string) => !NEVER_CONTACT.includes(s));
+        if (safeStatuses.length > 0) leadsQuery = leadsQuery.in('status', safeStatuses);
+        else leadsQuery = leadsQuery.in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED']);
+      } else {
+        // Sem filtro configurado: só contata leads ativos
+        leadsQuery = leadsQuery.in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED']);
+      }
       const cutoffDate = new Date(); cutoffDate.setDate(cutoffDate.getDate() - daysWithoutContact);
       leadsQuery = leadsQuery.or(`last_interaction_at.is.null,last_interaction_at.lt.${cutoffDate.toISOString()}`);
       if (campaign.max_leads) leadsQuery = leadsQuery.limit(campaign.max_leads);

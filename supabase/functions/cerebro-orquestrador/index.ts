@@ -7,6 +7,8 @@ const corsHeaders = {
 };
 
 const TERMINAL = ['CONCLUDED', 'ABANDONED', 'EXCLUDED'];
+// Leads com visita ou negociação ativa: não perturbar com automações outbound
+const DO_NOT_DISTURB = [...TERMINAL, 'VISIT_SCHEDULED'];
 
 // ── BRT helpers (UTC-3) ────────────────────────────────────────────────────
 function getBRTHour(): number {
@@ -121,19 +123,21 @@ Responda APENAS em JSON válido, sem markdown:
   "reason": "motivo curto em português"
 }
 
-Regras para decision:
-- "ok": conversa inativa, sem compromissos, pode enviar
-- "nao_perturbar": lead pediu para parar, ficou irritado ou disse que não tem interesse
-- "agendado_48": existe visita, ligação ou reunião combinada nos próximos 2 dias
-- "agendado_72": existe visita, ligação ou reunião combinada em 3+ dias
-- "negociando": conversa ativa, corretor e lead trocando mensagens sobre proposta/condições
-- "docs_enviados": lead disse que já enviou ou vai enviar documentos
+Regras para decision (prioridade decrescente — aplique a primeira que se encaixar):
+- "nao_perturbar": lead pediu para parar, ficou irritado, disse não tem interesse, "não quero mais", "me tira da lista", "para de me mandar mensagem", "não tenho interesse", "desiste"
+- "agendado_48": lead confirmou visita, reunião, ligação ou encontro combinado para os próximos 2 dias — frases como "vou lá amanhã", "pode me esperar", "confirmo para segunda", "vou sim", "apareço sábado", "a que horas é?", "ok combinado", "até lá", "a visita está confirmada"
+- "agendado_72": visita ou compromisso combinado em 3+ dias — "semana que vem", "na próxima quinta", "no fim de semana"
+- "negociando": corretor e lead trocando mensagens ativas sobre proposta, valores, condições, subsídio — não enviar automação enquanto negociação está viva
+- "docs_enviados": lead disse que já enviou ou vai enviar documentos agora
+- "ok": conversa inativa ou sem compromissos — pode enviar automação
 
-Regras para suggested_status (só quando há evidência clara na conversa):
-- "VISIT_SCHEDULED": lead confirmou visita ou tour presencial
-- "DOCS_REQUESTED": lead enviou ou confirmou envio de documentos (RG, CPF, comprovante de renda)
-- "IN_PROGRESS": conversa ativa sem evento específico de avanço
-- null: sem evidência de avanço de pipeline`;
+Regras para suggested_status (só quando há evidência CLARA no texto):
+- "VISIT_SCHEDULED": lead confirmou presença em visita ou tour — expressões como "vou sim", "apareço lá", "confirmado", "ok, estarei lá", "sábado eu vou", "pode me esperar", "a que horas é a visita"
+- "DOCS_REQUESTED": lead enviou ou confirmou envio de documentos (RG, CPF, comprovante de renda, holerite)
+- "IN_PROGRESS": conversa ativa e positiva sem evento específico de avanço de pipeline
+- null: sem evidência clara de avanço
+
+IMPORTANTE: Priorize SEMPRE proteger o lead que já agendou visita. Em caso de dúvida entre "ok" e "agendado_*", escolha "agendado_48".`;
 
   const result = await callGemini(geminiKey, system, `Histórico da conversa:\n${history}`);
   if (!result) return null;
@@ -468,14 +472,23 @@ serve(async (req) => {
           continue;
         }
 
-        if (TERMINAL.includes((lead.status || '').toUpperCase())) {
-          await supabase.from('lead_activation_queue')
-            .update({ status: 'cancelled', cancel_reason: `lead_${lead.status}` })
-            .eq('id', item.id);
-          // Marca estado como encerrado
+        const leadStatusUpper = (lead.status || '').toUpperCase();
+        if (DO_NOT_DISTURB.includes(leadStatusUpper)) {
+          // Para VISIT_SCHEDULED: cancela TODOS os itens outbound pendentes da fila
+          if (leadStatusUpper === 'VISIT_SCHEDULED') {
+            await supabase.from('lead_activation_queue')
+              .update({ status: 'cancelled', cancel_reason: 'visit_scheduled' })
+              .eq('lead_id', lead.id)
+              .in('action_type', ['toque_1','toque_2','sentinela','last_chance','broker_warmup','auto_resposta']);
+            console.log(`[cerebro] 📅 Fila limpa para ${lead.name} — visita agendada`);
+          } else {
+            await supabase.from('lead_activation_queue')
+              .update({ status: 'cancelled', cancel_reason: `lead_${lead.status}` })
+              .eq('id', item.id);
+          }
           await setLeadState(supabase, lead.id, {
             ultimo_evento: `lead_${lead.status.toLowerCase()}`,
-            proxima_acao:  'encerrar',
+            proxima_acao:  leadStatusUpper === 'VISIT_SCHEDULED' ? 'aguardar_visita' : 'encerrar',
             atualizado_por: 'cerebro',
           });
           cancelled++;
@@ -519,7 +532,7 @@ serve(async (req) => {
             const { decision, reason, suggested_status } = convAnalysis;
             console.log(`[cerebro] 🧠 análise conversa ${lead.name}: ${decision} — ${reason}`);
 
-            // ── Atualização automática de status do pipeline ──────────────
+            // ── Camada 3: Atualização automática de status do pipeline ────
             if (suggested_status) {
               const PIPELINE_ORDER = ['NEW', 'IN_PROGRESS', 'VISIT_SCHEDULED', 'DOCS_REQUESTED', 'CONCLUDED'];
               const curIdx = PIPELINE_ORDER.indexOf((lead.status || 'NEW').toUpperCase());
@@ -537,10 +550,31 @@ serve(async (req) => {
                 }).catch(() => {});
                 await supabase.from('lead_notes').insert({
                   lead_id: lead.id,
-                  content: `📊 Status atualizado automaticamente pela IA: ${lead.status} → ${suggested_status}. Motivo: ${reason}`,
+                  content: `🤖 Status atualizado pela IA: ${lead.status} → ${suggested_status}. Motivo: ${reason}`,
                   type: 'SYSTEM',
                 }).catch(() => {});
                 console.log(`[cerebro] 📊 ${lead.name}: ${lead.status} → ${suggested_status}`);
+
+                // Se visita agendada detectada: cancelar TODA a fila outbound pendente
+                if (suggested_status === 'VISIT_SCHEDULED') {
+                  await supabase.from('lead_activation_queue')
+                    .update({ status: 'cancelled', cancel_reason: 'visit_scheduled_detected_by_ia' })
+                    .eq('lead_id', lead.id)
+                    .in('action_type', ['toque_1','toque_2','sentinela','last_chance','broker_warmup','auto_resposta'])
+                    .in('status', ['pending']);
+                  await supabase.from('lead_notes').insert({
+                    lead_id: lead.id,
+                    content: `📅 Automações pausadas — visita agendada detectada pela IA na conversa.`,
+                    type: 'SYSTEM',
+                  }).catch(() => {});
+                  console.log(`[cerebro] 📅 Fila outbound limpa para ${lead.name} — visita detectada na conversa`);
+                  // Cancela o item atual e pula
+                  await supabase.from('lead_activation_queue')
+                    .update({ status: 'cancelled', cancel_reason: 'visit_scheduled_detected_by_ia' })
+                    .eq('id', item.id);
+                  cancelled++;
+                  continue;
+                }
               }
             }
 

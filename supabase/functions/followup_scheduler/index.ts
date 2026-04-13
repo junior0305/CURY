@@ -128,6 +128,7 @@ serve(async (req) => {
       .neq('status', 'ABANDONED')
       .neq('status', 'EXCLUDED')
       .neq('status', 'CONCLUDED')
+      .neq('status', 'VISIT_SCHEDULED')
       .limit(30);
 
     let criticalProcessed = 0;
@@ -197,6 +198,7 @@ serve(async (req) => {
       .neq('status', 'ABANDONED')
       .neq('status', 'EXCLUDED')
       .neq('status', 'CONCLUDED')
+      .neq('status', 'VISIT_SCHEDULED')
       .limit(30);
 
     console.log(`[B2] ${coldLeads?.length || 0} leads frios encontrados`);
