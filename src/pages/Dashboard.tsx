@@ -898,7 +898,7 @@ const Dashboard = () => {
 
           <CampaignHeroBanner leads={leads} users={profiles} />
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-[700px]">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
 
             {/* ── Coluna esquerda ──────────────────────────────────────────────── */}
             <div className="lg:col-span-4 flex flex-col gap-3">
@@ -923,12 +923,13 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* ── Coluna direita ───────────────────────────────────────────────── */}
-            <div className="lg:col-span-8 mb-10">
+            {/* ── Coluna direita — sticky: gruda no topo enquanto a página rola ── */}
+            <div className="lg:col-span-8 self-start sticky top-0">
               {selectedLeadId ? (
-                <div className="flex gap-3" style={{ height: "calc(100vh - 180px)" }}>
-                  {/* Lista compacta lateral — todos os leads (filter ALL) */}
-                  <div className="w-[260px] shrink-0 flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden">
+                /* Lead aberto: fila lateral + detalhe */
+                <div className="flex gap-3" style={{ height: "calc(100vh - 58px)" }}>
+                  {/* Lista compacta lateral — todos os leads */}
+                  <div className="w-[240px] shrink-0 flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden">
                     <div className="px-3 py-2 border-b border-gray-700/40 flex items-center justify-between shrink-0">
                       <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Fila</span>
                       <button
@@ -947,13 +948,12 @@ const Dashboard = () => {
                   </div>
                 </div>
               ) : showLeadList ? (
-                <div className="flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden" style={{ height: "calc(100vh - 180px)" }}>
+                /* Lista por status — scroll interno, cabeçalho fixo */
+                <div className="flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden" style={{ height: "calc(100vh - 58px)" }}>
                   <div className="px-4 py-3 border-b border-gray-700/40 flex items-center justify-between shrink-0 bg-slate-800/60">
                     <div className="flex items-center gap-2.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-                      <h3 className="text-xs font-black text-gray-300 uppercase tracking-widest">
-                        {filterLabel}
-                      </h3>
+                      <h3 className="text-xs font-black text-gray-300 uppercase tracking-widest">{filterLabel}</h3>
                       <Badge className="bg-indigo-500/15 text-indigo-400 border-indigo-500/30 text-[10px] font-black">
                         {filteredCount}
                       </Badge>
@@ -968,12 +968,10 @@ const Dashboard = () => {
                   </div>
                 </div>
               ) : (
-                <div className="h-full flex flex-col items-center justify-center bg-slate-800/10 border border-dashed border-gray-700/30 rounded-2xl gap-4">
-                  <div className="flex items-center gap-3 text-gray-700">
-                    <div className="flex items-center gap-1 text-xs font-bold">
-                      <span>←</span>
-                      <span>clique em um card</span>
-                    </div>
+                /* Estado vazio */
+                <div className="flex flex-col items-center justify-center bg-slate-800/10 border border-dashed border-gray-700/30 rounded-2xl gap-4 py-20">
+                  <div className="flex items-center gap-1 text-xs font-bold text-gray-700">
+                    <span>←</span><span>clique em um card</span>
                   </div>
                   <div className="flex flex-col items-center gap-1">
                     <div className="flex gap-1.5">
