@@ -59,21 +59,23 @@ export default function ForcePasswordChange() {
 
     setLoading(true);
     try {
-      // 1. Atualiza a senha no Supabase Auth
-      const { error: authError } = await supabase.auth.updateUser({ password });
-      if (authError) throw authError;
-
-      // 2. Limpa a flag no profile
+      // 1. Limpa a flag ANTES de atualizar a senha — assim quando USER_UPDATED
+      //    disparar no AuthProvider, o profile já terá must_change_password=false.
       const { error: profileError } = await supabase
         .from("profiles")
         .update({ must_change_password: false })
         .eq("id", user!.id);
       if (profileError) throw profileError;
 
+      // 2. Atualiza a senha — dispara USER_UPDATED, AuthProvider re-lê o profile
+      //    (que já tem must_change_password=false) e redireciona para /dashboard.
+      const { error: authError } = await supabase.auth.updateUser({ password });
+      if (authError) throw authError;
+
       toast.success("Senha atualizada com sucesso! Bem-vindo ao sistema.");
-      // Recarrega a sessão para atualizar o AuthProvider
+      // O redirect é feito pelo efeito de role no AuthProvider.
+      // navigate + reload explícito causavam tela preta e race condition.
       navigate("/dashboard", { replace: true });
-      window.location.reload();
     } catch (err: any) {
       toast.error("Erro ao atualizar senha: " + err.message);
     } finally {

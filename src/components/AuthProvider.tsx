@@ -160,9 +160,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(session?.user ?? null);
       setAuthDebug({ lastAuthEvent: event, sessionId: session?.user?.id ?? null });
 
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session) {
           setLoading(true);
+          fetchUserRole(session.user.id, session.user.email ?? undefined);
+        }
+      } else if (event === 'USER_UPDATED') {
+        // Atualização de dados do usuário (ex: troca de senha) — não mostra loading screen.
+        // Apenas re-lê o profile para atualizar mustChangePassword sem travar a UI.
+        if (session) {
           fetchUserRole(session.user.id, session.user.email ?? undefined);
         }
       } else if (event === 'SIGNED_OUT') {

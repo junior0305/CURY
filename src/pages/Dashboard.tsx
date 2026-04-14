@@ -566,7 +566,35 @@ const Dashboard = () => {
                 <PipelineStat label="Docs"         count={stats.docs}        active={filter === "DOCS_REQUESTED"  && showLeadList} onClick={() => handlePipelineClick("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
               </div>
 
-              {/* 3. Briefing diário */}
+              {/* 3. Strip "mais leads aguardando" — visível mesmo quando RadarAcao já mostra um */}
+              {(() => {
+                const total = stats.new + stats.in_progress + stats.visits + stats.docs;
+                if (total === 0) return null;
+                const parts: string[] = [];
+                if (stats.new > 0)         parts.push(`${stats.new} novo${stats.new > 1 ? 's' : ''}`);
+                if (stats.in_progress > 0) parts.push(`${stats.in_progress} em atend.`);
+                if (stats.visits > 0)      parts.push(`${stats.visits} visita${stats.visits > 1 ? 's' : ''}`);
+                if (stats.docs > 0)        parts.push(`${stats.docs} doc${stats.docs > 1 ? 's' : ''}`);
+                return (
+                  <button
+                    onClick={() => { setShowLeadList(true); setFilter("ALL"); setActiveTab("lead"); }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-indigo-500/8 border border-indigo-500/20 hover:bg-indigo-500/15 hover:border-indigo-500/35 transition-all active:scale-[0.98]"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                      <span className="text-xs font-black text-indigo-300">
+                        {total} lead{total > 1 ? 's' : ''} aguardando
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-indigo-400/60">{parts.join(' · ')}</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-indigo-400/50" />
+                    </div>
+                  </button>
+                );
+              })()}
+
+              {/* 4. Briefing diário */}
               {isBroker && user?.id && (
                 <DailyBriefing
                   leads={leads}
@@ -647,7 +675,7 @@ const Dashboard = () => {
 
         <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-sm border-t border-gray-700/50 flex justify-around px-2 pt-2 pb-safe z-40">
           <NavButton icon={LayoutDashboard} label="Missão"  active={activeTab === "mission"} onClick={() => setActiveTab("mission")} />
-          <NavButton icon={Target}          label="Leads"   active={activeTab === "lead"}    onClick={() => setActiveTab("lead")}    badge={hasLeadActivity ? undefined : undefined} />
+          <NavButton icon={Target}          label="Leads"   active={activeTab === "lead"}    onClick={() => setActiveTab("lead")}    badge={stats.new + stats.in_progress + stats.visits + stats.docs} />
           <NavButton icon={Trophy}          label="Ranking" active={activeTab === "stats"}   onClick={() => setActiveTab("stats")} />
         </nav>
       </div>
