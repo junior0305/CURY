@@ -239,7 +239,12 @@ export default function SaudeLeads() {
     setReassigning(true);
     const { error } = await supabase
       .from("leads")
-      .update({ broker_id: selectedBrokerId })
+      .update({
+        broker_id: selectedBrokerId,
+        status: "NEW",
+        last_interaction_at: new Date().toISOString(),
+        last_broker_whatsapp_at: null, // Zera contador — lead é novo para o corretor destino
+      })
       .eq("id", reassignLeadId);
     setReassigning(false);
     if (error) { toast.error("Erro ao redistribuir"); return; }

@@ -268,12 +268,14 @@ export const touchLeadInteraction = async (leadId: string) => {
 };
 
 export const updateLeadBroker = async (leadId: string, brokerId: string) => {
+  const now = new Date().toISOString();
   const { error } = await supabase
     .from("leads")
     .update({
       broker_id: brokerId,
       status: "NEW",
-      last_interaction_at: new Date().toISOString(),
+      last_interaction_at: now,
+      last_broker_whatsapp_at: null, // Zera contador — lead é novo para este corretor
     })
     .eq("id", leadId);
 

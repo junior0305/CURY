@@ -79,12 +79,13 @@ const LeadRework = () => {
       
       const { error } = await supabase
         .from('leads')
-        .update({ 
-          broker_id: randomBrokerId, 
+        .update({
+          broker_id: randomBrokerId,
           manager_id: broker?.managerId || null,
-          status: 'NEW', 
+          status: 'NEW',
           last_interaction_at: new Date().toISOString(),
-          exclusion_reason: null, 
+          last_broker_whatsapp_at: null, // Zera contador — lead é novo para o corretor destino
+          exclusion_reason: null,
           notes: `Lead recuperado e distribuído para ${broker?.name}.`
         })
         .eq('id', leadId);

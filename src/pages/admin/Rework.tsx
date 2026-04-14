@@ -99,7 +99,13 @@ export default function Rework() {
     if (!toBroker || selectedLeads.size === 0) return toast({ title: "Selecione destino e leads", variant: "destructive" });
     setRedistributing(true);
     const selectedIds = Array.from(selectedLeads);
-    const { error } = await supabase.from("leads").update({ broker_id: toBroker }).in("id", selectedIds);
+    const now = new Date().toISOString();
+    const { error } = await supabase.from("leads").update({
+      broker_id: toBroker,
+      status: "NEW",
+      last_interaction_at: now,
+      last_broker_whatsapp_at: null, // Zera contador — lead é novo para o corretor destino
+    }).in("id", selectedIds);
     setRedistributing(false);
     if (error) return toast({ title: "Erro ao redistribuir", description: error.message, variant: "destructive" });
 
