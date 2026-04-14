@@ -20,9 +20,9 @@ export function QuickScheduleModal({ open, onOpenChange, leadId, onScheduled }: 
     try {
       const { error } = await supabase
         .from('leads')
-        .update({ 
+        .update({
           next_action_date: date.toISOString(),
-          // Opcional: Poderíamos salvar o "Motivo" ou "Resultado" em algum log de interação futuro
+          last_interaction_at: new Date().toISOString(),
         })
         .eq('id', leadId);
 

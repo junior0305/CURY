@@ -266,7 +266,11 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
         open={isScheduleOpen}
         onOpenChange={setIsScheduleOpen}
         leadId={leadId}
-        onScheduled={() => { onLeadUpdated(); refetchTimeline(); }}
+        onScheduled={() => {
+          queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
+          onLeadUpdated();
+          refetchTimeline();
+        }}
       />
 
       {/* Header */}
