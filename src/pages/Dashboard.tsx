@@ -229,8 +229,9 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState("mission");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
-  const [filter, setFilter] = useState<LeadStatus | "ACTIVE" | "ALL">("ACTIVE");
-  const [showLeadList, setShowLeadList] = useState(false);
+  const [filter, setFilter] = useState<LeadStatus | "ACTIVE" | "ALL">("ALL");
+  // No desktop a lista fica sempre visível — os cards de pipeline são filtros, não toggles
+  const [showLeadList, setShowLeadList] = useState(true);
 
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
@@ -392,9 +393,13 @@ const Dashboard = () => {
 
   const handlePipelineClick = (f: LeadStatus | "ACTIVE" | "ALL") => {
     setFilter(f);
-    setShowLeadList(true);
     setSelectedLeadId(null);
-    if (!isDesktop) setActiveTab("lead");
+    if (isDesktop) {
+      setShowLeadList(true); // no desktop mantém sempre aberto
+    } else {
+      setShowLeadList(true);
+      setActiveTab("lead");
+    }
   };
 
   const handleBackToList = () => {
@@ -947,7 +952,7 @@ const Dashboard = () => {
                     <LeadDetail leadId={selectedLeadId} onLeadUpdated={() => {}} leadQueue={sortedLeadIds} onNavigateLead={handleLeadSelect} />
                   </div>
                 </div>
-              ) : showLeadList ? (
+              ) : (
                 /* Lista por status — scroll interno, cabeçalho fixo */
                 <div className="flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden" style={{ height: "calc(100vh - 58px)" }}>
                   <div className="px-4 py-3 border-b border-gray-700/40 flex items-center justify-between shrink-0 bg-slate-800/60">
@@ -958,30 +963,15 @@ const Dashboard = () => {
                         {filteredCount}
                       </Badge>
                     </div>
-                    <button onClick={() => setShowLeadList(false)}
-                      className="text-gray-600 hover:text-gray-300 text-[10px] font-bold transition-colors px-2 py-1 rounded-lg hover:bg-slate-700/60 flex items-center gap-1">
-                      <X className="w-3 h-3" /> Fechar
-                    </button>
+                    {filter !== "ALL" && (
+                      <button onClick={() => setFilter("ALL")}
+                        className="text-gray-600 hover:text-gray-300 text-[10px] font-bold transition-colors px-2 py-1 rounded-lg hover:bg-slate-700/60 flex items-center gap-1">
+                        <X className="w-3 h-3" /> Ver Todos
+                      </button>
+                    )}
                   </div>
                   <div className="flex-1 min-h-0 overflow-y-auto p-3">
                     <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact iaRepliedLeadIds={iaRepliedLeadIds} botActiveLeadIds={botActiveLeadIds} redistributionThresholdH={redistributionThresholdH} />
-                  </div>
-                </div>
-              ) : (
-                /* Estado vazio */
-                <div className="flex flex-col items-center justify-center bg-slate-800/10 border border-dashed border-gray-700/30 rounded-2xl gap-4 py-20">
-                  <div className="flex items-center gap-1 text-xs font-bold text-gray-700">
-                    <span>←</span><span>clique em um card</span>
-                  </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="flex gap-1.5">
-                      {(["sky","indigo","emerald","amber"] as const).map((c, i) => (
-                        <div key={c} className={cn("w-2 h-2 rounded-full opacity-20",
-                          c === "sky" ? "bg-sky-400" : c === "indigo" ? "bg-indigo-400" : c === "emerald" ? "bg-emerald-400" : "bg-amber-400"
-                        )} style={{ animationDelay: `${i * 150}ms` }} />
-                      ))}
-                    </div>
-                    <p className="text-[11px] text-gray-700 font-medium">Novos · Atendimento · Visitas · Docs</p>
                   </div>
                 </div>
               )}
