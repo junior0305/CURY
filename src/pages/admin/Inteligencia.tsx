@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   Brain, Zap, MessageSquare, Bot, Shield, RefreshCw,
   AlertTriangle, CheckCircle2, XCircle, Clock, Activity,
   Wifi, WifiOff, TrendingUp, TrendingDown, Minus,
-  ChevronRight, Cpu, Loader2, AlertOctagon, Info,
+  ChevronRight, Cpu, Loader2, AlertOctagon, Info, Star,
 } from "lucide-react";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -165,13 +166,55 @@ function Bar({ value, max, color }: { value: number; max: number; color: string 
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
+interface CoachAnalysis {
+  id: string;
+  broker_id: string;
+  broker_name: string;
+  quality_score: number | null;
+  severity: string | null;
+  total_leads_analyzed: number;
+  leads_abandoned: number;
+  leads_converted: number;
+  summary: string;
+  positives: string[];
+  errors: { type: string; description: string }[];
+  created_at: string;
+}
+
+const SEVERITY_COLORS: Record<string, string> = {
+  low:    "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  medium: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  high:   "bg-red-500/15 text-red-400 border-red-500/30",
+};
+
 export default function Inteligencia() {
   const [period, setPeriod] = useState<Period>("30d");
   const [data, setData] = useState<IntelData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshedAt, setRefreshedAt] = useState<Date>(new Date());
+  const [coachAnalyses, setCoachAnalyses] = useState<CoachAnalysis[]>([]);
+  const [coachPending, setCoachPending] = useState(0);
 
   useEffect(() => { fetchAll(); }, [period]);
+
+  useEffect(() => {
+    supabase
+      .from("ai_coach_analysis")
+      .select("id, broker_id, quality_score, severity, total_leads_analyzed, leads_abandoned, leads_converted, summary, positives, errors, created_at, profiles(first_name, full_name)")
+      .order("quality_score", { ascending: true })
+      .limit(20)
+      .then(({ data: rows }) => {
+        setCoachAnalyses((rows || []).map((r: any) => ({
+          ...r,
+          broker_name: r.profiles?.first_name || r.profiles?.full_name || "—",
+        })));
+      });
+    supabase
+      .from("ai_coach_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending")
+      .then(({ count }) => setCoachPending(count || 0));
+  }, []);
 
   async function fetchAll() {
     setLoading(true);
@@ -766,28 +809,116 @@ export default function Inteligencia() {
         </section>
       )}
 
-      {/* ── AI Coach placeholder ────────────────────────────────────────────── */}
+      {/* ── AI Coach ─────────────────────────────────────────────────────────── */}
       <section>
         <div className="flex items-center justify-between mb-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold flex items-center gap-2">
             <Brain className="w-3.5 h-3.5 text-emerald-400" />
             AI Coach — Qualidade dos Corretores
           </p>
-          <StatusPill status="inactive" />
-        </div>
-        <Card className="bg-slate-900/60 border-slate-700/50 border-dashed p-5">
-          <div className="flex items-start gap-3">
-            <Clock className="w-4 h-4 text-slate-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-xs font-bold text-slate-400">Aguardando primeiras análises</p>
-              <p className="text-[10px] text-slate-600 mt-1 max-w-lg">
-                O AI Coach precisa acumular conversas IA (<code className="bg-slate-800 px-1 rounded">ia_conversations</code>)
-                para gerar notas de qualidade. Atualmente há 7 conversas registradas.
-                À medida que o sistema processa mais leads com chip conectado, as análises aparecerão aqui com evolução histórica por corretor.
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
+            {coachPending > 0 && (
+              <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                {coachPending} pendentes na fila
+              </span>
+            )}
+            <StatusPill status={coachAnalyses.length > 0 ? "ok" : "inactive"} />
           </div>
-        </Card>
+        </div>
+
+        {coachAnalyses.length === 0 ? (
+          <Card className="bg-slate-900/60 border-slate-700/50 border-dashed p-5">
+            <div className="flex items-start gap-3">
+              <Clock className="w-4 h-4 text-slate-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-bold text-slate-400">Aguardando primeiras análises</p>
+                <p className="text-[10px] text-slate-600 mt-1">
+                  Configure um LLM em <strong className="text-slate-500">Central IA → AI Coach</strong> para iniciar.
+                  O sistema analisa automaticamente a cada ciclo do scheduler.
+                </p>
+              </div>
+            </div>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {/* Ranking */}
+            {coachAnalyses.filter(a => a.quality_score != null).length > 0 && (
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {(() => {
+                  const ranked = [...coachAnalyses]
+                    .filter(a => a.quality_score != null)
+                    .sort((a, b) => (b.quality_score || 0) - (a.quality_score || 0));
+                  return ranked.slice(0, 3).map((a, i) => (
+                    <Card key={a.id} className={cn(
+                      "bg-slate-900/60 border-slate-700/50 p-3 text-center",
+                      i === 0 && "border-amber-500/30 bg-amber-500/5"
+                    )}>
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        {i === 0 && <Star className="w-3 h-3 text-amber-400" />}
+                        <span className="text-[10px] text-slate-500 uppercase tracking-wider">#{i + 1}</span>
+                      </div>
+                      <p className={cn(
+                        "text-xl font-bold",
+                        (a.quality_score || 0) >= 70 ? "text-emerald-400" :
+                        (a.quality_score || 0) >= 40 ? "text-amber-400" : "text-red-400"
+                      )}>{a.quality_score}</p>
+                      <p className="text-[10px] text-slate-400 truncate">{a.broker_name}</p>
+                    </Card>
+                  ));
+                })()}
+              </div>
+            )}
+
+            {/* Lista completa */}
+            {coachAnalyses.map(a => (
+              <Card key={a.id} className="bg-slate-900/60 border-slate-700/50 p-3">
+                <div className="flex items-start gap-3">
+                  {/* Score */}
+                  <div className={cn(
+                    "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold",
+                    a.quality_score == null ? "bg-slate-800 text-slate-600" :
+                    a.quality_score >= 70 ? "bg-emerald-500/20 text-emerald-400" :
+                    a.quality_score >= 40 ? "bg-amber-500/20 text-amber-400" :
+                    "bg-red-500/20 text-red-400"
+                  )}>
+                    {a.quality_score ?? "—"}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-xs font-bold text-slate-300">{a.broker_name}</span>
+                      {a.severity && (
+                        <Badge className={cn("text-[9px] h-4 px-1 border", SEVERITY_COLORS[a.severity] || "bg-slate-800 text-slate-500")}>
+                          {a.severity.toUpperCase()}
+                        </Badge>
+                      )}
+                    </div>
+                    {a.summary && (
+                      <p className="text-[10px] text-slate-500 line-clamp-2">{a.summary}</p>
+                    )}
+                    {a.errors?.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {a.errors.slice(0, 2).map((e, i) => (
+                          <span key={i} className="text-[9px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded">
+                            {e.type}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Meta */}
+                  <div className="text-right shrink-0 text-[10px] text-slate-600 space-y-0.5">
+                    <p>{a.total_leads_analyzed} leads</p>
+                    <p>{a.leads_converted} conv.</p>
+                    <p>{timeAgo(a.created_at)}</p>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Rodapé */}

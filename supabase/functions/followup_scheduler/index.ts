@@ -519,6 +519,19 @@ serve(async (req) => {
       }
     }
 
+    // ── BLOCO 14: AI Coach automático ────────────────────────────────────────
+    // Processa até 10 corretores da fila a cada ciclo do scheduler
+    let coachProcessed = 0;
+    try {
+      const { data: coachR } = await supabase.functions.invoke('ai_coach_processor', { body: {} });
+      coachProcessed = coachR?.processed ?? 0;
+      if (coachProcessed > 0 || (coachR?.errors ?? 0) > 0) {
+        console.log(`[followup_scheduler] Bloco 14 — AI Coach: processed=${coachProcessed} errors=${coachR?.errors ?? 0}`);
+      }
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 14 error:', e.message);
+    }
+
     // ── BLOCO 6.5: Limpeza automática de logs antigos ────────────────────────
     // Mantém apenas 7 dias de webhook_logs e 30 dias de automation_logs
     // Roda em lotes pequenos para não travar o banco
