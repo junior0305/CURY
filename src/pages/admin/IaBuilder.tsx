@@ -49,7 +49,7 @@ interface WelcomeTemplate {
   created_at: string;
 }
 
-type Tab = "profiles" | "cadence" | "welcome" | "sentinela";
+type Tab = "profiles" | "cadence" | "welcome";
 
 interface SentinelaConfig {
   id?: string;
@@ -431,10 +431,9 @@ export default function IaBuilder() {
           <Play className="w-4 h-4" /> Cadência Follow-up
           <span className="text-xs bg-slate-700 rounded px-1.5">{cadences.filter(c => c.is_active).length}</span>
         </button>
-        <button onClick={() => setTab("sentinela")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "sentinela" ? "bg-orange-900/40 text-orange-300 border border-orange-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
-          <Shield className="w-4 h-4" /> Sentinela IA
-          {sentinelaConfig.is_enabled && <span className="text-xs bg-orange-700/60 text-orange-200 rounded px-1.5">ON</span>}
-        </button>
+        <span className="text-xs text-slate-500 flex items-center gap-1 px-3 py-2 border border-slate-700/50 rounded-lg">
+          <Shield className="w-3.5 h-3.5" /> Sentinela → Central IA
+        </span>
       </div>
       {tab === "profiles" ? (
         <div className="space-y-4">
@@ -630,7 +629,7 @@ export default function IaBuilder() {
             </div>
           )}
         </div>
-      ) : tab === "sentinela" ? (
+      ) : tab === ("sentinela" as string) ? (
         <div className="space-y-6">
           {/* A. Banner de orçamento */}
           <Card className="border-2 border-orange-500/30 bg-orange-950/20">

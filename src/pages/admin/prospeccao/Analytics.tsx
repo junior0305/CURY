@@ -115,10 +115,11 @@ export default function Analytics() {
       const conversionRate = leadsContacted > 0 ? (leadsConverted / leadsContacted) * 100 : 0;
       const responseRate = leadsContacted > 0 ? (leadsResponded / leadsContacted) * 100 : 0;
 
-      // ── Conversas ─────────────────────────────────────────────────────
+      // ── Conversas (somente prospecção — is_crm_lead = false) ──────────
       const { data: conversations } = await supabase
         .from("ia_conversations")
-        .select("id,status,sentiment,messages_count,bot_instance_id,campaign_id");
+        .select("id,status,sentiment,messages_count,bot_instance_id,campaign_id")
+        .eq("is_crm_lead", false);
 
       const totalConversations = conversations?.length || 0;
       const activeConversations = conversations?.filter(c => c.status === "active").length || 0;
@@ -183,32 +184,35 @@ export default function Analytics() {
       }
       templateStats.sort((a, b) => b.responseRate - a.responseRate);
 
-      // ── Total mensagens ───────────────────────────────────────────────
-      const { count: totalMessages } = await supabase
-        .from("ia_messages")
-        .select("*", { count: "exact", head: true });
+      // ── Total mensagens — derivado dos chips (somente prospecção) ─────
+      const totalMessages = bots?.reduce((s, b) => s + (b.total_messages_sent || 0), 0) || 0;
 
-      // ── Atividade por hora (hoje) ─────────────────────────────────────
+      // ── Atividade por hora (hoje) — filtrado por conversas de prospecção
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
-      const { data: todayMsgs } = await supabase
-        .from("ia_messages")
-        .select("sent_at")
-        .gte("sent_at", todayStart.toISOString())
-        .eq("direction", "outgoing");
-
+      const prospectingConvIds = (conversations || []).map(c => c.id);
       const hourBuckets = Array.from({ length: 24 }, (_, h) => ({ hour: h, count: 0 }));
-      for (const m of todayMsgs || []) {
-        if (m.sent_at) {
-          const h = new Date(m.sent_at).getHours();
-          hourBuckets[h].count++;
+
+      if (prospectingConvIds.length > 0) {
+        const { data: todayMsgs } = await supabase
+          .from("ia_messages")
+          .select("sent_at")
+          .in("conversation_id", prospectingConvIds.slice(0, 500))
+          .gte("sent_at", todayStart.toISOString())
+          .eq("direction", "outgoing");
+
+        for (const m of todayMsgs || []) {
+          if (m.sent_at) {
+            const h = new Date(m.sent_at).getHours();
+            hourBuckets[h].count++;
+          }
         }
       }
 
       setData({
         totalBots, onlineBots, totalCampaigns, activeCampaigns,
         totalConversations, activeConversations,
-        totalMessages: totalMessages || 0, messagesToday,
+        totalMessages, messagesToday,
         leadsContacted, leadsResponded, leadsQualified, leadsConverted,
         conversionRate, responseRate,
         sentimentBreakdown: { positive, neutral, negative },
