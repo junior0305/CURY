@@ -31,6 +31,7 @@ import SistemaControl from "@/components/admin/SistemaControl";
 import Agentes from "./Agentes";
 import LeadDistribution from "@/components/admin/LeadDistribution";
 import Inteligencia from "./Inteligencia";
+import AICoach from "./AICoach";
 
 // ─── Grupos principais ────────────────────────────────────────────────────────
 
@@ -73,6 +74,7 @@ const GROUPS = [
       { value: "ia-builder", label: "IA Builder",  roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "agentes",    label: "Agentes",     roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "prospeccao", label: "Prospecção",  roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "ai-coach",   label: "AI Coach",    roles: ["ADMIN", "SUPERINTENDENT"] },
     ],
   },
   {
@@ -387,10 +389,12 @@ export default function AdminLayout() {
             { v: "ia-builder", l: "IA Builder",  roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "agentes",    l: "Agentes",     roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "prospeccao", l: "Prospecção",  roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "ai-coach",   l: "AI Coach",    roles: ["ADMIN","SUPERINTENDENT"] },
           ]} role={normalizedRole}>
             <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>
             <TabsContent value="agentes" className="p-6"><Agentes /></TabsContent>
             <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>
+            <TabsContent value="ai-coach" className="p-6"><AICoach /></TabsContent>
           </SubTabs>
         )}
 
