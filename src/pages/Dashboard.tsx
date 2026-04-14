@@ -924,10 +924,10 @@ const Dashboard = () => {
             </div>
 
             {/* ── Coluna direita ───────────────────────────────────────────────── */}
-            <div className="lg:col-span-8 min-h-[600px] mb-10">
+            <div className="lg:col-span-8 mb-10">
               {selectedLeadId ? (
-                <div className="h-full flex gap-3">
-                  {/* Lista compacta lateral */}
+                <div className="flex gap-3" style={{ height: "calc(100vh - 180px)" }}>
+                  {/* Lista compacta lateral — todos os leads (filter ALL) */}
                   <div className="w-[260px] shrink-0 flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden">
                     <div className="px-3 py-2 border-b border-gray-700/40 flex items-center justify-between shrink-0">
                       <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Fila</span>
@@ -937,8 +937,8 @@ const Dashboard = () => {
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2">
-                      <LeadList selectedLeadId={selectedLeadId} onSelectLead={handleLeadSelect} currentUserRole={role} filter="ACTIVE" compact iaRepliedLeadIds={iaRepliedLeadIds} botActiveLeadIds={botActiveLeadIds} redistributionThresholdH={redistributionThresholdH} />
+                    <div className="flex-1 min-h-0 overflow-y-auto p-2">
+                      <LeadList selectedLeadId={selectedLeadId} onSelectLead={handleLeadSelect} currentUserRole={role} filter="ALL" compact iaRepliedLeadIds={iaRepliedLeadIds} botActiveLeadIds={botActiveLeadIds} redistributionThresholdH={redistributionThresholdH} />
                     </div>
                   </div>
                   {/* Painel de detalhe */}
@@ -947,7 +947,7 @@ const Dashboard = () => {
                   </div>
                 </div>
               ) : showLeadList ? (
-                <div className="h-full flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden">
+                <div className="flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden" style={{ height: "calc(100vh - 180px)" }}>
                   <div className="px-4 py-3 border-b border-gray-700/40 flex items-center justify-between shrink-0 bg-slate-800/60">
                     <div className="flex items-center gap-2.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
@@ -963,7 +963,7 @@ const Dashboard = () => {
                       <X className="w-3 h-3" /> Fechar
                     </button>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-3">
+                  <div className="flex-1 min-h-0 overflow-y-auto p-3">
                     <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact iaRepliedLeadIds={iaRepliedLeadIds} botActiveLeadIds={botActiveLeadIds} redistributionThresholdH={redistributionThresholdH} />
                   </div>
                 </div>
