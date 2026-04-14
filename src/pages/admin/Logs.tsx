@@ -49,12 +49,19 @@ interface AutomationLog {
 
 interface AIAnalysis {
   id: string;
-  conversation_id: string | null;
-  lead_id: string | null;
-  analysis_type: string | null;
-  ai_decision: string | null;
-  ai_reasoning: string | null;
-  scheduled_action: string | null;
+  broker_id: string | null;
+  broker_name?: string | null;
+  analysis_period: string | null;
+  total_leads_analyzed: number | null;
+  avg_first_response_time: number | null;
+  avg_lead_response_time: number | null;
+  leads_abandoned: number | null;
+  leads_converted: number | null;
+  quality_score: number | null;
+  severity: string | null;
+  errors: string[] | null;
+  positives: string[] | null;
+  summary: string | null;
   created_at: string;
 }
 
@@ -115,13 +122,16 @@ export default function Logs() {
       supabase.from("distribution_logs").select("*").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
       supabase.from("webhook_logs").select("*").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
       supabase.from("automation_logs").select("*").order("executed_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
-      supabase.from("ai_context_analysis").select("*").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
+      supabase.from("ai_coach_analysis").select("*, profiles(name)").order("created_at", { ascending: false }).range(from, from + PAGE_SIZE - 1),
     ]);
 
     setDistLogs(dRes.data || []);
     setWebhookLogs(wRes.data || []);
     setAutomationLogs(aRes.data || []);
-    setAiAnalyses(aiRes.data || []);
+    setAiAnalyses((aiRes.data || []).map((r: any) => ({
+      ...r,
+      broker_name: r.profiles?.name ?? null,
+    })));
 
     // Fetch failed outgoing messages
     const { data: failedRaw } = await supabase
@@ -355,7 +365,10 @@ export default function Logs() {
   );
 
   const filteredAI = aiAnalyses.filter(l =>
-    !search || l.ai_reasoning?.toLowerCase().includes(search.toLowerCase())
+    !search ||
+    l.broker_name?.toLowerCase().includes(search.toLowerCase()) ||
+    l.summary?.toLowerCase().includes(search.toLowerCase()) ||
+    l.severity?.toLowerCase().includes(search.toLowerCase())
   );
 
   const filteredFailed = failedMessages.filter(f =>
@@ -549,39 +562,93 @@ export default function Logs() {
           {filteredAI.length === 0 ? (
             <div className="text-center py-20 text-gray-500">
               <Brain className="w-12 h-12 mx-auto mb-3 opacity-20" />
-              <p>Nenhuma análise de IA encontrada.</p>
-              <p className="text-sm mt-1">A IA registrará análises quando avaliar follow-ups.</p>
+              <p>Nenhuma análise de AI Coach encontrada.</p>
+              <p className="text-sm mt-1">As análises aparecem após o AI Coach processar a fila de corretores.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredAI.map(log => (
-                <div key={log.id} className="bg-slate-800/40 border border-orange-700/40 rounded-xl p-4">
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <Brain className="w-4 h-4 text-orange-400" />
-                      <span className="text-white font-semibold text-sm">{log.analysis_type?.replace(/_/g, ' ').toUpperCase()}</span>
-                      <Badge className={`text-xs ${log.ai_decision === 'approved' ? 'bg-green-900/40 text-green-300 border-green-500/30' : 'bg-red-900/40 text-red-300 border-red-500/30'}`}>
-                        {log.ai_decision === 'approved' ? 'Aprovado' : 'Rejeitado'}
-                      </Badge>
+              {filteredAI.map(log => {
+                const severityStyle =
+                  log.severity === 'critical' ? 'bg-red-900/40 text-red-300 border-red-500/30' :
+                  log.severity === 'warning'  ? 'bg-yellow-900/40 text-yellow-300 border-yellow-500/30' :
+                  'bg-green-900/40 text-green-300 border-green-500/30';
+                const severityLabel =
+                  log.severity === 'critical' ? 'Crítico' :
+                  log.severity === 'warning'  ? 'Atenção' : 'Bom';
+                const scoreColor =
+                  (log.quality_score ?? 0) >= 80 ? 'text-green-400' :
+                  (log.quality_score ?? 0) >= 60 ? 'text-yellow-400' : 'text-red-400';
+                const fmtMin = (secs: number | null) =>
+                  secs == null ? '—' : secs < 60 ? `${secs}s` : `${Math.round(secs / 60)}min`;
+
+                return (
+                  <div key={log.id} className="bg-slate-800/40 border border-orange-700/30 rounded-xl p-4 space-y-3">
+                    {/* Cabeçalho */}
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Brain className="w-4 h-4 text-orange-400 shrink-0" />
+                        <span className="text-white font-bold text-sm">{log.broker_name ?? 'Corretor'}</span>
+                        <Badge className={`text-xs border ${severityStyle}`}>{severityLabel}</Badge>
+                        {log.quality_score != null && (
+                          <span className={`text-sm font-black ${scoreColor}`}>Score {log.quality_score}/100</span>
+                        )}
+                      </div>
+                      <span className="text-gray-500 text-xs">{fmt(log.created_at)}</span>
                     </div>
-                    <span className="text-gray-500 text-xs">{fmt(log.created_at)}</span>
+
+                    {/* Métricas */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { label: 'Leads analisados', value: log.total_leads_analyzed ?? '—' },
+                        { label: 'Convertidos',       value: log.leads_converted ?? '—' },
+                        { label: 'Abandonados',       value: log.leads_abandoned ?? '—' },
+                        { label: 'T. 1ª resposta',    value: fmtMin(log.avg_first_response_time) },
+                      ].map(m => (
+                        <div key={m.label} className="bg-slate-900/50 rounded-lg p-2 text-center">
+                          <div className="text-xs text-gray-500 uppercase tracking-wider">{m.label}</div>
+                          <div className="text-white font-bold text-sm mt-0.5">{String(m.value)}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Resumo */}
+                    {log.summary && (
+                      <div className="bg-orange-900/20 border border-orange-500/20 rounded p-3">
+                        <div className="text-xs text-orange-300 font-semibold mb-1">Resumo da IA</div>
+                        <p className="text-sm text-orange-100 leading-relaxed">{log.summary}</p>
+                      </div>
+                    )}
+
+                    {/* Erros e Positivos */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {Array.isArray(log.errors) && log.errors.length > 0 && (
+                        <div className="bg-red-900/15 border border-red-500/20 rounded p-3">
+                          <div className="text-xs text-red-400 font-semibold mb-1">Pontos de melhoria</div>
+                          <ul className="space-y-1">
+                            {(log.errors as string[]).map((e, i) => (
+                              <li key={i} className="text-xs text-red-200 flex gap-1.5">
+                                <span className="text-red-500 shrink-0">•</span>{e}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {Array.isArray(log.positives) && log.positives.length > 0 && (
+                        <div className="bg-green-900/15 border border-green-500/20 rounded p-3">
+                          <div className="text-xs text-green-400 font-semibold mb-1">Pontos positivos</div>
+                          <ul className="space-y-1">
+                            {(log.positives as string[]).map((p, i) => (
+                              <li key={i} className="text-xs text-green-200 flex gap-1.5">
+                                <span className="text-green-500 shrink-0">•</span>{p}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  
-                  {log.ai_reasoning && (
-                    <div className="mt-3 bg-orange-900/20 border border-orange-500/30 rounded p-3">
-                      <div className="text-xs text-orange-300 font-semibold mb-1">Análise da IA:</div>
-                      <p className="text-sm text-orange-100">{log.ai_reasoning}</p>
-                    </div>
-                  )}
-                  
-                  {log.scheduled_action && (
-                    <div className="mt-2 text-xs">
-                      <span className="text-gray-500">Agendamento detectado:</span>{' '}
-                      <span className="text-white">{new Date(log.scheduled_action).toLocaleString('pt-BR')}</span>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
