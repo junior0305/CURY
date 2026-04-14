@@ -1,15 +1,82 @@
-import { useCallback, useRef } from 'react';
+/**
+ * use-audio-arena.ts
+ *
+ * Sons do sistema CRM — Web Audio API + MP3 customizados.
+ *
+ * Problema anterior: cada componente criava seu próprio AudioContext, cada um
+ * precisando de desbloqueio individual. Com o singleton abaixo, um único
+ * contexto é desbloqueado na primeira interação do usuário e todos os sons
+ * do sistema passam a funcionar imediatamente a partir daí.
+ */
 
-type SoundKey = 'SALE' | 'OVERTAKE' | 'NEW_LEAD' | 'NOTIFICATION';
+import { useCallback } from 'react';
 
-// Sintetiza sons via Web Audio API — sem dependência de arquivos externos
-function createAudioContext(): AudioContext | null {
+export type SoundKey = 'SALE' | 'OVERTAKE' | 'NEW_LEAD' | 'NOTIFICATION';
+
+// ── Singleton AudioContext ─────────────────────────────────────────────────────
+
+let _ctx: AudioContext | null = null;
+let _unlocked = false;
+let _pendingSounds: Array<() => void> = [];
+let _listenersRegistered = false;
+
+function getCtx(): AudioContext | null {
+  if (!_ctx) {
+    try {
+      _ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    } catch {
+      return null;
+    }
+  }
+  return _ctx;
+}
+
+async function tryUnlock(): Promise<void> {
+  if (_unlocked) return;
+  const ctx = getCtx();
+  if (!ctx) return;
   try {
-    return new (window.AudioContext || (window as any).webkitAudioContext)();
-  } catch {
-    return null;
+    await ctx.resume();
+  } catch {}
+  if (ctx.state === 'running') {
+    _unlocked = true;
+    // Drena a fila de sons que chegaram antes do desbloqueio
+    const pending = _pendingSounds.splice(0);
+    for (const fn of pending) {
+      try { fn(); } catch {}
+    }
   }
 }
+
+/**
+ * Registra listeners de interação uma única vez.
+ * Chamado automaticamente quando o módulo carrega.
+ * Qualquer click, toque ou tecla desbloqueia o AudioContext para sempre.
+ */
+function registerUnlockListeners() {
+  if (_listenersRegistered || typeof window === 'undefined') return;
+  _listenersRegistered = true;
+
+  const handler = () => {
+    tryUnlock().then(() => {
+      if (_unlocked) {
+        // Remove os listeners assim que desbloqueado — não precisa mais ouvir
+        ['click', 'touchstart', 'keydown', 'pointerdown'].forEach(ev =>
+          window.removeEventListener(ev, handler)
+        );
+      }
+    });
+  };
+
+  ['click', 'touchstart', 'keydown', 'pointerdown'].forEach(ev =>
+    window.addEventListener(ev, handler, { passive: true })
+  );
+}
+
+// Registra imediatamente ao importar o módulo
+registerUnlockListeners();
+
+// ── Síntese de sons via Web Audio API ─────────────────────────────────────────
 
 function playTone(
   ctx: AudioContext,
@@ -20,7 +87,7 @@ function playTone(
   type: OscillatorType = 'sine',
   fadeOut = true
 ) {
-  const osc = ctx.createOscillator();
+  const osc  = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.connect(gain);
   gain.connect(ctx.destination);
@@ -33,13 +100,13 @@ function playTone(
 }
 
 function synthesize(ctx: AudioContext, key: SoundKey) {
-  const t = ctx.currentTime;
+  const t   = ctx.currentTime;
   const vol = 0.35;
 
   switch (key) {
     case 'NEW_LEAD': {
       // Três pings ascendentes — atenção imediata
-      playTone(ctx, 880, t,       0.12, vol, 'sine');
+      playTone(ctx, 880,  t,        0.12, vol, 'sine');
       playTone(ctx, 1100, t + 0.13, 0.12, vol, 'sine');
       playTone(ctx, 1320, t + 0.26, 0.18, vol, 'sine');
       break;
@@ -50,7 +117,6 @@ function synthesize(ctx: AudioContext, key: SoundKey) {
       notes.forEach((freq, i) => {
         playTone(ctx, freq, t + i * 0.1, 0.25, vol * 0.9, 'triangle');
       });
-      // Acorde final
       [523, 784, 1047].forEach(freq => {
         playTone(ctx, freq, t + 0.45, 0.55, vol * 0.6, 'sine');
       });
@@ -58,7 +124,7 @@ function synthesize(ctx: AudioContext, key: SoundKey) {
     }
     case 'OVERTAKE': {
       // Impacto dramático — descida + punch
-      const osc = ctx.createOscillator();
+      const osc  = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
@@ -69,107 +135,110 @@ function synthesize(ctx: AudioContext, key: SoundKey) {
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
       osc.start(t);
       osc.stop(t + 0.3);
-      // Punch
-      playTone(ctx, 200, t + 0.05, 0.2, vol * 0.5, 'square');
-      // Brilho no topo
-      playTone(ctx, 880, t, 0.15, vol * 0.3, 'sine');
+      playTone(ctx, 200, t + 0.05, 0.2,  vol * 0.5, 'square');
+      playTone(ctx, 880, t,        0.15,  vol * 0.3, 'sine');
       break;
     }
     case 'NOTIFICATION': {
-      // Sino suave — simples e não intrusivo
-      playTone(ctx, 660, t, 0.08, vol * 0.7, 'sine');
-      playTone(ctx, 880, t + 0.09, 0.2, vol * 0.5, 'sine');
+      // Sino suave
+      playTone(ctx, 660, t,        0.08, vol * 0.7, 'sine');
+      playTone(ctx, 880, t + 0.09, 0.20, vol * 0.5, 'sine');
       break;
     }
   }
 }
 
-// Custom MP3 URLs são salvas no localStorage após carregamento do DB
+// ── MP3 customizado ───────────────────────────────────────────────────────────
+
 export const CUSTOM_SOUND_KEY = (key: SoundKey) => `crm_sound_${key}_url`;
+
+async function playCustomMp3(url: string): Promise<void> {
+  const audio = new Audio(url);
+  audio.volume = 1;
+  try {
+    await audio.play();
+    return new Promise(resolve => {
+      audio.onended = () => resolve();
+      audio.onerror = () => resolve();
+      // Timeout de segurança: resolve após 10s caso onended não dispare
+      setTimeout(resolve, 10000);
+    });
+  } catch (e: any) {
+    // NotAllowedError = autoplay blocked (não deveria acontecer após unlock)
+    console.warn('[AudioArena] MP3 play falhou:', e?.name, e?.message);
+  }
+}
+
+// ── Execução do som (interna) ─────────────────────────────────────────────────
+
+function doPlay(soundKey: SoundKey) {
+  const customUrl = localStorage.getItem(CUSTOM_SOUND_KEY(soundKey));
+  if (customUrl) {
+    playCustomMp3(customUrl).catch(() => {});
+    return;
+  }
+  const ctx = getCtx();
+  if (!ctx) return;
+  try {
+    synthesize(ctx, soundKey);
+  } catch (e) {
+    console.warn('[AudioArena] Erro ao sintetizar:', e);
+  }
+}
+
+// ── Sincronização de URLs customizadas ────────────────────────────────────────
 
 const ALL_SOUND_KEYS: SoundKey[] = ['SALE', 'OVERTAKE', 'NEW_LEAD', 'NOTIFICATION'];
 const SETTING_PREFIX = 'custom_sound_';
-const SESSION_SYNC_KEY = 'crm_audio_synced_v2';
+const SESSION_SYNC_KEY = 'crm_audio_synced_v3';
 
 /**
  * Sincroniza URLs de sons customizados do banco → localStorage.
- * Executa uma vez por sessão (flag em sessionStorage).
- * Garante que todos os usuários (corretores, gestores) toquem o som correto
- * mesmo sem abrir as configurações de áudio.
+ * Roda uma vez por sessão. Exportada para ser chamada no App.tsx.
  */
 export async function syncAudioSettings(supabase: any): Promise<void> {
   if (sessionStorage.getItem(SESSION_SYNC_KEY)) return;
   try {
-    const keys = ALL_SOUND_KEYS.map((k) => `${SETTING_PREFIX}${k}`);
+    const keys = ALL_SOUND_KEYS.map(k => `${SETTING_PREFIX}${k}`);
     const { data } = await supabase
       .from('system_settings')
       .select('key, value')
       .in('key', keys);
 
-    // Limpa entradas antigas antes de repopular
-    ALL_SOUND_KEYS.forEach((k) => localStorage.removeItem(CUSTOM_SOUND_KEY(k)));
-
+    ALL_SOUND_KEYS.forEach(k => localStorage.removeItem(CUSTOM_SOUND_KEY(k)));
     (data ?? []).forEach((row: any) => {
       const soundKey = row.key.replace(SETTING_PREFIX, '') as SoundKey;
       if (row.value) localStorage.setItem(CUSTOM_SOUND_KEY(soundKey), row.value);
     });
-
     sessionStorage.setItem(SESSION_SYNC_KEY, '1');
   } catch {
     // Falha silenciosa — usa localStorage existente ou sons sintetizados
   }
 }
 
-function playCustomMp3(url: string): Promise<void> {
-  return new Promise((resolve) => {
-    const audio = new Audio(url);
-    audio.onended = () => resolve();
-    audio.onerror = () => resolve(); // fallback silencioso
-    audio.play().catch(() => resolve());
-  });
-}
+// ── Hook público ──────────────────────────────────────────────────────────────
 
+/**
+ * Hook de som do CRM. Todos os componentes compartilham o mesmo AudioContext
+ * (singleton de módulo), portanto basta UMA interação do usuário em qualquer
+ * lugar da página para desbloquear o áudio de todo o sistema.
+ */
 export function useAudioArena() {
-  const ctxRef = useRef<AudioContext | null>(null);
-
-  const getCtx = useCallback((): AudioContext | null => {
-    if (!ctxRef.current) ctxRef.current = createAudioContext();
-    if (ctxRef.current?.state === 'suspended') {
-      ctxRef.current.resume().catch(() => {});
-    }
-    return ctxRef.current;
-  }, []);
-
   const playSound = useCallback((soundKey: SoundKey) => {
     const isMuted = localStorage.getItem('crm_audio_muted') === 'true';
     if (isMuted) return;
 
-    // Verificar se há MP3 customizado
-    const customUrl = localStorage.getItem(CUSTOM_SOUND_KEY(soundKey));
-    if (customUrl) {
-      playCustomMp3(customUrl).catch(() => {});
-      return;
+    if (_unlocked) {
+      doPlay(soundKey);
+    } else {
+      // Enfileira para tocar na próxima interação do usuário
+      _pendingSounds.push(() => doPlay(soundKey));
     }
-
-    const ctx = getCtx();
-    if (!ctx) return;
-
-    // Se bloqueado por política de autoplay, agenda para o próximo clique
-    if (ctx.state === 'suspended') {
-      const unlock = () => {
-        ctx.resume().then(() => synthesize(ctx, soundKey)).catch(() => {});
-        window.removeEventListener('click', unlock);
-      };
-      window.addEventListener('click', unlock, { once: true });
-      return;
-    }
-
-    try {
-      synthesize(ctx, soundKey);
-    } catch (e) {
-      console.warn('[AudioArena] Erro ao sintetizar som:', e);
-    }
-  }, [getCtx]);
+  }, []); // sem deps — não depende de estado local, só do singleton de módulo
 
   return { playSound, isLoaded: true };
 }
+
+// ── Status público (para UI de diagnóstico) ───────────────────────────────────
+
+export function isAudioUnlocked() { return _unlocked; }

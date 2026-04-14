@@ -22,7 +22,7 @@ import type { User } from "@/types/user";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import LeaderboardPodium from "@/components/dashboard/LeaderboardPodium";
-import { useAudioArena } from "@/hooks/use-audio-arena";
+import { useAudioArena, isAudioUnlocked } from "@/hooks/use-audio-arena";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -149,11 +149,19 @@ const Dashboard = () => {
   const isBroker = role === "BROKER";
   useRivalWatch(isBroker);
   const [audioMuted, setAudioMuted] = useState(localStorage.getItem("crm_audio_muted") === "true");
+  const [audioUnlocked, setAudioUnlocked] = useState(isAudioUnlocked());
   const toggleAudio = () => {
     const next = !audioMuted;
     setAudioMuted(next);
     localStorage.setItem("crm_audio_muted", String(next));
   };
+  // Atualiza o indicador de desbloqueio quando o usuário interage
+  useEffect(() => {
+    if (audioUnlocked) return;
+    const check = () => { if (isAudioUnlocked()) setAudioUnlocked(true); };
+    ['click', 'touchstart', 'keydown'].forEach(e => window.addEventListener(e, check, { passive: true }));
+    return () => ['click', 'touchstart', 'keydown'].forEach(e => window.removeEventListener(e, check));
+  }, [audioUnlocked]);
 
   // ── UMA única instância de gamificação — passada para GamificationBar como props
   const { xpStats, missions, prizeClaims, loading: gamLoading, reload } = useGamification();
@@ -517,6 +525,9 @@ const Dashboard = () => {
                       onClick={() => { toggleAudio(); setMenuOpen(false); }}>
                       {audioMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                       {audioMuted ? "Ativar Sons" : "Silenciar Sons"}
+                      {!audioUnlocked && !audioMuted && (
+                        <span className="ml-auto text-[10px] font-black text-amber-400 uppercase tracking-wider">aguardando clique</span>
+                      )}
                     </button>
                     <div className="border-t border-gray-700/40" />
                     <button
@@ -763,10 +774,15 @@ const Dashboard = () => {
           </Sheet>
 
           {/* Utilitários discretos */}
-          <Button variant="ghost" size="icon" onClick={toggleAudio}
-            className={cn("h-8 w-8 rounded-xl", audioMuted ? "text-red-400/70 hover:bg-red-900/20" : "text-gray-600 hover:text-gray-400 hover:bg-slate-800")}>
-            {audioMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-          </Button>
+          <div className="relative">
+            <Button variant="ghost" size="icon" onClick={toggleAudio}
+              className={cn("h-8 w-8 rounded-xl", audioMuted ? "text-red-400/70 hover:bg-red-900/20" : "text-gray-600 hover:text-gray-400 hover:bg-slate-800")}>
+              {audioMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+            </Button>
+            {!audioUnlocked && !audioMuted && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse" title="Som aguardando interação" />
+            )}
+          </div>
           <Button variant="ghost" size="icon" onClick={signOut}
             className="h-8 w-8 rounded-xl text-gray-700 hover:text-red-400 hover:bg-red-900/20">
             <LogOut className="w-3.5 h-3.5" />
