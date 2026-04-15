@@ -24,7 +24,7 @@ serve(async (req) => {
 
     const { data: bot, error } = await supabase
       .from('bot_instances')
-      .select('evolution_api_url, evolution_api_key, instance_name, name, status')
+      .select('evolution_api_url, evolution_api_key, instance_name, name, status, last_qr_base64, last_qr_at')
       .eq('id', botInstanceId)
       .maybeSingle();
 
@@ -32,6 +32,28 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Bot instance not found' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // ── Fast path: QR em cache recebido via webhook (< 25s) ─────────────────
+    // Evita chamada lenta à Evolution API quando o webhook já entregou o QR.
+    if (bot.status === 'connecting' && bot.last_qr_base64 && bot.last_qr_at) {
+      const qrAgeMs = Date.now() - new Date(bot.last_qr_at).getTime();
+      if (qrAgeMs < 25000) {
+        console.log(`[get-whatsapp-qr] QR servido do cache do banco (${Math.round(qrAgeMs / 1000)}s atrás)`);
+        return new Response(
+          JSON.stringify({ connected: false, base64: bot.last_qr_base64, fromCache: true }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // ── Fast path: já conectado conforme DB ──────────────────────────────────
+    if (bot.status === 'open') {
+      console.log(`[get-whatsapp-qr] status=open no DB — retornando connected sem chamar Evolution`);
+      return new Response(
+        JSON.stringify({ connected: true, fromCache: true }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const base = (bot.evolution_api_url || '').replace(/\/+$/, '');

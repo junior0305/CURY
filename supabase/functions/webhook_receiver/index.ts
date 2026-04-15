@@ -152,11 +152,59 @@ serve(async (req) => {
       status_code: 200,
     }).then(() => {}).catch(() => {}); // fire-and-forget
 
+    const now = new Date().toISOString();
+    const eventType   = payload?.event || payload?.type || '';
+    const instanceName = payload?.instance || payload?.data?.instance || '';
+
+    // ── CONNECTION_UPDATE — atualiza status do chip em tempo real ─────────────
+    // A Evolution API dispara este evento sempre que a conexão muda:
+    // open (conectado), connecting (escaneando QR), close/closed (desconectado).
+    // Sem este handler, o banco só é atualizado pelo check-bot-health (cron) — com atraso.
+    if (eventType === 'CONNECTION_UPDATE' && instanceName) {
+      const rawState = payload?.data?.state || 'unknown';
+      const state = String(rawState).toLowerCase();
+
+      let newStatus: string;
+      let healthScore: number;
+      if (state === 'open')       { newStatus = 'open';       healthScore = 100; }
+      else if (state === 'connecting') { newStatus = 'connecting'; healthScore = 50;  }
+      else                        { newStatus = 'offline';    healthScore = 0;   }
+
+      const { data: updated } = await supabase
+        .from('bot_instances')
+        .update({ status: newStatus, health_score: healthScore })
+        .eq('instance_name', instanceName)
+        .select('id, name')
+        .maybeSingle();
+
+      console.log(`[webhook_receiver] CONNECTION_UPDATE instance=${instanceName} state=${rawState} → status=${newStatus} bot="${updated?.name ?? 'not found'}"`);
+
+      return new Response(
+        JSON.stringify({ success: true, event: 'CONNECTION_UPDATE', status: newStatus }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ── QRCODE_UPDATED — salva QR no banco para o Gatekeeper buscar sem chamar Evolution ─
+    if ((eventType === 'QRCODE_UPDATED' || eventType === 'qrcode.updated') && instanceName) {
+      const qrBase64 = payload?.data?.qrcode?.base64 || payload?.data?.base64 || null;
+      if (qrBase64) {
+        await supabase
+          .from('bot_instances')
+          .update({ last_qr_base64: qrBase64, last_qr_at: now, status: 'connecting' })
+          .eq('instance_name', instanceName);
+        console.log(`[webhook_receiver] QRCODE_UPDATED instance=${instanceName} — QR salvo no banco`);
+      }
+      return new Response(
+        JSON.stringify({ success: true, event: 'QRCODE_UPDATED' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const phoneNumber = payload?.data?.key?.remoteJid?.replace('@s.whatsapp.net', '') ||
                         payload?.key?.remoteJid?.replace('@s.whatsapp.net', '');
     const fromMe = payload?.data?.key?.fromMe === true || payload?.key?.fromMe === true;
     const messageText = payload?.data?.message?.conversation || payload?.data?.message?.extendedTextMessage?.text || payload?.message?.conversation || payload?.message?.extendedTextMessage?.text;
-    const now = new Date().toISOString();
 
     if (phoneNumber) {
       if (fromMe) {
