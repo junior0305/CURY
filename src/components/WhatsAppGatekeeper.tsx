@@ -13,9 +13,6 @@ const STYLES = `
     0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,212,255,.4);}
     50%{opacity:.8;box-shadow:0 0 0 12px rgba(0,212,255,0);}
   }
-  @keyframes gkSpin {
-    to { transform: rotate(360deg); }
-  }
   @keyframes gkFadeIn {
     from{opacity:0;transform:translateY(12px);}
     to{opacity:1;transform:translateY(0);}
@@ -44,16 +41,18 @@ const STYLES = `
   }
 `;
 
-// Quantas tentativas sem QR antes de mostrar erro
-const MAX_FAIL_COUNT = 4;
-
-type GkStatus = "loading" | "no_instance" | "connected" | "disconnected" | "connecting" | "qr_error" | "success";
+// Máx. falhas antes de mostrar qr_error
+const MAX_FAIL_COUNT = 2;
+// Tempo máx. em "connecting" antes de voltar ao QR (ms)
+const CONNECTING_TIMEOUT_MS = 20000;
+// Bypass global — se depois desse tempo o corretor ainda não entrou, entra automaticamente
+const GLOBAL_BYPASS_MS = 25000;
 
 const SESSION_KEY = (userId: string) => `wha_ok_${userId}`;
 
-// Tempo máximo em "connecting" antes de voltar para QR (ms)
-const CONNECTING_TIMEOUT_MS = 45000;
+type GkStatus = "loading" | "no_instance" | "connected" | "disconnected" | "connecting" | "qr_error" | "success";
 
+// ── Hook de status ─────────────────────────────────────────────────────────────
 function useBotStatus(userId: string | undefined, role: string | null) {
   const [botInstanceId, setBotInstanceId] = useState<string | null | "none">(null);
   const [status, setStatus] = useState<GkStatus>("loading");
@@ -63,36 +62,42 @@ function useBotStatus(userId: string | undefined, role: string | null) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const connectingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failCountRef = useRef(0);
-  // true somente quando o usuário viu um QR e pode ter escaneado
   const qrWasDisplayedRef = useRef(false);
-  // quantas vezes seguidas Evolution retornou "connecting" sem QR exibido
   const stuckConnectingCountRef = useRef(0);
 
   const shouldCheck = role === "BROKER" || role === "MANAGER";
 
-  // Busca bot_instance_id uma vez
+  // ── PASSO 1: Verificar DB antes de chamar Evolution API ───────────────────
+  // Se o banco já registra status "open", entra imediatamente sem nenhuma chamada HTTP.
   useEffect(() => {
-    if (!userId || !shouldCheck) {
-      setStatus("connected");
-      return;
-    }
-    if (sessionStorage.getItem(SESSION_KEY(userId)) === "1") {
-      setStatus("connected");
-      return;
-    }
+    if (!userId || !shouldCheck) { setStatus("connected"); return; }
+    if (sessionStorage.getItem(SESSION_KEY(userId)) === "1") { setStatus("connected"); return; }
+
     supabase
       .from("profiles")
       .select("bot_instance_id")
       .eq("id", userId)
       .maybeSingle()
-      .then(({ data }) => {
-        const id = data?.bot_instance_id ?? null;
-        if (!id) {
-          setBotInstanceId("none");
-          setStatus("no_instance");
-        } else {
-          setBotInstanceId(id);
+      .then(async ({ data: profile }) => {
+        const id = profile?.bot_instance_id ?? null;
+        if (!id) { setBotInstanceId("none"); setStatus("no_instance"); return; }
+
+        // Checar status no banco (rápido, sem chamar Evolution)
+        const { data: botInst } = await supabase
+          .from("bot_instances")
+          .select("status")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (botInst?.status === "open") {
+          // Conectado conforme DB — não precisa chamar Evolution API
+          sessionStorage.setItem(SESSION_KEY(userId), "1");
+          setStatus("connected");
+          return;
         }
+
+        // Não conectado — armar polling contra Evolution API
+        setBotInstanceId(id);
       });
   }, [userId, shouldCheck]);
 
@@ -106,7 +111,6 @@ function useBotStatus(userId: string | undefined, role: string | null) {
       setQrBase64(null);
     }
     try {
-      // Após 2 polls com "connecting" sem QR, forçar geração de QR ignorando o estado
       const forceQR = !qrWasDisplayedRef.current && stuckConnectingCountRef.current >= 2;
       const { data, error } = await supabase.functions.invoke("get-whatsapp-qr", {
         body: { botInstanceId, forceQR },
@@ -121,7 +125,6 @@ function useBotStatus(userId: string | undefined, role: string | null) {
         return;
       }
 
-      // Conectado
       if (data.connected) {
         failCountRef.current = 0;
         if (userId) sessionStorage.setItem(SESSION_KEY(userId), "1");
@@ -131,64 +134,58 @@ function useBotStatus(userId: string | undefined, role: string | null) {
         return;
       }
 
-      // Estado transitório pós-scan — só respeitar se o usuário de fato viu um QR
       if (data.connecting) {
         if (qrWasDisplayedRef.current) {
           failCountRef.current = 0;
           stuckConnectingCountRef.current = 0;
           setStatus("connecting");
         } else {
-          // Instância presa em "connecting" no Evolution sem ação do usuário
-          // Incrementar contador — após 2x a próxima poll envia forceQR=true
           stuckConnectingCountRef.current++;
           setStatus("disconnected");
         }
         return;
       }
 
-      // Erro específico da Evolution API
       if (data.error) {
         failCountRef.current++;
         if (failCountRef.current >= MAX_FAIL_COUNT) {
           setStatus("qr_error");
-          setErrorDetail(data.error_detail || `Erro ao gerar QR: ${data.error}`);
+          setErrorDetail(data.error_detail || `Erro: ${data.error}`);
         } else {
           setStatus("disconnected");
         }
         return;
       }
 
-      // QR recebido com sucesso
       if (data.base64) {
         failCountRef.current = 0;
         stuckConnectingCountRef.current = 0;
-        qrWasDisplayedRef.current = true; // usuário pode escanear a partir daqui
+        qrWasDisplayedRef.current = true;
         setQrBase64(data.base64);
         setStatus("disconnected");
         if (userId) sessionStorage.removeItem(SESSION_KEY(userId));
         return;
       }
 
-      // Resposta sem base64 e sem erro explícito — contar como falha
       failCountRef.current++;
-      setStatus("disconnected"); // manter na tela de QR com spinner
       if (failCountRef.current >= MAX_FAIL_COUNT) {
         setStatus("qr_error");
-        setErrorDetail("A instância WhatsApp não está gerando o QR Code. Verifique se o chip está configurado corretamente na Evolution API.");
+        setErrorDetail("A instância não está gerando QR. Verifique se o chip está configurado corretamente.");
+      } else {
+        setStatus("disconnected");
       }
-
     } finally {
       if (showRefreshing) setRefreshing(false);
     }
   }, [botInstanceId, userId]);
 
-  // Primeira verificação quando botInstanceId ficar disponível
+  // Primeira verificação ao receber botInstanceId
   useEffect(() => {
     if (!botInstanceId || botInstanceId === "none") return;
     checkConnection();
   }, [botInstanceId, checkConnection]);
 
-  // Polling a cada 3s enquanto desconectado ou em connecting
+  // Polling a cada 4s enquanto desconectado ou conectando
   useEffect(() => {
     const shouldPoll = status === "disconnected" || status === "connecting";
     if (!shouldPoll) {
@@ -197,44 +194,49 @@ function useBotStatus(userId: string | undefined, role: string | null) {
       return;
     }
 
-    // Se entrou em "connecting", inicia timeout de 45s para voltar ao QR
     if (status === "connecting") {
       if (!connectingTimeoutRef.current) {
         connectingTimeoutRef.current = setTimeout(() => {
           connectingTimeoutRef.current = null;
-          qrWasDisplayedRef.current = false; // sessão de escaneamento expirou
+          qrWasDisplayedRef.current = false;
           setStatus("disconnected");
           setQrBase64(null);
         }, CONNECTING_TIMEOUT_MS);
       }
     } else {
-      // Saiu de connecting — limpa timeout
       if (connectingTimeoutRef.current) {
         clearTimeout(connectingTimeoutRef.current);
         connectingTimeoutRef.current = null;
       }
     }
 
-    intervalRef.current = setInterval(() => checkConnection(), 3000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    intervalRef.current = setInterval(() => checkConnection(), 4000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [status, checkConnection]);
 
   const resetAndRetry = useCallback(() => {
     failCountRef.current = 0;
     stuckConnectingCountRef.current = 0;
     qrWasDisplayedRef.current = false;
-    if (connectingTimeoutRef.current) {
-      clearTimeout(connectingTimeoutRef.current);
-      connectingTimeoutRef.current = null;
-    }
+    if (connectingTimeoutRef.current) { clearTimeout(connectingTimeoutRef.current); connectingTimeoutRef.current = null; }
     setErrorDetail(null);
     setQrBase64(null);
     setStatus("disconnected");
   }, []);
 
   return { status, qrBase64, errorDetail, refreshing, checkConnection, resetAndRetry };
+}
+
+// ── Botão de bypass discreto ──────────────────────────────────────────────────
+function BypassLink({ onBypass, label = "Entrar sem WhatsApp" }: { onBypass: () => void; label?: string }) {
+  return (
+    <button
+      onClick={onBypass}
+      className="text-[11px] text-slate-600 hover:text-slate-400 transition-colors underline underline-offset-2"
+    >
+      {label}
+    </button>
+  );
 }
 
 // ── Loading ───────────────────────────────────────────────────────────────────
@@ -262,13 +264,13 @@ function GkSuccess() {
   );
 }
 
-// ── Sem instância — não bloqueia, apenas passa (banner interno avisa se necessário) ──
+// ── Sem instância — passa direto para o app ───────────────────────────────────
 function GkNoInstance({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// ── Conectando (pós-scan) ─────────────────────────────────────────────────────
-function GkConnecting() {
+// ── Conectando pós-scan ───────────────────────────────────────────────────────
+function GkConnecting({ onBypass }: { onBypass: () => void }) {
   const [secondsLeft, setSecondsLeft] = useState(Math.round(CONNECTING_TIMEOUT_MS / 1000));
 
   useEffect(() => {
@@ -291,33 +293,27 @@ function GkConnecting() {
           </p>
           <p className="text-slate-400 text-sm">QR Code escaneado. Aguarde a confirmação.</p>
         </div>
-        {/* Dots animados */}
         <div className="flex gap-2">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 gk-dot1" />
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 gk-dot2" />
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 gk-dot3" />
         </div>
-        <p className="text-[10px] text-slate-600 uppercase tracking-widest">
-          Estabelecendo sessão WhatsApp
-        </p>
         {secondsLeft > 0 && (
-          <p className="text-[10px] text-slate-700">
+          <p className="text-[10px] text-slate-600">
             Novo QR em {secondsLeft}s caso não conecte
           </p>
         )}
+        <BypassLink onBypass={onBypass} label="Entrar agora sem aguardar" />
       </div>
     </>
   );
 }
 
-// ── Erro de QR ────────────────────────────────────────────────────────────────
+// ── Erro de QR — com auto-bypass ─────────────────────────────────────────────
 const AUTO_BYPASS_SECONDS = 15;
 
 function GkQRError({
-  errorDetail,
-  onRetry,
-  onBypass,
-  refreshing,
+  errorDetail, onRetry, onBypass, refreshing,
 }: {
   errorDetail: string | null;
   onRetry: () => void;
@@ -364,7 +360,6 @@ function GkQRError({
             Tentar novamente
           </button>
 
-          {/* Bypass — entra sem WhatsApp e o banner interno avisa */}
           <button
             onClick={onBypass}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
@@ -379,9 +374,8 @@ function GkQRError({
             Entrar sem WhatsApp ({countdown}s)
           </button>
         </div>
-
         <p className="text-[10px] text-slate-600 max-w-xs">
-          Você pode trabalhar normalmente. O WhatsApp pode ser reconectado depois pelo banner dentro do sistema.
+          Você pode trabalhar normalmente. O WhatsApp pode ser reconectado pelo banner dentro do sistema.
         </p>
       </div>
     </>
@@ -390,10 +384,7 @@ function GkQRError({
 
 // ── QR Code ───────────────────────────────────────────────────────────────────
 function GkQRCode({
-  qrBase64,
-  refreshing,
-  onRefresh,
-  onBypass,
+  qrBase64, refreshing, onRefresh, onBypass,
 }: {
   qrBase64: string | null;
   refreshing: boolean;
@@ -405,26 +396,20 @@ function GkQRCode({
       <style>{STYLES}</style>
       <div className="gk-hex gk-ui min-h-screen flex flex-col items-center justify-center p-4">
 
-        {/* Header */}
         <div className="flex flex-col items-center mb-8 gk-fadein">
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 gk-pulse"
-            style={{
-              background: "rgba(0,212,255,.1)",
-              border: "1px solid rgba(0,212,255,.3)",
-            }}>
+            style={{ background: "rgba(0,212,255,.1)", border: "1px solid rgba(0,212,255,.3)" }}>
             <Smartphone className="w-7 h-7 text-cyan-400" />
           </div>
           <h1 className="gk-display text-base font-black text-white uppercase tracking-widest">
             Conectar WhatsApp
           </h1>
           <p className="text-[11px] text-slate-500 uppercase tracking-widest mt-1">
-            Obrigatório para acessar o sistema
+            Escaneie para receber leads automáticos
           </p>
         </div>
 
-        {/* Card */}
-        <div
-          className="w-full max-w-sm rounded-2xl p-6 gk-fadein"
+        <div className="w-full max-w-sm rounded-2xl p-6 gk-fadein"
           style={{
             background: "rgba(8,14,28,0.96)",
             border: "1px solid rgba(0,212,255,.2)",
@@ -432,7 +417,6 @@ function GkQRCode({
             animationDelay: "0.1s",
           }}
         >
-          {/* Status */}
           <div className="flex items-center gap-2 mb-5">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
               style={{ background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.25)" }}>
@@ -443,13 +427,11 @@ function GkQRCode({
             </div>
           </div>
 
-          {/* QR Code area */}
           <div className="flex flex-col items-center gap-4">
             {qrBase64 ? (
               <div className="relative">
                 <div className="absolute inset-0 rounded-xl"
-                  style={{ boxShadow: "0 0 30px rgba(0,212,255,.15)", border: "1px solid rgba(0,212,255,.2)", borderRadius: "12px" }}
-                />
+                  style={{ boxShadow: "0 0 30px rgba(0,212,255,.15)", border: "1px solid rgba(0,212,255,.2)", borderRadius: "12px" }} />
                 <img
                   src={qrBase64}
                   alt="QR Code WhatsApp"
@@ -465,7 +447,6 @@ function GkQRCode({
               </div>
             )}
 
-            {/* Instructions */}
             <div className="w-full space-y-2 mt-1">
               {[
                 "Abra o WhatsApp no celular",
@@ -473,14 +454,8 @@ function GkQRCode({
                 "Aponte a câmera para o QR Code",
               ].map((step, i) => (
                 <div key={i} className="flex items-center gap-3">
-                  <div
-                    className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-black"
-                    style={{
-                      background: "rgba(0,212,255,.15)",
-                      border: "1px solid rgba(0,212,255,.3)",
-                      color: "#00D4FF",
-                    }}
-                  >
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[10px] font-black"
+                    style={{ background: "rgba(0,212,255,.15)", border: "1px solid rgba(0,212,255,.3)", color: "#00D4FF" }}>
                     {i + 1}
                   </div>
                   <span className="text-[12px] text-slate-400">{step}</span>
@@ -490,7 +465,6 @@ function GkQRCode({
 
             <div className="h-px w-full" style={{ background: "rgba(0,212,255,.1)" }} />
 
-            {/* Refresh button */}
             <button
               onClick={() => onRefresh()}
               disabled={refreshing}
@@ -510,20 +484,9 @@ function GkQRCode({
               O QR Code expira em ~30 segundos. O sistema detecta a conexão automaticamente.
             </p>
 
-            {/* Saída de emergência — não bloqueia o trabalho */}
-            <button
-              onClick={onBypass}
-              className="text-[10px] text-slate-700 hover:text-slate-400 transition-colors underline underline-offset-2 mt-1"
-            >
-              Entrar sem conectar agora
-            </button>
+            <BypassLink onBypass={onBypass} label="Entrar sem conectar agora" />
           </div>
         </div>
-
-        {/* Footer */}
-        <p className="text-[10px] text-slate-700 mt-6 uppercase tracking-widest">
-          Comandra War Room — Conexão recomendada
-        </p>
       </div>
     </>
   );
@@ -532,23 +495,35 @@ function GkQRCode({
 // ── Main Gatekeeper ───────────────────────────────────────────────────────────
 export function WhatsAppGatekeeper({ children }: { children: React.ReactNode }) {
   const { user, role, loading: authLoading } = useAuth();
-  const { status, qrBase64, errorDetail, refreshing, checkConnection, resetAndRetry } = useBotStatus(
-    user?.id,
-    role
-  );
+  const { status, qrBase64, errorDetail, refreshing, checkConnection, resetAndRetry } = useBotStatus(user?.id, role);
   const [bypassed, setBypassed] = useState(false);
+  const globalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Bypass: entra no sistema sem WhatsApp — o WhatsAppQRBanner dentro do app avisa
-  const handleBypass = useCallback(() => {
-    setBypassed(true);
-  }, []);
+  const handleBypass = useCallback(() => setBypassed(true), []);
+
+  // Segurança global: se depois de 25s o corretor ainda não entrou, entra automaticamente.
+  // Evita qualquer travamento independente do estado.
+  useEffect(() => {
+    if (authLoading) return;
+    if (status === "connected" || status === "success" || bypassed) {
+      if (globalTimerRef.current) clearTimeout(globalTimerRef.current);
+      return;
+    }
+    if (globalTimerRef.current) return; // já armado
+    globalTimerRef.current = setTimeout(() => {
+      globalTimerRef.current = null;
+      setBypassed(true);
+    }, GLOBAL_BYPASS_MS);
+    return () => {
+      if (globalTimerRef.current) { clearTimeout(globalTimerRef.current); globalTimerRef.current = null; }
+    };
+  }, [authLoading, status, bypassed]);
 
   if (authLoading || status === "loading") return <GkLoading />;
   if (status === "success") return <GkSuccess />;
-  // Se bypassado ou sem instância: renderiza o app normalmente
   if (bypassed || status === "connected") return <>{children}</>;
   if (status === "no_instance") return <GkNoInstance>{children}</GkNoInstance>;
-  if (status === "connecting") return <GkConnecting />;
+  if (status === "connecting") return <GkConnecting onBypass={handleBypass} />;
   if (status === "qr_error") return (
     <GkQRError
       errorDetail={errorDetail}
@@ -557,16 +532,14 @@ export function WhatsAppGatekeeper({ children }: { children: React.ReactNode }) 
       refreshing={refreshing}
     />
   );
-  if (status === "disconnected") {
-    return (
-      <GkQRCode
-        qrBase64={qrBase64}
-        refreshing={refreshing}
-        onRefresh={() => checkConnection(true)}
-        onBypass={handleBypass}
-      />
-    );
-  }
+  if (status === "disconnected") return (
+    <GkQRCode
+      qrBase64={qrBase64}
+      refreshing={refreshing}
+      onRefresh={() => checkConnection(true)}
+      onBypass={handleBypass}
+    />
+  );
 
   return <>{children}</>;
 }
