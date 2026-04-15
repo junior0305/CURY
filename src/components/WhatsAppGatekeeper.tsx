@@ -262,19 +262,9 @@ function GkSuccess() {
   );
 }
 
-// ── Sem instância ─────────────────────────────────────────────────────────────
-function GkNoInstance() {
-  return (
-    <div className="gk-hex gk-ui min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
-      <WifiOff className="w-12 h-12 text-amber-400" />
-      <p className="gk-display text-sm font-black text-white uppercase tracking-widest">
-        Sem instância configurada
-      </p>
-      <p className="text-slate-400 text-sm max-w-xs">
-        Sua conta não tem uma instância WhatsApp vinculada. Fale com o administrador.
-      </p>
-    </div>
-  );
+// ── Sem instância — não bloqueia, apenas passa (banner interno avisa se necessário) ──
+function GkNoInstance({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }
 
 // ── Conectando (pós-scan) ─────────────────────────────────────────────────────
@@ -321,15 +311,27 @@ function GkConnecting() {
 }
 
 // ── Erro de QR ────────────────────────────────────────────────────────────────
+const AUTO_BYPASS_SECONDS = 15;
+
 function GkQRError({
   errorDetail,
   onRetry,
+  onBypass,
   refreshing,
 }: {
   errorDetail: string | null;
   onRetry: () => void;
+  onBypass: () => void;
   refreshing: boolean;
 }) {
+  const [countdown, setCountdown] = useState(AUTO_BYPASS_SECONDS);
+
+  useEffect(() => {
+    if (countdown <= 0) { onBypass(); return; }
+    const t = setInterval(() => setCountdown(s => s - 1), 1000);
+    return () => clearInterval(t);
+  }, [countdown, onBypass]);
+
   return (
     <>
       <style>{STYLES}</style>
@@ -346,22 +348,40 @@ function GkQRError({
             {errorDetail || "Houve um problema ao conectar com o serviço WhatsApp."}
           </p>
         </div>
-        <button
-          onClick={onRetry}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
-          style={{
-            background: "rgba(239,68,68,.1)",
-            border: "1px solid rgba(239,68,68,.3)",
-            color: refreshing ? "#475569" : "#F87171",
-            cursor: refreshing ? "not-allowed" : "pointer",
-          }}
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
-          Tentar novamente
-        </button>
+        <div className="flex flex-col items-center gap-3">
+          <button
+            onClick={onRetry}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+            style={{
+              background: "rgba(239,68,68,.1)",
+              border: "1px solid rgba(239,68,68,.3)",
+              color: refreshing ? "#475569" : "#F87171",
+              cursor: refreshing ? "not-allowed" : "pointer",
+            }}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            Tentar novamente
+          </button>
+
+          {/* Bypass — entra sem WhatsApp e o banner interno avisa */}
+          <button
+            onClick={onBypass}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+            style={{
+              background: "rgba(99,102,241,.12)",
+              border: "1px solid rgba(99,102,241,.3)",
+              color: "#818CF8",
+              cursor: "pointer",
+            }}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            Entrar sem WhatsApp ({countdown}s)
+          </button>
+        </div>
+
         <p className="text-[10px] text-slate-600 max-w-xs">
-          Se o problema persistir, contate o administrador para verificar a instância WhatsApp.
+          Você pode trabalhar normalmente. O WhatsApp pode ser reconectado depois pelo banner dentro do sistema.
         </p>
       </div>
     </>
@@ -373,10 +393,12 @@ function GkQRCode({
   qrBase64,
   refreshing,
   onRefresh,
+  onBypass,
 }: {
   qrBase64: string | null;
   refreshing: boolean;
   onRefresh: () => void;
+  onBypass: () => void;
 }) {
   return (
     <>
@@ -487,12 +509,20 @@ function GkQRCode({
             <p className="text-[10px] text-slate-600 text-center">
               O QR Code expira em ~30 segundos. O sistema detecta a conexão automaticamente.
             </p>
+
+            {/* Saída de emergência — não bloqueia o trabalho */}
+            <button
+              onClick={onBypass}
+              className="text-[10px] text-slate-700 hover:text-slate-400 transition-colors underline underline-offset-2 mt-1"
+            >
+              Entrar sem conectar agora
+            </button>
           </div>
         </div>
 
         {/* Footer */}
         <p className="text-[10px] text-slate-700 mt-6 uppercase tracking-widest">
-          Comandra War Room — Conexão obrigatória
+          Comandra War Room — Conexão recomendada
         </p>
       </div>
     </>
@@ -506,15 +536,24 @@ export function WhatsAppGatekeeper({ children }: { children: React.ReactNode }) 
     user?.id,
     role
   );
+  const [bypassed, setBypassed] = useState(false);
+
+  // Bypass: entra no sistema sem WhatsApp — o WhatsAppQRBanner dentro do app avisa
+  const handleBypass = useCallback(() => {
+    setBypassed(true);
+  }, []);
 
   if (authLoading || status === "loading") return <GkLoading />;
   if (status === "success") return <GkSuccess />;
-  if (status === "no_instance") return <GkNoInstance />;
+  // Se bypassado ou sem instância: renderiza o app normalmente
+  if (bypassed || status === "connected") return <>{children}</>;
+  if (status === "no_instance") return <GkNoInstance>{children}</GkNoInstance>;
   if (status === "connecting") return <GkConnecting />;
   if (status === "qr_error") return (
     <GkQRError
       errorDetail={errorDetail}
       onRetry={resetAndRetry}
+      onBypass={handleBypass}
       refreshing={refreshing}
     />
   );
@@ -524,6 +563,7 @@ export function WhatsAppGatekeeper({ children }: { children: React.ReactNode }) 
         qrBase64={qrBase64}
         refreshing={refreshing}
         onRefresh={() => checkConnection(true)}
+        onBypass={handleBypass}
       />
     );
   }
