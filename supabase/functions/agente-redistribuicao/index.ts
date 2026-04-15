@@ -157,10 +157,22 @@ serve(async (req) => {
       const newBroker = candidates[0];
       const oldBrokerId = lead.broker_id as string;
 
-      // Transferir lead
+      // Transferir lead — reseta campos para que o novo corretor comece do zero
       await supabase.from('leads')
-        .update({ broker_id: newBroker.id })
+        .update({
+          broker_id: newBroker.id,
+          status: 'NEW',                              // aparece como novo lead para o destinatário
+          last_interaction_at: now,                   // zera contador de horas parado
+          last_broker_whatsapp_at: null,              // zera countdown de redistribuição
+        })
         .eq('id', lead.id);
+
+      // Cancelar toques pendentes na fila de automação — o novo corretor não deve receber
+      // disparos automáticos de uma cadência iniciada pelo corretor anterior
+      await supabase.from('lead_activation_queue')
+        .update({ status: 'cancelled', cancel_reason: 'lead_redistributed' })
+        .eq('lead_id', lead.id)
+        .eq('status', 'pending');
 
       // Atualizar contagem local
       if (oldBrokerId) loadMap[oldBrokerId] = Math.max(0, (loadMap[oldBrokerId] || 1) - 1);
