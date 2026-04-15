@@ -1,6 +1,6 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { fetchLeadsForDashboard } from "@/integrations/supabase/leads";
+import { useMemo, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchLeadsForDashboard, registerBrokerContact } from "@/integrations/supabase/leads";
 import { fetchOpenTasks } from "@/integrations/supabase/tasks";
 import { Lead, LeadStatus } from "@/types/lead";
 import { Task } from "@/types/task";
@@ -52,6 +52,15 @@ const LeadList = ({
   iaRepliedLeadIds = new Set(), botActiveLeadIds = new Set(), redistributionThresholdH,
 }: LeadListProps) => {
   const { session } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Registra contato imediato quando o corretor abre WhatsApp ou liga para o lead.
+  // Zera tanto last_interaction_at quanto last_broker_whatsapp_at para parar o
+  // contador de horas e reiniciar o countdown de redistribuição.
+  const registerContact = useCallback(async (leadId: string) => {
+    await registerBrokerContact(leadId);
+    queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
+  }, [queryClient]);
 
   const { data: leads = [], isLoading: loadingLeads } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
@@ -264,14 +273,22 @@ const LeadList = ({
               <div className="flex gap-1 shrink-0">
                 <div
                   className="h-7 w-7 rounded-lg bg-slate-700/60 hover:bg-indigo-600 flex items-center justify-center text-gray-500 hover:text-white transition-colors cursor-pointer"
-                  onClick={(e) => { e.stopPropagation(); window.open(`https://wa.me/${lead.phone?.replace(/\D/g, "")}`, "_blank"); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    registerContact(lead.id); // registra contato — zera contador de horas
+                    window.open(`https://wa.me/${lead.phone?.replace(/\D/g, "")}`, "_blank");
+                  }}
                   title="Abrir WhatsApp"
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
                 </div>
                 <div
                   className="h-7 w-7 rounded-lg bg-slate-700/60 hover:bg-emerald-600 flex items-center justify-center text-gray-500 hover:text-white transition-colors cursor-pointer"
-                  onClick={(e) => { e.stopPropagation(); window.open(`tel:${lead.phone?.replace(/\D/g, "")}`, "_blank"); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    registerContact(lead.id); // registra contato — zera contador de horas
+                    window.open(`tel:${lead.phone?.replace(/\D/g, "")}`, "_blank");
+                  }}
                   title="Ligar"
                 >
                   <Phone className="w-3.5 h-3.5" />

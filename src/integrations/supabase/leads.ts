@@ -267,6 +267,20 @@ export const touchLeadInteraction = async (leadId: string) => {
     .eq("id", leadId);
 };
 
+/**
+ * Registra contato ativo do corretor (WhatsApp aberto ou ligação iniciada).
+ * Atualiza tanto last_interaction_at quanto last_broker_whatsapp_at para:
+ * 1. Zerar o contador "Xh sem interação" na UI
+ * 2. Reiniciar o countdown de redistribuição — corretor está em contato
+ */
+export const registerBrokerContact = async (leadId: string) => {
+  const now = new Date().toISOString();
+  await supabase
+    .from("leads")
+    .update({ last_interaction_at: now, last_broker_whatsapp_at: now })
+    .eq("id", leadId);
+};
+
 export const updateLeadBroker = async (leadId: string, brokerId: string) => {
   const now = new Date().toISOString();
   const { error } = await supabase

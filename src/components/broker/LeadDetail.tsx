@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchLeadsForDashboard, updateLeadStatus, touchLeadInteraction } from "@/integrations/supabase/leads";
+import { fetchLeadsForDashboard, updateLeadStatus, touchLeadInteraction, registerBrokerContact } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
 import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin, Brain, BrainCircuit, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -176,6 +176,8 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
   const handleWhatsApp = () => {
     if (!lead) return;
     window.open(`https://wa.me/${lead.phone.replace(/\D/g, "")}`, "_blank");
+    // Registra contato — zera contador de horas e reinicia countdown de redistribuição
+    registerBrokerContact(leadId);
     // Se lead ainda está em NOVO, avança automaticamente para EM ATENDIMENTO
     if (lead.status === "NEW") {
       updateStatusMutation.mutate({ status: "IN_PROGRESS" });
@@ -193,6 +195,8 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
   const handleCall = () => {
     if (!lead) return;
     window.location.href = `tel:${lead.phone}`;
+    // Registra contato — zera contador de horas e reinicia countdown de redistribuição
+    registerBrokerContact(leadId);
     sendNoteMutation.mutate("Clicou para ligar");
   };
 
