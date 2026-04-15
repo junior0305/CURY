@@ -5,6 +5,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { COMPANIES, getSelectedCompanyId } from '@/integrations/supabase/companies';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface AuthContextType {
   session: Session | null;
@@ -24,6 +25,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // helper to keep debug info on window for inspection
   const setAuthDebug = (payload: any) => {
@@ -176,6 +178,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(null);
         setMustChangePassword(false);
         localStorage.removeItem('arena_company_locked'); // libera troca de empresa no próximo login
+        queryClient.clear(); // Limpa cache — impede que próximo usuário veja dados do anterior
         setLoading(false);
         setAuthDebug({ sessionId: null, role: null });
       }
@@ -269,6 +272,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = async () => {
     setLoading(true);
+    queryClient.clear(); // Limpa cache antes de sair — garante que próximo usuário começa do zero
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
