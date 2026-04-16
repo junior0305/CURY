@@ -149,7 +149,7 @@ const LeadDistribution = () => {
     },
   });
 
-  const resetForm = () => { setForm(emptyForm); setEditingQueueId(null); setActiveTeamId(null); };
+  const resetForm = () => { setForm(emptyForm); setEditingQueueId(null); setActiveTeamId(null); setGhostBrokerCount(0); };
 
   const brokersInSelectedTeam = useMemo(
     () => (activeTeamId ? brokers.filter(b => b.teamId === activeTeamId) : []),
@@ -161,13 +161,19 @@ const LeadDistribution = () => {
     setForm({ ...form, brokerIds: ids.includes(id) ? ids.filter(b => b !== id) : [...ids, id] });
   };
 
+  const [ghostBrokerCount, setGhostBrokerCount] = useState(0);
+
   const handleEditQueue = (q: DistributionQueue) => {
     setEditingQueueId(q.id);
+    const allIds: string[] = (q as any).brokerIds || [];
+    const validIds = allIds.filter(id => brokers.some(b => b.id === id));
+    const removed = allIds.length - validIds.length;
+    setGhostBrokerCount(removed);
     setForm({
       name: q.name,
       matchField: q.matchField,
       matchValue: q.matchValue,
-      brokerIds: (q as any).brokerIds || [],
+      brokerIds: validIds,
       isActive: q.isActive,
       lockAfterAssignment: q.lockAfterAssignment ?? false,
       region: q.region ?? "",
@@ -379,6 +385,17 @@ const LeadDistribution = () => {
           </div>
         </button>
 
+        {/* Aviso: corretores excluídos do sistema removidos da fila */}
+        {ghostBrokerCount > 0 && (
+          <div className="px-3 py-2 rounded-lg text-[9px] leading-relaxed"
+            style={{ background: "rgba(239,68,68,.06)", border: "1px solid rgba(239,68,68,.2)", color: "#f87171" }}>
+            <span className="font-black">⚠️ {ghostBrokerCount} corretor{ghostBrokerCount > 1 ? "es removidos" : " removido"}:</span>{" "}
+            {ghostBrokerCount > 1 ? "Esses corretores foram" : "Esse corretor foi"} excluído{ghostBrokerCount > 1 ? "s" : ""} do sistema e{" "}
+            {ghostBrokerCount > 1 ? "foram retirados" : "foi retirado"} automaticamente desta fila.
+            Clique em <span className="font-black">Atualizar</span> para confirmar.
+          </div>
+        )}
+
         {/* Aviso quando campanha exclusiva está ativa */}
         {form.lockAfterAssignment && form.brokerIds.length > 0 && (
           <div className="px-3 py-2 rounded-lg text-[9px] leading-relaxed"
@@ -515,7 +532,7 @@ const LeadDistribution = () => {
               <div className="px-5 py-2.5 flex items-center gap-2 flex-wrap"
                 style={{ borderTop: "1px solid rgba(26,39,68,0.7)" }}>
                 <Users className="w-3 h-3 shrink-0" style={{ color: "#2a3a5a" }} />
-                {qBrokers.length === 0
+                {qBrokers.length === 0 && qBrokerIds.length === 0
                   ? <span className="text-[10px] italic" style={{ color: "#3a2a2a" }}>Sem corretores vinculados</span>
                   : qBrokers.map(b => (
                     <span key={b.id} className="text-[10px] font-bold px-2 py-0.5 rounded-full"
@@ -524,6 +541,13 @@ const LeadDistribution = () => {
                     </span>
                   ))
                 }
+                {/* Corretores excluídos que ainda estão no array */}
+                {qBrokerIds.length > qBrokers.length && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: "rgba(239,68,68,0.1)", color: "#f87171", border: "1px solid rgba(239,68,68,0.25)" }}>
+                    +{qBrokerIds.length - qBrokers.length} excluído{qBrokerIds.length - qBrokers.length > 1 ? "s" : ""} — edite para limpar
+                  </span>
+                )}
               </div>
             </div>
           );
