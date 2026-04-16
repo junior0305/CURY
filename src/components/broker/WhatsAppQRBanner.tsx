@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Smartphone, RefreshCw, CheckCircle2, WifiOff } from "lucide-react";
+import { Smartphone, RefreshCw, CheckCircle2, WifiOff, Wifi } from "lucide-react";
 
 export function WhatsAppQRBanner() {
   const { user } = useAuth();
@@ -14,8 +14,10 @@ export function WhatsAppQRBanner() {
   const [loading, setLoading] = useState(false);
   const [qrBase64, setQrBase64] = useState<string | null>(null);
   const [justConnected, setJustConnected] = useState(false);
+  const [connecting, setConnecting] = useState(false); // QR escaneado, aguardando confirmação
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 1. Busca bot_instance_id + instance_name do perfil do corretor
   useEffect(() => {
@@ -95,22 +97,35 @@ export function WhatsAppQRBanner() {
   }, [open, botInstanceId, justConnected]);
 
   // 4. Busca o QR code via Edge Function
-  const fetchQR = useCallback(async () => {
+  const fetchQR = useCallback(async (forceQR = false) => {
     if (!botInstanceId) return;
+    if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
     setLoading(true);
     setError(null);
     setQrBase64(null);
+    setConnecting(false);
     setJustConnected(false);
     try {
       const { data, error: fnError } = await supabase.functions.invoke("get-whatsapp-qr", {
-        body: { botInstanceId },
+        body: { botInstanceId, forceQR },
       });
       if (fnError) throw new Error(fnError.message);
+
       if (data?.connected) {
+        // Chip já conectado
         setIsConnected(true);
         setJustConnected(true);
       } else if (data?.base64) {
+        // QR disponível — exibir
         setQrBase64(data.base64);
+      } else if (data?.connecting) {
+        // QR foi escaneado, aguardando confirmação da Evolution API (~5-15s)
+        // Mostra estado intermediário e re-tenta em 4s com forceQR para buscar novo QR se travar
+        setConnecting(true);
+        retryTimerRef.current = setTimeout(() => fetchQR(true), 4000);
+      } else if (data?.error) {
+        // Erro específico retornado pela Edge Function
+        setError(data.error_detail || `Erro: ${data.error}`);
       } else {
         setError("QR code não disponível. A instância pode estar inicializando — tente em alguns segundos.");
       }
@@ -121,14 +136,21 @@ export function WhatsAppQRBanner() {
     }
   }, [botInstanceId]);
 
+  // Limpa timer de retry ao desmontar
+  useEffect(() => {
+    return () => { if (retryTimerRef.current) clearTimeout(retryTimerRef.current); };
+  }, []);
+
   const handleOpen = () => {
     setOpen(true);
     fetchQR();
   };
 
   const handleClose = () => {
+    if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
     setOpen(false);
     setQrBase64(null);
+    setConnecting(false);
     setJustConnected(false);
     setError(null);
   };
@@ -181,6 +203,17 @@ export function WhatsAppQRBanner() {
               </div>
             )}
 
+            {!loading && connecting && (
+              <div className="flex flex-col items-center gap-3 py-6">
+                <Wifi className="w-10 h-10 text-emerald-400 animate-pulse" />
+                <p className="text-sm font-semibold text-emerald-300">QR escaneado! Conectando...</p>
+                <p className="text-xs text-slate-400 text-center">
+                  Aguarde a confirmação da conexão. Isso pode levar alguns segundos.
+                </p>
+                <p className="text-[10px] text-slate-600">Verificando automaticamente...</p>
+              </div>
+            )}
+
             {!loading && justConnected && (
               <div className="flex flex-col items-center gap-3 py-6">
                 <CheckCircle2 className="w-14 h-14 text-emerald-400" />
@@ -194,7 +227,7 @@ export function WhatsAppQRBanner() {
               </div>
             )}
 
-            {!loading && !justConnected && qrBase64 && (
+            {!loading && !justConnected && !connecting && qrBase64 && (
               <>
                 <div className="rounded-xl overflow-hidden border-4 border-white shadow-xl">
                   <img src={qrBase64} alt="QR Code WhatsApp" className="w-56 h-56 object-contain" />
@@ -212,7 +245,7 @@ export function WhatsAppQRBanner() {
               </>
             )}
 
-            {!loading && !justConnected && error && (
+            {!loading && !justConnected && !connecting && error && (
               <div className="flex flex-col items-center gap-3 py-4">
                 <p className="text-sm text-red-400 text-center">{error}</p>
                 <Button size="sm" onClick={fetchQR} variant="outline" className="border-slate-600 text-slate-300 gap-1.5">
