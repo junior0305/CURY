@@ -7,8 +7,8 @@ const corsHeaders = {
 };
 
 const TERMINAL = ['CONCLUDED', 'ABANDONED', 'EXCLUDED'];
-// Leads com visita ou negociação ativa: não perturbar com automações outbound
-const DO_NOT_DISTURB = [...TERMINAL, 'VISIT_SCHEDULED'];
+// Leads com visita, documentação em andamento ou negociação ativa: não perturbar
+const DO_NOT_DISTURB = [...TERMINAL, 'VISIT_SCHEDULED', 'DOCS_REQUESTED'];
 
 // ── BRT helpers (UTC-3) ────────────────────────────────────────────────────
 function getBRTHour(): number {
@@ -474,13 +474,14 @@ serve(async (req) => {
 
         const leadStatusUpper = (lead.status || '').toUpperCase();
         if (DO_NOT_DISTURB.includes(leadStatusUpper)) {
-          // Para VISIT_SCHEDULED: cancela TODOS os itens outbound pendentes da fila
-          if (leadStatusUpper === 'VISIT_SCHEDULED') {
+          // Para VISIT_SCHEDULED e DOCS_REQUESTED: cancela TODOS os itens outbound pendentes
+          if (leadStatusUpper === 'VISIT_SCHEDULED' || leadStatusUpper === 'DOCS_REQUESTED') {
+            const cancelReason = leadStatusUpper === 'VISIT_SCHEDULED' ? 'visit_scheduled' : 'docs_requested';
             await supabase.from('lead_activation_queue')
-              .update({ status: 'cancelled', cancel_reason: 'visit_scheduled' })
+              .update({ status: 'cancelled', cancel_reason: cancelReason })
               .eq('lead_id', lead.id)
               .in('action_type', ['toque_1','toque_2','sentinela','last_chance','broker_warmup','auto_resposta']);
-            console.log(`[cerebro] 📅 Fila limpa para ${lead.name} — visita agendada`);
+            console.log(`[cerebro] 📄 Fila limpa para ${lead.name} — status ${leadStatusUpper}`);
           } else {
             await supabase.from('lead_activation_queue')
               .update({ status: 'cancelled', cancel_reason: `lead_${lead.status}` })
@@ -508,6 +509,105 @@ serve(async (req) => {
             console.log(`[cerebro] ⏸ ${item.action_type} bloqueado (modo humano) → ${lead.name}`);
             cancelled++;
             continue;
+          }
+
+          // ── CAMADA 1: Estado avançado do lead_state (tema/momento/intencao) ──
+          // Nunca disparar quando lead está em fase de visita ou documentação
+          if (leadState?.tema === 'visita' || leadState?.tema === 'documentacao') {
+            await supabase.from('lead_activation_queue')
+              .update({ status: 'cancelled', cancel_reason: 'active_tema_visit_or_docs' })
+              .eq('id', item.id);
+            console.log(`[cerebro] 🏠 ${item.action_type} cancelado — tema=${leadState?.tema} (fase avançada) → ${lead.name}`);
+            cancelled++;
+            continue;
+          }
+
+          // Nunca disparar quando lead já decidiu comprar
+          if (leadState?.momento === 'decidido') {
+            await supabase.from('lead_activation_queue')
+              .update({ status: 'cancelled', cancel_reason: 'lead_decided' })
+              .eq('id', item.id);
+            console.log(`[cerebro] ✅ ${item.action_type} cancelado — momento=decidido → ${lead.name}`);
+            cancelled++;
+            continue;
+          }
+
+          // Silêncio de 24h quando lead está quente (não perturbar conversa ativa)
+          if (leadState?.intencao === 'quente') {
+            const lastOutboundMs = lead.last_broker_whatsapp_at
+              ? new Date(lead.last_broker_whatsapp_at).getTime()
+              : 0;
+            if (lastOutboundMs > 0 && Date.now() - lastOutboundMs < 24 * 3600000) {
+              const resumeAt = new Date(lastOutboundMs + 24 * 3600000).toISOString();
+              await supabase.from('lead_activation_queue')
+                .update({ status: 'pending', scheduled_for: resumeAt })
+                .eq('id', item.id);
+              console.log(`[cerebro] 🔥 ${item.action_type} adiado — lead quente, silêncio 24h → ${lead.name}`);
+              rescheduled++;
+              continue;
+            }
+          }
+
+          // ── CAMADA 2: Janelas de silêncio recente ───────────────────────
+          // Corretor falou há menos de 6h → não perturbar conversa ativa
+          if (lead.last_broker_whatsapp_at) {
+            const brokerSentMs = new Date(lead.last_broker_whatsapp_at).getTime();
+            if (Date.now() - brokerSentMs < 6 * 3600000) {
+              const resumeAt = new Date(brokerSentMs + 6 * 3600000).toISOString();
+              await supabase.from('lead_activation_queue')
+                .update({ status: 'pending', scheduled_for: resumeAt })
+                .eq('id', item.id);
+              console.log(`[cerebro] ⏱ ${item.action_type} adiado — corretor falou há <6h → ${lead.name}`);
+              rescheduled++;
+              continue;
+            }
+          }
+
+          // Lead respondeu há menos de 2h → aguardar andamento da conversa
+          if (lead.last_lead_response_at) {
+            const leadRepliedMs = new Date(lead.last_lead_response_at).getTime();
+            if (Date.now() - leadRepliedMs < 2 * 3600000) {
+              const resumeAt = new Date(leadRepliedMs + 2 * 3600000).toISOString();
+              await supabase.from('lead_activation_queue')
+                .update({ status: 'pending', scheduled_for: resumeAt })
+                .eq('id', item.id);
+              console.log(`[cerebro] 💬 ${item.action_type} adiado — lead respondeu há <2h → ${lead.name}`);
+              rescheduled++;
+              continue;
+            }
+          }
+
+          // IA enviou mensagem há menos de 1h → aguardar resposta do lead
+          {
+            const { data: latestConv } = await supabase
+              .from('ia_conversations')
+              .select('id')
+              .eq('lead_id', lead.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (latestConv?.id) {
+              const { data: recentIaMsg } = await supabase
+                .from('ia_messages')
+                .select('created_at')
+                .eq('conversation_id', latestConv.id)
+                .eq('direction', 'outgoing')
+                .gt('created_at', new Date(Date.now() - 3600000).toISOString())
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (recentIaMsg) {
+                const resumeAt = new Date(new Date(recentIaMsg.created_at).getTime() + 3600000).toISOString();
+                await supabase.from('lead_activation_queue')
+                  .update({ status: 'pending', scheduled_for: resumeAt })
+                  .eq('id', item.id);
+                console.log(`[cerebro] 🤖 ${item.action_type} adiado — IA enviou msg há <1h → ${lead.name}`);
+                rescheduled++;
+                continue;
+              }
+            }
           }
 
           // ── PROTEÇÃO ANTI-SPAM: não disparar se o cliente já respondeu e está

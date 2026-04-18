@@ -31,20 +31,35 @@ function getCtx(): AudioContext | null {
   return _ctx;
 }
 
+function drainPending() {
+  if (!_unlocked) return;
+  const pending = _pendingSounds.splice(0);
+  for (const fn of pending) {
+    try { fn(); } catch {}
+  }
+}
+
 async function tryUnlock(): Promise<void> {
   if (_unlocked) return;
   const ctx = getCtx();
   if (!ctx) return;
+
+  // Escuta statechange como backup — útil quando resume() não resolve imediatamente
+  if (!ctx.onstatechange) {
+    ctx.onstatechange = () => {
+      if (ctx.state === 'running' && !_unlocked) {
+        _unlocked = true;
+        drainPending();
+      }
+    };
+  }
+
   try {
     await ctx.resume();
   } catch {}
   if (ctx.state === 'running') {
     _unlocked = true;
-    // Drena a fila de sons que chegaram antes do desbloqueio
-    const pending = _pendingSounds.splice(0);
-    for (const fn of pending) {
-      try { fn(); } catch {}
-    }
+    drainPending();
   }
 }
 
@@ -174,7 +189,11 @@ async function playCustomMp3(url: string): Promise<void> {
 function doPlay(soundKey: SoundKey) {
   const customUrl = localStorage.getItem(CUSTOM_SOUND_KEY(soundKey));
   if (customUrl) {
-    playCustomMp3(customUrl).catch(() => {});
+    // Tenta MP3 customizado; se falhar, cai na síntese nativa
+    playCustomMp3(customUrl).catch(() => {
+      const ctx = getCtx();
+      if (ctx) try { synthesize(ctx, soundKey); } catch {}
+    });
     return;
   }
   const ctx = getCtx();

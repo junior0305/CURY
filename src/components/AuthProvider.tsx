@@ -268,7 +268,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, loading, session]);
+  }, [role, loading, session, mustChangePassword]); // mustChangePassword nas deps garante navegação quando a flag é limpa
 
   const signOut = async () => {
     setLoading(true);

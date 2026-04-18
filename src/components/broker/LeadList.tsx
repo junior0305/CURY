@@ -1,13 +1,13 @@
-import { useMemo, useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchLeadsForDashboard, registerBrokerContact } from "@/integrations/supabase/leads";
+import { useMemo, useCallback, useState, useRef } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { fetchLeadsForDashboard, registerBrokerContact, updateLeadStatus } from "@/integrations/supabase/leads";
 import { fetchOpenTasks } from "@/integrations/supabase/tasks";
 import { Lead, LeadStatus } from "@/types/lead";
 import { Task } from "@/types/task";
 import {
   Loader2, Phone, MessageSquare, Clock, AlertTriangle, Bell,
   Zap, AlertCircle, Hourglass, MapPin, Calendar, FileText,
-  Bot, SkipForward, AlertOctagon,
+  Bot, SkipForward, AlertOctagon, ChevronRight, Check, X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -47,12 +47,22 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
 // Statuses eligible for redistribution
 const REDIST_STATUSES: LeadStatus[] = ["NEW", "IN_PROGRESS", "DOCS_REQUESTED"];
 
+// Próximo status na cadência do pipeline
+const NEXT_STATUS: Partial<Record<LeadStatus, { status: LeadStatus; label: string }>> = {
+  NEW:             { status: "IN_PROGRESS",     label: "Em Atendimento" },
+  IN_PROGRESS:     { status: "VISIT_SCHEDULED", label: "Agendar Visita" },
+  VISIT_SCHEDULED: { status: "DOCS_REQUESTED",  label: "Pedir Docs" },
+  DOCS_REQUESTED:  { status: "CONCLUDED",        label: "Fechar Venda 🎉" },
+};
+
 const LeadList = ({
   selectedLeadId, onSelectLead, currentUserRole, filter, compact,
   iaRepliedLeadIds = new Set(), botActiveLeadIds = new Set(), redistributionThresholdH,
 }: LeadListProps) => {
   const { session } = useAuth();
   const queryClient = useQueryClient();
+  const [pendingAdvance, setPendingAdvance] = useState<string | null>(null);
+  const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Registra contato imediato quando o corretor abre WhatsApp ou liga para o lead.
   // Zera tanto last_interaction_at quanto last_broker_whatsapp_at para parar o
@@ -61,6 +71,26 @@ const LeadList = ({
     await registerBrokerContact(leadId);
     queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
   }, [queryClient]);
+
+  // Mutation para avançar fase do pipeline diretamente do card
+  const advanceMutation = useMutation({
+    mutationFn: async ({ leadId, status }: { leadId: string; status: LeadStatus }) => {
+      await updateLeadStatus(leadId, status);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
+      setPendingAdvance(null);
+      if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
+    },
+  });
+
+  const triggerAdvance = useCallback((e: React.MouseEvent, leadId: string) => {
+    e.stopPropagation();
+    if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
+    setPendingAdvance(leadId);
+    // Auto-cancela em 5s se o corretor não confirmar
+    pendingTimerRef.current = setTimeout(() => setPendingAdvance(null), 5000);
+  }, []);
 
   const { data: leads = [], isLoading: loadingLeads } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
@@ -282,17 +312,19 @@ const LeadList = ({
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
                 </div>
-                <div
-                  className="h-7 w-7 rounded-lg bg-slate-700/60 hover:bg-emerald-600 flex items-center justify-center text-gray-500 hover:text-white transition-colors cursor-pointer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    registerContact(lead.id); // registra contato — zera contador de horas
-                    window.open(`tel:${lead.phone?.replace(/\D/g, "")}`, "_blank");
-                  }}
-                  title="Ligar"
-                >
-                  <Phone className="w-3.5 h-3.5" />
-                </div>
+                {lead.phone && (
+                  <a
+                    className="h-7 w-7 rounded-lg bg-slate-700/60 hover:bg-emerald-600 flex items-center justify-center text-gray-500 hover:text-white transition-colors cursor-pointer"
+                    href={`tel:+${lead.phone.replace(/\D/g, "")}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      registerContact(lead.id);
+                    }}
+                    title="Ligar"
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                  </a>
+                )}
               </div>
             </div>
 
@@ -340,6 +372,47 @@ const LeadList = ({
                 <AlertTriangle className="w-3 h-3" /> Sem tarefa agendada
               </div>
             )}
+
+            {/* Botão Avançar → fase seguinte (só em modo expandido) */}
+            {!compact && (() => {
+              const next = NEXT_STATUS[lead.status as LeadStatus];
+              if (!next) return null;
+              const isPending = pendingAdvance === lead.id;
+              const isAdvancing = advanceMutation.isPending && pendingAdvance === lead.id;
+              return (
+                <div className="mt-2 flex items-center gap-1.5">
+                  {isPending ? (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          advanceMutation.mutate({ leadId: lead.id, status: next.status });
+                        }}
+                        disabled={isAdvancing}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black transition-all active:scale-95 disabled:opacity-60"
+                      >
+                        <Check className="w-3 h-3" />
+                        {isAdvancing ? "Avançando..." : `Confirmar → ${next.label}`}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setPendingAdvance(null); }}
+                        className="h-7 w-7 flex items-center justify-center rounded-lg bg-slate-700/60 text-gray-500 hover:text-white hover:bg-slate-600 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={(e) => triggerAdvance(e, lead.id)}
+                      className="flex items-center gap-1 text-[10px] font-bold text-gray-600 hover:text-indigo-400 transition-colors px-1 py-0.5 rounded hover:bg-indigo-500/8"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                      Avançar → {next.label}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Tempo parado */}
             {hoursAgo > 0 && (

@@ -129,6 +129,7 @@ serve(async (req) => {
       .neq('status', 'EXCLUDED')
       .neq('status', 'CONCLUDED')
       .neq('status', 'VISIT_SCHEDULED')
+      .neq('status', 'DOCS_REQUESTED')
       .limit(30);
 
     let criticalProcessed = 0;
@@ -199,6 +200,7 @@ serve(async (req) => {
       .neq('status', 'EXCLUDED')
       .neq('status', 'CONCLUDED')
       .neq('status', 'VISIT_SCHEDULED')
+      .neq('status', 'DOCS_REQUESTED')
       .limit(30);
 
     console.log(`[B2] ${coldLeads?.length || 0} leads frios encontrados`);
@@ -258,7 +260,7 @@ serve(async (req) => {
     console.log(`[followup_scheduler] Bloco 2 — Frios: ${coldProcessed}`);
 
     // ── BLOCO 3: Cadências existentes ─────────────────────────────────────────
-    const TERMINAL_STATUSES = ['CONCLUDED', 'ABANDONED', 'EXCLUDED'];
+    const TERMINAL_STATUSES = ['CONCLUDED', 'ABANDONED', 'EXCLUDED', 'VISIT_SCHEDULED', 'DOCS_REQUESTED'];
 
     const { data: executions } = await supabase
       .from('cadence_executions')
@@ -385,11 +387,11 @@ serve(async (req) => {
 
     console.log(`[B4] Templates disponíveis — welcome: ${activeWelcome.length}, cadence steps: ${cadenceTextSteps.length}`);
 
-    // Busca leads com last_interaction_at antigo
+    // Busca leads com last_interaction_at antigo (excluindo DOCS_REQUESTED — lead em fase de documentação)
     const { data: staleWithInteraction } = await supabase
       .from('leads')
-      .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, welcome_responded_at, broker:profiles!broker_id(first_name, bot_instance_id)')
-      .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
+      .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, welcome_responded_at, last_broker_whatsapp_at, last_lead_response_at, broker:profiles!broker_id(first_name, bot_instance_id)')
+      .in('status', ['NEW', 'IN_PROGRESS'])
       .lt('last_interaction_at', thresholdAgo)
       .not('broker_id', 'is', null)
       .limit(30);
@@ -397,8 +399,8 @@ serve(async (req) => {
     // Busca leads sem last_interaction_at (nunca registrado) e criados há mais de X horas
     const { data: staleWithoutInteraction } = await supabase
       .from('leads')
-      .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, welcome_responded_at, broker:profiles!broker_id(first_name, bot_instance_id)')
-      .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
+      .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, welcome_responded_at, last_broker_whatsapp_at, last_lead_response_at, broker:profiles!broker_id(first_name, bot_instance_id)')
+      .in('status', ['NEW', 'IN_PROGRESS'])
       .is('last_interaction_at', null)
       .lt('created_at', thresholdAgo)
       .not('broker_id', 'is', null)
@@ -427,6 +429,25 @@ serve(async (req) => {
       // Anti-spam: máximo 1 follow-up automático a cada MIN_FOLLOWUP_INTERVAL_HOURS
       const alreadySent = await hasRecentAutoFollowup(supabase, lead.id, MIN_FOLLOWUP_INTERVAL_HOURS);
       if (alreadySent) { console.log(`[B4] ANTISPAM ${lead.id}`); continue; }
+
+      // ── Janelas de silêncio: não perturbar conversa ativa ─────────────────────
+      // Corretor falou há menos de 6h → não enviar
+      if (lead.last_broker_whatsapp_at) {
+        const brokerSentMs = new Date(lead.last_broker_whatsapp_at).getTime();
+        if (nowMs - brokerSentMs < 6 * 3600000) {
+          console.log(`[B4] SILÊNCIO (corretor <6h) ${lead.id} (${lead.name})`);
+          continue;
+        }
+      }
+
+      // Lead respondeu há menos de 2h → não enviar
+      if (lead.last_lead_response_at) {
+        const leadRepliedMs = new Date(lead.last_lead_response_at).getTime();
+        if (nowMs - leadRepliedMs < 2 * 3600000) {
+          console.log(`[B4] SILÊNCIO (lead <2h) ${lead.id} (${lead.name})`);
+          continue;
+        }
+      }
 
       const hoursStale = (nowMs - new Date(lead.last_interaction_at || lead.created_at).getTime()) / 3600000;
       const brokerName = broker.first_name || 'nossa equipe';
@@ -629,6 +650,30 @@ serve(async (req) => {
       console.log(`[followup_scheduler] Bloco 13 — Scoring: ${scoringCount}`);
     } catch (e: any) {
       console.error('[followup_scheduler] Bloco 13 error:', e.message);
+    }
+
+    // ── BLOCO 15: Acompanhamento de Visitas ───────────────────────────────────
+    let visitasTotal = 0;
+    try {
+      const { data: vr } = await supabase.functions.invoke('agente-visitas', { body: {} });
+      visitasTotal = vr?.total ?? 0;
+      if (visitasTotal > 0) {
+        console.log(`[followup_scheduler] Bloco 15 — Visitas: f1=${vr?.fase1} f2=${vr?.fase2} f3=${vr?.fase3}`);
+      }
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 15 error:', e.message);
+    }
+
+    // ── BLOCO 16: Acompanhamento de Documentação ─────────────────────────────
+    let docsTotal = 0;
+    try {
+      const { data: dr } = await supabase.functions.invoke('agente-documentacao', { body: {} });
+      docsTotal = dr?.total ?? 0;
+      if (docsTotal > 0) {
+        console.log(`[followup_scheduler] Bloco 16 — Docs: f1=${dr?.fase1} f2=${dr?.fase2} f3=${dr?.fase3}`);
+      }
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 16 error:', e.message);
     }
 
     const total = criticalProcessed + coldProcessed + cadenceProcessed + staleProcessed + sentinelaProcessed + cerebroProcessed;

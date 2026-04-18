@@ -154,26 +154,30 @@ serve(async (req) => {
     }
 
     if (!chosenBroker) {
-      console.log('[DISTRIBUTION] Fallback final: distribuindo pelo corretor com menos leads hoje');
-      const today = new Date().toISOString().split('T')[0];
-      const { data: brokers } = await supabase
-        .from('profiles')
-        .select('id, first_name, last_name, phone, team_id, bot_instance_id, manager_id, automation_settings, evolution_instance')
-        .eq('lead_assignment_enabled', true)
-        .eq('role', 'BROKER');
+      // Fallback RESTRITO À FILA: todos os corretores da fila estavam ausentes.
+      // Nunca busca corretores de outras filas/equipes — evita atribuição cruzada.
+      if (chosenQueue && chosenQueue.broker_ids?.length > 0) {
+        console.log(`[DISTRIBUTION] Fallback (fila ${chosenQueue.name}): todos ausentes — atribuindo ao corretor com menos leads na fila`);
+        const today = new Date().toISOString().split('T')[0];
+        const { data: queueBrokers } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, phone, team_id, bot_instance_id, manager_id, automation_settings, evolution_instance')
+          .in('id', chosenQueue.broker_ids)
+          .eq('role', 'BROKER');
 
-      if (brokers?.length > 0) {
-        const counts = await Promise.all(brokers.map(async (b) => {
-          const { count } = await supabase
-            .from('leads')
-            .select('id', { count: 'exact', head: true })
-            .eq('broker_id', b.id)
-            .gte('created_at', today + 'T00:00:00Z');
-          return { broker: b, count: count || 0 };
-        }));
-        counts.sort((a, b) => a.count - b.count);
-        chosenBroker = counts[0].broker;
-        console.log(`[DISTRIBUTION] Fallback escolheu ${chosenBroker.first_name} (${counts[0].count} leads hoje)`);
+        if (queueBrokers && queueBrokers.length > 0) {
+          const counts = await Promise.all(queueBrokers.map(async (b: any) => {
+            const { count } = await supabase
+              .from('leads')
+              .select('id', { count: 'exact', head: true })
+              .eq('broker_id', b.id)
+              .gte('created_at', today + 'T00:00:00Z');
+            return { broker: b, count: count || 0 };
+          }));
+          counts.sort((a: any, b: any) => a.count - b.count);
+          chosenBroker = counts[0].broker;
+          console.log(`[DISTRIBUTION] Fallback (fila) escolheu ${chosenBroker.first_name} (${counts[0].count} leads hoje)`);
+        }
       }
     }
 

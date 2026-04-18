@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
@@ -25,7 +24,6 @@ const WOLF_STYLES = `
 
 export default function ForcePasswordChange() {
   const { user, signOut } = useAuth();
-  const navigate = useNavigate();
 
   const [password, setPassword]     = useState("");
   const [confirm, setConfirm]       = useState("");
@@ -73,9 +71,9 @@ export default function ForcePasswordChange() {
       if (authError) throw authError;
 
       toast.success("Senha atualizada com sucesso! Bem-vindo ao sistema.");
-      // O redirect é feito pelo efeito de role no AuthProvider.
-      // navigate + reload explícito causavam tela preta e race condition.
-      navigate("/dashboard", { replace: true });
+      // O redirect é feito pelo efeito de role no AuthProvider quando mustChangePassword muda para false.
+      // Não chamar navigate aqui — evita race condition onde ProtectedBrokerRoute
+      // ainda vê mustChangePassword=true e redireciona de volta para esta tela.
     } catch (err: any) {
       toast.error("Erro ao atualizar senha: " + err.message);
     } finally {
