@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Trophy, Zap, ShieldCheck, Flame } from "lucide-react";
+import { Trophy, Zap, ShieldCheck, Flame, Calendar, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 import { useEffect, useState } from "react";
@@ -40,18 +40,55 @@ export function AchievementTicker() {
     refetchInterval: 5000,
   });
 
+  // Período relevante: últimas 48h para eventos de pipeline + mês para contagem de vendas
+  const since48h = useMemo(() => new Date(Date.now() - 48 * 3600000).toISOString(), []);
+  const startOfMonth = useMemo(() => {
+    const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d.toISOString();
+  }, []);
+
   // Vendas do mês atual com contagem por corretor
   const { data: recentSales = [] } = useQuery({
     queryKey: ["ticker-sales-month"],
     queryFn: async () => {
-      const som = new Date(); som.setDate(1); som.setHours(0, 0, 0, 0);
       const { data } = await supabase
         .from("leads")
         .select("id, broker_id, last_interaction_at, profiles:broker_id(first_name)")
         .eq("status", "CONCLUDED")
-        .gte("last_interaction_at", som.toISOString())
+        .gte("last_interaction_at", startOfMonth)
         .order("last_interaction_at", { ascending: false })
         .limit(20);
+      return data || [];
+    },
+    refetchInterval: 30000,
+  });
+
+  // Visitas agendadas nas últimas 48h
+  const { data: recentVisits = [] } = useQuery({
+    queryKey: ["ticker-visits-48h"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("leads")
+        .select("id, broker_id, last_interaction_at, profiles:broker_id(first_name)")
+        .eq("status", "VISIT_SCHEDULED")
+        .gte("last_interaction_at", since48h)
+        .order("last_interaction_at", { ascending: false })
+        .limit(10);
+      return data || [];
+    },
+    refetchInterval: 30000,
+  });
+
+  // Documentação conseguida nas últimas 48h
+  const { data: recentDocs = [] } = useQuery({
+    queryKey: ["ticker-docs-48h"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("leads")
+        .select("id, broker_id, last_interaction_at, profiles:broker_id(first_name)")
+        .eq("status", "DOCS_REQUESTED")
+        .gte("last_interaction_at", since48h)
+        .order("last_interaction_at", { ascending: false })
+        .limit(10);
       return data || [];
     },
     refetchInterval: 30000,
@@ -66,7 +103,7 @@ export function AchievementTicker() {
     return map;
   }, [recentSales]);
 
-  // Itens do ticker: vendas recentes + prêmios, mesclados por data
+  // Itens do ticker: vendas + visitas + docs + prêmios, mesclados por data
   const tickerItems = useMemo(() => {
     const sales = recentSales.slice(0, 6).map((s: any) => ({
       id: `sale-${s.id}`,
@@ -75,6 +112,20 @@ export function AchievementTicker() {
       brokerId: s.broker_id,
       date: s.last_interaction_at,
     }));
+    const visits = recentVisits.map((v: any) => ({
+      id: `visit-${v.id}`,
+      type: 'VISIT' as const,
+      name: (v.profiles as any)?.first_name || "Corretor",
+      brokerId: v.broker_id,
+      date: v.last_interaction_at,
+    }));
+    const docs = recentDocs.map((d: any) => ({
+      id: `docs-${d.id}`,
+      type: 'DOCS' as const,
+      name: (d.profiles as any)?.first_name || "Corretor",
+      brokerId: d.broker_id,
+      date: d.last_interaction_at,
+    }));
     const prizes = achievements.map((a: any) => ({
       id: a.id,
       type: 'PRIZE' as const,
@@ -82,10 +133,10 @@ export function AchievementTicker() {
       value: a.reward_value,
       date: a.created_at,
     }));
-    return [...sales, ...prizes]
+    return [...sales, ...visits, ...docs, ...prizes]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 10);
-  }, [recentSales, achievements]);
+      .slice(0, 14);
+  }, [recentSales, recentVisits, recentDocs, achievements]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -119,6 +170,24 @@ export function AchievementTicker() {
       <>MAIS UMA VENDA PARA <NeonName name={item.name} />! TOTAL: {count} NO MÊS. QUEM É O PRÓXIMO?</>,
     ];
     return msgs[item.brokerId.charCodeAt(0) % msgs.length];
+  };
+
+  const getVisitMessage = (item: { name: string; brokerId: string }) => {
+    const msgs = [
+      <><NeonName name={item.name} /> AGENDOU VISITA! 🏠 A MÁQUINA ESTÁ GIRANDO!</>,
+      <>VISITA MARCADA POR <NeonName name={item.name} />! 🏠 UM PASSO MAIS PERTO DO FECHAMENTO.</>,
+      <><NeonName name={item.name} /> MARCOU A VISITA! 🏠 CONCORRÊNCIA NA CORRIDA — E VOCÊ?</>,
+    ];
+    return msgs[item.brokerId.charCodeAt(0) % msgs.length];
+  };
+
+  const getDocsMessage = (item: { name: string; brokerId: string }) => {
+    const msgs = [
+      <><NeonName name={item.name} /> CONSEGUIU OS DOCUMENTOS! 📄 VENDA PRATICAMENTE GARANTIDA.</>,
+      <>DOCS ENTREGUES PARA <NeonName name={item.name} />! 📄 ESSE NEGÓCIO VAI FECHAR.</>,
+      <><NeonName name={item.name} /> TEM OS PAPÉIS NA MÃO! 📄 MAIS UMA VENDA A CAMINHO.</>,
+    ];
+    return msgs[item.brokerId.charCodeAt(1) % msgs.length];
   };
 
   const getPrizeMessage = (item: { name: string; value: number; brokerId?: string }) => {
@@ -188,17 +257,29 @@ export function AchievementTicker() {
           ) : (
             [...tickerItems, ...tickerItems].map((item, idx) => {
               const isFresh = differenceInMinutes(new Date(), new Date(item.date)) < 5;
+              const TypeIcon =
+                item.type === 'SALE'  ? Trophy :
+                item.type === 'VISIT' ? Calendar :
+                item.type === 'DOCS'  ? FileText :
+                Zap;
+              const iconColor =
+                item.type === 'SALE'  ? "text-amber-400" :
+                item.type === 'VISIT' ? "text-emerald-400" :
+                item.type === 'DOCS'  ? "text-blue-400" :
+                "text-indigo-400";
               return (
                 <div key={`${item.id}-${idx}`} className={cn(
-                  "flex items-center gap-4 py-1.5 px-5 rounded-2xl border transition-all",
+                  "flex items-center gap-3 py-1.5 px-5 rounded-2xl border transition-all",
                   isFresh
-                    ? "bg-indigo-600/20 border-indigo-500/50 animate-pulse-glow shadow-[0_0_20px_rgba(99,102,241,0.2)]"
+                    ? "bg-indigo-600/20 border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.2)]"
                     : "bg-white/5 border-white/5"
                 )}>
+                  <TypeIcon className={cn("h-3.5 w-3.5 shrink-0", iconColor)} />
                   <span className={cn("font-bold text-xs sm:text-sm tracking-tight uppercase flex items-center", isFresh ? "text-white" : "text-slate-400")}>
-                    {item.type === 'SALE'
-                      ? getSaleMessage(item as any)
-                      : getPrizeMessage(item as any)}
+                    {item.type === 'SALE'  ? getSaleMessage(item as any)  :
+                     item.type === 'VISIT' ? getVisitMessage(item as any) :
+                     item.type === 'DOCS'  ? getDocsMessage(item as any)  :
+                     getPrizeMessage(item as any)}
                   </span>
                   {isFresh && (
                     <div className="flex items-center gap-1 bg-indigo-500 px-2 py-0.5 rounded-lg border border-indigo-400 shadow-lg">
