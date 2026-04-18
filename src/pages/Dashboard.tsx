@@ -34,6 +34,8 @@ import { DailyMissionsPanel } from "@/components/gamification/DailyMissionsPanel
 import { useRivalWatch } from "@/hooks/useRivalWatch";
 import { useGamification } from "@/hooks/useGamification";
 import { RadarAcao } from "@/components/broker/RadarAcao";
+import { LeadsQuentes } from "@/components/broker/LeadsQuentes";
+import { PulsoDia } from "@/components/broker/PulsoDia";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 import { DailyBriefing } from "@/components/broker/DailyBriefing";
 
@@ -560,56 +562,24 @@ const Dashboard = () => {
         <main className="flex-1 overflow-y-auto p-3 pb-24 space-y-3">
           {activeTab === "mission" && (
             <>
-              {/* 1. Radar — ação imediata: o corretor sabe o que fazer SEM PENSAR */}
+              {/* ── Zona 1: O QUE FAZER AGORA ─────────────────────────────────── */}
               <RadarAcao onSelectLead={handleLeadSelect} botActiveLeadIds={botActiveLeadIds} />
 
-              {/* 2. Pipeline — acesso rápido à fila por status */}
+              {/* ── Zona 3: PULSO DO DIA (3 números) ─────────────────────────── */}
+              {isBroker && <PulsoDia />}
+
+              {/* ── Zona 2: LEADS QUENTES (cards com calor + ações inline) ─────── */}
+              {isBroker && <LeadsQuentes limit={5} />}
+
+              {/* ── Pipeline — acesso rápido por status (filtro) ─────────────── */}
               <div className="grid grid-cols-2 gap-2">
-                <PipelineStat label="Novos"        count={stats.new}         active={filter === "NEW"             && showLeadList} onClick={() => handlePipelineClick("NEW")}             color="sky"     icon={Sparkles} />
-                <PipelineStat label="Atend."       count={stats.in_progress} active={filter === "IN_PROGRESS"     && showLeadList} onClick={() => handlePipelineClick("IN_PROGRESS")}     color="indigo"  icon={Users2} />
-                <PipelineStat label="Visita"       count={stats.visits}      active={filter === "VISIT_SCHEDULED" && showLeadList} onClick={() => handlePipelineClick("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
-                <PipelineStat label="Docs"         count={stats.docs}        active={filter === "DOCS_REQUESTED"  && showLeadList} onClick={() => handlePipelineClick("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
+                <PipelineStat label="Novos"  count={stats.new}         active={filter === "NEW"             && showLeadList} onClick={() => handlePipelineClick("NEW")}             color="sky"     icon={Sparkles} />
+                <PipelineStat label="Atend." count={stats.in_progress} active={filter === "IN_PROGRESS"     && showLeadList} onClick={() => handlePipelineClick("IN_PROGRESS")}     color="indigo"  icon={Users2} />
+                <PipelineStat label="Visita" count={stats.visits}      active={filter === "VISIT_SCHEDULED" && showLeadList} onClick={() => handlePipelineClick("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
+                <PipelineStat label="Docs"   count={stats.docs}        active={filter === "DOCS_REQUESTED"  && showLeadList} onClick={() => handlePipelineClick("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
               </div>
 
-              {/* 3. Strip "mais leads aguardando" — visível mesmo quando RadarAcao já mostra um */}
-              {(() => {
-                const total = stats.new + stats.in_progress + stats.visits + stats.docs;
-                if (total === 0) return null;
-                const parts: string[] = [];
-                if (stats.new > 0)         parts.push(`${stats.new} novo${stats.new > 1 ? 's' : ''}`);
-                if (stats.in_progress > 0) parts.push(`${stats.in_progress} em atend.`);
-                if (stats.visits > 0)      parts.push(`${stats.visits} visita${stats.visits > 1 ? 's' : ''}`);
-                if (stats.docs > 0)        parts.push(`${stats.docs} doc${stats.docs > 1 ? 's' : ''}`);
-                return (
-                  <button
-                    onClick={() => { setShowLeadList(true); setFilter("ALL"); setActiveTab("lead"); }}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-indigo-500/8 border border-indigo-500/20 hover:bg-indigo-500/15 hover:border-indigo-500/35 transition-all active:scale-[0.98]"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-                      <span className="text-xs font-black text-indigo-300">
-                        {total} lead{total > 1 ? 's' : ''} aguardando
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-indigo-400/60">{parts.join(' · ')}</span>
-                      <ChevronRight className="w-3.5 h-3.5 text-indigo-400/50" />
-                    </div>
-                  </button>
-                );
-              })()}
-
-              {/* 4. Briefing diário */}
-              {isBroker && user?.id && (
-                <DailyBriefing
-                  leads={leads}
-                  iaRepliedLeadIds={iaRepliedLeadIds}
-                  userId={user.id}
-                  onFilter={(f) => handlePipelineClick(f as any)}
-                />
-              )}
-
-              {/* 4. Campanha + missão */}
+              {/* ── Zona 4: GAMIFICAÇÃO AMBIENT ──────────────────────────────── */}
               <CampaignHeroBanner leads={leads} users={profiles} />
               <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
             </>
@@ -908,10 +878,13 @@ const Dashboard = () => {
             {/* ── Coluna esquerda ──────────────────────────────────────────────── */}
             <div className="lg:col-span-4 flex flex-col gap-3">
 
-              {/* 1. Radar — próxima ação urgente: primeiro elemento visível */}
+              {/* Zona 1: O QUE FAZER AGORA */}
               <RadarAcao onSelectLead={handleLeadSelect} botActiveLeadIds={botActiveLeadIds} />
 
-              {/* 2. Pipeline — acesso à fila por status */}
+              {/* Zona 3: PULSO DO DIA */}
+              {isBroker && <PulsoDia />}
+
+              {/* Pipeline — acesso à fila por status */}
               <div>
                 <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest mb-2 px-0.5">Pipeline</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -922,23 +895,21 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* 3. Missão do dia — agenda */}
+              {/* Zona 4: Gamificação ambient — Missão do dia */}
               <div className="bg-slate-800/40 border border-gray-700/40 rounded-2xl p-4 flex-1">
                 <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
               </div>
             </div>
 
-            {/* ── Coluna direita — sticky: gruda no topo enquanto a página rola ── */}
+            {/* ── Coluna direita ────────────────────────────────────────────────── */}
             <div className="lg:col-span-8 self-start sticky top-0">
               {selectedLeadId ? (
                 /* Lead aberto: fila lateral + detalhe */
                 <div className="flex gap-3" style={{ height: "calc(100vh - 58px)" }}>
-                  {/* Lista compacta lateral — todos os leads */}
                   <div className="w-[240px] shrink-0 flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden">
                     <div className="px-3 py-2 border-b border-gray-700/40 flex items-center justify-between shrink-0">
                       <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Fila</span>
-                      <button
-                        onClick={() => { setSelectedLeadId(null); setShowLeadList(true); }}
+                      <button onClick={() => { setSelectedLeadId(null); setShowLeadList(true); }}
                         className="text-gray-600 hover:text-gray-400 transition-colors p-0.5 rounded">
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -947,31 +918,40 @@ const Dashboard = () => {
                       <LeadList selectedLeadId={selectedLeadId} onSelectLead={handleLeadSelect} currentUserRole={role} filter="ALL" compact iaRepliedLeadIds={iaRepliedLeadIds} botActiveLeadIds={botActiveLeadIds} redistributionThresholdH={redistributionThresholdH} />
                     </div>
                   </div>
-                  {/* Painel de detalhe */}
                   <div className="flex-1 min-w-0 rounded-2xl overflow-hidden border border-gray-700/40">
                     <LeadDetail leadId={selectedLeadId} onLeadUpdated={() => {}} leadQueue={sortedLeadIds} onNavigateLead={handleLeadSelect} />
                   </div>
                 </div>
               ) : (
-                /* Lista por status — scroll interno, cabeçalho fixo */
-                <div className="flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden" style={{ height: "calc(100vh - 58px)" }}>
-                  <div className="px-4 py-3 border-b border-gray-700/40 flex items-center justify-between shrink-0 bg-slate-800/60">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-                      <h3 className="text-xs font-black text-gray-300 uppercase tracking-widest">{filterLabel}</h3>
-                      <Badge className="bg-indigo-500/15 text-indigo-400 border-indigo-500/30 text-[10px] font-black">
-                        {filteredCount}
-                      </Badge>
+                /* Zona 2: LEADS QUENTES + lista completa por status */
+                <div className="flex flex-col gap-3" style={{ maxHeight: "calc(100vh - 58px)", overflowY: "auto" }}>
+                  {/* Zona 2: cards com calor + ações inline */}
+                  {isBroker && (
+                    <div className="bg-slate-800/40 border border-gray-700/40 rounded-2xl p-3">
+                      <LeadsQuentes limit={6} />
                     </div>
-                    {filter !== "ALL" && (
-                      <button onClick={() => setFilter("ALL")}
-                        className="text-gray-600 hover:text-gray-300 text-[10px] font-bold transition-colors px-2 py-1 rounded-lg hover:bg-slate-700/60 flex items-center gap-1">
-                        <X className="w-3 h-3" /> Ver Todos
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-y-auto p-3">
-                    <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact iaRepliedLeadIds={iaRepliedLeadIds} botActiveLeadIds={botActiveLeadIds} redistributionThresholdH={redistributionThresholdH} />
+                  )}
+
+                  {/* Lista completa por status (filtro de pipeline) */}
+                  <div className="flex flex-col bg-slate-800/40 border border-gray-700/40 rounded-2xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-gray-700/40 flex items-center justify-between shrink-0 bg-slate-800/60">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                        <h3 className="text-xs font-black text-gray-300 uppercase tracking-widest">{filterLabel}</h3>
+                        <Badge className="bg-indigo-500/15 text-indigo-400 border-indigo-500/30 text-[10px] font-black">
+                          {filteredCount}
+                        </Badge>
+                      </div>
+                      {filter !== "ALL" && (
+                        <button onClick={() => setFilter("ALL")}
+                          className="text-gray-600 hover:text-gray-300 text-[10px] font-bold transition-colors px-2 py-1 rounded-lg hover:bg-slate-700/60 flex items-center gap-1">
+                          <X className="w-3 h-3" /> Ver Todos
+                        </button>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <LeadList selectedLeadId={null} onSelectLead={handleLeadSelect} currentUserRole={role} filter={filter} compact iaRepliedLeadIds={iaRepliedLeadIds} botActiveLeadIds={botActiveLeadIds} redistributionThresholdH={redistributionThresholdH} />
+                    </div>
                   </div>
                 </div>
               )}
