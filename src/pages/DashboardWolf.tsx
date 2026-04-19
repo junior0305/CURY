@@ -23,10 +23,11 @@ import type { User } from "@/types/user";
 import { toast } from "sonner";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
-import { RadarAcao } from "@/components/broker/RadarAcao";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import LeadForm from "@/components/broker/LeadForm";
 import { MetaStrip } from "@/components/broker/MetaStrip";
+import { FocusModeCard } from "@/components/broker/FocusModeCard";
+import { AchievementTicker } from "@/components/dashboard/AchievementTicker";
 
 /* ─────────────────────────────────────────────
    STYLES
@@ -299,45 +300,6 @@ async function fetchBrokerRanking(): Promise<RankItem[]> {
 /* ─────────────────────────────────────────────
    TICKER — usa conquistas reais via realtime
 ───────────────────────────────────────────── */
-const TICKER_FALLBACK = [
-  { icon:"⚡", text:"Atenda os leads novos o quanto antes — primeiros 5min são ouro!", color:"#00D4FF" },
-  { icon:"🎯", text:"Meta: responder todo lead em menos de 2 minutos",               color:"#10B981" },
-  { icon:"🔥", text:"Consistência bate talento — foque no processo diário",           color:"#F97316" },
-  { icon:"🚀", text:"Quem agenda visita primeiro fecha mais — agende hoje",           color:"#818CF8" },
-];
-
-function AchievementTicker({ items, highlight }: { items: typeof TICKER_FALLBACK; highlight: boolean }) {
-  const doubled = [...items, ...items];
-  return (
-    <div className="relative overflow-hidden flex items-center shrink-0" style={{
-      height: 38,
-      background: highlight
-        ? "linear-gradient(90deg,rgba(245,158,11,.2),rgba(245,158,11,.08),rgba(245,158,11,.2))"
-        : "var(--crm-ticker-bg, rgba(5,8,18,.9))",
-      borderTop: "1px solid rgba(0,212,255,.15)",
-      borderBottom: "1px solid rgba(0,212,255,.15)",
-      boxShadow: highlight ? "0 0 20px rgba(245,158,11,.25)" : "none",
-      transition: "all .5s ease",
-    }}>
-      <div className="absolute left-0 top-0 bottom-0 z-10 flex items-center px-3 gap-2 shrink-0"
-        style={{ background: "linear-gradient(90deg,var(--crm-ticker-fade,#080B14) 65%,transparent)", minWidth: 120 }}>
-        <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0" style={{ filter: "drop-shadow(0 0 4px #F59E0B)" }} />
-        <span className="wolf-display text-[9px] font-bold tracking-widest whitespace-nowrap" style={{ color: "#F59E0B" }}>WALL OF FAME</span>
-      </div>
-      <div className="ticker-track flex gap-10 pl-32 items-center whitespace-nowrap">
-        {doubled.map((item, i) => (
-          <div key={i} className="flex items-center gap-2 shrink-0">
-            <span className="text-sm">{item.icon}</span>
-            <span className="text-xs font-bold" style={{ color: item.color, textShadow: `0 0 8px ${item.color}60` }}>{item.text}</span>
-            <span className="text-slate-700 text-xs mx-2">◆</span>
-          </div>
-        ))}
-      </div>
-      <div className="absolute right-0 top-0 bottom-0 w-12 pointer-events-none"
-        style={{ background: "linear-gradient(270deg,var(--crm-ticker-fade,#080B14),transparent)" }} />
-    </div>
-  );
-}
 
 /* ─────────────────────────────────────────────
    LOGO
@@ -426,9 +388,7 @@ export default function DashboardWolf() {
   const [confetti, setConfetti]         = useState(false);
   const [rankFlash, setRankFlash]       = useState(false);
   const [saleToast, setSaleToast]       = useState<string | null>(null);
-  const [tickerHL, setTickerHL]         = useState(false);
   const [dismissed, setDismissed]       = useState<Set<string>>(new Set());
-  const [tickerItems, setTickerItems]   = useState(TICKER_FALLBACK);
   const [mutating, setMutating]         = useState(false);
   const [humanMode, setHumanMode]       = useState(false);
   const [humanModeLoading, setHumanModeLoading] = useState(false);
@@ -583,10 +543,6 @@ export default function DashboardWolf() {
         qc.invalidateQueries({ queryKey: ["wolfLeads"] });
         if (!isMuted) playSound("NEW_LEAD");
         toast.info(`⚡ Novo Lead: ${lead.name}`, { description: "Atenda agora — primeiros minutos são decisivos!" });
-        setTickerItems(prev => [
-          { icon: "⚡", text: `NOVO LEAD: ${lead.name} — atender agora!`, color: "#00D4FF" },
-          ...prev.slice(0, 3),
-        ]);
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -651,15 +607,9 @@ export default function DashboardWolf() {
     if (stepId === "CONCLUDED") {
       setConfetti(true);
       setSaleToast(activeLead.name);
-      setTickerHL(true);
       if (!isMuted) playSound("SALE");
-      setTickerItems(prev => [
-        { icon: "🏆", text: `${myName} fechou negócio com ${activeLead.name}! 🎉`, color: "#F59E0B" },
-        ...prev.slice(0, 3),
-      ]);
       setTimeout(() => setConfetti(false), 3000);
       setTimeout(() => setSaleToast(null), 4500);
-      setTimeout(() => setTickerHL(false), 5000);
     }
 
     try {
@@ -853,8 +803,8 @@ export default function DashboardWolf() {
           </div>
         </header>
 
-        {/* ── TICKER ── */}
-        <AchievementTicker items={tickerItems} highlight={tickerHL} />
+        {/* ── TICKER — eventos reais do banco ── */}
+        <AchievementTicker />
 
         {/* ── META DO MÊS ── */}
         {isBroker && <MetaStrip />}
@@ -1145,9 +1095,6 @@ export default function DashboardWolf() {
               })}
             </div>
 
-            {/* ── RADAR DE AÇÃO ── */}
-            <RadarAcao onSelectLead={(id) => { const lead = filteredLeads.find(l => l.id === id); if (lead) handleSelect(lead); }} botActiveLeadIds={botActiveLeadIds} />
-
             {/* ── LEAD QUEUE ── */}
             <div className="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5 min-h-0">
               <AnimatePresence>
@@ -1223,6 +1170,14 @@ export default function DashboardWolf() {
 
           {/* RIGHT — ARENA */}
           <div className={`flex-col gap-3 overflow-y-auto min-h-0 pr-0.5 w-full md:flex-[40] ${mobileTab === "arena" ? "flex" : "hidden md:flex"}`}>
+
+            {/* ── O QUE FAZER AGORA ── */}
+            {isBroker && (
+              <FocusModeCard
+                onSelectLead={(id) => { const lead = filteredLeads.find(l => l.id === id); if (lead) handleSelect(lead); }}
+                botActiveLeadIds={botActiveLeadIds}
+              />
+            )}
 
             <div className="flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
