@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { Lead, ExclusionReason, LeadStatus } from "@/types/lead";
+import { Lead, ExclusionReason, LeadStatus, LostReason, TipoTrabalho } from "@/types/lead";
 
 const mapLeadFromDB = (l: any): Lead => ({
   id: l.id,
@@ -15,6 +15,11 @@ const mapLeadFromDB = (l: any): Lead => ({
   lastLeadResponseAt: l.last_lead_response_at ?? null,
   lastBrokerWhatsappAt: l.last_broker_whatsapp_at ?? null,
   exclusionReason: l.exclusion_reason as ExclusionReason,
+  // Campos MCMV
+  rendaDeclarada: l.renda_declarada ?? null,
+  tipoTrabalho: (l.tipo_trabalho ?? null) as TipoTrabalho,
+  lostReason: (l.lost_reason ?? null) as LostReason,
+  visitaConfirmada: l.visita_confirmada ?? null,
 });
 
 // ─── XP por transição de status ───────────────────────────────────────────────
@@ -22,7 +27,8 @@ const mapLeadFromDB = (l: any): Lead => ({
 const XP_BY_STATUS: Partial<Record<LeadStatus, number>> = {
   IN_PROGRESS:      10,   // Primeiro contato feito
   VISIT_SCHEDULED:  30,   // Visita agendada
-  DOCS_REQUESTED:   50,   // Documentação solicitada
+  VISITA_REALIZADA: 50,   // Lead compareceu ao plantão 🏠
+  DOCS_REQUESTED:   80,   // Documentação entregue
   CONCLUDED:        200,  // Venda fechada 🏆
 };
 
@@ -30,6 +36,7 @@ const XP_BY_STATUS: Partial<Record<LeadStatus, number>> = {
 const MISSION_ACTION_BY_STATUS: Partial<Record<LeadStatus, string>> = {
   IN_PROGRESS:      "CONTACT_LEADS",
   VISIT_SCHEDULED:  "SCHEDULE_VISITS",
+  VISITA_REALIZADA: "SCHEDULE_VISITS",
   CONCLUDED:        "CLOSE_SALES",
 };
 
@@ -281,6 +288,13 @@ export const registerBrokerContact = async (leadId: string) => {
     .eq("id", leadId);
 };
 
+export const confirmLeadVisit = async (leadId: string, confirmada: boolean) => {
+  await supabase
+    .from("leads")
+    .update({ visita_confirmada: confirmada, last_interaction_at: new Date().toISOString() })
+    .eq("id", leadId);
+};
+
 export const updateLeadBroker = async (leadId: string, brokerId: string) => {
   const now = new Date().toISOString();
   const { error } = await supabase
@@ -299,15 +313,19 @@ export const updateLeadBroker = async (leadId: string, brokerId: string) => {
 export const updateLeadStatus = async (
   leadId: string,
   status: LeadStatus,
-  exclusionReason: ExclusionReason = null
+  exclusionReason: ExclusionReason = null,
+  lostReason: LostReason = null,
 ) => {
   const payload: any = {
     status,
     last_interaction_at: new Date().toISOString(),
   };
 
-  if (status === "EXCLUDED" || status === "ABANDONED") {
+  if (status === "EXCLUDED") {
     payload.exclusion_reason = exclusionReason;
+  }
+  if (status === "ABANDONED" && lostReason) {
+    payload.lost_reason = lostReason;
   }
 
   // 1. Buscar dados do lead ANTES de atualizar (precisamos do broker_id e nome)

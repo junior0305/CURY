@@ -61,6 +61,27 @@ serve(async (req) => {
     const message = sourceData.message || sourceData.mensagem || sourceData.Interesse || '';
     const tag = sourceData.tag || sourceData.primary_tag || (Array.isArray(sourceData.tags) ? sourceData.tags[0] : null) || sourceData.interest || sourceData.source || sourceData.origin || sourceData.origem || '';
 
+    // Campos MCMV opcionais — vêm do formulário do Facebook quando configurados
+    // Não são obrigatórios: se o formulário não perguntar, simplesmente não chegam
+    const rendaDeclarada: string | null =
+      sourceData.renda_declarada || sourceData.renda || sourceData.income || null;
+
+    const rawTipoTrabalho: string | null =
+      sourceData.tipo_trabalho || sourceData.tipo_emprego || sourceData.employment_type || null;
+
+    // Normaliza para os valores aceitos pelo sistema
+    let tipoTrabalho: string | null = null;
+    if (rawTipoTrabalho) {
+      const normalized = rawTipoTrabalho.toUpperCase().trim();
+      if (normalized.includes('CLT') || normalized.includes('CARTEIRA') || normalized.includes('EMPREGADO')) {
+        tipoTrabalho = 'CLT';
+      } else if (normalized.includes('AUTONOMO') || normalized.includes('AUTÔNOMO') || normalized.includes('LIBERAL')) {
+        tipoTrabalho = 'AUTONOMO';
+      } else if (normalized.includes('PUBLICO') || normalized.includes('PÚBLICO') || normalized.includes('SERVIDOR') || normalized.includes('ESTATUTARIO')) {
+        tipoTrabalho = 'FUNCIONARIO_PUBLICO';
+      }
+    }
+
     if (!phone) {
       return new Response(JSON.stringify({ error: 'Phone is required' }), {
         status: 400,
@@ -191,6 +212,9 @@ serve(async (req) => {
       received_at: nowIso,
       // Travar redistribuição se a fila tiver lock_after_assignment = true
       no_redistribute: chosenQueue?.lock_after_assignment === true,
+      // Campos MCMV opcionais (só incluídos se vieram no payload)
+      ...(rendaDeclarada  ? { renda_declarada:  rendaDeclarada  } : {}),
+      ...(tipoTrabalho    ? { tipo_trabalho:    tipoTrabalho    } : {}),
     };
 
     if (chosenBroker) insertPayload.broker_id = chosenBroker.id;
@@ -277,7 +301,13 @@ serve(async (req) => {
 
           // ── HANDOFF INTELIGENTE: gera briefing com IA ─────────────────
           const geminiKey = Deno.env.get('GEMINI_API_KEY') || '';
-          let notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${originLabel}`;
+          // Linha de qualificação MCMV se disponível
+          const mcmvLine = [
+            rendaDeclarada  ? `💰 Renda: ${rendaDeclarada}` : '',
+            tipoTrabalho    ? `💼 ${tipoTrabalho === 'CLT' ? 'CLT' : tipoTrabalho === 'AUTONOMO' ? 'Autônomo' : 'Func. Público'}` : '',
+          ].filter(Boolean).join(' · ');
+
+          let notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${originLabel}${mcmvLine ? `\n${mcmvLine}` : ''}`;
 
           if (geminiKey && (message || tag || origin)) {
             try {

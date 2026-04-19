@@ -38,6 +38,9 @@ import { LeadsQuentes } from "@/components/broker/LeadsQuentes";
 import { PulsoDia } from "@/components/broker/PulsoDia";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 import { DailyBriefing } from "@/components/broker/DailyBriefing";
+import { MetaStrip } from "@/components/broker/MetaStrip";
+import { FocusModeCard } from "@/components/broker/FocusModeCard";
+import { VisitasHoje } from "@/components/broker/VisitasHoje";
 
 // ── Meta Diária do Corretor ───────────────────────────────────────────────────
 function MetaDiariaBroker({ userId, profile, leads, profiles }: {
@@ -318,7 +321,7 @@ const Dashboard = () => {
     return {
       new:         displayLeads.filter(l => l.status === "NEW").length,
       in_progress: displayLeads.filter(l => l.status === "IN_PROGRESS").length,
-      visits:      displayLeads.filter(l => l.status === "VISIT_SCHEDULED").length,
+      visits:      displayLeads.filter(l => ["VISIT_SCHEDULED", "VISITA_REALIZADA"].includes(l.status)).length,
       docs:        displayLeads.filter(l => l.status === "DOCS_REQUESTED").length,
     };
   }, [leads, user?.id, role]);
@@ -440,6 +443,7 @@ const Dashboard = () => {
     return (
       <div className="flex flex-col h-screen bg-slate-900">
         <div className="flex-none z-50"><AchievementTicker /></div>
+        {isBroker && <div className="flex-none z-40"><MetaStrip /></div>}
         <WhatsAppQRBanner />
 
         <header className="flex-none bg-slate-900/95 backdrop-blur-sm border-b border-gray-700/50 z-40">
@@ -562,27 +566,31 @@ const Dashboard = () => {
         <main className="flex-1 overflow-y-auto p-3 pb-24 space-y-3">
           {activeTab === "mission" && (
             <>
-              {/* ── Zona 1: O QUE FAZER AGORA ─────────────────────────────────── */}
-              <RadarAcao onSelectLead={handleLeadSelect} botActiveLeadIds={botActiveLeadIds} />
+              {/* ── Zona 1: FAÇA ISSO AGORA — fila de trabalho prioritária ─────── */}
+              <FocusModeCard onSelectLead={handleLeadSelect} botActiveLeadIds={botActiveLeadIds} />
 
               {/* ── Zona 3: PULSO DO DIA (3 números) ─────────────────────────── */}
               {isBroker && <PulsoDia />}
 
-              {/* ── Zona 2: LEADS QUENTES (cards com calor + ações inline) ─────── */}
+              {/* ── Zona 2: LEADS EM CAMPO (cards com calor + ações inline) ─────── */}
               {isBroker && <LeadsQuentes limit={5} />}
 
               {/* ── Pipeline — acesso rápido por status (filtro) ─────────────── */}
               <div className="grid grid-cols-2 gap-2">
                 <PipelineStat label="Novos"  count={stats.new}         active={filter === "NEW"             && showLeadList} onClick={() => handlePipelineClick("NEW")}             color="sky"     icon={Sparkles} />
                 <PipelineStat label="Atend." count={stats.in_progress} active={filter === "IN_PROGRESS"     && showLeadList} onClick={() => handlePipelineClick("IN_PROGRESS")}     color="indigo"  icon={Users2} />
-                <PipelineStat label="Visita" count={stats.visits}      active={filter === "VISIT_SCHEDULED" && showLeadList} onClick={() => handlePipelineClick("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
+                <PipelineStat label="Visitas" count={stats.visits}     active={filter === "VISIT_SCHEDULED" && showLeadList} onClick={() => handlePipelineClick("VISIT_SCHEDULED")} color="emerald" icon={Calendar} />
                 <PipelineStat label="Docs"   count={stats.docs}        active={filter === "DOCS_REQUESTED"  && showLeadList} onClick={() => handlePipelineClick("DOCS_REQUESTED")}  color="amber"   icon={FileText} />
               </div>
 
-              {/* ── Zona 4: GAMIFICAÇÃO AMBIENT ──────────────────────────────── */}
+              {/* ── Gamificação ambient ───────────────────────────────────────── */}
               <CampaignHeroBanner leads={leads} users={profiles} />
               <MissionToday brokerId={user?.id || ""} onSelectLead={handleLeadSelect} />
             </>
+          )}
+
+          {activeTab === "visitas" && (
+            <VisitasHoje onSelectLead={handleLeadSelect} />
           )}
 
           {activeTab === "lead" && (
@@ -650,7 +658,8 @@ const Dashboard = () => {
 
         <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-sm border-t border-gray-700/50 flex justify-around px-2 pt-2 pb-safe z-40">
           <NavButton icon={LayoutDashboard} label="Missão"  active={activeTab === "mission"} onClick={() => setActiveTab("mission")} />
-          <NavButton icon={Target}          label="Leads"   active={activeTab === "lead"}    onClick={() => setActiveTab("lead")}    badge={stats.new + stats.in_progress + stats.visits + stats.docs} />
+          <NavButton icon={Calendar}        label="Visitas" active={activeTab === "visitas"} onClick={() => setActiveTab("visitas")} badge={stats.visits} />
+          <NavButton icon={Target}          label="Leads"   active={activeTab === "lead"}    onClick={() => setActiveTab("lead")}    badge={stats.new + stats.in_progress + stats.docs} />
           <NavButton icon={Trophy}          label="Ranking" active={activeTab === "stats"}   onClick={() => setActiveTab("stats")} />
         </nav>
       </div>
@@ -878,8 +887,18 @@ const Dashboard = () => {
             {/* ── Coluna esquerda ──────────────────────────────────────────────── */}
             <div className="lg:col-span-4 flex flex-col gap-3">
 
-              {/* Zona 1: O QUE FAZER AGORA */}
-              <RadarAcao onSelectLead={handleLeadSelect} botActiveLeadIds={botActiveLeadIds} />
+              {/* Meta strip desktop */}
+              {isBroker && <MetaStrip />}
+
+              {/* Zona 1: FAÇA ISSO AGORA */}
+              <FocusModeCard onSelectLead={handleLeadSelect} botActiveLeadIds={botActiveLeadIds} />
+
+              {/* Visitas do dia */}
+              {isBroker && (
+                <div className="bg-slate-800/40 border border-gray-700/40 rounded-2xl p-3">
+                  <VisitasHoje onSelectLead={handleLeadSelect} />
+                </div>
+              )}
 
               {/* Zona 3: PULSO DO DIA */}
               {isBroker && <PulsoDia />}

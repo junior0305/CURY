@@ -3,18 +3,10 @@ import { useState, useRef, useCallback } from "react";
 import { fetchLeadsForDashboard, registerBrokerContact, updateLeadStatus } from "@/integrations/supabase/leads";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
-import { Lead, LeadStatus } from "@/types/lead";
-import { MessageSquare, ChevronRight, Check, X, Flame, Zap, FileText, Calendar } from "lucide-react";
+import { Lead, LeadStatus, NEXT_STATUS, TIPO_TRABALHO_LABEL, LOST_REASON_LABEL, LostReason, LOST_REASON_LABEL as LRL } from "@/types/lead";
+import { MessageSquare, ChevronRight, Check, X, Flame, Zap, FileText, Calendar, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// ─── Config ───────────────────────────────────────────────────────────────────
-
-const NEXT_STATUS: Partial<Record<LeadStatus, { status: LeadStatus; label: string }>> = {
-  NEW:             { status: "IN_PROGRESS",     label: "Iniciar atend." },
-  IN_PROGRESS:     { status: "VISIT_SCHEDULED", label: "Agendar visita" },
-  VISIT_SCHEDULED: { status: "DOCS_REQUESTED",  label: "Pedir docs" },
-  DOCS_REQUESTED:  { status: "CONCLUDED",        label: "Fechar venda 🎉" },
-};
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 const INTENCAO_CFG = {
   quente: {
@@ -63,10 +55,11 @@ const MOMENTO_LABEL: Record<string, string> = {
 };
 
 const STATUS_ICON: Partial<Record<LeadStatus, React.ElementType>> = {
-  DOCS_REQUESTED:  FileText,
-  VISIT_SCHEDULED: Calendar,
-  NEW:             Zap,
-  IN_PROGRESS:     Flame,
+  DOCS_REQUESTED:   FileText,
+  VISIT_SCHEDULED:  Calendar,
+  VISITA_REALIZADA: Calendar,
+  NEW:              Zap,
+  IN_PROGRESS:      Flame,
 };
 
 const TERMINAL: LeadStatus[] = ["CONCLUDED", "ABANDONED", "EXCLUDED"];
@@ -94,6 +87,8 @@ export function LeadsQuentes({ limit = 6 }: LeadsQuentesProps) {
 
   const [pendingAdvance, setPendingAdvance] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [lostSheetOpen, setLostSheetOpen] = useState(false);
+  const [pendingLostId, setPendingLostId] = useState<string | null>(null);
 
   // ── Leads do broker ────────────────────────────────────────────────────────
   const { data: allLeads = [] } = useQuery<Lead[]>({
@@ -129,6 +124,16 @@ export function LeadsQuentes({ limit = 6 }: LeadsQuentesProps) {
       queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
       setPendingAdvance(null);
       if (timerRef.current) clearTimeout(timerRef.current);
+    },
+  });
+
+  const lostMutation = useMutation({
+    mutationFn: ({ leadId, reason }: { leadId: string; reason: LostReason }) =>
+      updateLeadStatus(leadId, "ABANDONED", null, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
+      setLostSheetOpen(false);
+      setPendingLostId(null);
     },
   });
 
@@ -173,6 +178,7 @@ export function LeadsQuentes({ limit = 6 }: LeadsQuentesProps) {
   if (sortedLeads.length === 0) return null;
 
   return (
+    <>
     <div className="space-y-2">
       {/* Título de zona */}
       <div className="flex items-center gap-2 px-0.5">
@@ -222,6 +228,14 @@ export function LeadsQuentes({ limit = 6 }: LeadsQuentesProps) {
                     {[tema, momento].filter(Boolean).join(" · ")}
                   </p>
                 )}
+                {(lead.rendaDeclarada || lead.tipoTrabalho) && (
+                  <p className="text-[10px] text-indigo-400/60 mt-0.5">
+                    {[
+                      lead.rendaDeclarada ? `R$ ${lead.rendaDeclarada}` : "",
+                      lead.tipoTrabalho ? TIPO_TRABALHO_LABEL[lead.tipoTrabalho] : "",
+                    ].filter(Boolean).join(" · ")}
+                  </p>
+                )}
               </div>
 
               {/* Tempo desde última resposta do lead */}
@@ -260,7 +274,7 @@ export function LeadsQuentes({ limit = 6 }: LeadsQuentesProps) {
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {/* WhatsApp */}
                 <button
                   onClick={(e) => openWhatsApp(e, lead)}
@@ -281,11 +295,45 @@ export function LeadsQuentes({ limit = 6 }: LeadsQuentesProps) {
                     {next.label}
                   </button>
                 )}
+
+                {/* Perdido */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setPendingLostId(lead.id); setLostSheetOpen(true); }}
+                  className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/5 hover:bg-red-950/40 text-gray-700 hover:text-red-400 transition-all border border-white/5"
+                  title="Marcar como perdido"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             )}
           </div>
         );
       })}
     </div>
+
+    {/* Sheet: motivo de perda */}
+    <Sheet open={lostSheetOpen} onOpenChange={setLostSheetOpen}>
+      <SheetContent side="bottom" className="bg-[#0d1117] border-white/10 text-white rounded-t-2xl pb-8">
+        <SheetHeader className="mb-4">
+          <SheetTitle className="text-white flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-400" />
+            Por que esse lead foi perdido?
+          </SheetTitle>
+        </SheetHeader>
+        <div className="space-y-2">
+          {(Object.entries(LRL) as [NonNullable<LostReason>, string][]).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => pendingLostId && lostMutation.mutate({ leadId: pendingLostId, reason: key })}
+              disabled={lostMutation.isPending}
+              className="w-full text-left px-4 py-3 rounded-xl bg-white/5 hover:bg-red-950/40 border border-white/5 hover:border-red-500/30 text-sm text-gray-300 hover:text-white font-medium transition-all disabled:opacity-50"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </SheetContent>
+    </Sheet>
+  </>
   );
 }
