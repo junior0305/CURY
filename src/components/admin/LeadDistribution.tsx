@@ -230,6 +230,7 @@ const LeadDistribution = () => {
                 <SelectItem value="source">Origem / Canal</SelectItem>
                 <SelectItem value="campaign">Campanha</SelectItem>
                 <SelectItem value="tipo_trabalho">Tipo de trabalho</SelectItem>
+                <SelectItem value="faixa_mcmv">Faixa MCMV (pela renda)</SelectItem>
               </SelectContent>
             </Select>
             <Input placeholder="Valor" value={form.matchValue}
@@ -246,7 +247,13 @@ const LeadDistribution = () => {
           </p>
           {form.matchField === "tipo_trabalho" && (
             <p className="text-[10px] rounded-lg px-2 py-1.5 mt-1" style={{ background: "rgba(0,212,255,0.06)", border: "1px solid rgba(0,212,255,0.15)", color: "#38BDF8" }}>
-              Valores válidos que chegam do Make: <strong>CLT</strong> · <strong>AUTONOMO</strong> · <strong>FUNCIONARIO_PUBLICO</strong>
+              Valores válidos do Make: <strong>CLT</strong> · <strong>AUTONOMO</strong> · <strong>FUNCIONARIO_PUBLICO</strong>
+            </p>
+          )}
+          {form.matchField === "faixa_mcmv" && (
+            <p className="text-[10px] rounded-lg px-2 py-1.5 mt-1" style={{ background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)", color: "#34D399" }}>
+              Calculado automaticamente pela renda declarada no Facebook.<br />
+              Valores: <strong>FAIXA_1</strong> ≤ R$ 2.640 · <strong>FAIXA_2</strong> ≤ R$ 4.400 · <strong>FAIXA_3</strong> ≤ R$ 8.000 · <strong>FORA</strong> acima disso
             </p>
           )}
         </div>

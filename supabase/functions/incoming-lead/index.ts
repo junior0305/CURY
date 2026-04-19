@@ -69,7 +69,7 @@ serve(async (req) => {
     const rawTipoTrabalho: string | null =
       sourceData.tipo_trabalho || sourceData.tipo_emprego || sourceData.employment_type || null;
 
-    // Normaliza para os valores aceitos pelo sistema
+    // Normaliza tipo de trabalho para os valores aceitos pelo sistema
     let tipoTrabalho: string | null = null;
     if (rawTipoTrabalho) {
       const normalized = rawTipoTrabalho.toUpperCase().trim();
@@ -81,6 +81,21 @@ serve(async (req) => {
         tipoTrabalho = 'FUNCIONARIO_PUBLICO';
       }
     }
+
+    // Converte renda declarada (texto livre) em faixa MCMV para roteamento de fila
+    // Limites 2024: Faixa 1 ≤ 2.640 | Faixa 2 ≤ 4.400 | Faixa 3 ≤ 8.000 | Fora acima disso
+    function calcFaixaMcmv(renda: string | null): string | null {
+      if (!renda) return null;
+      // Remove R$, pontos de milhar, espaços; troca vírgula decimal por ponto
+      const clean = renda.replace(/R\$|\s/g, '').replace(/\./g, '').replace(',', '.');
+      const valor = parseFloat(clean);
+      if (isNaN(valor) || valor <= 0) return null;
+      if (valor <= 2640)  return 'FAIXA_1';
+      if (valor <= 4400)  return 'FAIXA_2';
+      if (valor <= 8000)  return 'FAIXA_3';
+      return 'FORA';
+    }
+    const faixaMcmv: string | null = calcFaixaMcmv(rendaDeclarada);
 
     if (!phone) {
       return new Response(JSON.stringify({ error: 'Phone is required' }), {
@@ -99,7 +114,8 @@ serve(async (req) => {
       source:        (origin || '').toString(),
       product:       (sourceData.product || '').toString(),
       campaign:      (sourceData.campaign || '').toString(),
-      tipo_trabalho: (tipoTrabalho || '').toString(),       // CLT | AUTONOMO | FUNCIONARIO_PUBLICO
+      tipo_trabalho: (tipoTrabalho || '').toString(),  // CLT | AUTONOMO | FUNCIONARIO_PUBLICO
+      faixa_mcmv:    (faixaMcmv || '').toString(),     // FAIXA_1 | FAIXA_2 | FAIXA_3 | FORA
     };
 
     const { data: queues } = await supabase.from('distribution_queues').select('*').eq('is_active', true).order('created_at', { ascending: true });
