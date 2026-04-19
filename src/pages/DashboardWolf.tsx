@@ -177,6 +177,46 @@ const TEMA_DICA: Record<string, string> = {
   documentacao:  "Pendência documental. Envie o checklist de documentos e ofereça ajuda para agilizar.",
 };
 
+/** Faixa MCMV label */
+const FAIXA_LABEL: Record<string, { label: string; color: string }> = {
+  FAIXA_1: { label: "Faixa 1",  color: "#10B981" },
+  FAIXA_2: { label: "Faixa 2",  color: "#38BDF8" },
+  FAIXA_3: { label: "Faixa 3",  color: "#818CF8" },
+  FORA:    { label: "Fora MCMV", color: "#EF4444" },
+};
+
+/** Mensagem sugerida por status + tema */
+function getMsgTemplate(lead: Lead, tema?: string): string {
+  const nome = lead.name.split(" ")[0];
+  const s = lead.status;
+
+  if (s === "NEW")
+    return `Olá ${nome}! Vi que você tem interesse em imóvel pelo Minha Casa Minha Vida. Sou corretor parceiro do programa e posso te ajudar com tudo. Posso te ligar agora?`;
+
+  if (s === "IN_PROGRESS") {
+    if (tema === "preco")
+      return `Olá ${nome}! Sobre o valor: no MCMV a entrada pode ser bem menor do que você imagina, principalmente com o FGTS. Você tem saldo no FGTS? Me conta que faço uma simulação pra você!`;
+    if (tema === "entrada")
+      return `Olá ${nome}! Boa notícia — a entrada no MCMV pode ser reduzida com FGTS e subsídio do governo. Posso te mostrar como funciona? É bem mais acessível do que parece!`;
+    if (tema === "localizacao")
+      return `Olá ${nome}! Posso te enviar fotos do entorno, acesso ao transporte e o que tem no bairro. Manda um oi que coloco tudo aqui pra você avaliar!`;
+    if (tema === "documentacao")
+      return `Olá ${nome}! Vou te mandar a lista de documentos agora — é simples e te ajudo em cada etapa. Pode deixar que facilito tudo!`;
+    return `Olá ${nome}! Posso te ajudar com mais alguma informação sobre o empreendimento? Estou à disposição!`;
+  }
+
+  if (s === "VISIT_SCHEDULED")
+    return `Olá ${nome}! Confirmando sua visita ao plantão 😊 Qualquer dúvida sobre como chegar ou horário, me chama! Vai ser ótimo te receber.`;
+
+  if (s === "VISITA_REALIZADA")
+    return `Olá ${nome}! Que bom que veio conhecer! Para darmos o próximo passo, vou te enviar a lista de documentos necessários. É tranquilo e te ajudo em tudo!`;
+
+  if (s === "DOCS_REQUESTED")
+    return `Olá ${nome}! Como está indo a reunião dos documentos? Precisa de ajuda com algum? Me chama que resolvo rapidinho 😊`;
+
+  return `Olá ${nome}! Posso te ajudar com alguma informação?`;
+}
+
 // Pontuação por status (espelha o sistema de XP)
 const XP_BY_STATUS: Partial<Record<LeadStatus, number>> = {
   IN_PROGRESS:     10,
@@ -395,6 +435,10 @@ export default function DashboardWolf() {
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"battle" | "arena">("battle");
   const [lostSheetOpen, setLostSheetOpen] = useState(false);
+  const [visitSheet, setVisitSheet]       = useState(false);
+  const [visitDate, setVisitDate]         = useState("");
+  const [visitTime, setVisitTime]         = useState("10:00");
+  const [showMsg, setShowMsg]             = useState(false);
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const isBroker = role === "BROKER";
@@ -511,6 +555,50 @@ export default function DashboardWolf() {
     return map;
   }, [enriched, dismissed]);
 
+  // ── Última mensagem do lead (IA) ──────────────────────────────────────────
+  const { data: lastLeadMsg } = useQuery({
+    queryKey: ["wolf-last-msg", activeLead?.id],
+    enabled: !!activeLead?.id,
+    staleTime: 30000,
+    queryFn: async () => {
+      const { data: conv } = await supabase
+        .from("ia_conversations")
+        .select("id")
+        .eq("lead_id", activeLead!.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!conv) return null;
+      const { data: msg } = await supabase
+        .from("ia_messages")
+        .select("content, direction, created_at")
+        .eq("conversation_id", conv.id)
+        .eq("direction", "incoming")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return msg as { content: string; direction: string; created_at: string } | null;
+    },
+  });
+
+  // ── Qualificação MCMV do lead ──────────────────────────────────────────────
+  const { data: mcmvQual } = useQuery({
+    queryKey: ["wolf-mcmv", activeLead?.id],
+    enabled: !!activeLead?.id,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("mcmv_qualification")
+        .select("faixa, tem_fgts, qualificado, renda_informada, tem_imovel, ja_usou_mcmv")
+        .eq("lead_id", activeLead!.id)
+        .maybeSingle();
+      return data as {
+        faixa: string | null; tem_fgts: boolean | null; qualificado: boolean | null;
+        renda_informada: string | null; tem_imovel: boolean | null; ja_usou_mcmv: boolean | null;
+      } | null;
+    },
+  });
+
   // ── Auto-select first lead when filter changes ─────────────────────────────
   useEffect(() => {
     if (filteredLeads.length > 0) {
@@ -596,6 +684,7 @@ export default function DashboardWolf() {
   const handleSelect = (lead: typeof filteredLeads[number]) => {
     setActiveLead(lead);
     setActiveStatus(lead.status);
+    setShowMsg(false);
   };
 
   const handlePipelineClick = async (stepId: string) => {
@@ -652,6 +741,29 @@ export default function DashboardWolf() {
     } finally {
       setMutating(false);
     }
+  };
+
+  const handleAgendarVisita = async () => {
+    if (!activeLead || !visitDate) return;
+    const dt = new Date(`${visitDate}T${visitTime || "10:00"}`);
+    setVisitSheet(false);
+    try {
+      setMutating(true);
+      await Promise.all([
+        updateLeadStatus(activeLead.id, "VISIT_SCHEDULED"),
+        createTask({
+          userId: user!.id,
+          leadId: activeLead.id,
+          type: "FOLLOW_UP",
+          title: `Visita agendada — ${dt.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })} às ${visitTime}`,
+          dueAt: dt.toISOString(),
+        }),
+      ]);
+      qc.invalidateQueries({ queryKey: ["wolfLeads"] });
+      qc.invalidateQueries({ queryKey: ["wolfTasks"] });
+      toast.success(`Visita agendada para ${dt.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "short" })} às ${visitTime}`);
+    } catch { toast.error("Erro ao agendar visita."); }
+    finally { setMutating(false); setVisitDate(""); }
   };
 
   const handleVisitaRealizada = async (leadId: string) => {
@@ -916,17 +1028,55 @@ export default function DashboardWolf() {
                     })}
                   </div>
 
-                  {/* Renda / Tipo trabalho (Facebook) */}
-                  {(activeLead.rendaDeclarada || activeLead.tipoTrabalho) && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
-                      style={{ background: "rgba(129,140,248,.08)", border: "1px solid rgba(129,140,248,.2)" }}>
-                      <span className="text-[10px] text-indigo-300 font-semibold">
-                        {[
-                          activeLead.rendaDeclarada ? `R$ ${activeLead.rendaDeclarada}` : "",
-                          activeLead.tipoTrabalho ? TIPO_TRABALHO_LABEL[activeLead.tipoTrabalho] : "",
-                        ].filter(Boolean).join(" · ")}
-                      </span>
-                      <span className="text-[9px] text-indigo-500 ml-auto">via Facebook</span>
+                  {/* ── Renda / MCMV / Qualificação ────────────────────────── */}
+                  {(activeLead.rendaDeclarada || activeLead.tipoTrabalho || mcmvQual) && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {activeLead.rendaDeclarada && (
+                        <span className="text-[10px] px-2 py-0.5 rounded font-semibold"
+                          style={{ background: "rgba(129,140,248,.12)", color: "#818CF8", border: "1px solid rgba(129,140,248,.25)" }}>
+                          R$ {activeLead.rendaDeclarada}
+                        </span>
+                      )}
+                      {activeLead.tipoTrabalho && (
+                        <span className="text-[10px] px-2 py-0.5 rounded font-semibold"
+                          style={{ background: "rgba(129,140,248,.12)", color: "#818CF8", border: "1px solid rgba(129,140,248,.25)" }}>
+                          {TIPO_TRABALHO_LABEL[activeLead.tipoTrabalho]}
+                        </span>
+                      )}
+                      {mcmvQual?.faixa && FAIXA_LABEL[mcmvQual.faixa] && (
+                        <span className="text-[10px] px-2 py-0.5 rounded font-bold"
+                          style={{ background: `${FAIXA_LABEL[mcmvQual.faixa].color}18`, color: FAIXA_LABEL[mcmvQual.faixa].color, border: `1px solid ${FAIXA_LABEL[mcmvQual.faixa].color}40` }}>
+                          {FAIXA_LABEL[mcmvQual.faixa].label}
+                        </span>
+                      )}
+                      {mcmvQual && mcmvQual.tem_fgts !== null && (
+                        <span className="text-[10px] px-2 py-0.5 rounded font-semibold"
+                          style={{ background: mcmvQual.tem_fgts ? "rgba(16,185,129,.12)" : "rgba(239,68,68,.1)", color: mcmvQual.tem_fgts ? "#10B981" : "#EF4444", border: `1px solid ${mcmvQual.tem_fgts ? "rgba(16,185,129,.3)" : "rgba(239,68,68,.25)"}` }}>
+                          FGTS {mcmvQual.tem_fgts ? "✓" : "✗"}
+                        </span>
+                      )}
+                      {mcmvQual && mcmvQual.qualificado !== null && (
+                        <span className="text-[10px] px-2 py-0.5 rounded font-bold"
+                          style={{ background: mcmvQual.qualificado ? "rgba(16,185,129,.15)" : "rgba(239,68,68,.12)", color: mcmvQual.qualificado ? "#10B981" : "#EF4444", border: `1px solid ${mcmvQual.qualificado ? "rgba(16,185,129,.35)" : "rgba(239,68,68,.3)"}` }}>
+                          {mcmvQual.qualificado ? "✅ Qualificado" : "❌ Desqualificado"}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Última mensagem do lead ──────────────────────────────── */}
+                  {lastLeadMsg && (
+                    <div className="px-3 py-2 rounded-xl"
+                      style={{ background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)" }}>
+                      <p className="text-[9px] font-bold uppercase tracking-widest mb-1" style={{ color: "#475569" }}>
+                        Última mensagem do lead
+                      </p>
+                      <p className="text-xs text-slate-300 leading-relaxed line-clamp-2">
+                        "{lastLeadMsg.content}"
+                      </p>
+                      <p className="text-[9px] text-slate-600 mt-1">
+                        {new Date(lastLeadMsg.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      </p>
                     </div>
                   )}
 
@@ -959,7 +1109,7 @@ export default function DashboardWolf() {
                         )}
 
                         {s === "IN_PROGRESS" && (
-                          <button onClick={() => handlePipelineClick("VISIT_SCHEDULED")} disabled={mutating}
+                          <button onClick={() => { setVisitDate(""); setVisitSheet(true); }} disabled={mutating}
                             className="flex items-center gap-1.5 h-11 px-3 rounded-xl font-black text-xs uppercase tracking-wide shrink-0 transition-all"
                             style={{ background: "rgba(52,211,153,.2)", border: "1px solid rgba(52,211,153,.4)", color: "#34D399" }}>
                             <Calendar className="w-3.5 h-3.5" /> Agendar Visita
@@ -995,6 +1145,45 @@ export default function DashboardWolf() {
                             style={{ background: "rgba(245,158,11,.2)", border: "1px solid rgba(245,158,11,.4)", color: "#F59E0B" }}>
                             <Trophy className="w-3.5 h-3.5" /> Fechar Venda 🏆
                           </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ── Mensagem sugerida ───────────────────────────────────── */}
+                  {(() => {
+                    const ls = leadStateMap.get(activeLead.id);
+                    const msg = getMsgTemplate(activeLead, ls?.tema);
+                    const link = `https://wa.me/${activeLead.phone?.replace(/\D/g, "") ? (activeLead.phone.replace(/\D/g, "").startsWith("55") ? activeLead.phone.replace(/\D/g, "") : `55${activeLead.phone.replace(/\D/g, "")}`) : ""}?text=${encodeURIComponent(msg)}`;
+                    return (
+                      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(0,212,255,.15)" }}>
+                        <button
+                          onClick={() => setShowMsg(v => !v)}
+                          className="w-full flex items-center justify-between px-3 py-2 text-left transition-all"
+                          style={{ background: "rgba(0,212,255,.06)" }}>
+                          <div className="flex items-center gap-2">
+                            <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">Mensagem sugerida</span>
+                          </div>
+                          <ChevronRight className={`w-3.5 h-3.5 text-cyan-600 transition-transform ${showMsg ? "rotate-90" : ""}`} />
+                        </button>
+                        {showMsg && (
+                          <div className="px-3 py-2.5 space-y-2" style={{ background: "rgba(0,0,0,.2)" }}>
+                            <p className="text-xs text-slate-300 leading-relaxed">{msg}</p>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => { navigator.clipboard.writeText(msg); toast.success("Mensagem copiada!"); }}
+                                className="btn-ghost flex-1 py-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white uppercase tracking-wide">
+                                Copiar texto
+                              </button>
+                              {activeLead.phone && (
+                                <a href={link} target="_blank" rel="noreferrer"
+                                  className="btn-whatsapp flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-black text-white uppercase tracking-wide">
+                                  <MessageSquare className="w-3 h-3" /> Enviar no WhatsApp
+                                </a>
+                              )}
+                            </div>
+                          </div>
                         )}
                       </div>
                     );
@@ -1301,6 +1490,69 @@ export default function DashboardWolf() {
             </div>
           </div>
         </main>
+
+        {/* ── SHEET: AGENDAR VISITA ── */}
+        <Sheet open={visitSheet} onOpenChange={setVisitSheet}>
+          <SheetContent side="bottom" className="bg-[#080B14] border-white/10 text-white rounded-t-2xl pb-8">
+            <SheetHeader className="mb-5">
+              <SheetTitle className="text-white flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-emerald-400" />
+                Agendar visita — {activeLead?.name?.split(" ")[0]}
+              </SheetTitle>
+            </SheetHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">Data</label>
+                  <input
+                    type="date"
+                    value={visitDate}
+                    min={new Date().toISOString().split("T")[0]}
+                    onChange={e => setVisitDate(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl text-sm font-semibold text-white outline-none"
+                    style={{ background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)" }}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">Horário</label>
+                  <input
+                    type="time"
+                    value={visitTime}
+                    onChange={e => setVisitTime(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl text-sm font-semibold text-white outline-none"
+                    style={{ background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)" }}
+                  />
+                </div>
+              </div>
+
+              {/* Horários rápidos de plantão */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-2">Horários de plantão</p>
+                <div className="flex flex-wrap gap-2">
+                  {["09:00","10:00","11:00","14:00","15:00","16:00"].map(h => (
+                    <button key={h} onClick={() => setVisitTime(h)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                      style={{
+                        background: visitTime === h ? "rgba(52,211,153,.2)" : "rgba(255,255,255,.05)",
+                        border: visitTime === h ? "1px solid rgba(52,211,153,.4)" : "1px solid rgba(255,255,255,.08)",
+                        color: visitTime === h ? "#34D399" : "#64748B",
+                      }}>
+                      {h}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={handleAgendarVisita}
+                disabled={!visitDate || mutating}
+                className="w-full py-3 rounded-xl font-black text-sm uppercase tracking-wide transition-all disabled:opacity-40"
+                style={{ background: "linear-gradient(135deg,#059669,#10B981)", color: "white", boxShadow: "0 4px 18px rgba(16,185,129,.35)" }}>
+                {mutating ? "Agendando..." : "Confirmar visita"}
+              </button>
+            </div>
+          </SheetContent>
+        </Sheet>
 
         {/* ── SHEET: MOTIVO DE PERDA ── */}
         <Sheet open={lostSheetOpen} onOpenChange={setLostSheetOpen}>
