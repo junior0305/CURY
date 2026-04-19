@@ -587,11 +587,12 @@ export default function DashboardWolf() {
     enabled: !!activeLead?.id,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("mcmv_qualification")
         .select("faixa, tem_fgts, qualificado, renda_informada, tem_imovel, ja_usou_mcmv")
         .eq("lead_id", activeLead!.id)
         .maybeSingle();
+      if (error) return null; // tabela pode não existir neste ambiente
       return data as {
         faixa: string | null; tem_fgts: boolean | null; qualificado: boolean | null;
         renda_informada: string | null; tem_imovel: boolean | null; ja_usou_mcmv: boolean | null;
