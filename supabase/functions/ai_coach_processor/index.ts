@@ -215,25 +215,51 @@ serve(async (req) => {
 
         const brokerLeadIds = (brokerLeads || []).map((l: any) => l.id);
 
-        // Busca conversas
-        let convQuery = supabaseClient
+        // Se o corretor não tem leads, pula — evita capturar conversas de outros corretores
+        if (brokerLeadIds.length === 0) {
+          await supabaseClient.from('ai_coach_queue').update({
+            status: 'skipped',
+            error_message: 'No leads in last 30 days',
+            processed_at: new Date().toISOString(),
+          }).eq('id', item.id);
+          continue;
+        }
+
+        // IDs de conversas já analisadas anteriormente para este corretor (evita reanálise)
+        const { data: prevAnalyses } = await supabaseClient
+          .from('ai_coach_analysis')
+          .select('sample_conversations')
+          .eq('broker_id', item.broker_id);
+
+        const alreadyAnalyzedIds = new Set<string>();
+        (prevAnalyses || []).forEach((a: any) => {
+          (a.sample_conversations || []).forEach((id: string) => alreadyAnalyzedIds.add(id));
+        });
+
+        // Busca conversas deste corretor (busca mais para compensar as já analisadas)
+        const sampleSize = item.sample_size || 5;
+        const fetchLimit = sampleSize + alreadyAnalyzedIds.size + 10;
+        const { data: rawConversations } = await supabaseClient
           .from('ia_conversations')
           .select('*')
           .eq('is_crm_lead', true)
+          .in('lead_id', brokerLeadIds)
           .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
           .order('created_at', { ascending: false })
-          .limit(item.sample_size || 5);
+          .limit(fetchLimit);
 
-        if (brokerLeadIds.length > 0) {
-          convQuery = convQuery.in('lead_id', brokerLeadIds);
-        }
+        // Filtra conversas já incluídas em análises anteriores
+        const conversations = (rawConversations || [])
+          .filter((c: any) => !alreadyAnalyzedIds.has(c.id))
+          .slice(0, sampleSize);
 
-        const { data: conversations } = await convQuery;
-
-        if (!conversations || conversations.length === 0) {
+        if (conversations.length === 0) {
+          const reason = alreadyAnalyzedIds.size > 0
+            ? 'All recent conversations already analyzed in previous runs'
+            : 'No CRM conversations found in last 30 days';
           await supabaseClient.from('ai_coach_queue').update({
             status: 'skipped',
-            error_message: 'No CRM conversations found in last 30 days',
+            error_message: reason,
             processed_at: new Date().toISOString(),
           }).eq('id', item.id);
           continue;
