@@ -1154,32 +1154,35 @@ export default function DashboardWolf() {
                   {(() => {
                     const ls = leadStateMap.get(activeLead.id);
                     const msg = getMsgTemplate(activeLead, ls?.tema);
-                    const link = `https://wa.me/${activeLead.phone?.replace(/\D/g, "") ? (activeLead.phone.replace(/\D/g, "").startsWith("55") ? activeLead.phone.replace(/\D/g, "") : `55${activeLead.phone.replace(/\D/g, "")}`) : ""}?text=${encodeURIComponent(msg)}`;
+                    const phoneDigits = activeLead.phone?.replace(/\D/g, "") || "";
+                    const phoneFormatted = phoneDigits.startsWith("55") ? phoneDigits : `55${phoneDigits}`;
+                    const link = phoneDigits ? `https://wa.me/${phoneFormatted}?text=${encodeURIComponent(msg)}` : "";
                     return (
-                      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(0,212,255,.15)" }}>
+                      <div className="rounded-xl overflow-hidden"
+                        style={{ border: "1px solid rgba(0,212,255,.4)", boxShadow: "0 0 12px rgba(0,212,255,.1)" }}>
                         <button
                           onClick={() => setShowMsg(v => !v)}
-                          className="w-full flex items-center justify-between px-3 py-2 text-left transition-all"
-                          style={{ background: "rgba(0,212,255,.06)" }}>
+                          className="w-full flex items-center justify-between px-3 py-2.5 text-left transition-all"
+                          style={{ background: showMsg ? "rgba(0,212,255,.18)" : "rgba(0,212,255,.12)" }}>
                           <div className="flex items-center gap-2">
-                            <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-cyan-400">Mensagem sugerida</span>
+                            <MessageSquare className="w-4 h-4 text-cyan-300" />
+                            <span className="text-xs font-black uppercase tracking-wider text-cyan-200">💬 Mensagem sugerida</span>
                           </div>
-                          <ChevronRight className={`w-3.5 h-3.5 text-cyan-600 transition-transform ${showMsg ? "rotate-90" : ""}`} />
+                          <ChevronRight className={`w-4 h-4 text-cyan-400 transition-transform duration-200 ${showMsg ? "rotate-90" : ""}`} />
                         </button>
                         {showMsg && (
-                          <div className="px-3 py-2.5 space-y-2" style={{ background: "rgba(0,0,0,.2)" }}>
-                            <p className="text-xs text-slate-300 leading-relaxed">{msg}</p>
+                          <div className="px-3 py-3 space-y-2.5" style={{ background: "rgba(0,0,0,.3)" }}>
+                            <p className="text-xs text-slate-200 leading-relaxed">{msg}</p>
                             <div className="flex gap-2">
                               <button
                                 onClick={() => { navigator.clipboard.writeText(msg); toast.success("Mensagem copiada!"); }}
-                                className="btn-ghost flex-1 py-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white uppercase tracking-wide">
+                                className="btn-ghost flex-1 py-2 rounded-lg text-xs font-bold text-slate-300 hover:text-white uppercase tracking-wide">
                                 Copiar texto
                               </button>
-                              {activeLead.phone && (
+                              {link && (
                                 <a href={link} target="_blank" rel="noreferrer"
-                                  className="btn-whatsapp flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-black text-white uppercase tracking-wide">
-                                  <MessageSquare className="w-3 h-3" /> Enviar no WhatsApp
+                                  className="btn-whatsapp flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-black text-white uppercase tracking-wide">
+                                  <MessageSquare className="w-3.5 h-3.5" /> Enviar WhatsApp
                                 </a>
                               )}
                             </div>

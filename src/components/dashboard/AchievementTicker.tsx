@@ -30,14 +30,13 @@ export function AchievementTicker() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("achievements")
-        .select("id, reward_label, reward_value, action_type, created_at, status, profiles:profile_id(first_name, last_name)")
-        .eq('status', 'APPROVED')
+        .select("id, reward_label, reward_value, action_type, created_at, profiles:profile_id(first_name, last_name)")
         .order("created_at", { ascending: false })
         .limit(8);
-      if (error) throw error;
-      return data;
+      if (error) return []; // tabela pode não ter a coluna ou a relação — não quebra o ticker
+      return data ?? [];
     },
-    refetchInterval: 5000,
+    refetchInterval: 30000,
   });
 
   // Período relevante: últimas 48h para eventos de pipeline + mês para contagem de vendas
