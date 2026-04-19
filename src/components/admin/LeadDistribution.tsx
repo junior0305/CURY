@@ -227,6 +227,9 @@ const LeadDistribution = () => {
               <SelectContent className="bg-slate-900 border-gray-700 text-white">
                 <SelectItem value="titulo">Título</SelectItem>
                 <SelectItem value="tag">Tag</SelectItem>
+                <SelectItem value="source">Origem / Canal</SelectItem>
+                <SelectItem value="campaign">Campanha</SelectItem>
+                <SelectItem value="tipo_trabalho">Tipo de trabalho</SelectItem>
               </SelectContent>
             </Select>
             <Input placeholder="Valor" value={form.matchValue}
@@ -236,11 +239,16 @@ const LeadDistribution = () => {
             />
           </div>
           <p className="text-[10px]" style={{ color: "#2a3a5a" }}>
-            Leads onde <span style={{ color: "#00aaff" }}>{form.matchField}</span> contém{" "}
+            Leads onde <span style={{ color: "#00aaff" }}>{form.matchField}</span> ={" "}
             <span className="px-1 rounded font-bold" style={{ background: "rgba(0,102,255,0.15)", color: "#00e5ff" }}>
               "{form.matchValue || "..."}"
             </span>
           </p>
+          {form.matchField === "tipo_trabalho" && (
+            <p className="text-[10px] rounded-lg px-2 py-1.5 mt-1" style={{ background: "rgba(0,212,255,0.06)", border: "1px solid rgba(0,212,255,0.15)", color: "#38BDF8" }}>
+              Valores válidos que chegam do Make: <strong>CLT</strong> · <strong>AUTONOMO</strong> · <strong>FUNCIONARIO_PUBLICO</strong>
+            </p>
+          )}
         </div>
 
         {/* ── REGIÃO + CANAL ─────────────────────────────────────────────── */}

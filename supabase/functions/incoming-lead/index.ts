@@ -95,10 +95,11 @@ serve(async (req) => {
     );
 
     const leadValues: Record<string, string> = {
-      tag: (tag || '').toString(),
-      source: (origin || '').toString(),
-      product: (sourceData.product || '').toString(),
-      campaign: (sourceData.campaign || '').toString(),
+      tag:           (tag || '').toString(),
+      source:        (origin || '').toString(),
+      product:       (sourceData.product || '').toString(),
+      campaign:      (sourceData.campaign || '').toString(),
+      tipo_trabalho: (tipoTrabalho || '').toString(),       // CLT | AUTONOMO | FUNCIONARIO_PUBLICO
     };
 
     const { data: queues } = await supabase.from('distribution_queues').select('*').eq('is_active', true).order('created_at', { ascending: true });
