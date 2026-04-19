@@ -30,7 +30,7 @@ export function AchievementTicker() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("achievements")
-        .select("id, reward_label, reward_value, action_type, created_at, profiles:profile_id(first_name, last_name)")
+        .select("id, reward_label, reward_value, action_type, created_at, profiles:user_id(first_name, last_name)")
         .order("created_at", { ascending: false })
         .limit(8);
       if (error) return []; // tabela pode não ter a coluna ou a relação — não quebra o ticker
