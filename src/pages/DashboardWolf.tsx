@@ -6,24 +6,27 @@ import {
   MessageSquare, Phone, Calendar, X, Send, Zap,
   Flame, Trophy, Star, TrendingUp,
   Shield, Volume2, VolumeX, LogOut, Bell, CheckCircle2, Loader2,
-  Bot, UserCheck, Brain, PlusCircle
+  Bot, UserCheck, Brain, PlusCircle, FileText, ChevronRight,
+  AlertTriangle, XCircle,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchLeadsForDashboard, updateLeadStatus } from "@/integrations/supabase/leads";
+import { fetchLeadsForDashboard, updateLeadStatus, confirmLeadVisit } from "@/integrations/supabase/leads";
 import { fetchOpenTasks, createTask } from "@/integrations/supabase/tasks";
 import { fetchProfiles } from "@/integrations/supabase/profiles";
-import type { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
+import type { Lead, LeadStatus, ExclusionReason, LostReason } from "@/types/lead";
+import { LOST_REASON_LABEL, TIPO_TRABALHO_LABEL } from "@/types/lead";
 import type { Task } from "@/types/task";
 import type { User } from "@/types/user";
 import { toast } from "sonner";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 import { RadarAcao } from "@/components/broker/RadarAcao";
-import { Sheet, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import LeadForm from "@/components/broker/LeadForm";
+import { MetaStrip } from "@/components/broker/MetaStrip";
 
 /* ─────────────────────────────────────────────
    STYLES
@@ -123,19 +126,21 @@ const WOLF_STYLES = `
    CONSTANTS
 ───────────────────────────────────────────── */
 const PIPELINE = [
-  { id:"NEW",             label:"NOVO",   color:"#38BDF8", bg:"rgba(56,189,248,.15)"  },
-  { id:"IN_PROGRESS",     label:"ATEND.", color:"#818CF8", bg:"rgba(129,140,248,.15)" },
-  { id:"VISIT_SCHEDULED", label:"VISITA", color:"#34D399", bg:"rgba(52,211,153,.15)"  },
-  { id:"DOCS_REQUESTED",  label:"DOCS",   color:"#FBBF24", bg:"rgba(251,191,36,.15)"  },
-  { id:"CONCLUDED",       label:"VENDA",  color:"#F59E0B", bg:"rgba(245,158,11,.2)"   },
+  { id:"NEW",              label:"NOVO",      color:"#38BDF8", bg:"rgba(56,189,248,.15)"  },
+  { id:"IN_PROGRESS",      label:"ATEND.",    color:"#818CF8", bg:"rgba(129,140,248,.15)" },
+  { id:"VISIT_SCHEDULED",  label:"VISITA",    color:"#34D399", bg:"rgba(52,211,153,.15)"  },
+  { id:"VISITA_REALIZADA", label:"COMPAR.",   color:"#10B981", bg:"rgba(16,185,129,.15)"  },
+  { id:"DOCS_REQUESTED",   label:"DOCS",      color:"#FBBF24", bg:"rgba(251,191,36,.15)"  },
+  { id:"CONCLUDED",        label:"VENDA",     color:"#F59E0B", bg:"rgba(245,158,11,.2)"   },
 ];
 
 const STATUS_STYLE: Record<string,{bg:string;text:string;label:string;emoji:string}> = {
-  NEW:              { bg:"rgba(56,189,248,.15)",  text:"#38BDF8", label:"NOVO",   emoji:"⚡" },
-  IN_PROGRESS:      { bg:"rgba(129,140,248,.15)", text:"#818CF8", label:"ATEND.", emoji:"💬" },
-  VISIT_SCHEDULED:  { bg:"rgba(52,211,153,.15)",  text:"#34D399", label:"VISITA", emoji:"📅" },
-  DOCS_REQUESTED:   { bg:"rgba(251,191,36,.15)",  text:"#FBBF24", label:"DOCS",   emoji:"📄" },
-  CONCLUDED:        { bg:"rgba(245,158,11,.2)",   text:"#F59E0B", label:"VENDA",  emoji:"🏆" },
+  NEW:              { bg:"rgba(56,189,248,.15)",  text:"#38BDF8", label:"NOVO",      emoji:"⚡" },
+  IN_PROGRESS:      { bg:"rgba(129,140,248,.15)", text:"#818CF8", label:"ATEND.",    emoji:"💬" },
+  VISIT_SCHEDULED:  { bg:"rgba(52,211,153,.15)",  text:"#34D399", label:"VISITA",    emoji:"📅" },
+  VISITA_REALIZADA: { bg:"rgba(16,185,129,.15)",  text:"#10B981", label:"COMPAR.",   emoji:"🏠" },
+  DOCS_REQUESTED:   { bg:"rgba(251,191,36,.15)",  text:"#FBBF24", label:"DOCS",      emoji:"📄" },
+  CONCLUDED:        { bg:"rgba(245,158,11,.2)",   text:"#F59E0B", label:"VENDA",     emoji:"🏆" },
 };
 
 const FILTER_OPTIONS: { id:"ALL"|LeadStatus; label:string; emoji:string }[] = [
@@ -429,6 +434,7 @@ export default function DashboardWolf() {
   const [humanModeLoading, setHumanModeLoading] = useState(false);
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"battle" | "arena">("battle");
+  const [lostSheetOpen, setLostSheetOpen] = useState(false);
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const isBroker = role === "BROKER";
@@ -672,24 +678,50 @@ export default function DashboardWolf() {
     }
   };
 
-  const handleDiscard = async () => {
+  const handleDiscard = () => {
+    if (!activeLead || mutating) return;
+    setLostSheetOpen(true);
+  };
+
+  const handleConfirmLost = async (reason: LostReason) => {
     if (!activeLead || mutating) return;
     const next = filteredLeads.find(l => l.id !== activeLead.id);
-    // Otimista
     setDismissed(prev => new Set([...prev, activeLead.id]));
     if (next) { setActiveLead(next); setActiveStatus(next.status); }
     else { setActiveLead(null); setActiveStatus(""); }
+    setLostSheetOpen(false);
 
     try {
       setMutating(true);
-      await updateLeadStatus(activeLead.id, "EXCLUDED", "NO_INTEREST");
+      await updateLeadStatus(activeLead.id, "ABANDONED", null, reason);
       qc.invalidateQueries({ queryKey: ["wolfLeads"] });
-    } catch (err) {
-      toast.error("Erro ao descartar lead.");
+      qc.invalidateQueries({ queryKey: ["wolfRanking"] });
+    } catch {
+      toast.error("Erro ao registrar perda.");
       setDismissed(prev => { const s = new Set(prev); s.delete(activeLead.id); return s; });
     } finally {
       setMutating(false);
     }
+  };
+
+  const handleVisitaRealizada = async (leadId: string) => {
+    try {
+      setMutating(true);
+      await updateLeadStatus(leadId, "VISITA_REALIZADA");
+      qc.invalidateQueries({ queryKey: ["wolfLeads"] });
+      toast.success("Visita confirmada — solicite a documentação agora!");
+    } catch { toast.error("Erro ao confirmar visita."); }
+    finally { setMutating(false); }
+  };
+
+  const handleNaoCompareceu = async (leadId: string) => {
+    try {
+      setMutating(true);
+      await updateLeadStatus(leadId, "ABANDONED", null, "NAO_COMPARECEU");
+      qc.invalidateQueries({ queryKey: ["wolfLeads"] });
+      toast.info("Registrado como não compareceu.");
+    } catch { toast.error("Erro ao registrar."); }
+    finally { setMutating(false); }
   };
 
   const handleSaveNote = async () => {
@@ -824,6 +856,9 @@ export default function DashboardWolf() {
         {/* ── TICKER ── */}
         <AchievementTicker items={tickerItems} highlight={tickerHL} />
 
+        {/* ── META DO MÊS ── */}
+        {isBroker && <MetaStrip />}
+
         {/* ── WHATSAPP CONNECTION BANNER ── */}
         <WhatsAppQRBanner />
 
@@ -931,25 +966,89 @@ export default function DashboardWolf() {
                     })}
                   </div>
 
-                  {/* Actions */}
-                  <div className="grid grid-cols-4 gap-2">
-                    <button
-                      onClick={() => handleWhatsApp(activeLead)}
-                      className="btn-whatsapp col-span-2 flex items-center justify-center gap-2 h-11 rounded-xl font-black text-white text-sm uppercase tracking-wide">
-                      <MessageSquare className="w-4 h-4" /> WhatsApp
-                    </button>
-                    <a href={`tel:${activeLead.phone}`}
-                      className="btn-ghost flex flex-col items-center justify-center gap-0.5 h-11 rounded-xl text-slate-300 hover:text-white cursor-pointer">
-                      <Phone className="w-4 h-4" />
-                      <span className="text-[9px] uppercase font-bold">Ligar</span>
-                    </a>
-                    <button
-                      onClick={() => toast.info("Agendamento em breve")}
-                      className="btn-ghost flex flex-col items-center justify-center gap-0.5 h-11 rounded-xl text-slate-300 hover:text-amber-300">
-                      <Calendar className="w-4 h-4" />
-                      <span className="text-[9px] uppercase font-bold">Agendar</span>
-                    </button>
-                  </div>
+                  {/* Renda / Tipo trabalho (Facebook) */}
+                  {(activeLead.rendaDeclarada || activeLead.tipoTrabalho) && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
+                      style={{ background: "rgba(129,140,248,.08)", border: "1px solid rgba(129,140,248,.2)" }}>
+                      <span className="text-[10px] text-indigo-300 font-semibold">
+                        {[
+                          activeLead.rendaDeclarada ? `R$ ${activeLead.rendaDeclarada}` : "",
+                          activeLead.tipoTrabalho ? TIPO_TRABALHO_LABEL[activeLead.tipoTrabalho] : "",
+                        ].filter(Boolean).join(" · ")}
+                      </span>
+                      <span className="text-[9px] text-indigo-500 ml-auto">via Facebook</span>
+                    </div>
+                  )}
+
+                  {/* Actions — contextuais por status */}
+                  {(() => {
+                    const s = activeStatus || activeLead.status;
+                    return (
+                      <div className="flex gap-2 flex-wrap">
+                        {/* WhatsApp — sempre */}
+                        <button
+                          onClick={() => handleWhatsApp(activeLead)}
+                          className="btn-whatsapp flex items-center justify-center gap-2 h-11 px-4 rounded-xl font-black text-white text-sm uppercase tracking-wide flex-1 min-w-[120px]">
+                          <MessageSquare className="w-4 h-4" /> WhatsApp
+                        </button>
+
+                        {/* Ligar — sempre */}
+                        <a href={`tel:${activeLead.phone}`}
+                          className="btn-ghost flex flex-col items-center justify-center gap-0.5 h-11 w-14 rounded-xl text-slate-300 hover:text-white cursor-pointer shrink-0">
+                          <Phone className="w-4 h-4" />
+                          <span className="text-[9px] uppercase font-bold">Ligar</span>
+                        </a>
+
+                        {/* Avançar funil — contextual */}
+                        {s === "NEW" && (
+                          <button onClick={() => handlePipelineClick("IN_PROGRESS")} disabled={mutating}
+                            className="flex items-center gap-1.5 h-11 px-3 rounded-xl font-black text-xs uppercase tracking-wide shrink-0 transition-all"
+                            style={{ background: "rgba(129,140,248,.2)", border: "1px solid rgba(129,140,248,.4)", color: "#818CF8" }}>
+                            <ChevronRight className="w-3.5 h-3.5" /> Iniciar
+                          </button>
+                        )}
+
+                        {s === "IN_PROGRESS" && (
+                          <button onClick={() => handlePipelineClick("VISIT_SCHEDULED")} disabled={mutating}
+                            className="flex items-center gap-1.5 h-11 px-3 rounded-xl font-black text-xs uppercase tracking-wide shrink-0 transition-all"
+                            style={{ background: "rgba(52,211,153,.2)", border: "1px solid rgba(52,211,153,.4)", color: "#34D399" }}>
+                            <Calendar className="w-3.5 h-3.5" /> Agendar Visita
+                          </button>
+                        )}
+
+                        {s === "VISIT_SCHEDULED" && (
+                          <>
+                            <button onClick={() => handleVisitaRealizada(activeLead.id)} disabled={mutating}
+                              className="flex items-center gap-1.5 h-11 px-3 rounded-xl font-black text-xs uppercase tracking-wide shrink-0 transition-all"
+                              style={{ background: "rgba(16,185,129,.2)", border: "1px solid rgba(16,185,129,.4)", color: "#10B981" }}>
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Compareceu
+                            </button>
+                            <button onClick={() => handleNaoCompareceu(activeLead.id)} disabled={mutating}
+                              className="flex items-center gap-1.5 h-11 px-3 rounded-xl font-black text-xs uppercase tracking-wide shrink-0 transition-all"
+                              style={{ background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.3)", color: "#EF4444" }}>
+                              <XCircle className="w-3.5 h-3.5" /> Não veio
+                            </button>
+                          </>
+                        )}
+
+                        {s === "VISITA_REALIZADA" && (
+                          <button onClick={() => handlePipelineClick("DOCS_REQUESTED")} disabled={mutating}
+                            className="flex items-center gap-1.5 h-11 px-3 rounded-xl font-black text-xs uppercase tracking-wide shrink-0 transition-all"
+                            style={{ background: "rgba(251,191,36,.2)", border: "1px solid rgba(251,191,36,.4)", color: "#FBBF24" }}>
+                            <FileText className="w-3.5 h-3.5" /> Solicitar Docs
+                          </button>
+                        )}
+
+                        {s === "DOCS_REQUESTED" && (
+                          <button onClick={() => handlePipelineClick("CONCLUDED")} disabled={mutating}
+                            className="flex items-center gap-1.5 h-11 px-3 rounded-xl font-black text-xs uppercase tracking-wide shrink-0 transition-all"
+                            style={{ background: "rgba(245,158,11,.2)", border: "1px solid rgba(245,158,11,.4)", color: "#F59E0B" }}>
+                            <Trophy className="w-3.5 h-3.5" /> Fechar Venda 🏆
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Override de automação */}
                   <button
@@ -1001,7 +1100,7 @@ export default function DashboardWolf() {
                     <button onClick={handleDiscard} disabled={mutating}
                       className="btn-danger flex items-center gap-1.5 px-3 h-10 rounded-xl font-black text-white text-xs uppercase tracking-wide shrink-0"
                       style={{ opacity: mutating ? .6 : 1 }}>
-                      <X className="w-3.5 h-3.5" /> Sem Interesse
+                      <X className="w-3.5 h-3.5" /> Perdido
                     </button>
                   </div>
                 </motion.div>
@@ -1247,6 +1346,32 @@ export default function DashboardWolf() {
             </div>
           </div>
         </main>
+
+        {/* ── SHEET: MOTIVO DE PERDA ── */}
+        <Sheet open={lostSheetOpen} onOpenChange={setLostSheetOpen}>
+          <SheetContent side="bottom" className="bg-[#080B14] border-white/10 text-white rounded-t-2xl pb-8">
+            <SheetHeader className="mb-4">
+              <SheetTitle className="text-white flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-400" />
+                Por que esse lead foi perdido?
+              </SheetTitle>
+            </SheetHeader>
+            <div className="space-y-2">
+              {(Object.entries(LOST_REASON_LABEL) as [NonNullable<LostReason>, string][]).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => handleConfirmLost(key)}
+                  disabled={mutating}
+                  className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
+                  style={{ background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,.15)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(239,68,68,.35)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,.05)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,.08)"; }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </SheetContent>
+        </Sheet>
 
         {/* ── MOBILE BOTTOM TAB BAR ── */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex h-14 shrink-0"
