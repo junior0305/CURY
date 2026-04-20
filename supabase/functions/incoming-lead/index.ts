@@ -315,16 +315,30 @@ serve(async (req) => {
 
         if (notifBotId) {
           const originLabel = origin || tag || 'Sem origem';
+          const appUrl = Deno.env.get('APP_URL') || 'https://comandra.com.br/dashboard';
 
           // ── HANDOFF INTELIGENTE: gera briefing com IA ─────────────────
           const geminiKey = Deno.env.get('GEMINI_API_KEY') || '';
           // Linha de qualificação MCMV se disponível
+          const tipoTrabalhoLabel = tipoTrabalho === 'CLT' ? 'CLT' : tipoTrabalho === 'AUTONOMO' ? 'Autônomo' : tipoTrabalho === 'FUNCIONARIO_PUBLICO' ? 'Func. Público' : null;
           const mcmvLine = [
-            rendaDeclarada  ? `💰 Renda: ${rendaDeclarada}` : '',
-            tipoTrabalho    ? `💼 ${tipoTrabalho === 'CLT' ? 'CLT' : tipoTrabalho === 'AUTONOMO' ? 'Autônomo' : 'Func. Público'}` : '',
+            rendaDeclarada      ? `💰 Renda: *${rendaDeclarada}*` : '',
+            tipoTrabalhoLabel   ? `💼 ${tipoTrabalhoLabel}` : '',
           ].filter(Boolean).join(' · ');
 
-          let notifMsg = `🎯 *Novo Lead*\n\n👤 ${name}\n📞 ${phone}\n🏷️ ${tag || 'Sem tag'}\n📍 ${originLabel}${mcmvLine ? `\n${mcmvLine}` : ''}`;
+          // Mensagem base — SEM telefone (corretor deve entrar no sistema)
+          let notifMsg = [
+            `🎯 *Novo lead para você!*`,
+            ``,
+            `👤 *${name}*`,
+            `🏷️ ${tag || originLabel}`,
+            mcmvLine || '',
+            ``,
+            `📲 *Entre no sistema para ver o contato e enviar mensagem:*`,
+            appUrl,
+            ``,
+            `⏰ Atenda rápido — leads que esperam mais de 5 min convertem muito menos.`,
+          ].filter(l => l !== null && l !== undefined).join('\n');
 
           if (geminiKey && (message || tag || origin)) {
             try {
@@ -364,11 +378,11 @@ Responda APENAS em JSON válido, sem markdown, sem explicação:
               const temaLabel: Record<string,string> = { preco:'Preço/Parcela', entrada:'Valor de entrada', localizacao:'Localização', documentacao:'Documentação', sem_info:'Geral' };
 
               notifMsg = [
-                `🎯 *Novo Lead — Briefing*`,
+                `🎯 *Novo lead — Briefing IA*`,
                 ``,
                 `👤 *${name}*`,
-                `📞 ${phone}`,
                 `🏷️ ${tag || 'Sem tag'} · 📍 ${originLabel}`,
+                mcmvLine || '',
                 ``,
                 `📊 *Análise:*`,
                 `${intencaoEmoji} Intenção: *${briefing.intencao}*`,
@@ -378,7 +392,10 @@ Responda APENAS em JSON válido, sem markdown, sem explicação:
                 ``,
                 `💡 *Abertura sugerida:*`,
                 `_"${briefing.abertura}"_`,
-              ].filter(l => l !== '').join('\n');
+                ``,
+                `📲 *Entre no sistema para ver o contato:*`,
+                appUrl,
+              ].filter(l => l !== null && l !== undefined && l !== '').join('\n');
 
               // Salva classificação no lead_state
               try {

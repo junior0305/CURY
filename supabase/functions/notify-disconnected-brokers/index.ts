@@ -15,7 +15,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const appUrl = Deno.env.get('APP_URL') || 'https://app.comandra.com.br';
+    const appUrl = Deno.env.get('APP_URL') || 'https://comandra.com.br/dashboard';
 
     // ── 1. Buscar corretores com chip desconectado ────────────────────────────
     const { data: disconnectedBrokers } = await supabase
@@ -124,7 +124,22 @@ serve(async (req) => {
 
       const managerName = manager.first_name || manager.full_name?.split(' ')[0] || 'Gerência';
 
-      const message = `⚠️ *${brokerName}*, seu WhatsApp do CRM está *desconectado* (chip ${chipName}).\n\nSeus leads estão sem atendimento automático e podem estar perdendo oportunidades agora.\n\n👉 Acesse o sistema e reconecte o QR Code:\n${appUrl}\n\n_${managerName} - Gestão Comandra_`;
+      const message = [
+        `🚨 *ATENÇÃO, ${brokerName}!*`,
+        ``,
+        `Seu chip WhatsApp *"${chipName}"* está DESCONECTADO do CRM.`,
+        ``,
+        `❌ Seus leads *não recebem* follow-up automático`,
+        `❌ Mensagens automáticas estão *paralisadas*`,
+        `❌ Você pode estar *perdendo vendas agora*`,
+        ``,
+        `👉 *Acesse o sistema AGORA e reconecte:*`,
+        `${appUrl}`,
+        ``,
+        `Entre no app → toque em "Conectar" → escaneie o QR Code. Leva menos de 30 segundos.`,
+        ``,
+        `_${managerName} - Gestão Comandra_`,
+      ].join('\n');
 
       try {
         // Enviar via send_whatsapp_message (reutiliza a lógica existente)
