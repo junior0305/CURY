@@ -8,7 +8,12 @@ const corsHeaders = {
 
 function hoursAgo(iso: string | null): number {
   if (!iso) return 9999;
-  return Math.floor((Date.now() - new Date(iso).getTime()) / 3600000);
+  return (Date.now() - new Date(iso).getTime()) / 3600000;
+}
+
+function daysAgo(iso: string | null): number {
+  if (!iso) return 9999;
+  return (Date.now() - new Date(iso).getTime()) / 86400000;
 }
 
 async function sendAlert(supabase: any, botInstanceId: string, phone: string, message: string) {
@@ -30,6 +35,7 @@ serve(async (req) => {
   const now = new Date().toISOString();
   const alerts: Array<{ type: string; severity: string; message: string; fixed: boolean }> = [];
   let autoFixed = 0;
+  let checksRun = 0;
 
   try {
     // ── Carregar configurações ─────────────────────────────────────────────
@@ -42,7 +48,10 @@ serve(async (req) => {
     const alertPhone: string | null = alertPhoneSetting?.value ?? null;
     const canAlert = !!(notifBotId && alertPhone);
 
-    // ── CHECK 1: Bots offline > 2h ─────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════════════════
+    // CHECK 1: Bots offline > 2h
+    // ════════════════════════════════════════════════════════════════════════
+    checksRun++;
     const twoHAgo = new Date(Date.now() - 2 * 3600000).toISOString();
     const { data: offlineBots } = await supabase
       .from('bot_instances')
@@ -52,15 +61,25 @@ serve(async (req) => {
 
     for (const bot of offlineBots || []) {
       const h = hoursAgo(bot.updated_at);
-      const msg = `🔴 Bot offline: *${bot.name}* (${bot.instance_name}) está OFFLINE há ${h}h. Reconecte no painel Evolution.`;
+      const msg = `🔴 Bot offline: *${bot.name}* (${bot.instance_name}) está OFFLINE há ${h.toFixed(0)}h. Reconecte no painel Evolution.`;
       alerts.push({ type: 'bot_offline', severity: 'high', message: msg, fixed: false });
-      if (canAlert && h === 2) { // alerta só quando atingir exatamente 2h (não repetir toda hora)
+      if (canAlert && Math.round(h) === 2) {
         await sendAlert(supabase, notifBotId!, alertPhone!, msg);
       }
       console.log(`[guardian] ⚠️ ${msg}`);
     }
 
-    // ── CHECK 2: Itens pendentes parados há mais de 3h ──────────────────────
+    if ((offlineBots?.length ?? 0) === 0) {
+      await supabase.from('guardian_alerts')
+        .update({ resolved_at: now })
+        .eq('check_type', 'bot_offline')
+        .is('resolved_at', null);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CHECK 2: lead_activation_queue itens parados há > 3h
+    // ════════════════════════════════════════════════════════════════════════
+    checksRun++;
     const threeHAgo = new Date(Date.now() - 3 * 3600000).toISOString();
     const { count: stuckCount } = await supabase
       .from('lead_activation_queue')
@@ -69,7 +88,6 @@ serve(async (req) => {
       .lt('scheduled_for', threeHAgo);
 
     if ((stuckCount ?? 0) > 0) {
-      // Auto-fix: verificar se são leads com status terminal (que o cerebro não cancelou)
       const { data: stuckItems } = await supabase
         .from('lead_activation_queue')
         .select('id, lead_id')
@@ -110,9 +128,17 @@ serve(async (req) => {
         alerts.push({ type: 'queue_stuck', severity: 'info', message: msg, fixed: true });
         console.log(`[guardian] ✅ ${msg}`);
       }
+    } else {
+      await supabase.from('guardian_alerts')
+        .update({ resolved_at: now })
+        .in('check_type', ['queue_stuck', 'zero_sends_streak'])
+        .is('resolved_at', null);
     }
 
-    // ── CHECK 3: 5 execuções consecutivas do Cérebro com 0 enviados ──────────
+    // ════════════════════════════════════════════════════════════════════════
+    // CHECK 3: Streak de 0 envios pelo Cérebro
+    // ════════════════════════════════════════════════════════════════════════
+    checksRun++;
     const { data: recentCerebroRuns } = await supabase
       .from('cerebro_runs')
       .select('processed, rescheduled, ran_at')
@@ -120,8 +146,7 @@ serve(async (req) => {
       .limit(6);
 
     if ((recentCerebroRuns?.length ?? 0) >= 5) {
-      const runs = recentCerebroRuns!;
-      const allZeroSends = runs.slice(0, 5).every(r => (r.processed ?? 0) === 0);
+      const allZeroSends = recentCerebroRuns!.slice(0, 5).every(r => (r.processed ?? 0) === 0);
       const hasQueueItems = (stuckCount ?? 0) > 0;
 
       if (allZeroSends && hasQueueItems) {
@@ -132,7 +157,10 @@ serve(async (req) => {
       }
     }
 
-    // ── CHECK 4: Acúmulo de falhas permanentes (attempts >= 5) ───────────────
+    // ════════════════════════════════════════════════════════════════════════
+    // CHECK 4: Acúmulo de falhas permanentes (attempts >= 5)
+    // ════════════════════════════════════════════════════════════════════════
+    checksRun++;
     const { count: permanentFailCount } = await supabase
       .from('lead_activation_queue')
       .select('id', { count: 'exact', head: true })
@@ -140,40 +168,157 @@ serve(async (req) => {
       .gte('attempts', 5);
 
     if ((permanentFailCount ?? 0) > 10) {
-      const msg = `📛 ${permanentFailCount} lead(s) falharam 5+ vezes e não serão retentados. Verifique as credenciais dos bots no Evolution API (Canuto, Polonia, etc).`;
+      const msg = `📛 ${permanentFailCount} lead(s) falharam 5+ vezes e não serão retentados. Verifique as credenciais dos bots no Evolution API.`;
       alerts.push({ type: 'failed_buildup', severity: 'medium', message: msg, fixed: false });
       console.log(`[guardian] ⚠️ ${msg}`);
     }
 
-    // ── CHECK 5: Corretores sem bot atribuído ─────────────────────────────────
-    const { count: brokerWithoutBot } = await supabase
+    // ════════════════════════════════════════════════════════════════════════
+    // CHECK 5: Corretores sem bot atribuído
+    // ════════════════════════════════════════════════════════════════════════
+    checksRun++;
+    const { data: brokersWithoutBot } = await supabase
       .from('profiles')
-      .select('id', { count: 'exact', head: true })
+      .select('id, first_name, last_name')
       .eq('role', 'BROKER')
+      .eq('lead_assignment_enabled', true)
       .is('bot_instance_id', null);
 
-    if ((brokerWithoutBot ?? 0) > 0) {
-      const msg = `👤 ${brokerWithoutBot} corretor(es) sem bot WhatsApp atribuído. Esses leads não receberão follow-up automático.`;
+    if ((brokersWithoutBot?.length ?? 0) > 0) {
+      const names = (brokersWithoutBot || []).map(b => `${b.first_name || ''} ${b.last_name || ''}`.trim()).join(', ');
+      const msg = `👤 ${brokersWithoutBot!.length} corretor(es) ativo(s) sem bot WhatsApp: ${names}. Leads desses corretores não receberão follow-up automático.`;
       alerts.push({ type: 'broker_no_bot', severity: 'medium', message: msg, fixed: false });
       console.log(`[guardian] ⚠️ ${msg}`);
     }
 
-    // ── Resolver alertas antigos que agora estão OK ───────────────────────────
-    // Se não há mais bots offline, resolver alertas bot_offline anteriores
-    if ((offlineBots?.length ?? 0) === 0) {
+    // ════════════════════════════════════════════════════════════════════════
+    // CHECK 6: ai_coach_queue preso em 'processing' > 15min — AUTO-FIX
+    // ════════════════════════════════════════════════════════════════════════
+    checksRun++;
+    const fifteenMinAgo = new Date(Date.now() - 15 * 60000).toISOString();
+    const { data: stuckCoach } = await supabase
+      .from('ai_coach_queue')
+      .select('id, broker_id')
+      .eq('status', 'processing')
+      .lt('created_at', fifteenMinAgo);
+
+    if ((stuckCoach?.length ?? 0) > 0) {
+      await supabase
+        .from('ai_coach_queue')
+        .update({ status: 'pending' })
+        .eq('status', 'processing')
+        .lt('created_at', fifteenMinAgo);
+
+      autoFixed += stuckCoach!.length;
+      const msg = `🔧 Auto-fix: ${stuckCoach!.length} item(ns) da fila de AI Coach presos em 'processing' há >15min — resetados para 'pending'.`;
+      alerts.push({ type: 'ai_coach_stuck', severity: 'medium', message: msg, fixed: true });
+      console.log(`[guardian] ✅ ${msg}`);
+    } else {
       await supabase.from('guardian_alerts')
         .update({ resolved_at: now })
-        .eq('check_type', 'bot_offline')
-        .is('resolved_at', null);
-    }
-    if ((stuckCount ?? 0) === 0) {
-      await supabase.from('guardian_alerts')
-        .update({ resolved_at: now })
-        .in('check_type', ['queue_stuck', 'zero_sends_streak'])
+        .eq('check_type', 'ai_coach_stuck')
         .is('resolved_at', null);
     }
 
-    // ── Registrar alertas novos ───────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════════════════
+    // CHECK 7: Leads NEW > 3h sem nenhuma tentativa de contato (com corretor)
+    // ════════════════════════════════════════════════════════════════════════
+    checksRun++;
+    const { data: untouchedLeads } = await supabase
+      .from('leads')
+      .select('id, name, broker_id, created_at')
+      .eq('status', 'NEW')
+      .eq('contact_attempts', 0)
+      .lt('created_at', threeHAgo)
+      .not('broker_id', 'is', null)
+      .limit(20);
+
+    if ((untouchedLeads?.length ?? 0) > 0) {
+      const oldest = untouchedLeads!.reduce((acc, l) =>
+        new Date(l.created_at) < new Date(acc.created_at) ? l : acc
+      );
+      const oldestHours = hoursAgo(oldest.created_at).toFixed(0);
+      const msg = `⚠️ ${untouchedLeads!.length} lead(s) NEW com corretor atribuído e 0 tentativas de contato há 3h+. Mais antigo: "${oldest.name}" (${oldestHours}h). Verifique se os bots estão conectados.`;
+      alerts.push({ type: 'leads_orphaned', severity: 'high', message: msg, fixed: false });
+      if (canAlert) await sendAlert(supabase, notifBotId!, alertPhone!, msg);
+      console.log(`[guardian] ⚠️ ${msg}`);
+    } else {
+      await supabase.from('guardian_alerts')
+        .update({ resolved_at: now })
+        .eq('check_type', 'leads_orphaned')
+        .is('resolved_at', null);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CHECK 8: Leads NEGOTIATING > 15 dias sem atualização — alerta gerente
+    // ════════════════════════════════════════════════════════════════════════
+    checksRun++;
+    const fifteenDaysAgo = new Date(Date.now() - 15 * 86400000).toISOString();
+    const { data: staleNegoc } = await supabase
+      .from('leads')
+      .select('id, name, broker_id, negotiating_since')
+      .eq('status', 'NEGOTIATING')
+      .lt('negotiating_since', fifteenDaysAgo)
+      .limit(20);
+
+    if ((staleNegoc?.length ?? 0) > 0) {
+      const msg = `🕒 ${staleNegoc!.length} lead(s) em NEGOCIAÇÃO há mais de 15 dias sem avançar: ${staleNegoc!.map(l => `"${l.name}" (${daysAgo(l.negotiating_since).toFixed(0)}d)`).join(', ')}. Considere redistribuição ou intervenção do gerente.`;
+      alerts.push({ type: 'negotiating_stale', severity: 'medium', message: msg, fixed: false });
+      console.log(`[guardian] ⚠️ ${msg}`);
+
+      // Notificar gerentes dos corretores afetados
+      if (canAlert) {
+        const brokerIds = [...new Set(staleNegoc!.map(l => l.broker_id).filter(Boolean))];
+        for (const brokerId of brokerIds) {
+          const { data: broker } = await supabase
+            .from('profiles')
+            .select('first_name, manager_id')
+            .eq('id', brokerId)
+            .maybeSingle();
+          if (broker?.manager_id) {
+            const { data: manager } = await supabase
+              .from('profiles')
+              .select('whatsapp_number, bot_instance_id')
+              .eq('id', broker.manager_id)
+              .maybeSingle();
+            if (manager?.whatsapp_number && manager?.bot_instance_id) {
+              const brokerLeads = staleNegoc!.filter(l => l.broker_id === brokerId);
+              await sendAlert(
+                supabase,
+                manager.bot_instance_id,
+                manager.whatsapp_number,
+                `⚠️ *Atenção Gerente!* O corretor *${broker.first_name}* tem ${brokerLeads.length} lead(s) em negociação há mais de 15 dias sem avançar. Verifique no sistema.`
+              );
+            }
+          }
+        }
+      }
+    } else {
+      await supabase.from('guardian_alerts')
+        .update({ resolved_at: now })
+        .eq('check_type', 'negotiating_stale')
+        .is('resolved_at', null);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CHECK 9: Agentes principais desativados (risco sistêmico)
+    // ════════════════════════════════════════════════════════════════════════
+    checksRun++;
+    const { data: agentSettings } = await supabase
+      .from('system_settings')
+      .select('key, value')
+      .in('key', ['cerebro_enabled', 'agente_redistribuicao_enabled', 'agente_recuperacao_enabled']);
+
+    const allDisabled = (agentSettings || []).every(s => s.value === 'false' || s.value === false);
+    if (allDisabled && (agentSettings?.length ?? 0) >= 3) {
+      const msg = `🔕 Atenção: Todos os agentes principais (Cérebro, Redistribuição, Recuperação) estão DESATIVADOS. O sistema está operando em modo manual.`;
+      alerts.push({ type: 'heartbeat', severity: 'info', message: msg, fixed: false });
+      console.log(`[guardian] ℹ️ ${msg}`);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Registrar alertas novos
+    // ════════════════════════════════════════════════════════════════════════
     for (const alert of alerts) {
       await supabase.from('guardian_alerts').insert({
         check_type: alert.type,
@@ -184,23 +329,42 @@ serve(async (req) => {
       });
     }
 
-    // ── Heartbeat ─────────────────────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════════════════
+    // Heartbeat + system_health_log
+    // ════════════════════════════════════════════════════════════════════════
+    const issuesFound = alerts.filter(a => !a.fixed).length;
+    const summaryJson = {
+      checks: checksRun,
+      alerts: alerts.map(a => ({ type: a.type, severity: a.severity, fixed: a.fixed })),
+    };
+
     await supabase.from('guardian_alerts').insert({
       check_type: 'heartbeat',
-      severity: 'info',
-      message: `Guardian OK — ${alerts.length} alerta(s) | ${autoFixed} auto-fix(es)`,
+      severity: issuesFound > 0 ? 'medium' : 'info',
+      message: `Guardian OK — ${checksRun} checks | ${alerts.length} alerta(s) | ${autoFixed} auto-fix(es)`,
       auto_fixed: false,
       created_at: now,
     });
 
+    // Log no system_health_log (ignora erro se tabela não existir ainda)
+    await supabase.from('system_health_log').insert({
+      run_at: now,
+      checks_run: checksRun,
+      issues_found: issuesFound,
+      auto_fixed: autoFixed,
+      summary_json: summaryJson,
+    }).then(() => {}).catch(() => {});
+
     const result = {
       checked_at: now,
+      checks_run: checksRun,
       alerts: alerts.length,
+      issues_found: issuesFound,
       auto_fixed: autoFixed,
-      details: alerts.map(a => ({ type: a.type, severity: a.severity })),
+      details: alerts.map(a => ({ type: a.type, severity: a.severity, fixed: a.fixed })),
     };
 
-    console.log(`[guardian] done — alerts=${alerts.length} auto_fixed=${autoFixed}`);
+    console.log(`[guardian] done — checks=${checksRun} alerts=${alerts.length} auto_fixed=${autoFixed}`);
 
     return new Response(JSON.stringify(result), {
       status: 200,
@@ -213,7 +377,7 @@ serve(async (req) => {
       await supabase.from('guardian_alerts').insert({
         check_type: 'heartbeat',
         severity: 'high',
-        message: `Guardian ERRO: ${error.message}`,
+        message: `Guardian ERRO FATAL: ${error.message}`,
         auto_fixed: false,
         created_at: now,
       });
