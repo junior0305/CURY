@@ -41,12 +41,13 @@ const STYLES = `
   }
 `;
 
-// Máx. falhas antes de mostrar qr_error
-const MAX_FAIL_COUNT = 2;
 // Tempo máx. em "connecting" antes de voltar ao QR (ms)
 const CONNECTING_TIMEOUT_MS = 20000;
-// Bypass global — se depois desse tempo o corretor ainda não entrou, entra automaticamente
-const GLOBAL_BYPASS_MS = 25000;
+// Bypass global: se após esse tempo o corretor ainda não entrou, entra automaticamente
+// Aumentado para 90s pois o auto-recovery (restart+logout) pode levar até ~15s
+const GLOBAL_BYPASS_MS = 90000;
+// QR expira em ~30s — auto-refresh antes disso
+const QR_REFRESH_INTERVAL_S = 28;
 
 const SESSION_KEY = (userId: string) => `wha_ok_${userId}`;
 
@@ -61,6 +62,7 @@ function useBotStatus(userId: string | undefined, role: string | null) {
   const [refreshing, setRefreshing] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const connectingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isCheckingRef = useRef(false); // guard contra chamadas sobrepostas
   const failCountRef = useRef(0);
   const qrWasDisplayedRef = useRef(false);
   const stuckConnectingCountRef = useRef(0);
@@ -68,7 +70,6 @@ function useBotStatus(userId: string | undefined, role: string | null) {
   const shouldCheck = role === "BROKER" || role === "MANAGER";
 
   // ── PASSO 1: Verificar DB antes de chamar Evolution API ───────────────────
-  // Se o banco já registra status "open", entra imediatamente sem nenhuma chamada HTTP.
   useEffect(() => {
     if (!userId || !shouldCheck) { setStatus("connected"); return; }
     if (sessionStorage.getItem(SESSION_KEY(userId)) === "1") { setStatus("connected"); return; }
@@ -82,7 +83,6 @@ function useBotStatus(userId: string | undefined, role: string | null) {
         const id = profile?.bot_instance_id ?? null;
         if (!id) { setBotInstanceId("none"); setStatus("no_instance"); return; }
 
-        // Checar status no banco (rápido, sem chamar Evolution)
         const { data: botInst } = await supabase
           .from("bot_instances")
           .select("status")
@@ -90,19 +90,21 @@ function useBotStatus(userId: string | undefined, role: string | null) {
           .maybeSingle();
 
         if (botInst?.status === "open") {
-          // Conectado conforme DB — não precisa chamar Evolution API
           sessionStorage.setItem(SESSION_KEY(userId), "1");
           setStatus("connected");
           return;
         }
 
-        // Não conectado — armar polling contra Evolution API
         setBotInstanceId(id);
       });
   }, [userId, shouldCheck]);
 
   const checkConnection = useCallback(async (showRefreshing = false) => {
     if (!botInstanceId || botInstanceId === "none") return;
+    // Guard: não sobrepor chamadas (recovery pode levar ~15s)
+    if (isCheckingRef.current && !showRefreshing) return;
+    isCheckingRef.current = true;
+
     if (showRefreshing) {
       setRefreshing(true);
       failCountRef.current = 0;
@@ -118,7 +120,7 @@ function useBotStatus(userId: string | undefined, role: string | null) {
 
       if (error || !data) {
         failCountRef.current++;
-        if (failCountRef.current >= MAX_FAIL_COUNT) {
+        if (failCountRef.current >= 3) {
           setStatus("qr_error");
           setErrorDetail("Não foi possível contatar o serviço WhatsApp. Verifique a conexão com a Evolution API.");
         }
@@ -148,7 +150,7 @@ function useBotStatus(userId: string | undefined, role: string | null) {
 
       if (data.error) {
         failCountRef.current++;
-        if (failCountRef.current >= MAX_FAIL_COUNT) {
+        if (failCountRef.current >= 3) {
           setStatus("qr_error");
           setErrorDetail(data.error_detail || `Erro: ${data.error}`);
         } else {
@@ -168,13 +170,14 @@ function useBotStatus(userId: string | undefined, role: string | null) {
       }
 
       failCountRef.current++;
-      if (failCountRef.current >= MAX_FAIL_COUNT) {
+      if (failCountRef.current >= 3) {
         setStatus("qr_error");
         setErrorDetail("A instância não está gerando QR. Verifique se o chip está configurado corretamente.");
       } else {
         setStatus("disconnected");
       }
     } finally {
+      isCheckingRef.current = false;
       if (showRefreshing) setRefreshing(false);
     }
   }, [botInstanceId, userId]);
@@ -185,7 +188,7 @@ function useBotStatus(userId: string | undefined, role: string | null) {
     checkConnection();
   }, [botInstanceId, checkConnection]);
 
-  // Polling a cada 4s enquanto desconectado ou conectando
+  // Polling a cada 5s enquanto desconectado ou conectando
   useEffect(() => {
     const shouldPoll = status === "disconnected" || status === "connecting";
     if (!shouldPoll) {
@@ -210,7 +213,7 @@ function useBotStatus(userId: string | undefined, role: string | null) {
       }
     }
 
-    intervalRef.current = setInterval(() => checkConnection(), 4000);
+    intervalRef.current = setInterval(() => checkConnection(), 5000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [status, checkConnection]);
 
@@ -218,6 +221,7 @@ function useBotStatus(userId: string | undefined, role: string | null) {
     failCountRef.current = 0;
     stuckConnectingCountRef.current = 0;
     qrWasDisplayedRef.current = false;
+    isCheckingRef.current = false;
     if (connectingTimeoutRef.current) { clearTimeout(connectingTimeoutRef.current); connectingTimeoutRef.current = null; }
     setErrorDetail(null);
     setQrBase64(null);
@@ -382,7 +386,7 @@ function GkQRError({
   );
 }
 
-// ── QR Code ───────────────────────────────────────────────────────────────────
+// ── QR Code — com countdown de auto-refresh ───────────────────────────────────
 function GkQRCode({
   qrBase64, refreshing, onRefresh, onBypass,
 }: {
@@ -391,6 +395,35 @@ function GkQRCode({
   onRefresh: () => void;
   onBypass: () => void;
 }) {
+  const [countdown, setCountdown] = useState(QR_REFRESH_INTERVAL_S);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Reinicia o countdown toda vez que chega um QR novo (ou refreshing termina)
+  useEffect(() => {
+    if (refreshing || !qrBase64) {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+      if (refreshing) setCountdown(QR_REFRESH_INTERVAL_S);
+      return;
+    }
+
+    setCountdown(QR_REFRESH_INTERVAL_S);
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          // Auto-refresh: pede novo QR antes de expirar
+          onRefresh();
+          return QR_REFRESH_INTERVAL_S;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+  }, [qrBase64, refreshing, onRefresh]);
+
+  // Determina cor do countdown (urgência)
+  const countdownColor = countdown <= 8 ? "#EF4444" : countdown <= 15 ? "#F59E0B" : "#64748B";
+
   return (
     <>
       <style>{STYLES}</style>
@@ -430,20 +463,39 @@ function GkQRCode({
           <div className="flex flex-col items-center gap-4">
             {qrBase64 ? (
               <div className="relative">
+                {/* Overlay de expiração */}
+                {countdown <= 5 && (
+                  <div className="absolute inset-0 z-20 rounded-xl flex items-center justify-center"
+                    style={{ background: "rgba(8,14,28,0.75)" }}>
+                    <p className="text-white text-xs font-bold">Atualizando QR...</p>
+                  </div>
+                )}
                 <div className="absolute inset-0 rounded-xl"
                   style={{ boxShadow: "0 0 30px rgba(0,212,255,.15)", border: "1px solid rgba(0,212,255,.2)", borderRadius: "12px" }} />
                 <img
                   src={qrBase64}
                   alt="QR Code WhatsApp"
                   className="w-52 h-52 rounded-xl relative z-10"
-                  style={{ imageRendering: "pixelated" }}
+                  style={{ imageRendering: "pixelated", opacity: refreshing ? 0.4 : 1, transition: "opacity .3s" }}
                 />
               </div>
             ) : (
               <div className="w-52 h-52 rounded-xl flex flex-col items-center justify-center gap-3"
                 style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(0,212,255,.1)" }}>
                 <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
-                <p className="text-[10px] text-slate-500">Gerando QR Code...</p>
+                <p className="text-[10px] text-slate-500">
+                  {refreshing ? "Gerando QR Code..." : "Aguardando QR..."}
+                </p>
+              </div>
+            )}
+
+            {/* Countdown de expiração */}
+            {qrBase64 && !refreshing && (
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: countdownColor }} />
+                <p className="text-[11px]" style={{ color: countdownColor }}>
+                  Novo QR em {countdown}s
+                </p>
               </div>
             )}
 
@@ -480,10 +532,6 @@ function GkQRCode({
               {refreshing ? "Atualizando..." : "Novo QR Code"}
             </button>
 
-            <p className="text-[10px] text-slate-600 text-center">
-              O QR Code expira em ~30 segundos. O sistema detecta a conexão automaticamente.
-            </p>
-
             <BypassLink onBypass={onBypass} label="Entrar sem conectar agora" />
           </div>
         </div>
@@ -501,15 +549,14 @@ export function WhatsAppGatekeeper({ children }: { children: React.ReactNode }) 
 
   const handleBypass = useCallback(() => setBypassed(true), []);
 
-  // Segurança global: se depois de 25s o corretor ainda não entrou, entra automaticamente.
-  // Evita qualquer travamento independente do estado.
+  // Segurança global: 90s sem conectar → entra automaticamente
   useEffect(() => {
     if (authLoading) return;
     if (status === "connected" || status === "success" || bypassed) {
       if (globalTimerRef.current) clearTimeout(globalTimerRef.current);
       return;
     }
-    if (globalTimerRef.current) return; // já armado
+    if (globalTimerRef.current) return;
     globalTimerRef.current = setTimeout(() => {
       globalTimerRef.current = null;
       setBypassed(true);

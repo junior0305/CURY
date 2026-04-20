@@ -5,19 +5,25 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Smartphone, RefreshCw, CheckCircle2, WifiOff, Wifi } from "lucide-react";
 
+// QR expira em ~30s — auto-refresh a cada 28s
+const QR_REFRESH_INTERVAL_S = 28;
+
 export function WhatsAppQRBanner() {
   const { user } = useAuth();
   const [botInstanceId, setBotInstanceId] = useState<string | null>(null);
   const [instanceName, setInstanceName] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState<boolean | null>(null); // null = carregando
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [qrBase64, setQrBase64] = useState<string | null>(null);
   const [justConnected, setJustConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false); // QR escaneado, aguardando confirmação
+  const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(QR_REFRESH_INTERVAL_S);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isLoadingRef = useRef(false); // guard contra chamadas sobrepostas
 
   // 1. Busca bot_instance_id + instance_name do perfil do corretor
   useEffect(() => {
@@ -29,12 +35,11 @@ export function WhatsAppQRBanner() {
       .maybeSingle()
       .then(({ data }) => {
         if (!data?.bot_instance_id) {
-          setIsConnected(null); // sem chip configurado — não exibir
+          setIsConnected(null);
           return;
         }
         setBotInstanceId(data.bot_instance_id);
 
-        // Lê o status atual e o instance_name do chip
         supabase
           .from("bot_instances")
           .select("status, instance_name")
@@ -51,7 +56,7 @@ export function WhatsAppQRBanner() {
       });
   }, [user?.id]);
 
-  // 2. Realtime: escuta mudanças no bot_instances para reagir instantaneamente
+  // 2. Realtime: escuta mudanças no bot_instances
   useEffect(() => {
     if (!botInstanceId) return;
 
@@ -75,7 +80,7 @@ export function WhatsAppQRBanner() {
     return () => { supabase.removeChannel(channel); };
   }, [botInstanceId]);
 
-  // 3. Polling rápido (5s) enquanto modal aberto — confirma conexão via DB
+  // 3. Polling de status (5s) enquanto modal aberto
   useEffect(() => {
     if (!open || !botInstanceId || justConnected) return;
 
@@ -96,9 +101,35 @@ export function WhatsAppQRBanner() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [open, botInstanceId, justConnected]);
 
-  // 4. Busca o QR code via Edge Function
+  // 4. Countdown de auto-refresh do QR
+  useEffect(() => {
+    if (!open || !qrBase64 || loading || justConnected || connecting) {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+      if (loading) setCountdown(QR_REFRESH_INTERVAL_S);
+      return;
+    }
+
+    setCountdown(QR_REFRESH_INTERVAL_S);
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          fetchQR(); // auto-refresh quando expira
+          return QR_REFRESH_INTERVAL_S;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, qrBase64, loading, justConnected, connecting]);
+
+  // 5. Busca QR via Edge Function (com guard anti-overlap)
   const fetchQR = useCallback(async (forceQR = false) => {
     if (!botInstanceId) return;
+    if (isLoadingRef.current) return; // evita chamadas sobrepostas
+    isLoadingRef.current = true;
+
     if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
     setLoading(true);
     setError(null);
@@ -112,19 +143,14 @@ export function WhatsAppQRBanner() {
       if (fnError) throw new Error(fnError.message);
 
       if (data?.connected) {
-        // Chip já conectado
         setIsConnected(true);
         setJustConnected(true);
       } else if (data?.base64) {
-        // QR disponível — exibir
         setQrBase64(data.base64);
       } else if (data?.connecting) {
-        // QR foi escaneado, aguardando confirmação da Evolution API (~5-15s)
-        // Mostra estado intermediário e re-tenta em 4s com forceQR para buscar novo QR se travar
         setConnecting(true);
         retryTimerRef.current = setTimeout(() => fetchQR(true), 4000);
       } else if (data?.error) {
-        // Erro específico retornado pela Edge Function
         setError(data.error_detail || `Erro: ${data.error}`);
       } else {
         setError("QR code não disponível. A instância pode estar inicializando — tente em alguns segundos.");
@@ -133,12 +159,15 @@ export function WhatsAppQRBanner() {
       setError(e.message || "Erro ao buscar QR code. Verifique se a instância está ativa no Evolution.");
     } finally {
       setLoading(false);
+      isLoadingRef.current = false;
     }
   }, [botInstanceId]);
 
-  // Limpa timer de retry ao desmontar
   useEffect(() => {
-    return () => { if (retryTimerRef.current) clearTimeout(retryTimerRef.current); };
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
   }, []);
 
   const handleOpen = () => {
@@ -148,12 +177,17 @@ export function WhatsAppQRBanner() {
 
   const handleClose = () => {
     if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
     setOpen(false);
     setQrBase64(null);
     setConnecting(false);
     setJustConnected(false);
     setError(null);
+    setCountdown(QR_REFRESH_INTERVAL_S);
   };
+
+  // Determina cor do countdown
+  const countdownColor = countdown <= 8 ? "text-red-400" : countdown <= 15 ? "text-amber-400" : "text-slate-500";
 
   // Não exibe: sem chip configurado, ainda carregando, ou já conectado
   if (!botInstanceId || isConnected === null || isConnected === true) return null;
@@ -229,15 +263,28 @@ export function WhatsAppQRBanner() {
 
             {!loading && !justConnected && !connecting && qrBase64 && (
               <>
-                <div className="rounded-xl overflow-hidden border-4 border-white shadow-xl">
+                <div className="relative rounded-xl overflow-hidden border-4 border-white shadow-xl">
+                  {/* Overlay quando prestes a expirar */}
+                  {countdown <= 5 && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60">
+                      <RefreshCw className="w-6 h-6 text-white animate-spin" />
+                    </div>
+                  )}
                   <img src={qrBase64} alt="QR Code WhatsApp" className="w-56 h-56 object-contain" />
                 </div>
-                <p className="text-xs text-slate-500 text-center">
-                  QR válido por ~60 segundos.{" "}
-                  <button onClick={fetchQR} className="text-amber-400 hover:text-amber-300 underline">
-                    Gerar novo
+
+                {/* Countdown */}
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${countdown <= 8 ? "bg-red-400" : countdown <= 15 ? "bg-amber-400" : "bg-slate-500"}`} />
+                  <p className={`text-xs ${countdownColor}`}>
+                    Novo QR em {countdown}s
+                  </p>
+                  <span className="text-slate-600 text-xs">·</span>
+                  <button onClick={() => fetchQR()} className="text-xs text-amber-400 hover:text-amber-300 underline">
+                    Gerar agora
                   </button>
-                </p>
+                </div>
+
                 <div className="flex items-center gap-1.5 text-xs text-blue-400">
                   <RefreshCw className="w-3 h-3 animate-spin" />
                   Aguardando leitura do QR...
@@ -248,7 +295,7 @@ export function WhatsAppQRBanner() {
             {!loading && !justConnected && !connecting && error && (
               <div className="flex flex-col items-center gap-3 py-4">
                 <p className="text-sm text-red-400 text-center">{error}</p>
-                <Button size="sm" onClick={fetchQR} variant="outline" className="border-slate-600 text-slate-300 gap-1.5">
+                <Button size="sm" onClick={() => fetchQR()} variant="outline" className="border-slate-600 text-slate-300 gap-1.5">
                   <RefreshCw className="w-3.5 h-3.5" />
                   Tentar novamente
                 </Button>
