@@ -13,7 +13,10 @@ import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchLeadsForDashboard, updateLeadStatus, confirmLeadVisit } from "@/integrations/supabase/leads";
+import {
+  fetchLeadsForDashboard, updateLeadStatus,
+  registerContactAttempt, setLeadNegotiating, setLeadFollowUpAuto,
+} from "@/integrations/supabase/leads";
 import { fetchOpenTasks, createTask } from "@/integrations/supabase/tasks";
 import { fetchProfiles } from "@/integrations/supabase/profiles";
 import type { Lead, LeadStatus, ExclusionReason, LostReason } from "@/types/lead";
@@ -127,30 +130,27 @@ const WOLF_STYLES = `
    CONSTANTS
 ───────────────────────────────────────────── */
 const PIPELINE = [
-  { id:"NEW",              label:"NOVO",      color:"#38BDF8", bg:"rgba(56,189,248,.15)"  },
-  { id:"IN_PROGRESS",      label:"ATEND.",    color:"#818CF8", bg:"rgba(129,140,248,.15)" },
-  { id:"VISIT_SCHEDULED",  label:"VISITA",    color:"#34D399", bg:"rgba(52,211,153,.15)"  },
-  { id:"VISITA_REALIZADA", label:"COMPAR.",   color:"#10B981", bg:"rgba(16,185,129,.15)"  },
-  { id:"DOCS_REQUESTED",   label:"DOCS",      color:"#FBBF24", bg:"rgba(251,191,36,.15)"  },
-  { id:"CONCLUDED",        label:"VENDA",     color:"#F59E0B", bg:"rgba(245,158,11,.2)"   },
+  { id:"NEW",              label:"NOVO",    color:"#38BDF8", bg:"rgba(56,189,248,.15)"  },
+  { id:"IN_PROGRESS",      label:"ATEND.",  color:"#818CF8", bg:"rgba(129,140,248,.15)" },
+  { id:"NEGOTIATING",      label:"NEGOC.",  color:"#FB923C", bg:"rgba(251,146,60,.15)"  },
+  { id:"VISIT_SCHEDULED",  label:"VISITA",  color:"#34D399", bg:"rgba(52,211,153,.15)"  },
+  { id:"VISITA_REALIZADA", label:"COMPAR.", color:"#10B981", bg:"rgba(16,185,129,.15)"  },
+  { id:"DOCS_REQUESTED",   label:"DOCS",    color:"#FBBF24", bg:"rgba(251,191,36,.15)"  },
+  { id:"CONCLUDED",        label:"VENDA",   color:"#F59E0B", bg:"rgba(245,158,11,.2)"   },
 ];
 
 const STATUS_STYLE: Record<string,{bg:string;text:string;label:string;emoji:string}> = {
-  NEW:              { bg:"rgba(56,189,248,.15)",  text:"#38BDF8", label:"NOVO",      emoji:"⚡" },
-  IN_PROGRESS:      { bg:"rgba(129,140,248,.15)", text:"#818CF8", label:"ATEND.",    emoji:"💬" },
-  VISIT_SCHEDULED:  { bg:"rgba(52,211,153,.15)",  text:"#34D399", label:"VISITA",    emoji:"📅" },
-  VISITA_REALIZADA: { bg:"rgba(16,185,129,.15)",  text:"#10B981", label:"COMPAR.",   emoji:"🏠" },
-  DOCS_REQUESTED:   { bg:"rgba(251,191,36,.15)",  text:"#FBBF24", label:"DOCS",      emoji:"📄" },
-  CONCLUDED:        { bg:"rgba(245,158,11,.2)",   text:"#F59E0B", label:"VENDA",     emoji:"🏆" },
+  NEW:              { bg:"rgba(56,189,248,.15)",  text:"#38BDF8", label:"NOVO",        emoji:"⚡" },
+  IN_PROGRESS:      { bg:"rgba(129,140,248,.15)", text:"#818CF8", label:"ATEND.",      emoji:"💬" },
+  NEGOTIATING:      { bg:"rgba(251,146,60,.15)",  text:"#FB923C", label:"NEGOC.",      emoji:"🤝" },
+  VISIT_SCHEDULED:  { bg:"rgba(52,211,153,.15)",  text:"#34D399", label:"VISITA",      emoji:"📅" },
+  VISITA_REALIZADA: { bg:"rgba(16,185,129,.15)",  text:"#10B981", label:"COMPAR.",     emoji:"🏠" },
+  DOCS_REQUESTED:   { bg:"rgba(251,191,36,.15)",  text:"#FBBF24", label:"DOCS",        emoji:"📄" },
+  CONCLUDED:        { bg:"rgba(245,158,11,.2)",   text:"#F59E0B", label:"VENDA",       emoji:"🏆" },
+  FOLLOW_UP_AUTO:   { bg:"rgba(100,116,139,.12)", text:"#94A3B8", label:"FOLLOW-UP",   emoji:"🤖" },
+  REACTIVATED:      { bg:"rgba(234,179,8,.2)",    text:"#EAB308", label:"REATIVADO",   emoji:"🔥" },
 };
 
-const FILTER_OPTIONS: { id:"ALL"|LeadStatus; label:string; emoji:string }[] = [
-  { id:"ALL",             label:"TODOS",  emoji:"" },
-  { id:"NEW",             label:"NOVO",   emoji:"⚡" },
-  { id:"IN_PROGRESS",     label:"ATEND.", emoji:"💬" },
-  { id:"VISIT_SCHEDULED", label:"VISITA", emoji:"📅" },
-  { id:"DOCS_REQUESTED",  label:"DOCS",   emoji:"📄" },
-];
 
 const INTENT_STYLE: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
   quente:        { label: "QUENTE",  emoji: "🔥", color: "#EF4444", bg: "rgba(239,68,68,.15)"   },
@@ -243,15 +243,18 @@ function calcNextAction(lead: Lead, tasks: Task[]): string {
   if (open.length > 0) return open[0].title;
 
   const mins = minutesSince(lead.lastInteractionAt);
+  if (lead.status === "REACTIVATED")     return "🔥 Lead reativado — contato prioritário agora!";
   if (lead.status === "NEW") return "Primeiro contato — ligar agora";
   if (mins > 60) {
     const h = Math.floor(mins / 60), m = mins % 60;
     return `Sem resposta há ${h}h${m > 0 ? ` ${m}min` : ""} — retomar contato`;
   }
   if (lead.status === "IN_PROGRESS")     return "Manter contato ativo";
+  if (lead.status === "NEGOTIATING")     return "Negociando — atualizar andamento";
   if (lead.status === "VISIT_SCHEDULED") return "Confirmar visita agendada";
   if (lead.status === "DOCS_REQUESTED")  return "Cobrar documentação pendente";
   if (lead.status === "CONCLUDED")       return "Negócio fechado — parabéns! 🏆";
+  if (lead.status === "FOLLOW_UP_AUTO")  return "Bot em contato automático";
   return "Atualizar status do lead";
 }
 
@@ -262,13 +265,16 @@ function calcPriority(lead: Lead, tasks: Task[]): number {
   const hasTaskToday = tasks.some(
     t => t.leadId === lead.id && t.status === "OPEN" && new Date(t.dueAt) <= todayEnd
   );
-  if (lead.status === "NEW")          return 1;
-  if (mins > 60)                      return 2;
-  if (hasTaskToday)                   return 3;
-  if (lead.status === "IN_PROGRESS")  return 4;
-  if (lead.status === "DOCS_REQUESTED") return 5;
-  if (lead.status === "VISIT_SCHEDULED") return 6;
-  return 7;
+  if (lead.status === "REACTIVATED")     return 0; // Máxima prioridade
+  if (lead.status === "NEW")             return 1;
+  if (mins > 60)                         return 2;
+  if (hasTaskToday)                      return 3;
+  if (lead.status === "IN_PROGRESS")     return 4;
+  if (lead.status === "NEGOTIATING")     return 5;
+  if (lead.status === "DOCS_REQUESTED")  return 6;
+  if (lead.status === "VISIT_SCHEDULED") return 7;
+  if (lead.status === "FOLLOW_UP_AUTO")  return 9;
+  return 8;
 }
 
 /** Formata telefone para link do WhatsApp (remove não-dígitos, adiciona 55) */
@@ -410,6 +416,87 @@ function UrgencyBadge({ lastInteractionAt }: { lastInteractionAt: string }) {
 }
 
 /* ─────────────────────────────────────────────
+   QUEUE ROW — item reutilizável das 3 seções
+───────────────────────────────────────────── */
+interface QueueRowProps {
+  lead: Lead & { priority: number; nextAction: string; isStale: boolean };
+  i: number;
+  activeLead: Lead | null;
+  t: ReturnType<typeof import("@/contexts/ThemeContext").useTheme>["t"];
+  leadStateMap: Map<string, { lead_id: string; intencao: string; tema: string; momento: string }>;
+  handleSelect: (lead: any) => void;
+  handleWhatsApp: (lead: Pick<Lead, "phone" | "name" | "id">, e?: React.MouseEvent) => void;
+  tasks: import("@/types/task").Task[];
+  warningDays?: number;
+}
+
+function QueueRow({ lead, i, activeLead, t, leadStateMap, handleSelect, handleWhatsApp, warningDays }: QueueRowProps) {
+  const isActive = lead.id === activeLead?.id;
+  const s = STATUS_STYLE[lead.status];
+  const isStale = minutesSince(lead.lastInteractionAt) > 60;
+  const isReactivated = lead.status === "REACTIVATED";
+
+  return (
+    <motion.div key={lead.id}
+      initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 8 }} transition={{ delay: i * .04 }}
+      onClick={() => handleSelect(lead)}
+      className="queue-item flex items-center gap-3 px-3 py-2.5 rounded-xl"
+      style={{
+        background: isActive ? "rgba(0,212,255,.1)" : isReactivated ? "rgba(234,179,8,.08)" : t.glass,
+        border: isActive ? "1px solid rgba(0,212,255,.4)" : isReactivated ? "1px solid rgba(234,179,8,.35)" : `1px solid ${t.border}`,
+      }}>
+
+      {/* Priority dot */}
+      <div className="w-2 h-2 rounded-full shrink-0"
+        style={{
+          background: isReactivated ? "#EAB308" : isStale ? "#EF4444" : lead.status === "NEW" ? "#00D4FF" : s?.text,
+          boxShadow: isReactivated ? "0 0 8px #EAB308" : isStale ? "0 0 6px #EF4444" : lead.status === "NEW" ? "0 0 6px #00D4FF" : "none",
+        }} />
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-bold text-white truncate leading-tight">{lead.name}</span>
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 uppercase"
+            style={{ background: s?.bg, color: s?.text }}>{s?.label}</span>
+          {(() => {
+            const ls = leadStateMap.get(lead.id);
+            if (!ls || ls.intencao === "sem_info") return null;
+            const is = INTENT_STYLE[ls.intencao] || INTENT_STYLE.sem_info;
+            return (
+              <span className="text-[8px] font-bold px-1 py-0.5 rounded shrink-0"
+                style={{ background: is.bg, color: is.color }}>{is.emoji}</span>
+            );
+          })()}
+          {warningDays !== undefined && (
+            <span className="text-[8px] font-bold px-1.5 py-0.5 rounded shrink-0"
+              style={{ background: "rgba(239,68,68,.15)", color: "#EF4444" }}>⚠ {warningDays}d</span>
+          )}
+        </div>
+        <div className="text-[10px] text-slate-500 truncate mt-0.5">
+          {lead.nextAction || calcNextAction(lead, [])}
+        </div>
+      </div>
+
+      {/* Urgency */}
+      {isStale && !isReactivated && (
+        <span className="text-[9px] font-bold text-red-400 shrink-0 whitespace-nowrap">
+          ⚡ {minutesSince(lead.lastInteractionAt)}min
+        </span>
+      )}
+
+      {/* WhatsApp inline */}
+      <button onClick={e => handleWhatsApp(lead, e)}
+        className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:scale-110"
+        style={{ background: "rgba(16,185,129,.2)", border: "1px solid rgba(16,185,129,.3)" }}>
+        <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+      </button>
+    </motion.div>
+  );
+}
+
+/* ─────────────────────────────────────────────
    MAIN
 ───────────────────────────────────────────── */
 export default function DashboardWolf() {
@@ -420,7 +507,6 @@ export default function DashboardWolf() {
   const { playSound } = useAudioArena();
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [filter, setFilter]             = useState<"ALL" | LeadStatus>("ALL");
   const [activeLead, setActiveLead]     = useState<Lead | null>(null);
   const [activeStatus, setActiveStatus] = useState<string>("");
   const [noteText, setNoteText]         = useState("");
@@ -430,8 +516,8 @@ export default function DashboardWolf() {
   const [saleToast, setSaleToast]       = useState<string | null>(null);
   const [dismissed, setDismissed]       = useState<Set<string>>(new Set());
   const [mutating, setMutating]         = useState(false);
-  const [humanMode, setHumanMode]       = useState(false);
-  const [humanModeLoading, setHumanModeLoading] = useState(false);
+  const [negotiatingLoading, setNegotiatingLoading] = useState(false);
+  const [followupLoading, setFollowupLoading]       = useState(false);
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<"battle" | "arena">("battle");
   const [lostSheetOpen, setLostSheetOpen] = useState(false);
@@ -533,27 +619,31 @@ export default function DashboardWolf() {
     isStale:    minutesSince(l.lastInteractionAt) > 60,
   })), [myLeads, tasks]);
 
-  // ── Fila filtrada ──────────────────────────────────────────────────────────
+  // ── Seções da fila (3 seções fixas) ───────────────────────────────────────
   const intentRank: Record<string, number> = { quente: 0, morno: 1, frio: 2, sem_info: 3, desqualificado: 4 };
-  const filteredLeads = useMemo(() => {
-    const base = enriched.filter(l => !dismissed.has(l.id));
-    const scoped = filter === "ALL" ? base : base.filter(l => l.status === filter);
-    return [...scoped].sort((a, b) => {
-      if (a.priority !== b.priority) return a.priority - b.priority;
-      const ia = leadStateMap.get(a.id)?.intencao || "sem_info";
-      const ib = leadStateMap.get(b.id)?.intencao || "sem_info";
-      return (intentRank[ia] ?? 3) - (intentRank[ib] ?? 3);
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enriched, filter, dismissed, leadStateMap]);
 
-  // ── Contagens por status ───────────────────────────────────────────────────
-  const counts = useMemo(() => {
+  const sortByPriorityAndIntent = (a: typeof enriched[number], b: typeof enriched[number]) => {
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    const ia = leadStateMap.get(a.id)?.intencao || "sem_info";
+    const ib = leadStateMap.get(b.id)?.intencao || "sem_info";
+    return (intentRank[ia] ?? 3) - (intentRank[ib] ?? 3);
+  };
+
+  const ACTION_STATUSES  = new Set(["NEW","REACTIVATED","IN_PROGRESS","VISIT_SCHEDULED","VISITA_REALIZADA","DOCS_REQUESTED"]);
+  const NEGOC_STATUSES   = new Set(["NEGOTIATING"]);
+  const FOLLOWUP_STATUSES = new Set(["FOLLOW_UP_AUTO"]);
+
+  const { sectionAcao, sectionNegoc, sectionFollowup, filteredLeads, counts } = useMemo(() => {
     const base = enriched.filter(l => !dismissed.has(l.id));
-    const map: Record<string, number> = { ALL: base.length };
-    base.forEach(l => { map[l.status] = (map[l.status] || 0) + 1; });
-    return map;
-  }, [enriched, dismissed]);
+    const acao     = [...base.filter(l => ACTION_STATUSES.has(l.status))].sort(sortByPriorityAndIntent);
+    const negoc    = [...base.filter(l => NEGOC_STATUSES.has(l.status))].sort(sortByPriorityAndIntent);
+    const followup = [...base.filter(l => FOLLOWUP_STATUSES.has(l.status))].sort(sortByPriorityAndIntent);
+    const all      = [...acao, ...negoc, ...followup];
+    const countMap: Record<string, number> = { ALL: base.length };
+    base.forEach(l => { countMap[l.status] = (countMap[l.status] || 0) + 1; });
+    return { sectionAcao: acao, sectionNegoc: negoc, sectionFollowup: followup, filteredLeads: all, counts: countMap };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enriched, dismissed, leadStateMap]);
 
   // ── Última mensagem do lead (IA) ──────────────────────────────────────────
   const { data: lastLeadMsg } = useQuery({
@@ -600,18 +690,7 @@ export default function DashboardWolf() {
     },
   });
 
-  // ── Auto-select first lead when filter changes ─────────────────────────────
-  useEffect(() => {
-    if (filteredLeads.length > 0) {
-      setActiveLead(filteredLeads[0]);
-      setActiveStatus(filteredLeads[0].status);
-    } else {
-      setActiveLead(null);
-      setActiveStatus("");
-    }
-  }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Auto-select on initial load ────────────────────────────────────────────
+  // ── Auto-select first priority lead on load / when active lead is gone ────
   useEffect(() => {
     if (!activeLead && filteredLeads.length > 0) {
       setActiveLead(filteredLeads[0]);
@@ -653,36 +732,36 @@ export default function DashboardWolf() {
     return () => { supabase.removeChannel(ch); };
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Carrega modo humano quando lead muda ──────────────────────────────────
-  useEffect(() => {
-    if (!activeLead?.id) { setHumanMode(false); return; }
-    supabase
-      .from("lead_state")
-      .select("modo, bloqueado")
-      .eq("lead_id", activeLead.id)
-      .maybeSingle()
-      .then(({ data }) => setHumanMode(data?.modo === "humano_ativo" || !!data?.bloqueado));
-  }, [activeLead?.id]);
+  // ── Handlers de ciclo de vida ──────────────────────────────────────────────
+  const handleNegotiating = async () => {
+    if (!activeLead || negotiatingLoading) return;
+    setNegotiatingLoading(true);
+    try {
+      await setLeadNegotiating(activeLead.id);
+      setActiveLead(prev => prev ? { ...prev, status: "NEGOTIATING", negotiatingSince: new Date().toISOString() } : prev);
+      setActiveStatus("NEGOTIATING");
+      qc.invalidateQueries({ queryKey: ["wolfLeads"] });
+      toast.success("Lead marcado como Em Negociação");
+    } catch { toast.error("Erro ao atualizar status."); }
+    finally { setNegotiatingLoading(false); }
+  };
 
-  const handleToggleHumanMode = async () => {
-    if (!activeLead?.id || !user?.id) return;
-    setHumanModeLoading(true);
-    const newMode = !humanMode;
-    await supabase.rpc("upsert_lead_state", {
-      p_lead_id:        activeLead.id,
-      p_modo:           newMode ? "humano_ativo" : "automatico",
-      p_bloqueado:      newMode,
-      p_bloqueado_por:  newMode ? user.id : null,
-      p_ultimo_evento:  newMode ? "override_manual" : "override_liberado",
-      p_atualizado_por: "corretor",
-    });
-    setHumanMode(newMode);
-    setHumanModeLoading(false);
-    toast.success(newMode ? "Automação pausada — você está no controle" : "Automação reativada");
+  const handleMoveToFollowUp = async () => {
+    if (!activeLead || followupLoading) return;
+    setFollowupLoading(true);
+    try {
+      await setLeadFollowUpAuto(activeLead.id);
+      const next = filteredLeads.find(l => l.id !== activeLead.id);
+      if (next) { setActiveLead(next); setActiveStatus(next.status); }
+      else { setActiveLead(null); setActiveStatus(""); }
+      qc.invalidateQueries({ queryKey: ["wolfLeads"] });
+      toast.info("Lead movido para Follow-up automático — bot assume o contato");
+    } catch { toast.error("Erro ao mover para follow-up."); }
+    finally { setFollowupLoading(false); }
   };
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  const handleSelect = (lead: typeof filteredLeads[number]) => {
+  const handleSelect = (lead: Lead) => {
     setActiveLead(lead);
     setActiveStatus(lead.status);
     setShowMsg(false);
@@ -805,9 +884,14 @@ export default function DashboardWolf() {
     }
   };
 
-  const handleWhatsApp = (lead: Pick<Lead, "phone" | "name">, e?: React.MouseEvent) => {
+  const handleWhatsApp = (lead: Pick<Lead, "phone" | "name" | "id">, e?: React.MouseEvent) => {
     e?.stopPropagation();
     window.open(whatsappLink(lead.phone), "_blank");
+    // Incrementa tentativa e atualiza activeLead localmente
+    registerContactAttempt(lead.id).then(newCount => {
+      setActiveLead(prev => prev?.id === lead.id ? { ...prev, contactAttempts: newCount } : prev);
+      qc.invalidateQueries({ queryKey: ["wolfLeads"] });
+    });
   };
 
   // ── Loading / redirect ─────────────────────────────────────────────────────
@@ -946,6 +1030,32 @@ export default function DashboardWolf() {
                   transition={{ duration: .2 }}
                   className="border-neon-cyan rounded-2xl p-4 flex flex-col gap-3 shrink-0"
                   style={{ background: t.surfaceAlpha }}>
+
+                  {/* REACTIVATED banner */}
+                  {activeLead.status === "REACTIVATED" && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl animate-pulse"
+                      style={{ background: "rgba(234,179,8,.15)", border: "1px solid rgba(234,179,8,.5)" }}>
+                      <Flame className="w-4 h-4 text-yellow-400 shrink-0" />
+                      <span className="text-xs font-black uppercase tracking-wider text-yellow-300">
+                        Lead reativado — respondeu ao bot! Contato prioritário agora.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* NEGOTIATING 5-day warning */}
+                  {activeLead.status === "NEGOTIATING" && activeLead.negotiatingSince && (() => {
+                    const daysSince = Math.floor((Date.now() - new Date(activeLead.negotiatingSince).getTime()) / 86400000);
+                    if (daysSince < 5) return null;
+                    return (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
+                        style={{ background: "rgba(239,68,68,.12)", border: "1px solid rgba(239,68,68,.4)" }}>
+                        <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                        <span className="text-xs font-black uppercase tracking-wider text-red-300">
+                          {daysSince} dias em negociação sem atualização — atualize ou perca o lead!
+                        </span>
+                      </div>
+                    );
+                  })()}
 
                   {/* Lead info */}
                   <div className="flex items-start justify-between gap-3">
@@ -1193,37 +1303,49 @@ export default function DashboardWolf() {
                     );
                   })()}
 
-                  {/* Override de automação */}
-                  <button
-                    onClick={handleToggleHumanMode}
-                    disabled={humanModeLoading}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all"
-                    style={{
-                      background: humanMode ? "rgba(124,58,237,0.15)" : "rgba(255,255,255,0.03)",
-                      border: `1px solid ${humanMode ? "rgba(124,58,237,0.5)" : "rgba(255,255,255,0.07)"}`,
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      {humanMode
-                        ? <UserCheck className="w-3.5 h-3.5" style={{ color: "#7C3AED" }} />
-                        : <Bot className="w-3.5 h-3.5" style={{ color: "#475569" }} />
-                      }
-                      <span className="text-[10px] font-bold uppercase tracking-widest"
-                        style={{ color: humanMode ? "#A78BFA" : "#475569" }}>
-                        {humanMode ? "Modo Manual — automação pausada" : "Modo Automático"}
+                  {/* ── Ações de ciclo de vida ─────────────────────────────── */}
+                  <div className="flex gap-2 flex-wrap">
+                    {/* Estou Negociando — aparece em NEW / IN_PROGRESS / REACTIVATED */}
+                    {(activeStatus === "NEW" || activeStatus === "IN_PROGRESS" || activeStatus === "REACTIVATED") && (
+                      <button
+                        onClick={handleNegotiating}
+                        disabled={negotiatingLoading}
+                        className="flex-1 flex items-center justify-center gap-2 h-10 px-3 rounded-xl font-black text-xs uppercase tracking-wide transition-all disabled:opacity-50"
+                        style={{ background: "rgba(251,146,60,.18)", border: "1px solid rgba(251,146,60,.5)", color: "#FB923C" }}>
+                        {negotiatingLoading
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <UserCheck className="w-3.5 h-3.5" />}
+                        <span>Estou Negociando</span>
+                      </button>
+                    )}
+
+                    {/* Mover para Follow-up — aparece após 3+ tentativas sem resposta */}
+                    {(activeLead.contactAttempts >= 3) && !["NEGOTIATING","FOLLOW_UP_AUTO","CONCLUDED","ABANDONED"].includes(activeStatus) && (
+                      <button
+                        onClick={handleMoveToFollowUp}
+                        disabled={followupLoading}
+                        className="flex-1 flex items-center justify-center gap-2 h-10 px-3 rounded-xl font-black text-xs uppercase tracking-wide transition-all disabled:opacity-50"
+                        style={{ background: "rgba(100,116,139,.12)", border: "1px solid rgba(100,116,139,.35)", color: "#94A3B8" }}>
+                        {followupLoading
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Bot className="w-3.5 h-3.5" />}
+                        <span>Mover para Follow-up</span>
+                        <span className="bg-slate-700 text-slate-300 text-[9px] font-black px-1.5 py-0.5 rounded">{activeLead.contactAttempts} tent.</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Aviso de tentativas — sem resposta ainda */}
+                  {activeLead.contactAttempts > 0 && activeLead.contactAttempts < 3 && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+                      style={{ background: "rgba(251,191,36,.06)", border: "1px solid rgba(251,191,36,.2)" }}>
+                      <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span className="text-[10px] text-amber-300 font-semibold">
+                        {activeLead.contactAttempts}/3 tentativas — sem resposta ainda.
+                        {3 - activeLead.contactAttempts === 1 ? " Mais 1 e o follow-up automático fica disponível." : ""}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      {humanModeLoading
-                        ? <Loader2 className="w-3 h-3 animate-spin" style={{ color: "#475569" }} />
-                        : <div className="w-7 h-4 rounded-full relative transition-all"
-                            style={{ background: humanMode ? "#7C3AED" : "rgba(255,255,255,0.1)" }}>
-                            <div className="w-3 h-3 rounded-full bg-white absolute top-0.5 transition-all"
-                              style={{ left: humanMode ? "14px" : "2px" }} />
-                          </div>
-                      }
-                    </div>
-                  </button>
+                  )}
 
                   {/* Note + Discard */}
                   <div className="flex gap-2">
@@ -1259,105 +1381,86 @@ export default function DashboardWolf() {
               </div>
             )}
 
-            {/* ── FILTER CHIPS ── */}
-            <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              {FILTER_OPTIONS.map(opt => {
-                const count = counts[opt.id] || 0;
-                if (opt.id !== "ALL" && count === 0) return null;
-                const active = filter === opt.id;
-                const col = opt.id === "ALL" ? "#00D4FF" : STATUS_STYLE[opt.id]?.text || "#00D4FF";
-                return (
-                  <button key={opt.id}
-                    onClick={() => setFilter(opt.id)}
-                    className="filter-chip flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold"
-                    style={{
-                      background: active ? `${col}20` : t.glass,
-                      border: active ? `1px solid ${col}60` : `1px solid ${t.border}`,
-                      color: active ? col : "#475569",
-                      boxShadow: active ? `0 0 10px ${col}30` : "none",
-                    }}>
-                    {opt.emoji && <span>{opt.emoji}</span>}
-                    <span>{opt.label}</span>
+            {/* ── FILA EM 3 SEÇÕES ── */}
+            <div className="flex-1 overflow-y-auto flex flex-col gap-3 pr-0.5 min-h-0">
+
+              {filteredLeads.length === 0 && !leadsLoading && (
+                <div className="flex flex-col items-center justify-center py-10 text-slate-600">
+                  <CheckCircle2 className="w-8 h-8 mb-2 opacity-30" />
+                  <p className="text-sm font-semibold">Fila limpa — excelente trabalho!</p>
+                </div>
+              )}
+
+              {/* ── SEÇÃO 1: AÇÃO AGORA ─────────────────────────── */}
+              {sectionAcao.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2 px-1">
+                    <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="wolf-display text-[10px] font-bold uppercase tracking-widest text-cyan-400">AÇÃO AGORA</span>
                     <span className="wolf-display text-[9px] px-1.5 py-0.5 rounded font-bold"
-                      style={{
-                        background: active ? `${col}25` : "rgba(255,255,255,.08)",
-                        color: active ? col : "#64748B",
-                      }}>{count}</span>
-                  </button>
-                );
-              })}
-            </div>
+                      style={{ background: "rgba(0,212,255,.12)", color: "#38BDF8" }}>{sectionAcao.length}</span>
+                  </div>
+                  <AnimatePresence>
+                    {sectionAcao.map((lead, i) => <QueueRow key={lead.id} lead={lead} i={i} activeLead={activeLead} t={t} leadStateMap={leadStateMap} handleSelect={handleSelect} handleWhatsApp={handleWhatsApp} tasks={tasks} />)}
+                  </AnimatePresence>
+                </div>
+              )}
 
-            {/* ── LEAD QUEUE ── */}
-            <div className="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5 min-h-0">
-              <AnimatePresence>
-                {filteredLeads.length === 0 && !leadsLoading && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                    className="flex flex-col items-center justify-center py-10 text-slate-600">
-                    <CheckCircle2 className="w-8 h-8 mb-2 opacity-30" />
-                    <p className="text-sm font-semibold">Nenhum lead neste filtro</p>
-                  </motion.div>
-                )}
-                {filteredLeads.map((lead, i) => {
-                  const isActive = lead.id === activeLead?.id;
-                  const s = STATUS_STYLE[lead.status];
-                  const isStale = minutesSince(lead.lastInteractionAt) > 60;
-                  return (
-                    <motion.div key={lead.id}
-                      initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 8 }} transition={{ delay: i * .04 }}
-                      onClick={() => handleSelect(lead)}
-                      className="queue-item flex items-center gap-3 px-3 py-2.5 rounded-xl"
-                      style={{
-                        background: isActive ? "rgba(0,212,255,.1)" : t.glass,
-                        border: isActive ? "1px solid rgba(0,212,255,.4)" : `1px solid ${t.border}`,
-                      }}>
+              {/* ── SEÇÃO 2: EM NEGOCIAÇÃO ──────────────────────── */}
+              {sectionNegoc.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2 px-1">
+                    <UserCheck className="w-3.5 h-3.5 text-orange-400" />
+                    <span className="wolf-display text-[10px] font-bold uppercase tracking-widest text-orange-400">EM NEGOCIAÇÃO</span>
+                    <span className="wolf-display text-[9px] px-1.5 py-0.5 rounded font-bold"
+                      style={{ background: "rgba(251,146,60,.12)", color: "#FB923C" }}>{sectionNegoc.length}</span>
+                  </div>
+                  <AnimatePresence>
+                    {sectionNegoc.map((lead, i) => {
+                      const daysSince = lead.negotiatingSince
+                        ? Math.floor((Date.now() - new Date(lead.negotiatingSince).getTime()) / 86400000)
+                        : 0;
+                      return <QueueRow key={lead.id} lead={lead} i={i} activeLead={activeLead} t={t} leadStateMap={leadStateMap} handleSelect={handleSelect} handleWhatsApp={handleWhatsApp} tasks={tasks} warningDays={daysSince >= 5 ? daysSince : undefined} />;
+                    })}
+                  </AnimatePresence>
+                </div>
+              )}
 
-                      {/* Priority dot */}
-                      <div className="w-2 h-2 rounded-full shrink-0"
-                        style={{
-                          background: isStale ? "#EF4444" : lead.status === "NEW" ? "#00D4FF" : s?.text,
-                          boxShadow: isStale ? "0 0 6px #EF4444" : lead.status === "NEW" ? "0 0 6px #00D4FF" : "none",
-                        }} />
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-bold text-white truncate leading-tight">{lead.name}</span>
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 uppercase"
-                            style={{ background: s?.bg, color: s?.text }}>{s?.label}</span>
-                          {(() => {
-                            const ls = leadStateMap.get(lead.id);
-                            if (!ls || ls.intencao === "sem_info") return null;
-                            const is = INTENT_STYLE[ls.intencao] || INTENT_STYLE.sem_info;
-                            return (
-                              <span className="text-[8px] font-bold px-1 py-0.5 rounded shrink-0"
-                                style={{ background: is.bg, color: is.color }}>{is.emoji}</span>
-                            );
-                          })()}
-                        </div>
-                        <div className="text-[10px] text-slate-500 truncate mt-0.5">
-                          {(lead as any).nextAction || calcNextAction(lead, tasks)}
-                        </div>
-                      </div>
-
-                      {/* Urgency */}
-                      {isStale && (
-                        <span className="text-[9px] font-bold text-red-400 shrink-0 whitespace-nowrap">
-                          ⚡ {minutesSince(lead.lastInteractionAt)}min
-                        </span>
+              {/* ── SEÇÃO 3: NO FOLLOW-UP AUTO ──────────────────── */}
+              {sectionFollowup.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2">
+                      <Bot className="w-3.5 h-3.5 text-slate-500" />
+                      <span className="wolf-display text-[10px] font-bold uppercase tracking-widest text-slate-500">NO FOLLOW-UP AUTO</span>
+                      <span className="wolf-display text-[9px] px-1.5 py-0.5 rounded font-bold"
+                        style={{ background: "rgba(100,116,139,.12)", color: "#64748B" }}>{sectionFollowup.length}</span>
+                    </div>
+                  </div>
+                  <div className="px-3 py-2.5 rounded-xl"
+                    style={{ background: "rgba(100,116,139,.06)", border: "1px solid rgba(100,116,139,.15)" }}>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      🤖 <span className="font-bold text-slate-400">{sectionFollowup.length} lead{sectionFollowup.length > 1 ? "s" : ""}</span> com o bot em contato automático.
+                      Quando responderem, voltarão como <span className="text-yellow-400 font-bold">REATIVADO</span> com prioridade máxima.
+                    </p>
+                    <div className="flex flex-col gap-1 mt-2">
+                      {sectionFollowup.slice(0, 3).map(lead => (
+                        <button key={lead.id} onClick={() => handleSelect(lead)}
+                          className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity">
+                          <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-slate-600" />
+                          <span className="text-[10px] text-slate-500 truncate">{lead.name}</span>
+                          {lead.contactAttempts > 0 && (
+                            <span className="text-[9px] text-slate-600 shrink-0">{lead.contactAttempts} tent.</span>
+                          )}
+                        </button>
+                      ))}
+                      {sectionFollowup.length > 3 && (
+                        <span className="text-[9px] text-slate-600">+{sectionFollowup.length - 3} outros</span>
                       )}
-
-                      {/* WhatsApp inline */}
-                      <button onClick={e => handleWhatsApp(lead, e)}
-                        className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:scale-110"
-                        style={{ background: "rgba(16,185,129,.2)", border: "1px solid rgba(16,185,129,.3)" }}>
-                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-                      </button>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

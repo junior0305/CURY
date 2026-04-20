@@ -20,6 +20,14 @@ const mapLeadFromDB = (l: any): Lead => ({
   tipoTrabalho: (l.tipo_trabalho ?? null) as TipoTrabalho,
   lostReason: (l.lost_reason ?? null) as LostReason,
   visitaConfirmada: l.visita_confirmada ?? null,
+  // Ciclo de vida
+  contactAttempts:    l.contact_attempts    ?? 0,
+  lastAttemptAt:      l.last_attempt_at     ?? null,
+  negotiatingSince:   l.negotiating_since   ?? null,
+  followupStartedAt:  l.followup_started_at ?? null,
+  originalBrokerId:   l.original_broker_id  ?? null,
+  redistributionCount: l.redistribution_count ?? 0,
+  reactivatedAt:      l.reactivated_at      ?? null,
 });
 
 // ─── XP por transição de status ───────────────────────────────────────────────
@@ -368,4 +376,63 @@ export const updateLeadStatus = async (
       console.error("[Auto-Zap] Falha silenciosa:", err);
     }
   }
+};
+
+/**
+ * Registra uma tentativa de contato (WhatsApp ou ligação).
+ * Incrementa contact_attempts e atualiza last_attempt_at.
+ * Também atualiza last_broker_whatsapp_at para resetar o timer de redistribuição.
+ */
+export const registerContactAttempt = async (leadId: string) => {
+  const now = new Date().toISOString();
+  const { data } = await supabase
+    .from("leads")
+    .select("contact_attempts")
+    .eq("id", leadId)
+    .single();
+  const newAttempts = ((data as any)?.contact_attempts ?? 0) + 1;
+  await supabase
+    .from("leads")
+    .update({
+      contact_attempts:       newAttempts,
+      last_attempt_at:        now,
+      last_interaction_at:    now,
+      last_broker_whatsapp_at: now,
+    })
+    .eq("id", leadId);
+  return newAttempts;
+};
+
+/**
+ * Move o lead para NEGOTIATING e registra negotiating_since.
+ * Deve ser chamado quando o corretor clica em "Estou Negociando".
+ */
+export const setLeadNegotiating = async (leadId: string) => {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("leads")
+    .update({
+      status:            "NEGOTIATING",
+      negotiating_since: now,
+      last_interaction_at: now,
+    })
+    .eq("id", leadId);
+  if (error) throw error;
+};
+
+/**
+ * Move o lead para FOLLOW_UP_AUTO.
+ * Chamado quando o corretor clica em "Mover para Follow-up" (após 3+ tentativas).
+ */
+export const setLeadFollowUpAuto = async (leadId: string) => {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("leads")
+    .update({
+      status:             "FOLLOW_UP_AUTO",
+      followup_started_at: now,
+      last_interaction_at: now,
+    })
+    .eq("id", leadId);
+  if (error) throw error;
 };

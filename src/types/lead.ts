@@ -1,15 +1,19 @@
 // Funil MCMV:
-// NEW → IN_PROGRESS → VISIT_SCHEDULED → VISITA_REALIZADA → DOCS_REQUESTED → CONCLUDED
+// NEW → IN_PROGRESS → NEGOTIATING → VISIT_SCHEDULED → VISITA_REALIZADA → DOCS_REQUESTED → CONCLUDED
+// Desvios: FOLLOW_UP_AUTO (bot assume após 3 tentativas), REACTIVATED (lead respondeu ao bot → volta ao corretor)
 // Em qualquer etapa pode ir para ABANDONED (Perdido) com lost_reason obrigatório
 // EXCLUDED = uso administrativo
 
 export type LeadStatus =
   | 'NEW'               // Novo — chegou, aguardando primeiro contato
   | 'IN_PROGRESS'       // Em Atendimento — contato feito, qualificando
+  | 'NEGOTIATING'       // Negociando — corretor marcou como em negociação ativa
   | 'VISIT_SCHEDULED'   // Visita Agendada — plantão marcado
   | 'VISITA_REALIZADA'  // Visita Realizada — lead compareceu ao plantão
   | 'DOCS_REQUESTED'    // Docs Enviados — documentação entregue para análise
   | 'CONCLUDED'         // Fechado — venda concluída 🎉
+  | 'FOLLOW_UP_AUTO'    // Follow-up automático — bot assumiu após 3 tentativas sem resposta
+  | 'REACTIVATED'       // Reativado — lead respondeu ao bot, voltou para o corretor com prioridade
   | 'ABANDONED'         // Perdido — com motivo obrigatório (lost_reason)
   | 'EXCLUDED';         // Excluído — uso administrativo
 
@@ -62,21 +66,32 @@ export interface Lead {
   lastLeadResponseAt: string | null;
   lastBrokerWhatsappAt: string | null;
   exclusionReason: ExclusionReason;
-  // Novos campos MCMV
+  // Campos MCMV
   rendaDeclarada: string | null;       // Vem do formulário Facebook (opcional)
   tipoTrabalho: TipoTrabalho;          // CLT | AUTONOMO | FUNCIONARIO_PUBLICO (opcional)
   lostReason: LostReason;              // Motivo de perda ao ir para ABANDONED
   visitaConfirmada: boolean | null;    // Lead confirmou presença antes da visita
+  // Ciclo de vida — adicionados em 2026-04
+  contactAttempts: number;             // Tentativas de contato sem resposta
+  lastAttemptAt: string | null;        // Última tentativa de contato
+  negotiatingSince: string | null;     // Quando entrou em NEGOTIATING (alerta 5 dias)
+  followupStartedAt: string | null;    // Quando entrou em FOLLOW_UP_AUTO
+  originalBrokerId: string | null;     // Corretor original antes de redistribuição
+  redistributionCount: number;         // Quantas vezes foi redistribuído
+  reactivatedAt: string | null;        // Quando o lead respondeu ao bot e foi reativado
 }
 
 // Labels para exibição na UI
 export const STATUS_LABEL: Record<LeadStatus, string> = {
   NEW:              'Novo',
   IN_PROGRESS:      'Em Atendimento',
+  NEGOTIATING:      'Negociando',
   VISIT_SCHEDULED:  'Visita Agendada',
   VISITA_REALIZADA: 'Visita Realizada',
   DOCS_REQUESTED:   'Docs Enviados',
   CONCLUDED:        'Fechado',
+  FOLLOW_UP_AUTO:   'Follow-up Auto',
+  REACTIVATED:      'Reativado',
   ABANDONED:        'Perdido',
   EXCLUDED:         'Excluído',
 };
@@ -111,6 +126,8 @@ export const FAIXA_MCMV: Record<NonNullable<FaixaMCMV>, { label: string; max: nu
 export const NEXT_STATUS: Partial<Record<LeadStatus, { status: LeadStatus; label: string }>> = {
   NEW:              { status: 'IN_PROGRESS',      label: 'Iniciar atendimento' },
   IN_PROGRESS:      { status: 'VISIT_SCHEDULED',  label: 'Agendar visita' },
+  NEGOTIATING:      { status: 'VISIT_SCHEDULED',  label: 'Agendar visita' },
+  REACTIVATED:      { status: 'IN_PROGRESS',      label: 'Retomar atendimento' },
   VISIT_SCHEDULED:  { status: 'VISITA_REALIZADA', label: 'Confirmar comparecimento' },
   VISITA_REALIZADA: { status: 'DOCS_REQUESTED',   label: 'Docs recebidos' },
   DOCS_REQUESTED:   { status: 'CONCLUDED',        label: 'Fechar venda 🎉' },
