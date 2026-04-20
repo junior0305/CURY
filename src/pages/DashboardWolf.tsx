@@ -1115,28 +1115,42 @@ export default function DashboardWolf() {
                     </span>
                   </div>
 
-                  {/* Pipeline */}
-                  <div className="flex items-center gap-1">
-                    {PIPELINE.map((step, i) => {
-                      const active = step.id === activeStatus;
-                      const passed = PIPELINE.findIndex(s => s.id === activeStatus) > i;
-                      return (
-                        <button key={step.id}
-                          onClick={() => handlePipelineClick(step.id)}
-                          disabled={mutating}
-                          className={`pipeline-btn flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-xl text-[9px] font-bold uppercase ${active ? "active" : ""}`}
-                          style={{
-                            background: active ? step.bg : passed ? t.glass : "rgba(255,255,255,.02)",
-                            border: active ? `1px solid ${step.color}50` : `1px solid ${t.border}`,
-                            color: active ? step.color : passed ? t.textMuted : t.textSubtle,
-                            opacity: mutating ? .6 : 1,
-                          }}>
-                          {active && <div className="w-1.5 h-1.5 rounded-full"
-                            style={{ background: step.color, boxShadow: `0 0 6px ${step.color}` }} />}
-                          {step.label}
-                        </button>
-                      );
-                    })}
+                  {/* Pipeline — funil de vendas */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5 px-0.5">
+                      <ChevronRight className="w-3 h-3 text-slate-500" />
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Funil — clique para avançar o lead</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {PIPELINE.map((step, i) => {
+                        const activeIdx = PIPELINE.findIndex(s => s.id === activeStatus);
+                        const isActive  = step.id === activeStatus;
+                        const isPassed  = activeIdx > i;
+                        const isNext    = activeIdx >= 0 && i === activeIdx + 1;
+                        return (
+                          <button key={step.id}
+                            onClick={() => handlePipelineClick(step.id)}
+                            disabled={mutating}
+                            className={`pipeline-btn flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${isActive ? "active" : ""}`}
+                            style={{
+                              background: isActive ? step.bg  : isPassed  ? "rgba(255,255,255,.06)" : isNext ? `${step.color}18` : "rgba(255,255,255,.04)",
+                              border:     isActive ? `1px solid ${step.color}70` : isPassed ? "1px solid rgba(255,255,255,.12)" : isNext ? `1px solid ${step.color}55` : "1px solid rgba(255,255,255,.1)",
+                              color:      isActive ? step.color : isPassed ? "#6EE7B7" : isNext ? step.color : "#94A3B8",
+                              opacity: mutating ? .6 : 1,
+                              boxShadow: isNext ? `0 0 8px ${step.color}25` : "none",
+                            }}>
+                            {isPassed
+                              ? <span style={{ fontSize: 8 }}>✓</span>
+                              : isActive
+                                ? <div className="w-1.5 h-1.5 rounded-full" style={{ background: step.color, boxShadow: `0 0 6px ${step.color}` }} />
+                                : isNext
+                                  ? <ChevronRight className="w-2.5 h-2.5" style={{ color: step.color }} />
+                                  : <div className="w-1 h-1 rounded-full bg-slate-700" />}
+                            {step.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {/* ── Renda / MCMV / Qualificação ────────────────────────── */}
