@@ -259,27 +259,26 @@ function PipelineStrip({currentStatus}:{currentStatus:LeadStatus}){
       {PIPELINE_STEPS.map((step,i)=>{
         const isPast    = i < curIdx;
         const isCurrent = i === curIdx;
-        const isFuture  = i > curIdx;
         return(
           <div key={step.status} className="flex items-center flex-1 min-w-0">
             <div className="flex flex-col items-center flex-1 min-w-0">
-              <div className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
+              <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
                 style={{
                   background: isPast?"#10B981":isCurrent?"#00D4FF":"rgba(255,255,255,.08)",
-                  border: isCurrent?"2px solid #00D4FF":isPast?"2px solid #10B981":"2px solid rgba(255,255,255,.12)",
-                  boxShadow: isCurrent?"0 0 12px rgba(0,212,255,.5)":isPast?"0 0 6px rgba(16,185,129,.3)":"none",
+                  border: isCurrent?"2px solid #00D4FF":isPast?"2px solid #10B981":"2px solid rgba(255,255,255,.14)",
+                  boxShadow: isCurrent?"0 0 14px rgba(0,212,255,.55)":isPast?"0 0 6px rgba(16,185,129,.3)":"none",
                 }}>
-                {isPast&&<span style={{fontSize:7,color:"#080B14",fontWeight:900}}>✓</span>}
-                {isCurrent&&<div className="w-1.5 h-1.5 rounded-full bg-white"/>}
+                {isPast&&<span style={{fontSize:9,color:"#080B14",fontWeight:900}}>✓</span>}
+                {isCurrent&&<div className="w-2 h-2 rounded-full bg-white"/>}
               </div>
-              <span className="text-[7px] font-bold uppercase tracking-wide mt-0.5 truncate w-full text-center"
-                style={{color:isPast?"#10B981":isCurrent?"#00D4FF":"rgba(255,255,255,.18)"}}>
+              <span className="text-[9px] font-bold uppercase tracking-wide mt-1 truncate w-full text-center"
+                style={{color:isPast?"#10B981":isCurrent?"#00D4FF":"rgba(255,255,255,.22)"}}>
                 {step.label}
               </span>
             </div>
             {i < PIPELINE_STEPS.length-1 && (
-              <div className="h-px flex-1 mx-0.5 shrink-0"
-                style={{background:i<curIdx?"rgba(16,185,129,.4)":"rgba(255,255,255,.08)",minWidth:8}}/>
+              <div className="h-px flex-1 mx-1 shrink-0"
+                style={{background:i<curIdx?"rgba(16,185,129,.45)":"rgba(255,255,255,.08)",minWidth:10}}/>
             )}
           </div>
         );
@@ -309,6 +308,7 @@ export default function DashboardFoco(){
   const [msgModified,setMsgModified]=useState(false);
   const [sent,setSent]=useState(false);
   const [lostSheet,setLostSheet]=useState(false);
+  const [noShowSheet,setNoShowSheet]=useState(false);
   const [visitSheet,setVisitSheet]=useState(false);
   const [visitDate,setVisitDate]=useState("");
   const [visitTime,setVisitTime]=useState("10:00");
@@ -557,7 +557,7 @@ export default function DashboardFoco(){
     if(s==="VISIT_SCHEDULED"){
       res.push(
         {id:"came",  label:"✅ Compareceu!",          desc:"Lead veio à visita — solicitar documentação",    icon:<CheckCircle2 className="w-4 h-4"/>,color:"#10B981",bg:"rgba(16,185,129,.16)",border:"rgba(16,185,129,.45)",primary:true,full:true,action:()=>advance("VISITA_REALIZADA")},
-        {id:"gone",  label:"Não compareceu",          desc:"Lead não veio — encerrar como perdido",          icon:<X            className="w-4 h-4"/>,color:"#EF4444",bg:"rgba(239,68,68,.1)", border:"rgba(239,68,68,.35)",                        action:()=>handleLost("NAO_COMPARECEU")},
+        {id:"gone",  label:"Não compareceu",          desc:"Reagendar ou registrar desistência",             icon:<X            className="w-4 h-4"/>,color:"#F97316",bg:"rgba(249,115,22,.1)", border:"rgba(249,115,22,.35)",                       action:()=>setNoShowSheet(true)},
       );
     }
     if(s==="VISITA_REALIZADA"){
@@ -737,8 +737,8 @@ export default function DashboardFoco(){
                         {lead.tipoTrabalho&&<span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{background:"rgba(129,140,248,.08)",color:"#818CF8",border:"1px solid rgba(129,140,248,.2)"}}>{TIPO_TRABALHO_LABEL[lead.tipoTrabalho]}</span>}
                         {lead.contactAttempts>0&&<span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{background:"rgba(251,191,36,.1)",color:"#FBBF24",border:"1px solid rgba(251,191,36,.25)"}}>{lead.contactAttempts} tentativa{lead.contactAttempts>1?"s":""}</span>}
                       </div>
-                      <h1 className="foco-disp text-2xl sm:text-[2rem] font-black text-white leading-none">{lead.name}</h1>
-                      <p className="text-base text-cyan-400 font-semibold mt-1">{lead.phone}</p>
+                      <h1 className="foco-disp text-3xl sm:text-[2.4rem] font-black text-white leading-none">{lead.name}</h1>
+                      <p className="text-lg text-cyan-400 font-semibold mt-1">{lead.phone}</p>
                     </div>
 
                     {/* ── MENSAGEM PRONTA ── */}
@@ -1025,8 +1025,8 @@ export default function DashboardFoco(){
                             border:isActive?`1px solid ${color}40`:"1px solid rgba(255,255,255,.05)",
                           }}>
                           <div className="w-2 h-2 rounded-full shrink-0" style={{background:s?.text||color}}/>
-                          <p className="text-xs font-bold text-slate-200 truncate flex-1 leading-tight">{l.name}</p>
-                          <span className="text-[10px] font-semibold shrink-0" style={{color:m>60?"#EF4444":"#475569"}}>
+                          <p className="text-sm font-bold text-slate-100 truncate flex-1 leading-tight">{l.name}</p>
+                          <span className="text-xs font-semibold shrink-0" style={{color:m>60?"#EF4444":"#475569"}}>
                             {m<60?`${m}m`:`${Math.floor(m/60)}h`}
                           </span>
                         </button>
@@ -1095,6 +1095,42 @@ export default function DashboardFoco(){
                 className="w-full py-3 rounded-xl font-black text-sm uppercase tracking-wide disabled:opacity-40"
                 style={{background:"linear-gradient(135deg,#059669,#10B981)",color:"white",boxShadow:"0 4px 18px rgba(16,185,129,.35)"}}>
                 {mutating?"Agendando...":"Confirmar visita"}
+              </button>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* ── SHEET: NÃO COMPARECEU ── */}
+        <Sheet open={noShowSheet} onOpenChange={setNoShowSheet}>
+          <SheetContent side="bottom" className="bg-[#080B14] border-white/10 text-white rounded-t-2xl pb-8">
+            <SheetHeader className="mb-5">
+              <SheetTitle className="text-white flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-orange-400"/>
+                {lead?.name?.split(" ")[0]} não compareceu — o que fazer?
+              </SheetTitle>
+            </SheetHeader>
+            <div className="space-y-3">
+              {/* Reagendar */}
+              <button
+                onClick={()=>{setNoShowSheet(false);setVisitDate("");setVisitSheet(true);}}
+                className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-left transition-all hover:brightness-110"
+                style={{background:"rgba(52,211,153,.12)",border:"1px solid rgba(52,211,153,.35)"}}>
+                <Calendar className="w-6 h-6 text-emerald-400 shrink-0"/>
+                <div>
+                  <p className="font-black text-sm text-emerald-300 uppercase tracking-wide">Reagendar Visita</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Marcar nova data — o lead continua na fila</p>
+                </div>
+              </button>
+              {/* Desistência */}
+              <button
+                onClick={()=>{setNoShowSheet(false);setLostSheet(true);}}
+                className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-left transition-all hover:brightness-110"
+                style={{background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)"}}>
+                <X className="w-6 h-6 text-red-400 shrink-0"/>
+                <div>
+                  <p className="font-black text-sm text-red-300 uppercase tracking-wide">Registrar Desistência</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Lead perdido — informar o motivo e encerrar</p>
+                </div>
               </button>
             </div>
           </SheetContent>
