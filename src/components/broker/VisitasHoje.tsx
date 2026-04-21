@@ -7,13 +7,14 @@ import { cn } from "@/lib/utils";
 import { isToday, isTomorrow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-function VisitDay({ label, leads, onConfirm, onRealizada, onNaoCompareceu, onWhatsApp }: {
+function VisitDay({ label, leads, onConfirm, onRealizada, onNaoCompareceu, onWhatsApp, onDesfazerRealizada }: {
   label: string;
   leads: Lead[];
   onConfirm: (id: string, v: boolean) => void;
   onRealizada: (id: string) => void;
   onNaoCompareceu: (id: string) => void;
   onWhatsApp: (lead: Lead) => void;
+  onDesfazerRealizada: (id: string) => void;
 }) {
   if (leads.length === 0) return null;
   return (
@@ -115,9 +116,17 @@ function VisitDay({ label, leads, onConfirm, onRealizada, onNaoCompareceu, onWha
             )}
 
             {lead.status === "VISITA_REALIZADA" && (
-              <p className="text-[11px] text-emerald-400 font-bold">
-                Solicitar documentação agora →
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] text-emerald-400 font-bold">
+                  Solicitar documentação agora →
+                </p>
+                <button
+                  onClick={() => onDesfazerRealizada(lead.id)}
+                  className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-700/60 border border-gray-600/40 text-gray-500 hover:text-gray-300 hover:bg-slate-700 transition-all"
+                >
+                  ↩ Desfazer
+                </button>
+              </div>
             )}
           </div>
         );
@@ -154,6 +163,11 @@ export function VisitasHoje({ onSelectLead }: VisitasHojeProps) {
 
   const naoCompareceuMutation = useMutation({
     mutationFn: (id: string) => updateLeadStatus(id, "ABANDONED", null, "NAO_COMPARECEU"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] }),
+  });
+
+  const desfazerRealizadaMutation = useMutation({
+    mutationFn: (id: string) => updateLeadStatus(id, "VISIT_SCHEDULED"),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] }),
   });
 
@@ -206,6 +220,7 @@ export function VisitasHoje({ onSelectLead }: VisitasHojeProps) {
         onRealizada={id => realizadaMutation.mutate(id)}
         onNaoCompareceu={id => naoCompareceuMutation.mutate(id)}
         onWhatsApp={openWhatsApp}
+        onDesfazerRealizada={id => desfazerRealizadaMutation.mutate(id)}
       />
 
       <VisitDay
@@ -215,6 +230,7 @@ export function VisitasHoje({ onSelectLead }: VisitasHojeProps) {
         onRealizada={id => realizadaMutation.mutate(id)}
         onNaoCompareceu={id => naoCompareceuMutation.mutate(id)}
         onWhatsApp={openWhatsApp}
+        onDesfazerRealizada={id => desfazerRealizadaMutation.mutate(id)}
       />
 
       {realizadas.length > 0 && (
@@ -225,6 +241,7 @@ export function VisitasHoje({ onSelectLead }: VisitasHojeProps) {
           onRealizada={id => realizadaMutation.mutate(id)}
           onNaoCompareceu={id => naoCompareceuMutation.mutate(id)}
           onWhatsApp={openWhatsApp}
+          onDesfazerRealizada={id => desfazerRealizadaMutation.mutate(id)}
         />
       )}
     </div>

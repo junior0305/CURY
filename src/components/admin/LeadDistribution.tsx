@@ -227,8 +227,9 @@ const LeadDistribution = () => {
               <SelectContent className="bg-slate-900 border-gray-700 text-white">
                 <SelectItem value="titulo">Título</SelectItem>
                 <SelectItem value="tag">Tag</SelectItem>
-                <SelectItem value="source">Origem / Canal</SelectItem>
+                <SelectItem value="product">Produto / Empreendimento</SelectItem>
                 <SelectItem value="campaign">Campanha</SelectItem>
+                <SelectItem value="source">Origem / Canal</SelectItem>
                 <SelectItem value="tipo_trabalho">Tipo de trabalho</SelectItem>
                 <SelectItem value="faixa_mcmv">Faixa MCMV (pela renda)</SelectItem>
               </SelectContent>
@@ -245,6 +246,16 @@ const LeadDistribution = () => {
               "{form.matchValue || "..."}"
             </span>
           </p>
+          {form.matchField === "product" && (
+            <p className="text-[10px] rounded-lg px-2 py-1.5 mt-1" style={{ background: "rgba(0,102,255,0.06)", border: "1px solid rgba(0,102,255,0.2)", color: "#60A5FA" }}>
+              Valor enviado pelo Make no campo <strong>produto</strong>. Ex: <strong>JAGUARE</strong>, <strong>PARQUE_VERDE</strong>
+            </p>
+          )}
+          {form.matchField === "campaign" && (
+            <p className="text-[10px] rounded-lg px-2 py-1.5 mt-1" style={{ background: "rgba(0,102,255,0.06)", border: "1px solid rgba(0,102,255,0.2)", color: "#60A5FA" }}>
+              Valor enviado pelo Make no campo <strong>campanha</strong>. Ex: <strong>GIORGE</strong>, <strong>WOLF</strong>, <strong>EQUIPE_SP</strong>
+            </p>
+          )}
           {form.matchField === "tipo_trabalho" && (
             <p className="text-[10px] rounded-lg px-2 py-1.5 mt-1" style={{ background: "rgba(0,212,255,0.06)", border: "1px solid rgba(0,212,255,0.15)", color: "#38BDF8" }}>
               Valores válidos do Make: <strong>CLT</strong> · <strong>AUTONOMO</strong> · <strong>FUNCIONARIO_PUBLICO</strong>

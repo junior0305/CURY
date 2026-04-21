@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLeadsForDashboard, updateLeadStatus, touchLeadInteraction, registerBrokerContact } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
-import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin, Brain, BrainCircuit, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin, Brain, BrainCircuit, ChevronLeft, ChevronRight, Home, Handshake } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -29,11 +29,13 @@ interface LeadDetailProps {
 }
 
 const PIPELINE_STEPS = [
-  { id: "NEW",             label: "Novo",   icon: Zap,          color: "bg-sky-500",     ring: "ring-sky-500/40" },
-  { id: "IN_PROGRESS",     label: "Atend.", icon: MessageSquare, color: "bg-blue-500",    ring: "ring-blue-500/40" },
-  { id: "VISIT_SCHEDULED", label: "Visita", icon: Calendar,     color: "bg-emerald-500", ring: "ring-emerald-500/40" },
-  { id: "DOCS_REQUESTED",  label: "Docs",   icon: FileText,     color: "bg-amber-500",   ring: "ring-amber-500/40" },
-  { id: "CONCLUDED",       label: "Venda",  icon: Trophy,       color: "bg-indigo-600",  ring: "ring-indigo-500/40" },
+  { id: "NEW",              label: "Novo",   icon: Zap,          color: "bg-sky-500",     ring: "ring-sky-500/40" },
+  { id: "IN_PROGRESS",      label: "Atend.", icon: MessageSquare, color: "bg-blue-500",    ring: "ring-blue-500/40" },
+  { id: "NEGOTIATING",      label: "Negoc.", icon: Handshake,     color: "bg-orange-500",  ring: "ring-orange-500/40" },
+  { id: "VISIT_SCHEDULED",  label: "Visita", icon: Calendar,      color: "bg-emerald-500", ring: "ring-emerald-500/40" },
+  { id: "VISITA_REALIZADA", label: "Veio",   icon: Home,          color: "bg-teal-500",    ring: "ring-teal-500/40" },
+  { id: "DOCS_REQUESTED",   label: "Docs",   icon: FileText,      color: "bg-amber-500",   ring: "ring-amber-500/40" },
+  { id: "CONCLUDED",        label: "Venda",  icon: Trophy,        color: "bg-indigo-600",  ring: "ring-indigo-500/40" },
 ];
 
 const QUICK_NOTES = [
@@ -375,27 +377,26 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
             {PIPELINE_STEPS.map((step, idx) => {
               const isActive = idx === currentStepIndex;
               const isPast = idx < currentStepIndex;
-              const isNext = idx === currentStepIndex + 1;
-              const isLocked = idx > currentStepIndex + 1;
+              // CONCLUDED é terminal — só fica ativo se já estiver lá; não pode voltar atrás de CONCLUDED
+              const isConcludedTerminal = lead.status === "CONCLUDED" && step.id !== "CONCLUDED";
+              const isLocked = isConcludedTerminal;
               return (
                 <button key={step.id}
-                  disabled={isLocked}
+                  disabled={isLocked || isActive}
                   onClick={() => updateStatusMutation.mutate({ status: step.id as LeadStatus })}
                   className={cn(
-                    "relative z-10 flex flex-col items-center transition-all duration-200 min-w-[56px] flex-shrink-0",
-                    isLocked ? "cursor-not-allowed opacity-30" : "cursor-pointer active:scale-95"
+                    "relative z-10 flex flex-col items-center transition-all duration-200 min-w-[48px] flex-shrink-0",
+                    isLocked ? "cursor-not-allowed opacity-20" : isActive ? "cursor-default" : "cursor-pointer active:scale-95"
                   )}>
                   <div className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all",
+                    "w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all",
                     isActive
                       ? `${step.color} border-transparent text-white scale-110 ring-2 ring-offset-1 ring-offset-slate-900 ${step.ring}`
                       : isPast
-                        ? "bg-slate-700 border-gray-600 text-gray-500"
-                        : isNext
-                          ? "bg-slate-800 border-gray-600 text-gray-500 hover:border-gray-500"
-                          : "bg-slate-800 border-gray-800 text-gray-700"
+                        ? "bg-slate-700 border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-200"
+                        : "bg-slate-800 border-gray-700 text-gray-500 hover:border-gray-500 hover:text-gray-300"
                   )}>
-                    <step.icon className="w-3.5 h-3.5" />
+                    <step.icon className="w-3 h-3" />
                   </div>
                   <span className={cn(
                     "text-[9px] font-bold mt-1 uppercase tracking-wide",
