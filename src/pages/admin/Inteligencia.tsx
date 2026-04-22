@@ -197,6 +197,132 @@ interface IgnoredLead {
   hours_waiting: number;
 }
 
+// ─── CoachList — cards expandíveis ───────────────────────────────────────────
+
+function CoachList({ analyses }: { analyses: CoachAnalysis[] }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const verdict = (score: number | null) => {
+    if (score == null) return { label: "Sem dados", cls: "text-slate-500" };
+    if (score >= 70) return { label: "✅ Atende bem", cls: "text-emerald-400" };
+    if (score >= 40) return { label: "⚠️ Regular", cls: "text-amber-400" };
+    return { label: "🚨 Atende mal", cls: "text-red-400" };
+  };
+
+  return (
+    <div className="space-y-2">
+      {analyses.map(a => {
+        const open = openId === a.id;
+        const v    = verdict(a.quality_score);
+        return (
+          <Card
+            key={a.id}
+            className={cn(
+              "border-slate-700/50 transition-colors cursor-pointer",
+              open ? "bg-slate-800/80" : "bg-slate-900/60 hover:bg-slate-900/80"
+            )}
+            onClick={() => setOpenId(open ? null : a.id)}
+          >
+            {/* ── Cabeçalho sempre visível ── */}
+            <div className="flex items-center gap-3 p-3">
+              {/* Score */}
+              <div className={cn(
+                "w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 text-sm font-black",
+                a.quality_score == null ? "bg-slate-800 text-slate-600" :
+                a.quality_score >= 70   ? "bg-emerald-500/20 text-emerald-400" :
+                a.quality_score >= 40   ? "bg-amber-500/20 text-amber-400" :
+                "bg-red-500/20 text-red-400"
+              )}>
+                <span className="text-lg leading-none">{a.quality_score ?? "—"}</span>
+                <span className="text-[8px] opacity-60 leading-none">/100</span>
+              </div>
+
+              {/* Nome + veredito */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-bold text-white">{a.broker_name}</span>
+                  {a.severity && (
+                    <Badge className={cn("text-[9px] h-4 px-1 border", SEVERITY_COLORS[a.severity] || "bg-slate-800 text-slate-500")}>
+                      {a.severity.toUpperCase()}
+                    </Badge>
+                  )}
+                  <span className={cn("text-[10px] font-bold", v.cls)}>{v.label}</span>
+                </div>
+                {/* Resumo curto — sempre visível */}
+                {a.summary && (
+                  <p className="text-[10px] text-slate-500 line-clamp-1">{a.summary}</p>
+                )}
+              </div>
+
+              {/* Stats rápidos */}
+              <div className="text-right shrink-0 text-[10px] text-slate-500 space-y-0.5 mr-2">
+                <p><span className="text-slate-400 font-bold">{a.total_leads_analyzed}</span> leads</p>
+                <p><span className="text-emerald-400 font-bold">{a.leads_converted}</span> conv.</p>
+                <p><span className="text-red-400 font-bold">{a.leads_abandoned}</span> aband.</p>
+              </div>
+
+              {/* Chevron */}
+              <ChevronRight className={cn(
+                "w-4 h-4 text-slate-600 shrink-0 transition-transform",
+                open && "rotate-90"
+              )} />
+            </div>
+
+            {/* ── Conteúdo expandido ── */}
+            {open && (
+              <div className="border-t border-white/5 px-4 pb-4 pt-3 space-y-4">
+                {/* Análise completa */}
+                {a.summary && (
+                  <div>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1.5">📋 Análise completa</p>
+                    <p className="text-[11px] text-slate-300 leading-relaxed bg-slate-900/60 rounded-lg p-3 border border-white/5">
+                      {a.summary}
+                    </p>
+                  </div>
+                )}
+
+                {/* Pontos negativos */}
+                {a.errors?.length > 0 && (
+                  <div>
+                    <p className="text-[10px] text-red-400 uppercase tracking-wider font-bold mb-1.5">🚨 Problemas identificados</p>
+                    <div className="space-y-1.5">
+                      {a.errors.map((e, i) => (
+                        <div key={i} className="bg-red-950/20 border border-red-500/20 rounded-lg px-3 py-2">
+                          <p className="text-[10px] font-bold text-red-300 mb-0.5">{e.type.replace(/_/g, " ").toUpperCase()}</p>
+                          <p className="text-[11px] text-slate-300 leading-snug">{e.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Pontos positivos */}
+                {a.positives?.length > 0 && (
+                  <div>
+                    <p className="text-[10px] text-emerald-400 uppercase tracking-wider font-bold mb-1.5">✅ Pontos positivos</p>
+                    <div className="space-y-1.5">
+                      {a.positives.map((p, i) => (
+                        <div key={i} className="bg-emerald-950/20 border border-emerald-500/20 rounded-lg px-3 py-2">
+                          <p className="text-[11px] text-slate-300 leading-snug">{p}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Rodapé da análise */}
+                <p className="text-[9px] text-slate-600 pt-1">
+                  Gerado em {new Date(a.created_at).toLocaleString("pt-BR")} · Baseado em {a.total_leads_analyzed} leads (métricas CRM, não conteúdo das conversas)
+                </p>
+              </div>
+            )}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Inteligencia() {
   const [period, setPeriod] = useState<Period>("30d");
   const [data, setData] = useState<IntelData | null>(null);
@@ -951,7 +1077,7 @@ export default function Inteligencia() {
 
       {/* ── AI Coach ─────────────────────────────────────────────────────────── */}
       <section>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-1">
           <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold flex items-center gap-2">
             <Brain className="w-3.5 h-3.5 text-emerald-400" />
             AI Coach — Qualidade dos Corretores
@@ -965,6 +1091,9 @@ export default function Inteligencia() {
             <StatusPill status={coachAnalyses.length > 0 ? "ok" : "inactive"} />
           </div>
         </div>
+        <p className="text-[10px] text-slate-600 mb-3">
+          ⚠️ Análise baseada em <strong className="text-slate-500">métricas do CRM</strong> (contact_attempts, status, taxa de resposta) — não lê o conteúdo das conversas WhatsApp. Clique em cada corretor para ver a análise completa.
+        </p>
 
         {coachAnalyses.length === 0 ? (
           <Card className="bg-slate-900/60 border-slate-700/50 border-dashed p-5">
@@ -981,7 +1110,7 @@ export default function Inteligencia() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {/* Ranking */}
+            {/* Ranking top 3 */}
             {coachAnalyses.filter(a => a.quality_score != null).length > 0 && (
               <div className="grid grid-cols-3 gap-2 mb-3">
                 {(() => {
@@ -1003,60 +1132,22 @@ export default function Inteligencia() {
                         (a.quality_score || 0) >= 40 ? "text-amber-400" : "text-red-400"
                       )}>{a.quality_score}</p>
                       <p className="text-[10px] text-slate-400 truncate">{a.broker_name}</p>
+                      <p className="text-[9px] mt-0.5 font-bold">
+                        {(a.quality_score || 0) >= 70
+                          ? <span className="text-emerald-400">✅ Atende bem</span>
+                          : (a.quality_score || 0) >= 40
+                          ? <span className="text-amber-400">⚠️ Regular</span>
+                          : <span className="text-red-400">🚨 Atende mal</span>
+                        }
+                      </p>
                     </Card>
                   ));
                 })()}
               </div>
             )}
 
-            {/* Lista completa */}
-            {coachAnalyses.map(a => (
-              <Card key={a.id} className="bg-slate-900/60 border-slate-700/50 p-3">
-                <div className="flex items-start gap-3">
-                  {/* Score */}
-                  <div className={cn(
-                    "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold",
-                    a.quality_score == null ? "bg-slate-800 text-slate-600" :
-                    a.quality_score >= 70 ? "bg-emerald-500/20 text-emerald-400" :
-                    a.quality_score >= 40 ? "bg-amber-500/20 text-amber-400" :
-                    "bg-red-500/20 text-red-400"
-                  )}>
-                    {a.quality_score ?? "—"}
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs font-bold text-slate-300">{a.broker_name}</span>
-                      {a.severity && (
-                        <Badge className={cn("text-[9px] h-4 px-1 border", SEVERITY_COLORS[a.severity] || "bg-slate-800 text-slate-500")}>
-                          {a.severity.toUpperCase()}
-                        </Badge>
-                      )}
-                    </div>
-                    {a.summary && (
-                      <p className="text-[10px] text-slate-500 line-clamp-2">{a.summary}</p>
-                    )}
-                    {a.errors?.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {a.errors.slice(0, 2).map((e, i) => (
-                          <span key={i} className="text-[9px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded">
-                            {e.type}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Meta */}
-                  <div className="text-right shrink-0 text-[10px] text-slate-600 space-y-0.5">
-                    <p>{a.total_leads_analyzed} leads</p>
-                    <p>{a.leads_converted} conv.</p>
-                    <p>{timeAgo(a.created_at)}</p>
-                  </div>
-                </div>
-              </Card>
-            ))}
+            {/* Lista expandível */}
+            <CoachList analyses={coachAnalyses} />
           </div>
         )}
       </section>
