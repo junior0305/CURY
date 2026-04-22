@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { OperationalIntelligence } from "@/components/admin/OperationalIntelligence";
 import {
   Flame,
   Crosshair,
@@ -342,8 +343,11 @@ export default function CommandCenter() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="soldiers" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 bg-slate-900/50 border border-gray-700">
+      <Tabs defaultValue="intel" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 bg-slate-900/50 border border-gray-700">
+          <TabsTrigger value="intel" className="data-[state=active]:bg-cyan-900/50 text-xs md:text-sm">
+            🧠 INTEL
+          </TabsTrigger>
           <TabsTrigger value="captains" className="data-[state=active]:bg-blue-900/50 text-xs md:text-sm">
             🎖️ CAPITÃES
           </TabsTrigger>
@@ -354,6 +358,10 @@ export default function CommandCenter() {
             👥 TROPAS
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="intel" className="mt-4 md:mt-6">
+          <OperationalIntelligence />
+        </TabsContent>
 
         <TabsContent value="captains" className="mt-4 md:mt-6">
           <Card className="border-2 border-blue-500 bg-slate-900/50">
