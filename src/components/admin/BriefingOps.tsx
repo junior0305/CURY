@@ -45,7 +45,7 @@ interface AgenteRow {
 }
 interface ChipVolumeRow {
   nome: string; status: string; is_prospecting: boolean;
-  enviou: number; recebeu: number; converteu: number; tokens_7d: number;
+  auto: number; manual: number; recebeu: number; converteu: number; tokens_7d: number;
 }
 interface ChipRow {
   id: string; nome: string; status: string;
@@ -58,6 +58,7 @@ interface CampanhaRow {
 }
 interface CorretorResposta {
   broker_id: string; nome: string;
+  leads_auto: number; leads_manual: number;
   leads_respondidos: number; min_avg: number; perdidos: number;
 }
 interface CorretorIgnorou {
@@ -98,6 +99,7 @@ async function fetchBriefing(): Promise<BriefingData> {
     autoLogsRes, guardianLogRes, sentinelaRes,
     iaConvsRes, tokensRes,
     guardianAlertsRes, negocRes,
+    autoLogs7dRes,
   ] = await Promise.all([
     // 1. Lead respondeu, corretor sumiu (7d)
     supabase.from("leads").select(
@@ -131,7 +133,7 @@ async function fetchBriefing(): Promise<BriefingData> {
     // 5. Profiles (com phone para notificação)
     supabase.from("profiles").select("id,first_name,bot_instance_id,phone").eq("role","BROKER"),
 
-    // 6. Automation logs 24h
+    // 6. Automation logs 24h (para painel de agentes)
     supabase.from("automation_logs").select("entity_type,status,executed_at")
       .gt("executed_at", ago24h).limit(500),
 
@@ -162,6 +164,13 @@ async function fetchBriefing(): Promise<BriefingData> {
       .not("negotiating_since","is",null)
       .lt("negotiating_since", ago15d)
       .order("negotiating_since",{ascending:true}).limit(20),
+
+    // 13. Automation logs 7d com entity_id (lead_id) — para separar auto de manual
+    supabase.from("automation_logs").select("entity_id,entity_type,status")
+      .gt("executed_at", ago7d)
+      .eq("status","success")
+      .in("entity_type",["welcome","follow_up","aviso_redistribuicao_proprio","redistribuicao_proprio","redistribuicao"])
+      .limit(2000),
   ]);
 
   const allBots: any[]     = botInstancesRes.data || [];
@@ -206,6 +215,12 @@ async function fetchBriefing(): Promise<BriefingData> {
     }
   });
 
+  // ── SET de leads tocados por automação (7d) ──
+  // entity_id = lead_id. Se o lead aparece aqui, a automação mandou mensagem com sucesso.
+  const autoLeadIds = new Set<string>((autoLogs7dRes.data || []).map((r: any) => r.entity_id).filter(Boolean));
+  // Sentinela/IA também é automação — adicionar lead_ids das ia_conversations
+  iaConvs.forEach((c: any) => { if (c.lead_id) autoLeadIds.add(c.lead_id); });
+
   // ── CHIPS VOLUME via leads (7d) ──
   // Busca volume real por chip: enviou = leads que o chip tocou, recebeu = responderam, converteu = avançaram
   const { data: chipVolumeRaw } = await supabase.rpc
@@ -213,9 +228,11 @@ async function fetchBriefing(): Promise<BriefingData> {
     : { data: null };
 
   // Computa do leads30 (últimos 30d, mas filtra por last_broker_whatsapp_at > 7d)
+  // Separa: auto = só automação tocou | manual = corretor também agiu além da automação
   const ago7dTs = Date.now() - 7 * 86400000;
-  const chipEnviouMap: Record<string, number>   = {};
-  const chipRecebeuMap: Record<string, number>  = {};
+  const chipAutoMap:     Record<string, number> = {};
+  const chipManualMap:   Record<string, number> = {};
+  const chipRecebeuMap:  Record<string, number> = {};
   const chipConverteuMap: Record<string, number> = {};
   leads30.forEach((l: any) => {
     if (!l.last_broker_whatsapp_at) return;
@@ -225,8 +242,19 @@ async function fetchBriefing(): Promise<BriefingData> {
     if (!botId) return;
     const botName = allBots.find((b: any) => b.id === botId)?.name || "";
     if (!botName) return;
-    chipEnviouMap[botName]   = (chipEnviouMap[botName]   || 0) + 1;
-    if (l.last_lead_response_at) chipRecebeuMap[botName] = (chipRecebeuMap[botName] || 0) + 1;
+    // Determina se o toque foi apenas automático ou se o corretor também agiu
+    const tocadoPorAuto = autoLeadIds.has(l.id);
+    // Considera "manual" quando contact_attempts supera 1 (automação normalmente faz 1 toque por ciclo)
+    // ou quando o lead avançou além de NEW mas não tem entrada de automação (corretor avançou)
+    const corretorAgiu = !tocadoPorAuto || (l.contact_attempts || 0) > 1;
+    if (tocadoPorAuto && !corretorAgiu) {
+      chipAutoMap[botName]   = (chipAutoMap[botName]   || 0) + 1;
+    } else if (corretorAgiu) {
+      chipManualMap[botName] = (chipManualMap[botName] || 0) + 1;
+    } else {
+      chipAutoMap[botName]   = (chipAutoMap[botName]   || 0) + 1;
+    }
+    if (l.last_lead_response_at) chipRecebeuMap[botName]  = (chipRecebeuMap[botName]  || 0) + 1;
     if (!["NEW","IN_PROGRESS","ABANDONED","EXCLUDED"].includes(l.status))
       chipConverteuMap[botName] = (chipConverteuMap[botName] || 0) + 1;
   });
@@ -235,13 +263,14 @@ async function fetchBriefing(): Promise<BriefingData> {
     .filter((b: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.name === b.name) === i) // dedupe por nome
     .map((b: any) => ({
       nome: b.name, status: b.status, is_prospecting: b.is_prospecting,
-      enviou:    chipEnviouMap[b.name]    || 0,
+      auto:      chipAutoMap[b.name]      || 0,
+      manual:    chipManualMap[b.name]    || 0,
       recebeu:   chipRecebeuMap[b.name]   || 0,
       converteu: chipConverteuMap[b.name] || 0,
       tokens_7d: tokensByBot[b.id]        || 0,
     }))
-    .filter(c => c.enviou > 0)
-    .sort((a, b) => b.enviou - a.enviou);
+    .filter(c => (c.auto + c.manual) > 0)
+    .sort((a, b) => (b.auto + b.manual) - (a.auto + a.manual));
 
   // ── FOGO 1A: respondeu, corretor sumiu ──
   const fogo_respondeu: LeadRespondeuSemRetorno[] = (leadsRespondeuRes.data||[])
@@ -378,12 +407,24 @@ async function fetchBriefing(): Promise<BriefingData> {
   const follow_respondeu = leads30.filter((l: any) => (l.contact_attempts||0) > 0 && l.last_lead_response_at).length;
   const follow_exauridos = leads30.filter((l: any) => (l.contact_attempts||0) >= 4 && !l.last_lead_response_at && ["NEW","IN_PROGRESS"].includes(l.status)).length;
 
-  // ── CORRETORES: tempo de resposta ──
-  const brokerRespMap: Record<string, {nome:string;respondidos:number;totalMin:number;perdidos:number}> = {};
+  // ── CORRETORES: tempo de resposta + auto vs manual ──
+  const brokerRespMap: Record<string, {nome:string;respondidos:number;totalMin:number;perdidos:number;auto:number;manual:number}> = {};
   leads30.forEach((l: any) => {
-    if (!l.last_lead_response_at || !l.broker_id) return;
+    if (!l.broker_id) return;
     const nome = l.profiles?.first_name || "—";
-    if (!brokerRespMap[l.broker_id]) brokerRespMap[l.broker_id]={nome,respondidos:0,totalMin:0,perdidos:0};
+    if (!brokerRespMap[l.broker_id]) brokerRespMap[l.broker_id]={nome,respondidos:0,totalMin:0,perdidos:0,auto:0,manual:0};
+    // Conta auto vs manual para o corretor (mesma lógica dos chips)
+    if (l.last_broker_whatsapp_at) {
+      const sentAt = new Date(l.last_broker_whatsapp_at).getTime();
+      if (sentAt >= ago7dTs) {
+        const tocadoPorAuto = autoLeadIds.has(l.id);
+        const corretorAgiu  = !tocadoPorAuto || (l.contact_attempts || 0) > 1;
+        if (corretorAgiu) brokerRespMap[l.broker_id].manual++;
+        else              brokerRespMap[l.broker_id].auto++;
+      }
+    }
+    // Tempo de resposta (só onde lead respondeu)
+    if (!l.last_lead_response_at) return;
     const respondeuEm = new Date(l.last_lead_response_at).getTime();
     const botVoltou   = l.last_broker_whatsapp_at ? new Date(l.last_broker_whatsapp_at).getTime() : 0;
     if (botVoltou > respondeuEm) {
@@ -398,11 +439,12 @@ async function fetchBriefing(): Promise<BriefingData> {
   const corretores_resposta: CorretorResposta[] = Object.entries(brokerRespMap)
     .map(([id, v]: any) => ({
       broker_id: id, nome: v.nome,
+      leads_auto: v.auto, leads_manual: v.manual,
       leads_respondidos: v.respondidos,
       min_avg: v.respondidos > 0 ? Math.round(v.totalMin/v.respondidos) : 9999,
       perdidos: v.perdidos,
     }))
-    .sort((a, b) => a.min_avg - b.min_avg);
+    .sort((a, b) => (b.leads_auto + b.leads_manual) - (a.leads_auto + a.leads_manual));
 
   // ── CORRETORES: ignoraram leads (contact_attempts=0, >2h) ──
   const ignoradosAll = (leadsIgnoradosRes.data||[]);
@@ -667,10 +709,11 @@ export function BriefingOps() {
         {d.chips_volume.length === 0
           ? <EmptyOk text="Nenhum chip com atividade nos últimos 7 dias" />
           : (
-            <Table headers={["Chip","Status","Tipo","Enviou","Recebeu","Taxa retorno","Converteu","Tokens IA"]}>
+            <Table headers={["Chip","Status","Tipo","Auto (bot)","Manual (corretor)","% Manual","Respondeu","Converteu","Tokens IA"]}>
               {d.chips_volume.map(c => {
-                const taxa = c.enviou > 0 ? Math.round((c.recebeu / c.enviou) * 100) : 0;
-                const isOff = ["offline","disconnected"].includes(c.status);
+                const total    = c.auto + c.manual;
+                const pctManual = total > 0 ? Math.round((c.manual / total) * 100) : 0;
+                const isOff    = ["offline","disconnected"].includes(c.status);
                 return (
                   <tr key={c.nome} className="border-t border-white/5 hover:bg-white/3">
                     <Td>
@@ -684,15 +727,25 @@ export function BriefingOps() {
                         {c.is_prospecting ? "qualificador" : "corretor"}
                       </span>
                     </Td>
-                    <Td><span className="tabular-nums text-white font-bold">{c.enviou}</span></Td>
-                    <Td><span className="tabular-nums text-slate-300">{c.recebeu}</span></Td>
                     <Td>
-                      <span className={cn("tabular-nums font-bold text-xs",
-                        taxa === 0 ? "text-red-400" : taxa < 20 ? "text-amber-400" : "text-emerald-400"
+                      <span className="tabular-nums text-slate-400">{c.auto > 0 ? c.auto : "—"}</span>
+                    </Td>
+                    <Td>
+                      <span className={cn("tabular-nums font-bold",
+                        c.manual > 0 ? "text-emerald-300" : "text-red-400"
                       )}>
-                        {taxa}%
+                        {c.manual > 0 ? c.manual : "0 ←"}
                       </span>
                     </Td>
+                    <Td>
+                      <span className={cn("tabular-nums font-black text-xs",
+                        pctManual === 0  ? "text-red-400" :
+                        pctManual < 30   ? "text-amber-400" : "text-emerald-400"
+                      )}>
+                        {pctManual}%
+                      </span>
+                    </Td>
+                    <Td><span className="tabular-nums text-slate-300">{c.recebeu > 0 ? c.recebeu : "—"}</span></Td>
                     <Td>
                       <span className={cn("tabular-nums font-bold",
                         c.converteu > 0 ? "text-emerald-300" : "text-slate-600"
@@ -712,7 +765,9 @@ export function BriefingOps() {
           )
         }
         <p className="text-[10px] text-slate-600 mt-2">
-          Enviou = leads tocados pelo chip nos últimos 7d. Recebeu = leads que responderam. Converteu = leads que saíram de NEW/IN_PROGRESS.
+          <strong className="text-slate-500">Auto</strong> = mensagens enviadas por welcome/follow-up/sentinela.{" "}
+          <strong className="text-slate-500">Manual</strong> = corretor agiu além da automação (contact_attempts &gt; 1 ou sem toque automático).{" "}
+          <strong className="text-slate-500">% Manual = 0%</strong> significa que o corretor não tocou em nenhum lead — o bot fez tudo.
         </p>
       </Section>
 
@@ -720,41 +775,64 @@ export function BriefingOps() {
       <Section icon="👤" title="CORRETORES" subtitle="Quem está engajado e quem precisa de uma conversa">
 
         {/* 6A: Tempo de resposta */}
-        <SubTitle label="Quando o lead responde — quanto demora o corretor?" count={null} color="slate" />
+        <SubTitle label="Quem trabalhou e quem deixou o bot fazer tudo — 7 dias" count={null} color="slate" />
         {d.corretores_resposta.length === 0
-          ? <p className="text-xs text-slate-500 mb-4">Sem dados de resposta no período.</p>
+          ? <p className="text-xs text-slate-500 mb-4">Sem dados no período.</p>
           : (
-            <Table headers={["Corretor","T. médio resposta","Leads atendidos","Perdidos (>2h)","Situação"]}>
-              {d.corretores_resposta.slice(0, 15).map(c => (
-                <tr key={c.broker_id} className="border-t border-white/5 hover:bg-white/3">
-                  <Td><span className="text-white font-bold">{c.nome}</span></Td>
-                  <Td>
-                    <span className={cn("font-black tabular-nums",
-                      c.min_avg >= 9999 ? "text-red-400" :
-                      c.min_avg > 120 ? "text-red-400" :
-                      c.min_avg > 30 ? "text-amber-400" : "text-emerald-400"
-                    )}>
-                      {c.min_avg >= 9999 ? "nunca respondeu" : fmtTempo(c.min_avg)}
-                    </span>
-                  </Td>
-                  <Td><span className="tabular-nums text-slate-300">{c.leads_respondidos}</span></Td>
-                  <Td>
-                    <span className={cn("tabular-nums font-bold", c.perdidos>2?"text-red-400":"text-slate-400")}>
-                      {c.perdidos}
-                    </span>
-                  </Td>
-                  <Td>
-                    <span className="text-[10px] text-slate-500">
-                      {c.min_avg >= 9999 ? "🚨 crítico — chamar para conversa" :
-                       c.min_avg > 120   ? "⚠️ lento — treinar urgência" :
-                       c.min_avg > 30    ? "🟡 aceitável" : "✅ ágil"}
-                    </span>
-                  </Td>
-                </tr>
-              ))}
+            <Table headers={["Corretor","Auto (bot)","Manual (corretor)","% Manual","T. médio resposta","Perdidos (>2h)","Situação"]}>
+              {d.corretores_resposta.slice(0, 15).map(c => {
+                const total      = c.leads_auto + c.leads_manual;
+                const pctManual  = total > 0 ? Math.round((c.leads_manual / total) * 100) : 0;
+                return (
+                  <tr key={c.broker_id} className="border-t border-white/5 hover:bg-white/3">
+                    <Td><span className="text-white font-bold">{c.nome}</span></Td>
+                    <Td><span className="tabular-nums text-slate-400">{c.leads_auto || "—"}</span></Td>
+                    <Td>
+                      <span className={cn("tabular-nums font-bold",
+                        c.leads_manual > 0 ? "text-emerald-300" : "text-red-400"
+                      )}>
+                        {c.leads_manual > 0 ? c.leads_manual : "0 ←"}
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className={cn("tabular-nums font-black text-xs",
+                        pctManual === 0  ? "text-red-400" :
+                        pctManual < 30   ? "text-amber-400" : "text-emerald-400"
+                      )}>
+                        {pctManual}%
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className={cn("font-black tabular-nums",
+                        c.min_avg >= 9999 ? "text-red-400" :
+                        c.min_avg > 120   ? "text-red-400" :
+                        c.min_avg > 30    ? "text-amber-400" : "text-emerald-400"
+                      )}>
+                        {c.min_avg >= 9999 ? "—" : fmtTempo(c.min_avg)}
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className={cn("tabular-nums font-bold", c.perdidos > 2 ? "text-red-400" : "text-slate-400")}>
+                        {c.perdidos}
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className="text-[10px] text-slate-500">
+                        {pctManual === 0 && total > 0 ? "🚨 só o bot trabalhou" :
+                         pctManual < 20              ? "⚠️ pouco engajamento manual" :
+                         c.min_avg > 120             ? "⚠️ resposta lenta" :
+                         c.min_avg > 30              ? "🟡 aceitável" : "✅ ativo"}
+                      </span>
+                    </Td>
+                  </tr>
+                );
+              })}
             </Table>
           )
         }
+        <p className="text-[10px] text-slate-600 mt-2 mb-4">
+          <strong className="text-slate-500">% Manual = 0%</strong> = esse corretor não agiu em nenhum lead nos últimos 7 dias. O bot fez 100% do trabalho.
+        </p>
 
         {/* 6B: Quem ignorou leads */}
         <div className="mt-5" />
