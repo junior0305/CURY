@@ -119,12 +119,14 @@ async function fetchBriefing(): Promise<BriefingData> {
       .not("status","in","(\"CONCLUDED\",\"EXCLUDED\",\"ABANDONED\")")
       .limit(50),
 
-    // 2. Leads sem contato >2h (novos com broker, bot nunca agiu)
+    // 2. Leads sem nenhum contato >2h — critério real: bot nunca enviou nada (last_broker_whatsapp_at IS NULL)
+    // contact_attempts=0 NÃO é suficiente: boas-vindas não incrementa esse campo,
+    // então leads que receberam boas-vindas aparecem como "sem contato" mesmo tendo sido tocados.
     supabase.from("leads").select(
       "id,name,tag,broker_id,created_at,contact_attempts,status,profiles!broker_id(first_name,bot_instance_id)"
     ).in("status",["NEW","IN_PROGRESS"])
       .not("broker_id","is",null)
-      .eq("contact_attempts",0)
+      .is("last_broker_whatsapp_at", null)
       .lt("created_at", ago2h)
       .gt("created_at", ago7d)
       .order("created_at",{ascending:true})
@@ -709,7 +711,7 @@ export function BriefingOps() {
 
         {/* 1B: Sem contato >2h */}
         <div className="mt-4" />
-        <SubTitle label="Lead novo sem nenhum contato do bot (>2h)" count={d.fogo_sem_contato.length} color="orange" />
+        <SubTitle label="Lead novo — bot nunca enviou nada (>2h sem last_broker_whatsapp_at)" count={d.fogo_sem_contato.length} color="orange" />
         {d.fogo_sem_contato.length === 0
           ? <EmptyOk text="Nenhum lead ignorado no momento" />
           : (
@@ -1013,7 +1015,7 @@ export function BriefingOps() {
 
         {/* 6B: Quem ignorou leads */}
         <div className="mt-5" />
-        <SubTitle label="Leads sem nenhum contato — quem é responsável?" count={d.corretores_ignoraram.length} color="red" />
+        <SubTitle label="Leads que o bot NUNCA tocou — quem é responsável?" count={d.corretores_ignoraram.length} color="red" />
         {d.corretores_ignoraram.length === 0
           ? <EmptyOk text="Nenhum corretor com leads completamente ignorados" />
           : d.corretores_ignoraram.map(c => {
