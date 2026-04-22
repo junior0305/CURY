@@ -28,18 +28,24 @@ function fmtTempo(min: number): string {
 
 interface LeadIgnorado {
   id: string; name: string; tag: string | null;
-  broker_name: string; horas: number; tentativas: number; chip_status: string;
+  broker_name: string; broker_phone: string | null;
+  horas: number; tentativas: number; chip_status: string;
 }
 interface LeadRespondeuSemRetorno {
-  id: string; name: string; broker_name: string;
+  id: string; name: string;
+  broker_name: string; broker_phone: string | null;
   respondeu_ha_min: number; ultimo_bot_ha_min: number; tag: string | null;
-  origem: string; // "novo" | "redistribuido" | "follow_up"
+  origem: string;
 }
 interface AgenteRow {
   nome: string; icon: string;
   rodou: number | string; acionou: number | string; efetivo: string;
   status: "ok" | "warn" | "off" | "crit"; obs: string;
   ultima: string | null;
+}
+interface ChipVolumeRow {
+  nome: string; status: string; is_prospecting: boolean;
+  enviou: number; recebeu: number; converteu: number; tokens_7d: number;
 }
 interface ChipRow {
   id: string; nome: string; status: string;
@@ -55,7 +61,7 @@ interface CorretorResposta {
   leads_respondidos: number; min_avg: number; perdidos: number;
 }
 interface CorretorIgnorou {
-  nome: string; count: number;
+  nome: string; phone: string | null; count: number;
   leads: { name: string; horas: number; tentativas: number; tag: string | null }[];
 }
 interface NegociacaoParada {
@@ -66,8 +72,8 @@ interface BriefingData {
   fogo_respondeu: LeadRespondeuSemRetorno[];
   fogo_sem_contato: LeadIgnorado[];
   agentes: AgenteRow[];
+  chips_volume: ChipVolumeRow[];
   ia_auto: ChipRow[];
-  chips_corretor: ChipRow[];
   follow_tentou: number; follow_respondeu: number; follow_exauridos: number;
   corretores_resposta: CorretorResposta[];
   corretores_ignoraram: CorretorIgnorou[];
@@ -122,8 +128,8 @@ async function fetchBriefing(): Promise<BriefingData> {
     // 4. Bot instances
     supabase.from("bot_instances").select("id,name,status,is_prospecting"),
 
-    // 5. Profiles
-    supabase.from("profiles").select("id,first_name,bot_instance_id").eq("role","BROKER"),
+    // 5. Profiles (com phone para notificação)
+    supabase.from("profiles").select("id,first_name,bot_instance_id,phone").eq("role","BROKER"),
 
     // 6. Automation logs 24h
     supabase.from("automation_logs").select("entity_type,status,executed_at")
@@ -187,16 +193,55 @@ async function fetchBriefing(): Promise<BriefingData> {
     }
   });
 
-  // Mapa perfil_id → bot status
-  const profileBotMap: Record<string, string> = {};
-  const profileBotId:  Record<string, string> = {};
+  // Mapa perfil_id → bot status + phone
+  const profileBotMap:   Record<string, string> = {};
+  const profileBotId:    Record<string, string> = {};
+  const profilePhoneMap: Record<string, string | null> = {};
   allProfiles.forEach((p: any) => {
+    profilePhoneMap[p.id] = p.phone || null;
     if (p.bot_instance_id) {
       const bot = allBots.find((b: any) => b.id === p.bot_instance_id);
       profileBotMap[p.id] = bot?.status || "unknown";
       profileBotId[p.id]  = p.bot_instance_id;
     }
   });
+
+  // ── CHIPS VOLUME via leads (7d) ──
+  // Busca volume real por chip: enviou = leads que o chip tocou, recebeu = responderam, converteu = avançaram
+  const { data: chipVolumeRaw } = await supabase.rpc
+    ? { data: null } // fallback — computed below from leads30
+    : { data: null };
+
+  // Computa do leads30 (últimos 30d, mas filtra por last_broker_whatsapp_at > 7d)
+  const ago7dTs = Date.now() - 7 * 86400000;
+  const chipEnviouMap: Record<string, number>   = {};
+  const chipRecebeuMap: Record<string, number>  = {};
+  const chipConverteuMap: Record<string, number> = {};
+  leads30.forEach((l: any) => {
+    if (!l.last_broker_whatsapp_at) return;
+    const sentAt = new Date(l.last_broker_whatsapp_at).getTime();
+    if (sentAt < ago7dTs) return; // só últimos 7d
+    const botId = profileBotId[l.broker_id];
+    if (!botId) return;
+    const botName = allBots.find((b: any) => b.id === botId)?.name || "";
+    if (!botName) return;
+    chipEnviouMap[botName]   = (chipEnviouMap[botName]   || 0) + 1;
+    if (l.last_lead_response_at) chipRecebeuMap[botName] = (chipRecebeuMap[botName] || 0) + 1;
+    if (!["NEW","IN_PROGRESS","ABANDONED","EXCLUDED"].includes(l.status))
+      chipConverteuMap[botName] = (chipConverteuMap[botName] || 0) + 1;
+  });
+
+  const chips_volume: ChipVolumeRow[] = allBots
+    .filter((b: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.name === b.name) === i) // dedupe por nome
+    .map((b: any) => ({
+      nome: b.name, status: b.status, is_prospecting: b.is_prospecting,
+      enviou:    chipEnviouMap[b.name]    || 0,
+      recebeu:   chipRecebeuMap[b.name]   || 0,
+      converteu: chipConverteuMap[b.name] || 0,
+      tokens_7d: tokensByBot[b.id]        || 0,
+    }))
+    .filter(c => c.enviou > 0)
+    .sort((a, b) => b.enviou - a.enviou);
 
   // ── FOGO 1A: respondeu, corretor sumiu ──
   const fogo_respondeu: LeadRespondeuSemRetorno[] = (leadsRespondeuRes.data||[])
@@ -208,6 +253,7 @@ async function fetchBriefing(): Promise<BriefingData> {
     .map((l: any) => ({
       id: l.id, name: l.name || "Sem nome", tag: l.tag,
       broker_name: l.profiles?.first_name || "—",
+      broker_phone: profilePhoneMap[l.broker_id] || null,
       respondeu_ha_min: minAtras(l.last_lead_response_at),
       ultimo_bot_ha_min: l.last_broker_whatsapp_at ? minAtras(l.last_broker_whatsapp_at) : 9999,
       origem: l.contact_attempts > 3 ? "follow_up" : l.contact_attempts > 0 ? "novo" : "novo",
@@ -325,8 +371,7 @@ async function fetchBriefing(): Promise<BriefingData> {
       };
     });
 
-  const ia_auto       = allChipRows.filter(c => c.is_prospecting && !c.dono && (c.conversas_7d>0||c.tokens_7d>0));
-  const chips_corretor= allChipRows.filter(c => c.dono).sort((a,b)=>b.tokens_7d-a.tokens_7d);
+  const ia_auto = allChipRows.filter(c => c.is_prospecting && !c.dono && (c.conversas_7d>0||c.tokens_7d>0));
 
   // ── FOLLOW-UP ──
   const follow_tentou    = leads30.filter((l: any) => (l.contact_attempts||0) > 0 && !l.last_lead_response_at).length;
@@ -363,10 +408,13 @@ async function fetchBriefing(): Promise<BriefingData> {
   const ignoradosAll = (leadsIgnoradosRes.data||[]);
   const brokerIgnoreMap: Record<string, CorretorIgnorou> = {};
   ignoradosAll.forEach((l: any) => {
+    const bId = l.broker_id || "unknown";
     const nome = l.profiles?.first_name || "—";
-    if (!brokerIgnoreMap[nome]) brokerIgnoreMap[nome] = {nome, count:0, leads:[]};
-    brokerIgnoreMap[nome].count++;
-    brokerIgnoreMap[nome].leads.push({
+    if (!brokerIgnoreMap[bId]) brokerIgnoreMap[bId] = {
+      nome, phone: profilePhoneMap[bId] || null, count: 0, leads: []
+    };
+    brokerIgnoreMap[bId].count++;
+    brokerIgnoreMap[bId].leads.push({
       name: l.name||"Sem nome",
       horas: horasAtras(l.created_at),
       tentativas: l.contact_attempts||0,
@@ -412,7 +460,7 @@ async function fetchBriefing(): Promise<BriefingData> {
 
   return {
     fogo_respondeu, fogo_sem_contato, agentes,
-    ia_auto, chips_corretor,
+    ia_auto, chips_volume,
     follow_tentou, follow_respondeu, follow_exauridos,
     corretores_resposta, corretores_ignoraram,
     campanhas, negociacoes_paradas,
@@ -470,20 +518,37 @@ export function BriefingOps() {
         {d.fogo_respondeu.length === 0
           ? <EmptyOk text="Nenhum lead esperando resposta" />
           : (
-            <Table headers={["Lead","Corretor","Esperando","Último bot","Campanha"]}>
-              {d.fogo_respondeu.map(l => (
-                <tr key={l.id} className="border-t border-white/5 hover:bg-white/3">
-                  <Td><span className="text-white font-semibold">{l.name}</span></Td>
-                  <Td><span className="text-amber-300 font-bold">{l.broker_name}</span></Td>
-                  <Td>
-                    <span className={cn("font-black tabular-nums",
-                      l.respondeu_ha_min > 120 ? "text-red-400" : l.respondeu_ha_min > 30 ? "text-amber-400" : "text-orange-300"
-                    )}>{fmtTempo(l.respondeu_ha_min)}</span>
-                  </Td>
-                  <Td><span className="text-slate-500">{fmtTempo(l.ultimo_bot_ha_min)}</span></Td>
-                  <Td><span className="text-slate-500 text-[10px]">{l.tag||"—"}</span></Td>
-                </tr>
-              ))}
+            <Table headers={["Lead","Corretor","Esperando","Último bot","Campanha","Ação"]}>
+              {d.fogo_respondeu.map(l => {
+                const msg = encodeURIComponent(`Oi ${l.broker_name}, o lead ${l.name} respondeu há ${fmtTempo(l.respondeu_ha_min)} e está aguardando retorno. Pode entrar em contato agora?`);
+                return (
+                  <tr key={l.id} className="border-t border-white/5 hover:bg-white/3">
+                    <Td><span className="text-white font-semibold">{l.name}</span></Td>
+                    <Td><span className="text-amber-300 font-bold">{l.broker_name}</span></Td>
+                    <Td>
+                      <span className={cn("font-black tabular-nums",
+                        l.respondeu_ha_min > 120 ? "text-red-400" : l.respondeu_ha_min > 30 ? "text-amber-400" : "text-orange-300"
+                      )}>{fmtTempo(l.respondeu_ha_min)}</span>
+                    </Td>
+                    <Td><span className="text-slate-500">{fmtTempo(l.ultimo_bot_ha_min)}</span></Td>
+                    <Td><span className="text-slate-500 text-[10px]">{l.tag||"—"}</span></Td>
+                    <Td>
+                      {l.broker_phone
+                        ? (
+                          <a
+                            href={`https://wa.me/${l.broker_phone}?text=${msg}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold hover:bg-emerald-500/30 transition-colors"
+                          >
+                            📲 Notificar
+                          </a>
+                        )
+                        : <span className="text-slate-600 text-[10px]">sem tel.</span>
+                      }
+                    </Td>
+                  </tr>
+                );
+              })}
             </Table>
           )
         }
@@ -597,19 +662,58 @@ export function BriefingOps() {
         </p>
       </Section>
 
-      {/* ── BLOCO 5: CHIPS DE CORRETOR ──────────────────────────────────────── */}
-      <Section icon="📱" title="CHIPS DE CORRETOR" subtitle="Status e atividade dos chips vinculados a corretores — 7 dias">
-        <Table headers={["Chip (corretor)","Status","Conversas IA","Tokens gastos","Custo aprox."]}>
-          {d.chips_corretor.filter(c => c.conversas_7d > 0 || ["offline","disconnected"].includes(c.status)).map(c => (
-            <tr key={c.id} className="border-t border-white/5 hover:bg-white/3">
-              <Td><span className={cn("font-bold", ["offline","disconnected"].includes(c.status)?"text-slate-500":"text-white")}>{c.nome}</span></Td>
-              <Td><ChipStatus s={c.status} /></Td>
-              <Td><span className="tabular-nums text-slate-300">{c.conversas_7d||"—"}</span></Td>
-              <Td><span className="tabular-nums text-slate-300">{c.tokens_7d>0?c.tokens_7d.toLocaleString("pt-BR"):"—"}</span></Td>
-              <Td><span className="text-[10px] text-slate-500">{c.tokens_7d>0?`~R$${(c.tokens_7d*0.000013).toFixed(2)}`:"—"}</span></Td>
-            </tr>
-          ))}
-        </Table>
+      {/* ── BLOCO 5: CHIPS ──────────────────────────────────────────────────── */}
+      <Section icon="📱" title="CHIPS" subtitle="Volume real de mensagens por chip — últimos 7 dias">
+        {d.chips_volume.length === 0
+          ? <EmptyOk text="Nenhum chip com atividade nos últimos 7 dias" />
+          : (
+            <Table headers={["Chip","Status","Tipo","Enviou","Recebeu","Taxa retorno","Converteu","Tokens IA"]}>
+              {d.chips_volume.map(c => {
+                const taxa = c.enviou > 0 ? Math.round((c.recebeu / c.enviou) * 100) : 0;
+                const isOff = ["offline","disconnected"].includes(c.status);
+                return (
+                  <tr key={c.nome} className="border-t border-white/5 hover:bg-white/3">
+                    <Td>
+                      <span className={cn("font-bold", isOff ? "text-slate-500" : "text-white")}>{c.nome}</span>
+                    </Td>
+                    <Td><ChipStatus s={c.status} /></Td>
+                    <Td>
+                      <span className={cn("text-[10px] font-bold",
+                        c.is_prospecting ? "text-purple-400" : "text-slate-400"
+                      )}>
+                        {c.is_prospecting ? "qualificador" : "corretor"}
+                      </span>
+                    </Td>
+                    <Td><span className="tabular-nums text-white font-bold">{c.enviou}</span></Td>
+                    <Td><span className="tabular-nums text-slate-300">{c.recebeu}</span></Td>
+                    <Td>
+                      <span className={cn("tabular-nums font-bold text-xs",
+                        taxa === 0 ? "text-red-400" : taxa < 20 ? "text-amber-400" : "text-emerald-400"
+                      )}>
+                        {taxa}%
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className={cn("tabular-nums font-bold",
+                        c.converteu > 0 ? "text-emerald-300" : "text-slate-600"
+                      )}>
+                        {c.converteu > 0 ? c.converteu : "—"}
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className="text-[10px] text-slate-500">
+                        {c.tokens_7d > 0 ? `${c.tokens_7d.toLocaleString("pt-BR")} (~R$${(c.tokens_7d * 0.000013).toFixed(2)})` : "—"}
+                      </span>
+                    </Td>
+                  </tr>
+                );
+              })}
+            </Table>
+          )
+        }
+        <p className="text-[10px] text-slate-600 mt-2">
+          Enviou = leads tocados pelo chip nos últimos 7d. Recebeu = leads que responderam. Converteu = leads que saíram de NEW/IN_PROGRESS.
+        </p>
       </Section>
 
       {/* ── BLOCO 6: CORRETORES ─────────────────────────────────────────────── */}
@@ -657,27 +761,43 @@ export function BriefingOps() {
         <SubTitle label="Leads sem nenhum contato — quem é responsável?" count={d.corretores_ignoraram.length} color="red" />
         {d.corretores_ignoraram.length === 0
           ? <EmptyOk text="Nenhum corretor com leads completamente ignorados" />
-          : d.corretores_ignoraram.map(c => (
-            <div key={c.nome} className="mb-3">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-amber-300 font-black text-xs">{c.nome}</span>
-                <span className="text-[10px] bg-red-500/20 text-red-300 border border-red-500/30 px-1.5 py-0.5 rounded-full font-bold">{c.count} leads</span>
+          : d.corretores_ignoraram.map(c => {
+            const leadsList = c.leads.map(l => `• ${l.name} (${l.horas}h${l.tentativas > 0 ? `, bot tentou ${l.tentativas}x` : ""})`).join("\n");
+            const msg = encodeURIComponent(`Oi ${c.nome}, você tem ${c.count} lead(s) aguardando contato há horas. Por favor acesse o CRM agora:\n${leadsList}`);
+            return (
+              <div key={c.nome} className="mb-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-amber-300 font-black text-xs">{c.nome}</span>
+                  <span className="text-[10px] bg-red-500/20 text-red-300 border border-red-500/30 px-1.5 py-0.5 rounded-full font-bold">{c.count} leads</span>
+                  {c.phone
+                    ? (
+                      <a
+                        href={`https://wa.me/${c.phone}?text=${msg}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold hover:bg-emerald-500/30 transition-colors"
+                      >
+                        📲 Chamar corretor
+                      </a>
+                    )
+                    : <span className="text-slate-600 text-[10px]">sem telefone cadastrado</span>
+                  }
+                </div>
+                <div className="space-y-1 pl-3 border-l border-red-500/20">
+                  {c.leads.map((l, i) => (
+                    <div key={i} className="flex items-center gap-3 text-[11px]">
+                      <span className={cn("font-black tabular-nums w-10 shrink-0",l.horas>24?"text-red-400":"text-amber-400")}>{l.horas}h</span>
+                      <span className="text-slate-300">{l.name}</span>
+                      <span className="text-slate-600 text-[10px]">{l.tag||""}</span>
+                      {l.tentativas > 0
+                        ? <span className="text-[10px] text-red-400">bot tentou {l.tentativas}x → descaso</span>
+                        : <span className="text-[10px] text-slate-500">bot nunca agiu</span>
+                      }
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-1 pl-3 border-l border-red-500/20">
-                {c.leads.map((l, i) => (
-                  <div key={i} className="flex items-center gap-3 text-[11px]">
-                    <span className={cn("font-black tabular-nums w-10 shrink-0",l.horas>24?"text-red-400":"text-amber-400")}>{l.horas}h</span>
-                    <span className="text-slate-300">{l.name}</span>
-                    <span className="text-slate-600 text-[10px]">{l.tag||""}</span>
-                    {l.tentativas > 0
-                      ? <span className="text-[10px] text-red-400">bot tentou {l.tentativas}x → descaso</span>
-                      : <span className="text-[10px] text-slate-500">bot nunca agiu</span>
-                    }
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))
+            );
+          })
         }
       </Section>
 
