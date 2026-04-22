@@ -68,6 +68,12 @@ interface CorretorIgnorou {
 interface NegociacaoParada {
   name: string; broker_name: string; dias: number;
 }
+interface MensagemEfetiva {
+  tipo: string; preview: string;
+  enviadas: number; responderam: number; taxa: number;
+  min_avg: number; // tempo médio até resposta em minutos
+  melhor_hora: number | null; // hora do dia (0-23) com mais respostas
+}
 
 interface BriefingData {
   fogo_respondeu: LeadRespondeuSemRetorno[];
@@ -78,6 +84,8 @@ interface BriefingData {
   follow_sem_contato: number; follow_tentou: number;
   follow_respondeu: number; follow_resp_boasvindas: number; follow_resp_followup: number;
   follow_exauridos: number;
+  mensagens_efetivas: MensagemEfetiva[];
+  horarios_resposta: { hora: number; enviadas: number; responderam: number; taxa: number }[];
   corretores_resposta: CorretorResposta[];
   corretores_ignoraram: CorretorIgnorou[];
   campanhas: CampanhaRow[];
@@ -101,7 +109,7 @@ async function fetchBriefing(): Promise<BriefingData> {
     autoLogsRes, guardianLogRes, sentinelaRes,
     iaConvsRes, tokensRes,
     guardianAlertsRes, negocRes,
-    autoLogs7dRes,
+    autoLogs7dRes, msgsEfetivasRes,
   ] = await Promise.all([
     // 1. Lead respondeu, corretor sumiu (7d)
     supabase.from("leads").select(
@@ -173,6 +181,14 @@ async function fetchBriefing(): Promise<BriefingData> {
       .eq("status","success")
       .in("entity_type",["welcome","follow_up","aviso_redistribuicao_proprio","redistribuicao_proprio","redistribuicao"])
       .limit(2000),
+
+    // 14. Mensagens enviadas 30d com texto — para análise de efetividade
+    supabase.from("automation_logs").select("entity_id,entity_type,message_sent,executed_at")
+      .gt("executed_at", ago30d)
+      .eq("status","success")
+      .in("entity_type",["welcome","follow_up"])
+      .not("message_sent","is",null)
+      .limit(3000),
   ]);
 
   const allBots: any[]     = botInstancesRes.data || [];
@@ -414,6 +430,82 @@ async function fetchBriefing(): Promise<BriefingData> {
   const follow_resp_followup   = leads30.filter((l: any) => l.last_lead_response_at != null && (l.contact_attempts||0) > 0).length;
   const follow_exauridos     = leads30.filter((l: any) => (l.contact_attempts||0) >= 4 && !l.last_lead_response_at && ["NEW","IN_PROGRESS"].includes(l.status)).length;
 
+  // ── MENSAGENS EFETIVAS ──
+  // Mapa lead_id → last_lead_response_at (de leads30)
+  const leadResponseMap: Record<string, string | null> = {};
+  leads30.forEach((l: any) => { leadResponseMap[l.id] = l.last_lead_response_at || null; });
+
+  const msgsRaw: any[] = msgsEfetivasRes.data || [];
+
+  // Para cada mensagem enviada, verificar se o lead respondeu APÓS o envio (até 72h depois)
+  // Agrupar por preview (primeiros 80 chars) + tipo
+  const msgMap: Record<string, {
+    tipo: string; preview: string;
+    enviadas: number; responderam: number; totalMin: number;
+    horas: number[]; // hora do envio para as que geraram resposta
+  }> = {};
+
+  msgsRaw.forEach((m: any) => {
+    const preview = (m.message_sent || "").slice(0, 80).trim();
+    const key     = `${m.entity_type}||${preview}`;
+    if (!msgMap[key]) msgMap[key] = { tipo: m.entity_type, preview, enviadas: 0, responderam: 0, totalMin: 0, horas: [] };
+    msgMap[key].enviadas++;
+    const respondeuEm = leadResponseMap[m.entity_id];
+    if (respondeuEm) {
+      const enviadoEm   = new Date(m.executed_at).getTime();
+      const respondeuTs = new Date(respondeuEm).getTime();
+      const diffMin     = (respondeuTs - enviadoEm) / 60000;
+      if (diffMin > 0 && diffMin < 72 * 60) { // respondeu em até 72h
+        msgMap[key].responderam++;
+        msgMap[key].totalMin += diffMin;
+        msgMap[key].horas.push(new Date(m.executed_at).getHours());
+      }
+    }
+  });
+
+  const mensagens_efetivas: MensagemEfetiva[] = Object.values(msgMap)
+    .filter(m => m.enviadas >= 3) // só mensagens com volume mínimo
+    .map(m => {
+      // hora mais frequente entre as que geraram resposta
+      const horaFreq: Record<number, number> = {};
+      m.horas.forEach(h => horaFreq[h] = (horaFreq[h] || 0) + 1);
+      const melhor_hora = m.horas.length > 0
+        ? parseInt(Object.entries(horaFreq).sort((a, b) => b[1] - a[1])[0][0])
+        : null;
+      return {
+        tipo: m.tipo, preview: m.preview,
+        enviadas: m.enviadas, responderam: m.responderam,
+        taxa: m.enviadas > 0 ? Math.round((m.responderam / m.enviadas) * 100) : 0,
+        min_avg: m.responderam > 0 ? Math.round(m.totalMin / m.responderam) : 0,
+        melhor_hora,
+      };
+    })
+    .sort((a, b) => b.taxa - a.taxa)
+    .slice(0, 10);
+
+  // ── HORÁRIOS DE RESPOSTA ──
+  // Por hora do dia: de todas as mensagens enviadas, quantas geraram resposta
+  const horaEnvMap: Record<number, { enviadas: number; responderam: number }> = {};
+  msgsRaw.forEach((m: any) => {
+    const hora = new Date(m.executed_at).getHours();
+    if (!horaEnvMap[hora]) horaEnvMap[hora] = { enviadas: 0, responderam: 0 };
+    horaEnvMap[hora].enviadas++;
+    const respondeuEm = leadResponseMap[m.entity_id];
+    if (respondeuEm) {
+      const diffMin = (new Date(respondeuEm).getTime() - new Date(m.executed_at).getTime()) / 60000;
+      if (diffMin > 0 && diffMin < 72 * 60) horaEnvMap[hora].responderam++;
+    }
+  });
+  const horarios_resposta = Object.entries(horaEnvMap)
+    .map(([h, v]) => ({
+      hora: parseInt(h),
+      enviadas: v.enviadas,
+      responderam: v.responderam,
+      taxa: v.enviadas > 0 ? Math.round((v.responderam / v.enviadas) * 100) : 0,
+    }))
+    .filter(h => h.enviadas >= 2)
+    .sort((a, b) => a.hora - b.hora);
+
   // ── CORRETORES: tempo de resposta + auto vs manual ──
   const brokerRespMap: Record<string, {nome:string;respondidos:number;totalMin:number;perdidos:number;auto:number;manual:number}> = {};
   leads30.forEach((l: any) => {
@@ -512,7 +604,7 @@ async function fetchBriefing(): Promise<BriefingData> {
     ia_auto, chips_volume,
     follow_sem_contato, follow_tentou,
     follow_respondeu, follow_resp_boasvindas, follow_resp_followup,
-    follow_exauridos,
+    follow_exauridos, mensagens_efetivas, horarios_resposta,
     corretores_resposta, corretores_ignoraram,
     campanhas, negociacoes_paradas,
     loaded_at: new Date(),
@@ -738,13 +830,83 @@ export function BriefingOps() {
             sub={d.follow_exauridos > 20 ? "⚠️ volume alto — checar qualidade das campanhas" : "Provavelmente perdidos"}
           />
         </div>
-        <p className="text-[10px] text-slate-600">
+        <p className="text-[10px] text-slate-600 mb-6">
           <strong className="text-slate-500">Boas-vindas</strong> = primeira mensagem automática ao receber o lead.
           {" "}<strong className="text-slate-500">Follow-up</strong> = mensagens subsequentes programadas pelo scheduler (contact_attempts incrementa).
           {d.follow_resp_followup === 0 && d.follow_tentou > 10 && (
             <span className="text-amber-400"> ⚠️ Nenhum lead voltou após follow-up — verificar qualidade da mensagem ou timing.</span>
           )}
         </p>
+
+        {/* Mensagens que funcionaram */}
+        <SubTitle label="Mensagens que fizeram o lead responder — últimos 30 dias" count={null} color="slate" />
+        {d.mensagens_efetivas.length === 0
+          ? <EmptyOk text="Dados insuficientes (mínimo 3 envios por mensagem)" />
+          : (
+            <Table headers={["Tipo","Mensagem enviada","Enviadas","Responderam","Taxa","Tempo até resposta","Melhor hora"]}>
+              {d.mensagens_efetivas.map((m, i) => (
+                <tr key={i} className="border-t border-white/5 hover:bg-white/3">
+                  <Td>
+                    <span className={cn("text-[10px] font-bold",
+                      m.tipo === "welcome" ? "text-blue-400" : "text-purple-400"
+                    )}>
+                      {m.tipo === "welcome" ? "boas-vindas" : "follow-up"}
+                    </span>
+                  </Td>
+                  <Td className="max-w-xs">
+                    <span className="text-slate-300 text-[10px] leading-snug line-clamp-2">{m.preview}…</span>
+                  </Td>
+                  <Td><span className="tabular-nums text-slate-400">{m.enviadas}</span></Td>
+                  <Td><span className="tabular-nums text-emerald-300 font-bold">{m.responderam}</span></Td>
+                  <Td>
+                    <span className={cn("tabular-nums font-black text-xs",
+                      m.taxa === 0  ? "text-red-400" :
+                      m.taxa < 5    ? "text-amber-400" :
+                      m.taxa < 15   ? "text-yellow-300" : "text-emerald-400"
+                    )}>
+                      {m.taxa}%
+                    </span>
+                  </Td>
+                  <Td>
+                    <span className="tabular-nums text-slate-400 text-[10px]">
+                      {m.min_avg === 0 ? "—" : fmtTempo(m.min_avg)}
+                    </span>
+                  </Td>
+                  <Td>
+                    {m.melhor_hora !== null
+                      ? <span className="text-amber-300 font-bold text-[10px]">{m.melhor_hora}h–{m.melhor_hora + 1}h</span>
+                      : <span className="text-slate-600 text-[10px]">—</span>
+                    }
+                  </Td>
+                </tr>
+              ))}
+            </Table>
+          )
+        }
+
+        {/* Horários */}
+        {d.horarios_resposta.length > 0 && (
+          <div className="mt-4">
+            <SubTitle label="Taxa de resposta por hora do dia — quando enviar funciona mais" count={null} color="slate" />
+            <div className="flex flex-wrap gap-1.5">
+              {d.horarios_resposta.map(h => (
+                <div key={h.hora} className={cn(
+                  "flex flex-col items-center px-2.5 py-1.5 rounded-lg border text-[10px]",
+                  h.taxa >= 15 ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" :
+                  h.taxa >= 5  ? "bg-amber-500/15 border-amber-500/30 text-amber-300" :
+                  "bg-slate-800 border-white/5 text-slate-500"
+                )}>
+                  <span className="font-black">{String(h.hora).padStart(2,"0")}h</span>
+                  <span className="font-bold">{h.taxa}%</span>
+                  <span className="text-[9px] opacity-60">{h.enviadas} env.</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-600 mt-2">
+              Verde = melhor janela para disparo. Taxa = % de leads que responderam dentro de 72h após mensagem enviada nesse horário.
+            </p>
+          </div>
+        )}
       </Section>
 
       {/* ── BLOCO 5: CHIPS ──────────────────────────────────────────────────── */}
