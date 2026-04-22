@@ -187,6 +187,14 @@ const SEVERITY_COLORS: Record<string, string> = {
   high:   "bg-red-500/15 text-red-400 border-red-500/30",
 };
 
+interface IgnoredLead {
+  id: string;
+  name: string;
+  status: string;
+  broker_name: string;
+  hours_waiting: number;
+}
+
 export default function Inteligencia() {
   const [period, setPeriod] = useState<Period>("30d");
   const [data, setData] = useState<IntelData | null>(null);
@@ -194,8 +202,51 @@ export default function Inteligencia() {
   const [refreshedAt, setRefreshedAt] = useState<Date>(new Date());
   const [coachAnalyses, setCoachAnalyses] = useState<CoachAnalysis[]>([]);
   const [coachPending, setCoachPending] = useState(0);
+  const [ignoredLeads, setIgnoredLeads] = useState<IgnoredLead[]>([]);
+  const [staleNegotiating, setStaleNegotiating] = useState<IgnoredLead[]>([]);
 
   useEffect(() => { fetchAll(); }, [period]);
+
+  // Leads sendo ignorados por corretor
+  useEffect(() => {
+    const cutoff2h = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+    const cutoff15d = new Date(Date.now() - 15 * 24 * 3600 * 1000).toISOString();
+    supabase
+      .from("leads")
+      .select("id, name, status, created_at, broker_id, profiles!broker_id(first_name)")
+      .in("status", ["NEW", "IN_PROGRESS"])
+      .not("broker_id", "is", null)
+      .eq("contact_attempts", 0)
+      .lt("created_at", cutoff2h)
+      .order("created_at", { ascending: true })
+      .limit(50)
+      .then(({ data: rows }) => {
+        setIgnoredLeads((rows || []).map((r: any) => ({
+          id: r.id,
+          name: r.name || "Sem nome",
+          status: r.status,
+          broker_name: r.profiles?.first_name || "—",
+          hours_waiting: Math.round((Date.now() - new Date(r.created_at).getTime()) / 3600000),
+        })));
+      });
+    supabase
+      .from("leads")
+      .select("id, name, negotiating_since, broker_id, profiles!broker_id(first_name)")
+      .eq("status", "NEGOTIATING")
+      .not("negotiating_since", "is", null)
+      .lt("negotiating_since", cutoff15d)
+      .order("negotiating_since", { ascending: true })
+      .limit(20)
+      .then(({ data: rows }) => {
+        setStaleNegotiating((rows || []).map((r: any) => ({
+          id: r.id,
+          name: r.name || "Sem nome",
+          status: "NEGOTIATING",
+          broker_name: r.profiles?.first_name || "—",
+          hours_waiting: Math.floor((Date.now() - new Date(r.negotiating_since).getTime()) / 86400000),
+        })));
+      });
+  }, []);
 
   useEffect(() => {
     supabase
@@ -629,6 +680,81 @@ export default function Inteligencia() {
             })}
           </div>
         </Card>
+      </section>
+
+      {/* ── Corretores Ignorando Leads ─────────────────────────────────────── */}
+      <section>
+        <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-3 flex items-center gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+          Corretores Ignorando Leads
+          {ignoredLeads.length > 0 && (
+            <span className="text-red-400 font-black">{ignoredLeads.length} leads sem contato &gt;2h</span>
+          )}
+        </p>
+        {ignoredLeads.length === 0 && staleNegotiating.length === 0 ? (
+          <Card className="p-4 border border-emerald-500/20 bg-emerald-950/10 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs text-emerald-300">Nenhum lead sendo ignorado agora</span>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {ignoredLeads.length > 0 && (() => {
+              const rank: Record<string, number> = {};
+              ignoredLeads.forEach(l => { rank[l.broker_name] = (rank[l.broker_name] || 0) + 1; });
+              const sorted = Object.entries(rank).sort((a, b) => b[1] - a[1]);
+              return (
+                <div className="flex flex-wrap gap-2">
+                  {sorted.map(([name, count]) => (
+                    <div key={name} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-950/40 border border-red-500/30">
+                      <span className="text-[11px] font-black text-red-300">{name}</span>
+                      <span className="text-[10px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded-full">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            {ignoredLeads.length > 0 && (
+              <Card className="border border-red-500/25 bg-red-950/10">
+                <div className="divide-y divide-white/5 max-h-64 overflow-y-auto">
+                  {ignoredLeads.map(l => (
+                    <div key={l.id} className="flex items-center justify-between gap-2 px-4 py-2.5 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={cn("font-black shrink-0 tabular-nums",
+                          l.hours_waiting > 24 ? "text-red-400" : "text-amber-400"
+                        )}>{l.hours_waiting}h</span>
+                        <span className="text-white font-semibold truncate">{l.name}</span>
+                        <span className="text-slate-500 shrink-0">{l.status}</span>
+                      </div>
+                      <span className="text-amber-300 font-bold shrink-0">{l.broker_name}</span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+            {staleNegotiating.length > 0 && (
+              <>
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mt-4 flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-orange-400" />
+                  Negociações paradas +15 dias
+                  <span className="text-orange-400 font-black">{staleNegotiating.length}</span>
+                </p>
+                <Card className="border border-orange-500/25 bg-orange-950/10">
+                  <div className="divide-y divide-white/5 max-h-48 overflow-y-auto">
+                    {staleNegotiating.map(l => (
+                      <div key={l.id} className="flex items-center justify-between gap-2 px-4 py-2.5 text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-black text-orange-400 shrink-0 tabular-nums">{l.hours_waiting}d</span>
+                          <span className="text-white font-semibold truncate">{l.name}</span>
+                        </div>
+                        <span className="text-amber-300 font-bold shrink-0">{l.broker_name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </>
+            )}
+          </div>
+        )}
       </section>
 
       {/* ── Cerebro Orquestrador ───────────────────────────────────────────── */}
