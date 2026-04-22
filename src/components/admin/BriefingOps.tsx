@@ -75,7 +75,9 @@ interface BriefingData {
   agentes: AgenteRow[];
   chips_volume: ChipVolumeRow[];
   ia_auto: ChipRow[];
-  follow_tentou: number; follow_respondeu: number; follow_exauridos: number;
+  follow_sem_contato: number; follow_tentou: number;
+  follow_respondeu: number; follow_resp_boasvindas: number; follow_resp_followup: number;
+  follow_exauridos: number;
   corretores_resposta: CorretorResposta[];
   corretores_ignoraram: CorretorIgnorou[];
   campanhas: CampanhaRow[];
@@ -403,9 +405,14 @@ async function fetchBriefing(): Promise<BriefingData> {
   const ia_auto = allChipRows.filter(c => c.is_prospecting && !c.dono && (c.conversas_7d>0||c.tokens_7d>0));
 
   // ── FOLLOW-UP ──
-  const follow_tentou    = leads30.filter((l: any) => (l.contact_attempts||0) > 0 && !l.last_lead_response_at).length;
-  const follow_respondeu = leads30.filter((l: any) => (l.contact_attempts||0) > 0 && l.last_lead_response_at).length;
-  const follow_exauridos = leads30.filter((l: any) => (l.contact_attempts||0) >= 4 && !l.last_lead_response_at && ["NEW","IN_PROGRESS"].includes(l.status)).length;
+  // Nota: contact_attempts só incrementa nos follow-ups agendados — boas-vindas não conta.
+  // Por isso separamos: respondeu_qualquer (inclui quem respondeu ao boas-vindas) vs follow-up
+  const follow_sem_contato   = leads30.filter((l: any) => (l.contact_attempts||0) === 0 && !l.last_lead_response_at && l.last_broker_whatsapp_at).length;
+  const follow_tentou        = leads30.filter((l: any) => (l.contact_attempts||0) > 0 && !l.last_lead_response_at).length;
+  const follow_respondeu     = leads30.filter((l: any) => l.last_lead_response_at != null).length;
+  const follow_resp_boasvindas = leads30.filter((l: any) => l.last_lead_response_at != null && (l.contact_attempts||0) === 0).length;
+  const follow_resp_followup   = leads30.filter((l: any) => l.last_lead_response_at != null && (l.contact_attempts||0) > 0).length;
+  const follow_exauridos     = leads30.filter((l: any) => (l.contact_attempts||0) >= 4 && !l.last_lead_response_at && ["NEW","IN_PROGRESS"].includes(l.status)).length;
 
   // ── CORRETORES: tempo de resposta + auto vs manual ──
   const brokerRespMap: Record<string, {nome:string;respondidos:number;totalMin:number;perdidos:number;auto:number;manual:number}> = {};
@@ -503,7 +510,9 @@ async function fetchBriefing(): Promise<BriefingData> {
   return {
     fogo_respondeu, fogo_sem_contato, agentes,
     ia_auto, chips_volume,
-    follow_tentou, follow_respondeu, follow_exauridos,
+    follow_sem_contato, follow_tentou,
+    follow_respondeu, follow_resp_boasvindas, follow_resp_followup,
+    follow_exauridos,
     corretores_resposta, corretores_ignoraram,
     campanhas, negociacoes_paradas,
     loaded_at: new Date(),
@@ -691,16 +700,50 @@ export function BriefingOps() {
 
       {/* ── BLOCO 4: FOLLOW-UP ───────────────────────────────────────────────── */}
       <Section icon="📥" title="FOLLOW-UP — O QUE VOLTOU" subtitle="Resultado dos toques automáticos nos últimos 30 dias">
+        {/* Linha 1: O que respondeu */}
+        <p className="text-[10px] text-slate-500 uppercase tracking-wider font-black mb-2">Leads que responderam</p>
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          <StatCard
+            label="Total que respondeu alguma coisa"
+            value={d.follow_respondeu} color="emerald"
+            sub={`de ${d.follow_tentou + d.follow_respondeu + d.follow_sem_contato} leads tocados`}
+          />
+          <StatCard
+            label="Respondeu ao boas-vindas (1ª msg)"
+            value={d.follow_resp_boasvindas} color="emerald"
+            sub="contact_attempts = 0 → respondeu na hora"
+          />
+          <StatCard
+            label="Respondeu após follow-up (2ª+ msg)"
+            value={d.follow_resp_followup} color="emerald"
+            sub={d.follow_resp_followup === 0 ? "⚠️ nenhum lead voltou após follow-up" : ""}
+          />
+        </div>
+        {/* Linha 2: O que foi ignorado */}
+        <p className="text-[10px] text-slate-500 uppercase tracking-wider font-black mb-2">Leads que ignoraram</p>
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <StatCard label="Bot tentou, lead ignorou" value={d.follow_tentou} color="slate" />
-          <StatCard label="Lead respondeu ao bot" value={d.follow_respondeu} color="emerald"
-            sub={d.follow_tentou>0?`${Math.round(d.follow_respondeu/(d.follow_tentou+d.follow_respondeu)*100)}% taxa de retorno`:""} />
-          <StatCard label="Exauridos (4+ tentativas, silêncio)" value={d.follow_exauridos} color="red"
-            sub="Leads provavelmente perdidos" />
+          <StatCard
+            label="Recebeu boas-vindas, não respondeu"
+            value={d.follow_sem_contato} color="slate"
+            sub="Silêncio após 1ª mensagem"
+          />
+          <StatCard
+            label="Recebeu follow-up, continuou ignorando"
+            value={d.follow_tentou} color="slate"
+            sub="contact_attempts ≥ 1"
+          />
+          <StatCard
+            label="Exauridos (4+ tentativas, silêncio)"
+            value={d.follow_exauridos} color="red"
+            sub={d.follow_exauridos > 20 ? "⚠️ volume alto — checar qualidade das campanhas" : "Provavelmente perdidos"}
+          />
         </div>
         <p className="text-[10px] text-slate-600">
-          "Exauridos" = bot tentou 4 ou mais vezes e o lead nunca respondeu. Alta chance de número inválido ou desinteresse real.
-          {d.follow_exauridos > 20 && " ⚠️ Volume alto — verificar qualidade das campanhas."}
+          <strong className="text-slate-500">Boas-vindas</strong> = primeira mensagem automática ao receber o lead.
+          {" "}<strong className="text-slate-500">Follow-up</strong> = mensagens subsequentes programadas pelo scheduler (contact_attempts incrementa).
+          {d.follow_resp_followup === 0 && d.follow_tentou > 10 && (
+            <span className="text-amber-400"> ⚠️ Nenhum lead voltou após follow-up — verificar qualidade da mensagem ou timing.</span>
+          )}
         </p>
       </Section>
 
