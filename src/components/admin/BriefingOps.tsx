@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { RefreshCw, Loader2 } from "lucide-react";
@@ -445,10 +445,21 @@ async function fetchBriefing(): Promise<BriefingData> {
     horas: number[]; // hora do envio para as que geraram resposta
   }> = {};
 
+  // Normaliza a mensagem: pula a primeira linha (que tem nome do lead personalizado)
+  // e usa o corpo como chave de agrupamento
+  function msgTemplate(raw: string): string {
+    const text = (raw || "").trim();
+    const nlIdx = text.indexOf("\n");
+    // Se tem quebra de linha razoável (< 80 chars), usa o que vem depois
+    const body = nlIdx > 0 && nlIdx < 80 ? text.slice(nlIdx).trim() : text;
+    return body.slice(0, 120);
+  }
+
   msgsRaw.forEach((m: any) => {
-    const preview = (m.message_sent || "").slice(0, 80).trim();
-    const key     = `${m.entity_type}||${preview}`;
-    if (!msgMap[key]) msgMap[key] = { tipo: m.entity_type, preview, enviadas: 0, responderam: 0, totalMin: 0, horas: [] };
+    const body    = msgTemplate(m.message_sent || "");
+    const preview = body.slice(0, 100);
+    const key     = `${m.entity_type}||${body}`;
+    if (!msgMap[key]) msgMap[key] = { tipo: m.entity_type, preview: body.slice(0, 100), enviadas: 0, responderam: 0, totalMin: 0, horas: [] };
     msgMap[key].enviadas++;
     const respondeuEm = leadResponseMap[m.entity_id];
     if (respondeuEm) {
@@ -841,47 +852,8 @@ export function BriefingOps() {
         {/* Mensagens que funcionaram */}
         <SubTitle label="Mensagens que fizeram o lead responder — últimos 30 dias" count={null} color="slate" />
         {d.mensagens_efetivas.length === 0
-          ? <EmptyOk text="Dados insuficientes (mínimo 3 envios por mensagem)" />
-          : (
-            <Table headers={["Tipo","Mensagem enviada","Enviadas","Responderam","Taxa","Tempo até resposta","Melhor hora"]}>
-              {d.mensagens_efetivas.map((m, i) => (
-                <tr key={i} className="border-t border-white/5 hover:bg-white/3">
-                  <Td>
-                    <span className={cn("text-[10px] font-bold",
-                      m.tipo === "welcome" ? "text-blue-400" : "text-purple-400"
-                    )}>
-                      {m.tipo === "welcome" ? "boas-vindas" : "follow-up"}
-                    </span>
-                  </Td>
-                  <Td className="max-w-xs">
-                    <span className="text-slate-300 text-[10px] leading-snug line-clamp-2">{m.preview}…</span>
-                  </Td>
-                  <Td><span className="tabular-nums text-slate-400">{m.enviadas}</span></Td>
-                  <Td><span className="tabular-nums text-emerald-300 font-bold">{m.responderam}</span></Td>
-                  <Td>
-                    <span className={cn("tabular-nums font-black text-xs",
-                      m.taxa === 0  ? "text-red-400" :
-                      m.taxa < 5    ? "text-amber-400" :
-                      m.taxa < 15   ? "text-yellow-300" : "text-emerald-400"
-                    )}>
-                      {m.taxa}%
-                    </span>
-                  </Td>
-                  <Td>
-                    <span className="tabular-nums text-slate-400 text-[10px]">
-                      {m.min_avg === 0 ? "—" : fmtTempo(m.min_avg)}
-                    </span>
-                  </Td>
-                  <Td>
-                    {m.melhor_hora !== null
-                      ? <span className="text-amber-300 font-bold text-[10px]">{m.melhor_hora}h–{m.melhor_hora + 1}h</span>
-                      : <span className="text-slate-600 text-[10px]">—</span>
-                    }
-                  </Td>
-                </tr>
-              ))}
-            </Table>
-          )
+          ? <EmptyOk text="Dados insuficientes — aguardar mais volume de envios (mín. 3 por template)" />
+          : <MensagensEfetivasTable rows={d.mensagens_efetivas} />
         }
 
         {/* Horários */}
@@ -1250,6 +1222,84 @@ function EmptyOk({ text }: { text: string }) {
     <div className="flex items-center gap-2 py-3 px-4 rounded-lg bg-emerald-950/10 border border-emerald-500/15 mb-2">
       <span className="text-emerald-500 text-base">✓</span>
       <span className="text-xs text-emerald-400">{text}</span>
+    </div>
+  );
+}
+
+function MensagensEfetivasTable({ rows }: { rows: MensagemEfetiva[] }) {
+  const [expanded, setExpanded] = useState<number | null>(null);
+  return (
+    <div className="rounded-xl border border-white/8 bg-slate-900/40 overflow-hidden mb-2">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-white/8">
+            {["Tipo","Corpo da mensagem (clique para expandir)","Enviadas","Responderam","Taxa","Tempo até resposta","Melhor hora"].map(h => (
+              <th key={h} className="px-4 py-2 text-left text-[10px] text-slate-500 font-black uppercase tracking-wider whitespace-nowrap">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((m, i) => (
+            <Fragment key={i}>
+              <tr
+                className="border-t border-white/5 hover:bg-white/3 cursor-pointer"
+                onClick={() => setExpanded(expanded === i ? null : i)}
+              >
+                <Td>
+                  <span className={cn("text-[10px] font-bold",
+                    m.tipo === "welcome" ? "text-blue-400" : "text-purple-400"
+                  )}>
+                    {m.tipo === "welcome" ? "boas-vindas" : "follow-up"}
+                  </span>
+                </Td>
+                <Td className="max-w-xs">
+                  <div className="flex items-start gap-1.5">
+                    <span className="text-slate-500 text-[9px] mt-0.5 shrink-0">
+                      {expanded === i ? "▼" : "▶"}
+                    </span>
+                    <span className="text-slate-300 text-[10px] leading-snug">
+                      {expanded === i ? m.preview : m.preview.slice(0, 60) + (m.preview.length > 60 ? "…" : "")}
+                    </span>
+                  </div>
+                </Td>
+                <Td><span className="tabular-nums text-slate-400">{m.enviadas}</span></Td>
+                <Td><span className="tabular-nums text-emerald-300 font-bold">{m.responderam}</span></Td>
+                <Td>
+                  <span className={cn("tabular-nums font-black text-xs",
+                    m.taxa === 0  ? "text-red-400" :
+                    m.taxa < 5    ? "text-amber-400" :
+                    m.taxa < 15   ? "text-yellow-300" : "text-emerald-400"
+                  )}>
+                    {m.taxa}%
+                  </span>
+                </Td>
+                <Td>
+                  <span className="tabular-nums text-slate-400 text-[10px]">
+                    {m.min_avg === 0 ? "—" : fmtTempo(m.min_avg)}
+                  </span>
+                </Td>
+                <Td>
+                  {m.melhor_hora !== null
+                    ? <span className="text-amber-300 font-bold text-[10px]">{m.melhor_hora}h–{m.melhor_hora + 1}h</span>
+                    : <span className="text-slate-600 text-[10px]">—</span>
+                  }
+                </Td>
+              </tr>
+              {expanded === i && (
+                <tr className="border-t border-white/5 bg-slate-800/40">
+                  <td colSpan={7} className="px-6 py-3">
+                    <p className="text-[10px] text-slate-500 font-bold mb-1 uppercase tracking-wider">Corpo completo da mensagem:</p>
+                    <pre className="text-[11px] text-slate-200 whitespace-pre-wrap leading-relaxed font-sans bg-slate-900/60 rounded-lg p-3 border border-white/5">
+                      {m.preview}
+                    </pre>
+                    <p className="text-[9px] text-slate-600 mt-1">* Primeira linha com nome do lead foi removida para agrupar templates iguais</p>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
