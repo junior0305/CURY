@@ -221,14 +221,17 @@ serve(async (req) => {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // CHECK 7: Leads NEW > 3h sem nenhuma tentativa de contato (com corretor)
+    // CHECK 7: Leads NEW > 3h sem nenhum envio real (bot nunca mandou nada)
+    // Critério correto: last_broker_whatsapp_at IS NULL
+    // contact_attempts=0 NÃO detecta boas-vindas (que não incrementa o campo),
+    // gerando falsos positivos — corretores recebiam avisos mesmo com bot ativo.
     // ════════════════════════════════════════════════════════════════════════
     checksRun++;
     const { data: untouchedLeads } = await supabase
       .from('leads')
       .select('id, name, broker_id, created_at')
       .eq('status', 'NEW')
-      .eq('contact_attempts', 0)
+      .is('last_broker_whatsapp_at', null)
       .lt('created_at', threeHAgo)
       .not('broker_id', 'is', null)
       .limit(20);
@@ -238,7 +241,7 @@ serve(async (req) => {
         new Date(l.created_at) < new Date(acc.created_at) ? l : acc
       );
       const oldestHours = hoursAgo(oldest.created_at).toFixed(0);
-      const msg = `⚠️ ${untouchedLeads!.length} lead(s) NEW com corretor atribuído e 0 tentativas de contato há 3h+. Mais antigo: "${oldest.name}" (${oldestHours}h). Verifique se os bots estão conectados.`;
+      const msg = `⚠️ ${untouchedLeads!.length} lead(s) NEW com corretor atribuído sem nenhum envio do bot há 3h+. Mais antigo: "${oldest.name}" (${oldestHours}h). Verifique se os bots estão conectados.`;
       alerts.push({ type: 'leads_orphaned', severity: 'high', message: msg, fixed: false });
       if (canAlert) await sendAlert(supabase, notifBotId!, alertPhone!, msg);
       console.log(`[guardian] ⚠️ ${msg}`);
