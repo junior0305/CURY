@@ -324,9 +324,13 @@ export const updateLeadStatus = async (
   exclusionReason: ExclusionReason = null,
   lostReason: LostReason = null,
 ) => {
+  const now = new Date().toISOString();
   const payload: any = {
     status,
-    last_interaction_at: new Date().toISOString(),
+    last_interaction_at: now,
+    // Qualquer avanço de status pelo corretor conta como "contato" —
+    // reseta o contador de "sem contato" no dashboard e no guardian.
+    last_broker_whatsapp_at: now,
   };
 
   if (status === "EXCLUDED") {
