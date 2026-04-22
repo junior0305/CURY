@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
   Brain, Zap, MessageSquare, Bot, Shield, RefreshCw,
@@ -9,6 +10,7 @@ import {
   Wifi, WifiOff, TrendingUp, TrendingDown, Minus,
   ChevronRight, Cpu, Loader2, AlertOctagon, Info, Star,
 } from "lucide-react";
+import { BriefingOps } from "@/components/admin/BriefingOps";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -499,7 +501,19 @@ export default function Inteligencia() {
   const alertasAtivos = d.guardianPorTipo.filter(a => a.resolvidos < a.total);
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-6xl">
+    <div className="p-4 md:p-6 max-w-6xl">
+    <Tabs defaultValue="briefing" className="w-full">
+      <TabsList className="mb-6 bg-slate-900/50 border border-slate-700/50 h-auto p-1 gap-1 inline-flex rounded-xl">
+        <TabsTrigger value="briefing" className="px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider data-[state=active]:bg-violet-600 data-[state=active]:text-white text-slate-400">
+          🔥 Briefing Ops
+        </TabsTrigger>
+        <TabsTrigger value="tecnico" className="px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider data-[state=active]:bg-slate-700 data-[state=active]:text-white text-slate-400">
+          🔬 Painel Técnico
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="briefing"><BriefingOps /></TabsContent>
+      <TabsContent value="tecnico">
+    <div className="space-y-6">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1054,6 +1068,9 @@ export default function Inteligencia() {
         {" "}• cerebro_runs e scheduler_runs usam <code>ran_at</code>
       </div>
 
+      </div> {/* end space-y-6 tecnico */}
+      </TabsContent>
+    </Tabs>
     </div>
   );
 }
