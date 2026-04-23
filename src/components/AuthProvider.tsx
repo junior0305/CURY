@@ -248,9 +248,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (!loading && session && role) {
       const path = window.location.pathname;
+      // Nunca redireciona quem está trocando senha obrigatória — o ProtectedRoute já cuida disso
+      if (path === '/force-password-change') return;
       try {
         if (role === 'ADMIN' || role === 'SUPERINTENDENT') {
-          if (path !== '/admin' && path !== '/command-center') {
+          if (path !== '/admin' && path !== '/command-center' && path !== '/user-management') {
             navigate('/admin', { replace: true });
           }
         } else if (role === 'MANAGER') {
@@ -259,7 +261,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }
         } else {
           // BROKER e outros -> dashboard
-          if (path !== '/dashboard') {
+          if (path !== '/dashboard' && path !== '/dashboard-wolf') {
             navigate('/dashboard', { replace: true });
           }
         }
