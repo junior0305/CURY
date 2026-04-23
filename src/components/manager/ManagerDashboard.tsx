@@ -814,7 +814,7 @@ export default function ManagerDashboard() {
   const discardRestore = useMutation({
     mutationFn: async (leadId: string) => {
       const { error } = await supabase.from("leads")
-        .update({ status: "NEW", broker_id: null, updated_at: new Date().toISOString() })
+        .update({ status: "NEW", broker_id: null })
         .eq("id", leadId);
       if (error) throw error;
     },
