@@ -455,6 +455,89 @@ serve(async (req) => {
       await new Promise(r => setTimeout(r, 500));
     }
 
+    // ── PASSO E: Leads silenciosos — bot tentou 3+ vezes, 7+ dias sem resposta ─
+    // Lead nunca respondeu ao bot. Dá uma segunda chance com novo corretor.
+    const bot7DaysAgo = new Date(Date.now() - 7 * 24 * 3600000).toISOString();
+    const { data: silentLeads } = await supabase
+      .from('leads')
+      .select('id, name, tag, broker_id, contact_attempts, last_broker_whatsapp_at, broker:profiles!broker_id(id, first_name, protect_own_leads, manager_id, phone)')
+      .in('status', ['NEW', 'IN_PROGRESS'])
+      .eq('no_redistribute', false)
+      .eq('redistribution_stage', 0)
+      .not('broker_id', 'is', null)
+      .is('last_lead_response_at', null)
+      .gte('contact_attempts', 3)
+      .not('last_broker_whatsapp_at', 'is', null)
+      .lt('last_broker_whatsapp_at', bot7DaysAgo)
+      .limit(10);
+
+    for (const lead of silentLeads || []) {
+      const broker = (lead as any).broker;
+      if (!broker) continue;
+      if (broker.protect_own_leads) continue;
+
+      // Anti-spam: só redistribui 1x por lead
+      const { data: recentSilent } = await supabase
+        .from('automation_logs').select('id')
+        .eq('entity_id', lead.id).eq('entity_type', 'redistribuicao_silencioso')
+        .gte('executed_at', bot7DaysAgo).maybeSingle();
+      if (recentSilent) continue;
+
+      const managerIdBroker = broker.manager_id ?? null;
+      const candidates = brokers.filter(b =>
+        b.id !== lead.broker_id &&
+        (managerIdBroker ? b.manager_id === managerIdBroker : true)
+      );
+      if (!candidates.length) continue;
+
+      candidates.sort((a, b) => (loadMap[a.id] || 0) - (loadMap[b.id] || 0));
+      const newBroker = candidates[0];
+      const oldBrokerId = lead.broker_id as string;
+
+      await supabase.from('leads').update({
+        broker_id:               newBroker.id,
+        status:                  'NEW',
+        redistribution_stage:    1,
+        redistributed_at:        now,
+        original_broker_id:      oldBrokerId,
+        last_interaction_at:     now,
+        last_broker_whatsapp_at: null,
+        contact_attempts:        0,
+      }).eq('id', lead.id);
+
+      await supabase.from('lead_activation_queue')
+        .update({ status: 'cancelled', cancel_reason: 'lead_silencioso_redistribuido' })
+        .eq('lead_id', lead.id).eq('status', 'pending');
+
+      loadMap[oldBrokerId] = Math.max(0, (loadMap[oldBrokerId] || 1) - 1);
+      loadMap[newBroker.id] = (loadMap[newBroker.id] || 0) + 1;
+
+      const notifMsg = buildNewLeadMessage(lead.name, lead.tag || '', appUrl);
+      if (newBroker.phone) {
+        await notifyBrokerWhatsApp(supabase, newBroker.id, newBroker.phone, newBroker.manager_id, notifMsg);
+      }
+
+      await supabase.from('internal_notifications').insert({
+        to_id: newBroker.id,
+        type: 'LEAD_REDISTRIBUTED',
+        title: '📥 Novo lead atribuído para você',
+        message: `${lead.name} está aguardando atendimento.`,
+        related_lead_id: lead.id,
+      });
+
+      await supabase.from('automation_logs').insert({
+        entity_type: 'redistribuicao_silencioso',
+        entity_id: lead.id,
+        status: 'success',
+        message_sent: `Silencioso (${lead.contact_attempts}x sem resposta): ${broker.first_name ?? '?'} → ${newBroker.first_name}`,
+        executed_at: now,
+      });
+
+      redistributed++;
+      console.log(`[agente-redistribuicao] 🔇 Silencioso: ${lead.name} (${lead.contact_attempts}x) → ${newBroker.first_name}`);
+      await new Promise(r => setTimeout(r, 500));
+    }
+
     console.log(`[agente-redistribuicao] done — redistributed=${redistributed} warned=${warned}`);
 
     return new Response(JSON.stringify({ redistributed, warned }), {

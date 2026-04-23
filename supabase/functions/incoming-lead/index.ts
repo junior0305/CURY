@@ -112,8 +112,8 @@ serve(async (req) => {
     const leadValues: Record<string, string> = {
       tag:           (tag || '').toString(),
       source:        (origin || '').toString(),
-      product:       (sourceData.product || '').toString(),
-      campaign:      (sourceData.campaign || '').toString(),
+      product:       (sourceData.produto || sourceData.product || '').toString(),   // 'produto' = alias Make
+      campaign:      (sourceData.campanha || sourceData.campaign || '').toString(), // 'campanha' = alias Make
       tipo_trabalho: (tipoTrabalho || '').toString(),  // CLT | AUTONOMO | FUNCIONARIO_PUBLICO
       faixa_mcmv:    (faixaMcmv || '').toString(),     // FAIXA_1 | FAIXA_2 | FAIXA_3 | FORA
     };
@@ -227,8 +227,8 @@ serve(async (req) => {
       last_interaction_at: nowIso,
       created_at: nowIso,
       received_at: nowIso,
-      // Travar redistribuição se a fila tiver lock_after_assignment = true
-      no_redistribute: chosenQueue?.lock_after_assignment === true,
+      // Travar redistribuição se: (a) fila marcada como exclusiva OU (b) payload traz exclusiva=true
+      no_redistribute: chosenQueue?.lock_after_assignment === true || sourceData.exclusiva === true,
       // Campos MCMV opcionais (só incluídos se vieram no payload)
       ...(rendaDeclarada  ? { renda_declarada:  rendaDeclarada  } : {}),
       ...(tipoTrabalho    ? { tipo_trabalho:    tipoTrabalho    } : {}),

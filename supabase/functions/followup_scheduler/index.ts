@@ -652,6 +652,18 @@ serve(async (req) => {
       console.error('[followup_scheduler] Bloco 13 error:', e.message);
     }
 
+    // ── BLOCO 14: Prospecção Ativa ────────────────────────────────────────────
+    let prospeccaoProcessed = 0;
+    try {
+      const { data: pr } = await supabase.functions.invoke('agente-prospec\u00e7\u00e3o-ativa', { body: {} });
+      prospeccaoProcessed = pr?.processed ?? 0;
+      if (prospeccaoProcessed > 0) {
+        console.log(`[followup_scheduler] Bloco 14 — Prospecção: ${prospeccaoProcessed} leads enfileirados`);
+      }
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 14 error:', e.message);
+    }
+
     // ── BLOCO 15: Acompanhamento de Visitas ───────────────────────────────────
     let visitasTotal = 0;
     try {

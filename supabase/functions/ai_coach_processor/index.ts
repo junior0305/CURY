@@ -92,7 +92,7 @@ async function callOpenAIAPI(prompt: string, model: string, maxTokens: number): 
   return json.choices?.[0]?.message?.content || '';
 }
 
-// ── Tenta LLMs em ordem de prioridade (fallback automático) ───────────────────
+// ── Tenta LLMs em ordem de prioridade (fallback automático) ──────────────────
 
 async function callLLMWithFallback(
   supabase: any,
@@ -100,55 +100,60 @@ async function callLLMWithFallback(
   prompt: string
 ): Promise<string> {
   const active = configs.filter(c => c.is_active).sort((a: any, b: any) => a.priority - b.priority);
-
   if (active.length === 0) throw new Error('No active LLM configured');
 
   let lastError = '';
   for (const cfg of active) {
     try {
       console.log(`[ai_coach] Tentando ${cfg.provider} / ${cfg.model_name}`);
-
       if (cfg.provider === 'anthropic' && !ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set');
-      if (cfg.provider === 'openai' && !OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set');
-      if (cfg.provider === 'gemini' && !GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set');
+      if (cfg.provider === 'openai'    && !OPENAI_API_KEY)    throw new Error('OPENAI_API_KEY not set');
+      if (cfg.provider === 'gemini'    && !GEMINI_API_KEY)    throw new Error('GEMINI_API_KEY not set');
 
       let text = '';
       if (cfg.provider === 'anthropic') text = await callAnthropicAPI(prompt, cfg.model_name, cfg.max_tokens);
-      else if (cfg.provider === 'openai')    text = await callOpenAIAPI(prompt, cfg.model_name, cfg.max_tokens);
-      else if (cfg.provider === 'gemini')    text = await callGeminiAPI(prompt, cfg.model_name, cfg.max_tokens);
-
-      return text; // sucesso — retorna imediatamente
+      else if (cfg.provider === 'openai') text = await callOpenAIAPI(prompt, cfg.model_name, cfg.max_tokens);
+      else if (cfg.provider === 'gemini') text = await callGeminiAPI(prompt, cfg.model_name, cfg.max_tokens);
+      return text;
     } catch (err: any) {
       lastError = err.message;
       console.warn(`[ai_coach] ${cfg.provider} falhou: ${err.message}`);
-
-      // Notifica admins se for erro de saldo/cota
       if (isBalanceError(err.message)) {
         try {
-          // Busca admins para notificar
-          const { data: admins } = await supabase
-            .from('profiles')
-            .select('id')
-            .in('role', ['ADMIN', 'SUPERINTENDENT']);
-
+          const { data: admins } = await supabase.from('profiles').select('id').in('role', ['ADMIN', 'SUPERINTENDENT']);
           const notifications = (admins || []).map((a: any) => ({
             to_id: a.id,
             type: 'AI_COACH_LLM_ERROR',
             title: `⚠️ AI Coach: saldo insuficiente (${cfg.provider})`,
-            message: `O provedor ${cfg.provider} (${cfg.model_name}) falhou por saldo/cota. ${active.indexOf(cfg) < active.length - 1 ? 'Usando fallback automaticamente.' : 'Nenhum fallback disponível — análise pausada.'}`,
+            message: `O provedor ${cfg.provider} (${cfg.model_name}) falhou por saldo/cota.`,
           }));
-
-          if (notifications.length > 0) {
-            await supabase.from('internal_notifications').insert(notifications);
-          }
+          if (notifications.length > 0) await supabase.from('internal_notifications').insert(notifications);
         } catch (_) { /* não falha por causa da notificação */ }
       }
-
-      // Continua para o próximo LLM
     }
   }
-
   throw new Error(`Todos os LLMs falharam. Último erro: ${lastError}`);
+}
+
+// ── Formata transcrição de conversa para o prompt ─────────────────────────────
+
+function formatConversation(
+  leadName: string,
+  leadStatus: string,
+  messages: { direction: string; sender_type: string; message_text: string; sent_at: string | null }[]
+): string {
+  if (messages.length === 0) return `  Lead: ${leadName} (${leadStatus}) — sem mensagens registradas`;
+
+  const lines = messages
+    .filter(m => m.message_text && m.message_text.trim().length > 0)
+    .slice(0, 20) // limita a 20 mensagens por conversa para não explodir o prompt
+    .map(m => {
+      const quem = m.sender_type === 'lead' ? `  LEAD` : `  BOT `;
+      const texto = m.message_text.replace(/\n/g, ' ').slice(0, 200);
+      return `${quem}: ${texto}`;
+    });
+
+  return `  Lead: ${leadName} (status: ${leadStatus})\n${lines.join('\n')}`;
 }
 
 // ── Handler principal ─────────────────────────────────────────────────────────
@@ -162,7 +167,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Carrega todos os LLMs ativos (em ordem de prioridade)
+    // Carrega LLMs ativos
     const { data: llmConfigs } = await supabaseClient
       .from('ai_coach_llm_config')
       .select('*')
@@ -174,8 +179,6 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    console.log(`[ai_coach] LLMs disponíveis: ${llmConfigs.filter((c:any)=>c.is_active).map((c:any)=>c.provider).join(' → ')}`);
 
     // Busca fila pendente
     const { data: queue } = await supabaseClient
@@ -193,7 +196,7 @@ serve(async (req) => {
     }
 
     let processed = 0;
-    let errors = 0;
+    let errors    = 0;
 
     for (const item of queue) {
       try {
@@ -206,17 +209,19 @@ serve(async (req) => {
           .single();
         const brokerName = broker?.first_name || broker?.full_name || 'Corretor';
 
-        // Busca leads do broker nos últimos 30 dias
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const sevenDaysAgo  = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000).toISOString();
+
+        // ── 1. Métricas CRM ───────────────────────────────────────────────────
         const { data: brokerLeads } = await supabaseClient
           .from('leads')
-          .select('id')
+          .select('id, name, status, contact_attempts, last_broker_whatsapp_at, last_lead_response_at, created_at, last_interaction_at')
           .eq('broker_id', item.broker_id)
-          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+          .gte('created_at', thirtyDaysAgo);
 
-        const brokerLeadIds = (brokerLeads || []).map((l: any) => l.id);
+        const leads = brokerLeads || [];
 
-        // Se o corretor não tem leads, pula — evita capturar conversas de outros corretores
-        if (brokerLeadIds.length === 0) {
+        if (leads.length === 0) {
           await supabaseClient.from('ai_coach_queue').update({
             status: 'skipped',
             error_message: 'No leads in last 30 days',
@@ -225,152 +230,182 @@ serve(async (req) => {
           continue;
         }
 
-        // IDs de conversas já analisadas anteriormente para este corretor (evita reanálise)
-        const { data: prevAnalyses } = await supabaseClient
-          .from('ai_coach_analysis')
-          .select('sample_conversations')
-          .eq('broker_id', item.broker_id);
+        const totalLeads     = leads.length;
+        const contacted      = leads.filter((l: any) => l.last_broker_whatsapp_at !== null).length;
+        const responded      = leads.filter((l: any) => l.last_lead_response_at !== null).length;
+        const neverContacted = leads.filter((l: any) => (l.contact_attempts || 0) === 0).length;
+        const highAttempts   = leads.filter((l: any) => (l.contact_attempts || 0) >= 5).length;
+        const recentActivity = leads.filter((l: any) => l.last_broker_whatsapp_at && l.last_broker_whatsapp_at > sevenDaysAgo).length;
+        const responseRate   = contacted > 0 ? Math.round((responded / contacted) * 100) : 0;
 
-        const alreadyAnalyzedIds = new Set<string>();
-        (prevAnalyses || []).forEach((a: any) => {
-          (a.sample_conversations || []).forEach((id: string) => alreadyAnalyzedIds.add(id));
-        });
+        const byStatus: Record<string, number> = {};
+        leads.forEach((l: any) => { byStatus[l.status] = (byStatus[l.status] || 0) + 1; });
 
-        // Busca conversas deste corretor (busca mais para compensar as já analisadas)
-        const sampleSize = item.sample_size || 5;
-        const fetchLimit = sampleSize + alreadyAnalyzedIds.size + 10;
-        const { data: rawConversations } = await supabaseClient
+        const advanced = leads.filter((l: any) =>
+          !['NEW', 'IN_PROGRESS', 'ABANDONED', 'EXCLUDED'].includes(l.status)
+        ).length;
+        const conversionRate = totalLeads > 0 ? Math.round((advanced / totalLeads) * 100) : 0;
+        const avgAttempts    = totalLeads > 0
+          ? Math.round(leads.reduce((s: number, l: any) => s + (l.contact_attempts || 0), 0) / totalLeads * 10) / 10
+          : 0;
+
+        // ── 2. Conversas reais (ia_messages) ─────────────────────────────────
+        // Busca os lead_ids deste corretor que têm conversa no bot
+        const leadIds = leads.map((l: any) => l.id);
+
+        const { data: conversations } = await supabaseClient
           .from('ia_conversations')
-          .select('*')
-          .eq('is_crm_lead', true)
-          .in('lead_id', brokerLeadIds)
-          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+          .select('id, lead_id, created_at')
+          .in('lead_id', leadIds)
+          .gte('created_at', thirtyDaysAgo)
           .order('created_at', { ascending: false })
-          .limit(fetchLimit);
+          .limit(8); // máx 8 conversas para não explodir o prompt
 
-        // Filtra conversas já incluídas em análises anteriores
-        const conversations = (rawConversations || [])
-          .filter((c: any) => !alreadyAnalyzedIds.has(c.id))
-          .slice(0, sampleSize);
+        const convs = conversations || [];
+        let transcripts = '';
+        let totalMsgs   = 0;
+        let repeticoesDetectadas = 0;
+        let sinaisCompraIgnorados = 0;
 
-        if (conversations.length === 0) {
-          const reason = alreadyAnalyzedIds.size > 0
-            ? 'All recent conversations already analyzed in previous runs'
-            : 'No CRM conversations found in last 30 days';
-          await supabaseClient.from('ai_coach_queue').update({
-            status: 'skipped',
-            error_message: reason,
-            processed_at: new Date().toISOString(),
-          }).eq('id', item.id);
-          continue;
-        }
+        if (convs.length > 0) {
+          const convIds = convs.map((c: any) => c.id);
 
-        // Busca mensagens
-        const convIds = conversations.map((c: any) => c.id);
-        const { data: messages } = await supabaseClient
-          .from('ia_messages')
-          .select('*')
-          .in('conversation_id', convIds)
-          .order('created_at', { ascending: true });
+          const { data: messages } = await supabaseClient
+            .from('ia_messages')
+            .select('conversation_id, direction, sender_type, message_text, sent_at, created_at')
+            .in('conversation_id', convIds)
+            .not('message_text', 'is', null)
+            .order('created_at', { ascending: true })
+            .limit(200);
 
-        const messagesByConv: Record<string, any[]> = {};
-        (messages || []).forEach((m: any) => {
-          if (!messagesByConv[m.conversation_id]) messagesByConv[m.conversation_id] = [];
-          messagesByConv[m.conversation_id].push(m);
-        });
+          const msgs = messages || [];
+          totalMsgs  = msgs.length;
 
-        // Calcula métricas
-        let totalFirstResponseTime = 0;
-        let totalLeadResponseTime = 0;
-        let leadsAbandoned = 0;
-        let leadsConverted = 0;
-        let validConversations = 0;
-        const sampleData: any[] = [];
-
-        for (const conv of conversations) {
-          const convMessages = messagesByConv[conv.id] || [];
-          if (convMessages.length === 0) { leadsAbandoned++; continue; }
-
-          const firstIAMessage = convMessages.find((m: any) => ['ia', 'bot', 'agent'].includes(m.sender_type?.toLowerCase()));
-          const firstLeadMessage = convMessages.find((m: any) => m.sender_type?.toLowerCase() === 'lead');
-
-          if (firstIAMessage && conv.created_at) {
-            totalFirstResponseTime += (new Date(firstIAMessage.created_at).getTime() - new Date(conv.created_at).getTime()) / 1000;
-          }
-
-          if (firstLeadMessage) {
-            const nextIA = convMessages.find((m: any) =>
-              ['ia', 'bot', 'agent'].includes(m.sender_type?.toLowerCase()) &&
-              new Date(m.created_at) > new Date(firstLeadMessage.created_at)
-            );
-            if (nextIA) {
-              totalLeadResponseTime += (new Date(nextIA.created_at).getTime() - new Date(firstLeadMessage.created_at).getTime()) / 1000;
-            }
-          }
-
-          if (!firstLeadMessage) leadsAbandoned++;
-          else if (conv.status === 'escalated' || conv.escalated_to) leadsConverted++;
-
-          validConversations++;
-
-          sampleData.push({
-            lead_name: conv.lead_name,
-            messages_count: convMessages.length,
-            has_lead_response: !!firstLeadMessage,
-            first_response_time: firstIAMessage ? Math.round((new Date(firstIAMessage.created_at).getTime() - new Date(conv.created_at).getTime()) / 1000) : null,
-            transcript: convMessages.slice(0, 10).map((m: any) => `${m.sender_type}: ${(m.message_text || '').substring(0, 100)}`).join('\n'),
+          // Agrupa mensagens por conversa
+          const msgsByConv: Record<string, any[]> = {};
+          msgs.forEach((m: any) => {
+            if (!msgsByConv[m.conversation_id]) msgsByConv[m.conversation_id] = [];
+            msgsByConv[m.conversation_id].push(m);
           });
+
+          // Detecta padrões problemáticos
+          for (const conv of convs) {
+            const convMsgs = msgsByConv[conv.id] || [];
+            const botMsgs  = convMsgs.filter((m: any) => m.sender_type !== 'lead').map((m: any) => m.message_text);
+            const leadMsgs = convMsgs.filter((m: any) => m.sender_type === 'lead').map((m: any) => m.message_text);
+
+            // Detecta mensagens repetidas do bot (mesmo texto 2+ vezes na conversa)
+            const botMsgCount: Record<string, number> = {};
+            botMsgs.forEach(t => {
+              const key = (t || '').slice(0, 60);
+              botMsgCount[key] = (botMsgCount[key] || 0) + 1;
+            });
+            if (Object.values(botMsgCount).some(n => n >= 2)) repeticoesDetectadas++;
+
+            // Detecta sinais de compra do lead que o bot não avançou
+            const sinaisCompra = ['quero', 'tenho interesse', 'me interessa', 'quero comprar',
+              'quanto custa', 'qual o valor', 'como faço', 'vamos', 'bora', 'topo',
+              'pode ser', 'sim', 'adorei', 'gostei'];
+            const leadMostrouInteresse = leadMsgs.some(t =>
+              sinaisCompra.some(s => (t || '').toLowerCase().includes(s))
+            );
+            const leadId = conv.lead_id;
+            const leadData = leads.find((l: any) => l.id === leadId);
+            const naoAvancou = leadData && ['NEW', 'IN_PROGRESS', 'ABANDONED', 'EXCLUDED'].includes(leadData.status);
+            if (leadMostrouInteresse && naoAvancou) sinaisCompraIgnorados++;
+          }
+
+          // Formata transcrições (até 5 conversas)
+          const transList: string[] = [];
+          let convCount = 0;
+          for (const conv of convs) {
+            if (convCount >= 5) break;
+            const convMsgs = msgsByConv[conv.id] || [];
+            if (convMsgs.length === 0) continue;
+            const leadData = leads.find((l: any) => l.id === conv.lead_id);
+            const leadName = leadData?.name || 'Lead';
+            const leadStatus = leadData?.status || '?';
+            transList.push(formatConversation(leadName, leadStatus, convMsgs));
+            convCount++;
+          }
+
+          if (transList.length > 0) {
+            transcripts = `\nCONVERSAS REAIS (bot WhatsApp ↔ lead):\nNota: BOT = resposta automática do chip; LEAD = mensagem real do cliente.\n\n` +
+              transList.map((t, i) => `--- Conversa ${i + 1} ---\n${t}`).join('\n\n');
+          }
         }
 
-        const prompt = `Você é um coach de vendas. Analise estas ${conversations.length} tentativas de contato com leads do CRM:
+        // ── 3. Monta prompt com métricas + transcrições ───────────────────────
+        const prompt = `Você é um coach de vendas especialista em imóveis MCMV no Brasil. Analise a performance do chip de WhatsApp do corretor ${brokerName} nos últimos 30 dias.
 
-${sampleData.map((s, i) => `
-LEAD ${i + 1}: ${s.lead_name}
-- Mensagens: ${s.messages_count}
-- Lead respondeu: ${s.has_lead_response ? 'SIM' : 'NÃO'}
-- Tempo 1º contato: ${s.first_response_time ? `${s.first_response_time}s` : 'N/A'}
-Transcrição (primeiras mensagens):
-${s.transcript}
----
-`).join('\n')}
+IMPORTANTE: As conversas abaixo são entre o BOT AUTOMÁTICO do chip e os leads — não são mensagens manuais do corretor. O corretor é responsável por configurar o bot e garantir que os leads avancem no funil após a qualificação automática.
 
-MÉTRICAS CALCULADAS:
-- Tempo médio 1º contato: ${validConversations > 0 ? Math.round(totalFirstResponseTime / validConversations) : 0}s
-- Tempo médio resposta ao lead: ${validConversations > 0 ? Math.round(totalLeadResponseTime / validConversations) : 0}s
-- Leads abandonados: ${leadsAbandoned}/${conversations.length}
-- Leads convertidos: ${leadsConverted}/${conversations.length}
+MÉTRICAS DO CRM (30 dias):
+- Total de leads: ${totalLeads}
+- Leads que o bot contactou: ${contacted} (${Math.round(contacted/totalLeads*100)}%)
+- Leads que responderam: ${responded} — taxa de resposta: ${responseRate}%
+- Leads sem nenhum contato: ${neverContacted}
+- Leads com 5+ tentativas sem sucesso: ${highAttempts}
+- Leads com atividade nos últimos 7 dias: ${recentActivity}
+- Leads que avançaram no funil: ${advanced} — taxa de conversão: ${conversionRate}%
+- Média de tentativas por lead: ${avgAttempts}
 
-Retorne JSON com:
+DISTRIBUIÇÃO DE STATUS:
+${Object.entries(byStatus).map(([s, n]) => `- ${s}: ${n} leads`).join('\n')}
+
+PADRÕES DETECTADOS NAS CONVERSAS:
+- Conversas com mensagem repetida do bot (2+ vezes igual): ${repeticoesDetectadas}
+- Leads que mostraram interesse mas não avançaram no funil: ${sinaisCompraIgnorados}
+- Total de mensagens analisadas: ${totalMsgs}
+${transcripts}
+
+CRITÉRIOS DE AVALIAÇÃO:
+1. Qualidade do fluxo do bot: perguntas repetidas, travamentos, respostas que ignoram o que o lead disse
+2. Conversão: leads que mostraram interesse e não avançaram
+3. Volume: leads sem contato nenhum
+4. Engajamento: taxa de resposta e profundidade da qualificação
+5. Continuidade: após qualificação pelo bot, o corretor deve assumir e avançar o lead
+
+ERROS TÍPICOS A IDENTIFICAR:
+- Bot repete a mesma pergunta sem ouvir a resposta do lead
+- Lead diz "sim", "quero", "bora" e o bot reinicia o roteiro
+- Lead qualificado (respondeu perguntas de renda/FGTS) mas ficou em NEW
+- Bot não personalizou a resposta com base no que o lead informou
+- Conversas longas sem progresso (lead responde mas não avança de etapa)
+
+Retorne JSON (somente JSON, sem markdown):
 {
   "quality_score": 0-100,
   "severity": "low|medium|high",
-  "errors": [{"type": "string", "description": "string"}],
-  "positives": ["texto"],
-  "summary": "análise geral de performance"
+  "errors": [
+    {"type": "codigo_do_problema", "description": "descrição detalhada com exemplo real da conversa se possível"}
+  ],
+  "positives": ["ponto positivo concreto com dado ou exemplo"],
+  "summary": "análise em 3-5 frases: o que está funcionando, o que está travando, e qual a ação mais urgente para melhorar"
 }`;
 
-        // Chama LLM com fallback automático
         const responseText = await callLLMWithFallback(supabaseClient, llmConfigs, prompt);
 
+        // Extrai JSON da resposta
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error('No JSON found in LLM response');
         const analysis = JSON.parse(jsonMatch[0]);
 
-        // Salva análise
+        // Salva análise enriquecida
         await supabaseClient.from('ai_coach_analysis').insert({
           broker_id: item.broker_id,
           analysis_period: item.analysis_period,
-          total_leads_analyzed: conversations.length,
-          avg_first_response_time: validConversations > 0 ? Math.round(totalFirstResponseTime / validConversations) : null,
-          avg_lead_response_time: validConversations > 0 ? Math.round(totalLeadResponseTime / validConversations) : null,
-          leads_abandoned: leadsAbandoned,
-          leads_converted: leadsConverted,
+          total_leads_analyzed: totalLeads,
+          avg_first_response_time: null,
+          avg_lead_response_time: null,
+          leads_abandoned: neverContacted,
+          leads_converted: advanced,
           quality_score: analysis.quality_score || null,
           severity: analysis.severity || null,
           errors: analysis.errors || [],
           positives: analysis.positives || [],
           summary: analysis.summary || '',
-          sample_conversations: convIds,
+          sample_conversations: convs.map((c: any) => c.id).slice(0, 5),
         });
 
         await supabaseClient.from('ai_coach_queue').update({
@@ -379,7 +414,7 @@ Retorne JSON com:
         }).eq('id', item.id);
 
         processed++;
-        console.log(`[ai_coach] Corretor ${brokerName} analisado. Score: ${analysis.quality_score}`);
+        console.log(`[ai_coach] ${brokerName} analisado. Score: ${analysis.quality_score} | Convs: ${convs.length} | Msgs: ${totalMsgs}`);
       } catch (error: any) {
         console.error('[ai_coach] error for broker', item.broker_id, error.message);
         await supabaseClient.from('ai_coach_queue').update({

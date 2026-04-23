@@ -205,6 +205,36 @@ serve(async (req) => {
                         payload?.key?.remoteJid?.replace('@s.whatsapp.net', '');
     const fromMe = payload?.data?.key?.fromMe === true || payload?.key?.fromMe === true;
     const messageText = payload?.data?.message?.conversation || payload?.data?.message?.extendedTextMessage?.text || payload?.message?.conversation || payload?.message?.extendedTextMessage?.text;
+    const messageId = payload?.data?.key?.id || payload?.key?.id;
+
+    // ── Deduplicação por messageId ─────────────────────────────────────────
+    // A Evolution API dispara o mesmo MESSAGES_UPSERT múltiplas vezes em paralelo.
+    // Sem este guard, a IA responde N vezes com a mesma mensagem.
+    // Usamos o messageId único da Evolution como chave de dedup no webhook_logs.
+    if (messageId && !fromMe) {
+      const dedupeKey = `evol_${messageId}`;
+      const { data: alreadySeen } = await supabase
+        .from('webhook_logs')
+        .select('id')
+        .eq('integration_key', dedupeKey)
+        .limit(1)
+        .maybeSingle();
+
+      if (alreadySeen) {
+        console.log(`[webhook_receiver] ⚡ DUPLICATE ignorado — messageId=${messageId} phone=${phoneNumber}`);
+        return new Response(JSON.stringify({ success: true, duplicate: true }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Marca como processado — fire-and-forget (webhook_logs é rotacionado periodicamente)
+      supabase.from('webhook_logs').insert({
+        integration_key: dedupeKey,
+        payload: { messageId, phone: phoneNumber },
+        status_code: 200,
+        response_body: 'dedup_marker',
+      }).catch(() => {});
+    }
 
     if (phoneNumber) {
       if (fromMe) {
@@ -559,6 +589,23 @@ Responda APENAS em JSON válido, sem markdown:
       return new Response(JSON.stringify({ error: 'Invalid payload' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // ── Bloqueia IA para leads EXCLUDED / ABANDONED / CONCLUDED ─────────────
+    // Verifica status do lead ANTES de qualquer resposta automática
+    const { data: leadStatusCheck } = await supabase
+      .from('leads')
+      .select('id, status')
+      .eq('phone', phoneNumber)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (leadStatusCheck && ['EXCLUDED', 'ABANDONED', 'CONCLUDED'].includes(leadStatusCheck.status)) {
+      console.log(`[webhook_receiver] 🚫 Lead ${phoneNumber} com status ${leadStatusCheck.status} — IA bloqueada, sem resposta automática`);
+      return new Response(JSON.stringify({ success: true, blocked: true, reason: leadStatusCheck.status }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     // Find active conversation for this lead
     const { data: conversation } = await supabase
       .from('ia_conversations')
@@ -571,8 +618,11 @@ Responda APENAS em JSON válido, sem markdown:
 
     if (!conversation) {
       console.log('[webhook_receiver] no active conversation found for', phoneNumber);
-      // Try to find lead to determine broker
-      const { data: lead } = await supabase.from('leads').select('*, profiles!broker_id(*)').eq('phone', phoneNumber).maybeSingle();
+      // Try to find lead to determine broker (só leads ativos)
+      const { data: lead } = await supabase.from('leads').select('*, profiles!broker_id(*)')
+        .eq('phone', phoneNumber)
+        .not('status', 'in', '("ABANDONED","EXCLUDED","CONCLUDED")')
+        .maybeSingle();
 
       if (lead && lead.profiles) {
         const broker = lead.profiles;

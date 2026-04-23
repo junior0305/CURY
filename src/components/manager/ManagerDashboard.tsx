@@ -460,8 +460,8 @@ function MetaCorrida({ teamId, brokers, teamLeads }: {
 
 // ─── Alert Modal ─────────────────────────────────────────────────────────────
 
-function AlertModal({ broker, fromId, onClose }: {
-  broker: User; fromId: string; onClose: () => void;
+function AlertModal({ broker, fromId, lead, onClose }: {
+  broker: User; fromId: string; lead?: { id: string; name: string }; onClose: () => void;
 }) {
   const [msg, setMsg]                   = useState("");
   const [sending, setSending]           = useState(false);
@@ -547,7 +547,7 @@ function AlertModal({ broker, fromId, onClose }: {
         body: {
           botId: managerBotId,
           phone: broker.phone,
-          message: `🔔 *Alerta do Gerente*\n\n${msg.trim()}`,
+          message: `🔔 *Alerta do Gerente*\n\n${lead ? `📌 Lead: *${lead.name}*\n\n` : ""}${msg.trim()}`,
         },
       });
       console.log("[AlertModal] Resultado:", result, "Erro fn:", fnError);
@@ -581,12 +581,19 @@ function AlertModal({ broker, fromId, onClose }: {
     onClose();
   };
 
-  const QUICK = [
-    "Responda o cliente agora!",
-    "Retorne essa ligação perdida.",
-    "Atualize o status do lead.",
-    "Agende uma visita hoje.",
-  ];
+  const QUICK = lead
+    ? [
+        `Responda o cliente *${lead.name}* agora!`,
+        `Retorne a ligação perdida de *${lead.name}*.`,
+        `Atualize o status de *${lead.name}*.`,
+        `Agende uma visita com *${lead.name}* hoje.`,
+      ]
+    : [
+        "Responda o cliente agora!",
+        "Retorne essa ligação perdida.",
+        "Atualize o status do lead.",
+        "Agende uma visita hoje.",
+      ];
 
   return (
     <motion.div
@@ -615,7 +622,11 @@ function AlertModal({ broker, fromId, onClose }: {
             </div>
             <div>
               <p className="text-sm font-black text-white">{broker.name.split(" ")[0]}</p>
-              <p className="text-[10px] uppercase tracking-widest" style={{ color: "#475569" }}>Enviar alerta</p>
+              {lead ? (
+                <p className="text-[10px]" style={{ color: "#00D4FF" }}>Lead: {lead.name}</p>
+              ) : (
+                <p className="text-[10px] uppercase tracking-widest" style={{ color: "#475569" }}>Enviar alerta</p>
+              )}
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg transition-colors hover:bg-white/5" style={{ color: "#475569" }}>
@@ -706,7 +717,7 @@ export default function ManagerDashboard() {
   const [xpData, setXpData]             = useState<Record<string, { xp: number; level: number; levelName: string }>>({});
   const [rightTab, setRightTab]         = useState<RightTab>("alertas");
   const [leftPanel, setLeftPanel]       = useState<LeftPanel>("urgente");
-  const [alertBroker, setAlertBroker]   = useState<User | null>(null);
+  const [alertBroker, setAlertBroker]   = useState<{ broker: User; lead?: { id: string; name: string } } | null>(null);
   const [monitorLead, setMonitorLead]   = useState<Lead | null>(null);
   const [teamId, setTeamId]             = useState<string | null>(null);
   const [redistFilter, setRedistFilter] = useState<string>("todos");
@@ -1537,7 +1548,7 @@ export default function ManagerDashboard() {
                           </div>
                           {/* Botão de alerta */}
                           <button
-                            onClick={() => setAlertBroker(broker)}
+                            onClick={() => setAlertBroker({ broker })}
                             className="p-2 rounded-lg transition-all hover:scale-105 shrink-0"
                             style={{ background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}
                             title="Enviar alerta"
@@ -1896,7 +1907,7 @@ export default function ManagerDashboard() {
                                   {slaBreach ? "SLA BREACH" : slaWarn ? "Atenção" : "OK"}
                                 </p>
                               </div>
-                              <button onClick={() => setAlertBroker(broker!)} disabled={!broker}
+                              <button onClick={() => setAlertBroker({ broker: broker!, lead: { id: lead.id, name: lead.name } })} disabled={!broker}
                                 className="shrink-0 p-1.5 rounded-lg transition hover:scale-105"
                                 style={{ background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}>
                                 <Bell className="w-3 h-3" />
@@ -1996,8 +2007,9 @@ export default function ManagerDashboard() {
       <AnimatePresence>
         {alertBroker && (
           <AlertModal
-            broker={alertBroker}
+            broker={alertBroker.broker}
             fromId={user!.id}
+            lead={alertBroker.lead}
             onClose={() => setAlertBroker(null)}
           />
         )}
