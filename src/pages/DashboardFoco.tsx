@@ -588,12 +588,14 @@ export default function DashboardFoco(){
     if(s==="VISIT_SCHEDULED"){
       res.push(
         {id:"came",  label:"✅ Compareceu!",          desc:"Lead veio à visita — solicitar documentação",    icon:<CheckCircle2 className="w-4 h-4"/>,color:"#10B981",bg:"rgba(16,185,129,.16)",border:"rgba(16,185,129,.45)",primary:true,full:true,action:()=>advance("VISITA_REALIZADA")},
+        {id:"docs",  label:"Docs Recebidos",          desc:"Lead já entregou documentação — pular para docs",icon:<FileText     className="w-4 h-4"/>,color:"#FBBF24",bg:"rgba(251,191,36,.13)",border:"rgba(251,191,36,.4)",               action:()=>advance("DOCS_REQUESTED")},
         {id:"gone",  label:"Não compareceu",          desc:"Reagendar ou registrar desistência",             icon:<X            className="w-4 h-4"/>,color:"#F97316",bg:"rgba(249,115,22,.1)", border:"rgba(249,115,22,.35)",                       action:()=>setNoShowSheet(true)},
       );
     }
     if(s==="VISITA_REALIZADA"){
       res.push(
         {id:"docs",  label:"Solicitar Documentos",   desc:"Move para etapa de documentação",                icon:<FileText     className="w-4 h-4"/>,color:"#FBBF24",bg:"rgba(251,191,36,.16)",border:"rgba(251,191,36,.5)",primary:true,full:true,action:()=>advance("DOCS_REQUESTED")},
+        {id:"close", label:"Fechar Venda 🏆",         desc:"Negócio fechado na visita — venda confirmada!",  icon:<Trophy       className="w-4 h-4"/>,color:"#F59E0B",bg:"rgba(245,158,11,.18)",border:"rgba(245,158,11,.5)",               action:()=>advance("CONCLUDED")},
       );
     }
     if(s==="DOCS_REQUESTED"){
@@ -876,15 +878,14 @@ export default function DashboardFoco(){
                           <div className="flex items-center gap-2 mb-2">
                             <div className="flex-1 h-px" style={{background:"rgba(255,255,255,.06)"}}/>
                             <span className="text-[10px] font-bold uppercase tracking-widest shrink-0"
-                              style={{color:sent?"#00D4FF":"#334155"}}>
-                              {sent?"▼ O que aconteceu?":"Registrar resultado"}
+                              style={{color:"#00D4FF"}}>
+                              ▼ O que aconteceu?
                             </span>
                             <div className="flex-1 h-px" style={{background:"rgba(255,255,255,.06)"}}/>
                           </div>
-                          <motion.div animate={sent?{opacity:1}:{opacity:.55}} transition={{duration:.3}}
-                            className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-2 gap-2">
                             {getOutcomes(lead).map(o=><OutcomeBtn key={o.id} o={o} loading={mutating}/>)}
-                          </motion.div>
+                          </div>
                         </motion.div>
                       )}
                     </AnimatePresence>
