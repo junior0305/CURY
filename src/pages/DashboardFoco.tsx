@@ -1257,6 +1257,17 @@ export default function DashboardFoco(){
                   <p className="text-xs text-slate-500 mt-0.5">Marcar nova data — o lead continua na fila</p>
                 </div>
               </button>
+              {/* Retomar atendimento */}
+              <button
+                onClick={()=>{setNoShowSheet(false);advance("IN_PROGRESS");}}
+                className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-left transition-all hover:brightness-110"
+                style={{background:"rgba(99,102,241,.12)",border:"1px solid rgba(99,102,241,.35)"}}>
+                <MessageSquare className="w-6 h-6 text-indigo-400 shrink-0"/>
+                <div>
+                  <p className="font-black text-sm text-indigo-300 uppercase tracking-wide">Retomar Atendimento</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Voltar para Em Atendimento — sem visita por agora</p>
+                </div>
+              </button>
               {/* Desistência */}
               <button
                 onClick={()=>{setNoShowSheet(false);setLostSheet(true);}}
