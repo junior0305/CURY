@@ -722,6 +722,7 @@ export default function ManagerDashboard() {
   const [teamId, setTeamId]             = useState<string | null>(null);
   const [redistFilter, setRedistFilter] = useState<string>("todos");
   const [searchQuery, setSearchQuery]   = useState<string>("");
+  const [mobileView, setMobileView]     = useState<"leads" | "equipe">("leads");
 
   // Manager's team_id
   useEffect(() => {
@@ -960,13 +961,14 @@ export default function ManagerDashboard() {
         className="shrink-0 flex items-center justify-between px-5 h-12 z-10"
         style={{ borderBottom: "1px solid rgba(0,212,255,0.1)", background: t.surfaceAlpha }}
       >
-        <div className="flex items-center gap-3">
-          <img src="/comandra-logo.png" alt="Comandra" className="h-7 w-7 object-contain"
+        <div className="flex items-center gap-2 sm:gap-3">
+          <img src="/comandra-logo.png" alt="Comandra" className="h-7 w-7 object-contain shrink-0"
             style={{ filter: "drop-shadow(0 0 8px rgba(0,212,255,0.7))" }} />
           <div>
-            <p className="font-black text-xs uppercase tracking-[0.2em]"
+            <p className="font-black text-[10px] sm:text-xs uppercase tracking-[0.15em] sm:tracking-[0.2em]"
               style={{ color: t.text, textShadow: "0 0 12px rgba(0,212,255,0.4)" }}>
-              Centro de Comando
+              <span className="hidden sm:inline">Centro de Comando</span>
+              <span className="sm:hidden">Comando</span>
             </p>
             <p className="text-[9px] uppercase tracking-widest" style={{ color: t.textSubtle }}>
               {brokers.length} corretores · {lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
@@ -1008,7 +1010,7 @@ export default function ManagerDashboard() {
       <MetaCorrida teamId={teamId} brokers={brokers} teamLeads={teamLeads} />
 
       {/* ── KPI BAR ─────────────────────────────────────────────────────────── */}
-      <div className="shrink-0 grid grid-cols-3 sm:grid-cols-7 gap-2 px-4 pt-2 pb-0">
+      <div className="shrink-0 grid grid-cols-3 sm:grid-cols-7 gap-1.5 sm:gap-2 px-3 sm:px-4 pt-2 pb-0">
         <KpiCard delay={0.00} label="Presentes"    value={`${stats.present}/${stats.total}`} icon={UserCheck}     neon={stats.present < stats.total ? "#F59E0B" : "#10B981"} />
         <KpiCard delay={0.04} label="Novos hoje"   value={stats.newToday}                    icon={Zap}           neon="#00D4FF" />
         <KpiCard delay={0.08} label="Ativos"       value={stats.active}                      icon={Target}        neon="#818CF8" />
@@ -1019,13 +1021,13 @@ export default function ManagerDashboard() {
       </div>
 
       {/* ── MAIN SPLIT ──────────────────────────────────────────────────────── */}
-      <main className="flex flex-1 overflow-hidden gap-3 p-3 min-h-0">
+      <main className="flex flex-1 overflow-hidden gap-3 p-3 min-h-0 pb-16 md:pb-3">
 
         {/* ── ESQUERDA ─────────────────────────────────────────────────────── */}
-        <div className="flex flex-col gap-2 flex-[55] min-h-0 overflow-hidden">
+        <div className={`flex-col gap-2 overflow-y-auto md:overflow-hidden md:min-h-0 w-full md:flex-[55] md:w-auto ${mobileView === "leads" ? "flex" : "hidden"} md:flex`}>
 
-          {/* Left panel tabs */}
-          <div className="flex gap-1.5 shrink-0">
+          {/* Left panel tabs — desktop: flex fixo / mobile: scroll horizontal */}
+          <div className="flex gap-1.5 shrink-0 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {([
               { v: "urgente",      label: "Urgentes",     icon: AlertTriangle, color: "#EF4444" },
               { v: "redistribuir", label: "Redistribuir", icon: RotateCcw,     color: "#00D4FF" },
@@ -1033,7 +1035,7 @@ export default function ManagerDashboard() {
               { v: "busca",        label: "Buscar",       icon: Search,        color: "#10B981" },
             ] as { v: LeftPanel; label: string; icon: React.ElementType; color: string; badge?: number }[]).map(tab => (
               <button key={tab.v} onClick={() => setLeftPanel(tab.v)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex-1 justify-center relative"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 md:flex-1 md:justify-center relative"
                 style={leftPanel === tab.v ? {
                   background: `${tab.color}15`,
                   color: tab.color,
@@ -1469,20 +1471,20 @@ export default function ManagerDashboard() {
         </div>
 
         {/* ── DIREITA ──────────────────────────────────────────────────────── */}
-        <div className="flex flex-col gap-2 flex-[45] min-h-0 overflow-hidden">
+        <div className={`flex-col gap-2 overflow-y-auto md:overflow-hidden md:min-h-0 w-full md:flex-[45] md:w-auto ${mobileView === "equipe" ? "flex" : "hidden"} md:flex`}>
 
-          {/* Tab selector */}
-          <div className="flex gap-1.5 shrink-0">
+          {/* Tab selector — desktop: flex fixo / mobile: scroll horizontal */}
+          <div className="flex gap-1 shrink-0 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {([
-              { v: "alertas",    label: "Semáforo",  icon: Shield },
-              { v: "velocidade", label: "SLA",       icon: Zap, badge: velocidadeStats.uncontacted.filter(l => l.minsWaiting > 15).length },
-              { v: "ranking",    label: "Ranking",   icon: Trophy },
-              { v: "intel",      label: "Intel",     icon: Brain },
-              { v: "presenca",   label: "Presença",  icon: UserCheck },
-              { v: "fila",       label: "Fila",      icon: GitMerge },
+              { v: "alertas",    label: "Semáforo", icon: Shield },
+              { v: "velocidade", label: "SLA",      icon: Zap, badge: velocidadeStats.uncontacted.filter(l => l.minsWaiting > 15).length },
+              { v: "ranking",    label: "Ranking",  icon: Trophy },
+              { v: "intel",      label: "Intel",    icon: Brain },
+              { v: "presenca",   label: "Presença", icon: UserCheck },
+              { v: "fila",       label: "Fila",     icon: GitMerge },
             ] as { v: RightTab; label: string; icon: React.ElementType; badge?: number }[]).map(tab => (
               <button key={tab.v} onClick={() => setRightTab(tab.v)}
-                className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex-1 justify-center"
+                className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 md:flex-1 md:justify-center"
                 style={rightTab === tab.v ? {
                   background: "linear-gradient(135deg, #0044cc, #0066ff)",
                   color: "#fff",
@@ -1494,7 +1496,7 @@ export default function ManagerDashboard() {
                   border: "1px solid var(--crm-border-mid, #1E293B)",
                 }}
               >
-                <tab.icon className="w-3 h-3" />
+                <tab.icon className="w-3 h-3 shrink-0" />
                 {tab.label}
                 {(tab.badge ?? 0) > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center animate-pulse"
@@ -1979,9 +1981,31 @@ export default function ManagerDashboard() {
         </div>
       </main>
 
+      {/* ── MOBILE BOTTOM NAV — fixed, igual ao dashboard do corretor ────── */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex h-14"
+        style={{ background: "rgba(8,11,20,.97)", borderTop: "1px solid rgba(0,212,255,.15)", backdropFilter: "blur(12px)" }}>
+        <button onClick={() => setMobileView("leads")}
+          className="relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-all"
+          style={{ color: mobileView === "leads" ? "#EF4444" : "#475569" }}>
+          <AlertTriangle className="w-5 h-5" />
+          <span className="text-[9px] font-bold uppercase">Leads</span>
+          {(stats.stalled + stats.unassigned) > 0 && (
+            <span className="absolute top-1.5 right-[calc(50%-20px)] w-4 h-4 rounded-full text-[8px] font-black flex items-center justify-center"
+              style={{ background: "#EF4444", color: "#fff" }}>{stats.stalled + stats.unassigned}</span>
+          )}
+        </button>
+        <div className="w-px my-3" style={{ background: "#1E293B" }} />
+        <button onClick={() => setMobileView("equipe")}
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 transition-all"
+          style={{ color: mobileView === "equipe" ? "#00D4FF" : "#475569" }}>
+          <Shield className="w-5 h-5" />
+          <span className="text-[9px] font-bold uppercase">Equipe</span>
+        </button>
+      </nav>
+
       {/* ── FOOTER ──────────────────────────────────────────────────────────── */}
       <footer
-        className="shrink-0 flex items-center gap-6 px-5 h-10"
+        className="shrink-0 hidden md:flex items-center gap-6 px-5 h-10"
         style={{ borderTop: "1px solid rgba(0,212,255,0.08)", background: "var(--crm-surface)" }}
       >
         <div className="flex items-center gap-1.5">
