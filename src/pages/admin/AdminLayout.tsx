@@ -1,5 +1,44 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Component, type ReactNode, type ErrorInfo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+class AdminErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[AdminLayout] Crash capturado:", error, info.componentStack);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-8">
+          <div className="max-w-2xl w-full bg-red-950/40 border border-red-500/40 rounded-2xl p-8">
+            <h2 className="text-2xl font-black text-red-400 mb-2">Erro no painel Admin</h2>
+            <p className="text-slate-300 text-sm mb-4">Um componente crashou. Abra o console (F12) para ver o stack completo.</p>
+            <pre className="bg-black/60 rounded-lg p-4 text-xs text-red-300 overflow-auto max-h-60 whitespace-pre-wrap">
+              {this.state.error.message}
+              {"\n\n"}
+              {this.state.error.stack}
+            </pre>
+            <button
+              className="mt-6 px-6 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-bold"
+              onClick={() => this.setState({ error: null })}
+            >
+              Tentar novamente
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Users, DollarSign, LogOut, Crown,
@@ -156,7 +195,7 @@ const ROLE_LABELS: Record<string, { label: string }> = {
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
-export default function AdminLayout() {
+function AdminLayoutInner() {
   const { role, user, signOut } = useAuth();
   const { t } = useTheme();
   const normalizedRole = role?.toUpperCase() ?? "";
@@ -439,5 +478,13 @@ export default function AdminLayout() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function AdminLayout() {
+  return (
+    <AdminErrorBoundary>
+      <AdminLayoutInner />
+    </AdminErrorBoundary>
   );
 }

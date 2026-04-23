@@ -628,7 +628,7 @@ export default function Inteligencia() {
 
   return (
     <div className="p-4 md:p-6 max-w-6xl">
-    <Tabs defaultValue="briefing" className="w-full">
+    <Tabs defaultValue="tecnico" className="w-full">
       <TabsList className="mb-6 bg-slate-900/50 border border-slate-700/50 h-auto p-1 gap-1 inline-flex rounded-xl">
         <TabsTrigger value="briefing" className="px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider data-[state=active]:bg-violet-600 data-[state=active]:text-white text-slate-400">
           🔥 Briefing Ops

@@ -137,7 +137,7 @@ async function fetchBriefing(): Promise<BriefingData> {
       "id,status,broker_id,tag,last_lead_response_at,last_broker_whatsapp_at,contact_attempts,negotiating_since,created_at,name,profiles!broker_id(first_name)"
     ).gt("created_at", ago30d)
       .not("status","in","(\"EXCLUDED\")")
-      .limit(2000),
+      .limit(500),
 
     // 4. Bot instances
     supabase.from("bot_instances").select("id,name,status,is_prospecting"),
@@ -163,7 +163,7 @@ async function fetchBriefing(): Promise<BriefingData> {
 
     // 10. Tokens (7d)
     supabase.from("ia_messages").select("conversation_id,ai_tokens_used")
-      .gt("created_at", ago7d).limit(2000),
+      .gt("created_at", ago7d).limit(500),
 
     // 11. Guardian alerts unresolved
     supabase.from("guardian_alerts").select("check_type,severity,message,created_at,auto_fixed")
@@ -182,7 +182,7 @@ async function fetchBriefing(): Promise<BriefingData> {
       .gt("executed_at", ago7d)
       .eq("status","success")
       .in("entity_type",["welcome","follow_up","aviso_redistribuicao_proprio","redistribuicao_proprio","redistribuicao"])
-      .limit(2000),
+      .limit(500),
 
     // 14. Mensagens enviadas 30d com texto — para análise de efetividade
     supabase.from("automation_logs").select("entity_id,entity_type,message_sent,executed_at")
@@ -190,7 +190,7 @@ async function fetchBriefing(): Promise<BriefingData> {
       .eq("status","success")
       .in("entity_type",["welcome","follow_up"])
       .not("message_sent","is",null)
-      .limit(3000),
+      .limit(1000),
   ]);
 
   const allBots: any[]     = botInstancesRes.data || [];
