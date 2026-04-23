@@ -139,7 +139,12 @@ const UserForm = ({ isOpen, onOpenChange, userToEdit, onSave, isSaving }: UserFo
         onSave(data.user as User);
         onOpenChange(false);
       } catch (err: any) {
-        toast.error(`Falha na Edge Function: ${err.message}. Verifique se a função está implantada.`);
+        const msg: string = err.message || "";
+        if (msg.toLowerCase().includes("already been registered") || msg.toLowerCase().includes("email_exists") || msg.toLowerCase().includes("already registered")) {
+          toast.error("Este e-mail já está cadastrado no sistema. Use outro e-mail ou edite o usuário existente.");
+        } else {
+          toast.error(`Erro ao criar usuário: ${msg}`);
+        }
       } finally {
         setCreating(false);
       }

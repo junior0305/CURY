@@ -136,7 +136,9 @@ serve(async (req) => {
     })
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    const msg: string = error?.message || String(error);
+    console.error("[create-user] erro:", msg);
+    return new Response(JSON.stringify({ error: msg }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400
     })
