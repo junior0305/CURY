@@ -706,7 +706,7 @@ function AlertModal({ broker, fromId, lead, onClose }: {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-type RightTab  = "alertas" | "presenca" | "fila" | "ranking" | "intel" | "velocidade";
+type RightTab  = "equipe" | "velocidade" | "ranking";
 type LeftPanel = "urgente" | "redistribuir" | "descarte" | "busca";
 
 export default function ManagerDashboard() {
@@ -715,7 +715,8 @@ export default function ManagerDashboard() {
   const queryClient       = useQueryClient();
   const [lastUpdated, setLastUpdated]   = useState(new Date());
   const [xpData, setXpData]             = useState<Record<string, { xp: number; level: number; levelName: string }>>({});
-  const [rightTab, setRightTab]         = useState<RightTab>("alertas");
+  const [rightTab, setRightTab]         = useState<RightTab>("equipe");
+  const [expandedUrgente, setExpandedUrgente] = useState<"nocontact" | "unassigned" | "stalled" | null>("nocontact");
   const [leftPanel, setLeftPanel]       = useState<LeftPanel>("urgente");
   const [alertBroker, setAlertBroker]   = useState<{ broker: User; lead?: { id: string; name: string } } | null>(null);
   const [monitorLead, setMonitorLead]   = useState<Lead | null>(null);
@@ -877,6 +878,19 @@ export default function ManagerDashboard() {
   }, [teamLeads, redistFilter]);
 
   const brokerMap = useMemo(() => Object.fromEntries(brokers.map(b => [b.id, b])), [brokers]);
+
+  // Leads sem nenhum contato do bot há mais de 2h (crítico)
+  const noContactLeads = useMemo(() =>
+    teamLeads
+      .filter(l =>
+        l.brokerId &&
+        !l.lastBrokerWhatsappAt &&
+        !["CONCLUDED","ABANDONED","EXCLUDED"].includes(l.status) &&
+        hoursAgo(l.createdAt) >= 2
+      )
+      .sort((a, b) => hoursAgo(b.createdAt) - hoursAgo(a.createdAt)),
+    [teamLeads]
+  );
 
   // Velocidade de resposta
   const velocidadeStats = useMemo(() => {
@@ -1062,107 +1076,194 @@ export default function ManagerDashboard() {
             {leftPanel === "urgente" && (
               <motion.div key="urgente" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 8 }} transition={{ duration: 0.18 }}
-                className="flex flex-col gap-2 flex-1 min-h-0 overflow-hidden">
+                className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
 
-                {/* Sem corretor */}
-                {unassigned.length > 0 && (
-                  <Panel>
-                    <SectionHeader label="Sem Corretor" icon={UserX} color="#EF4444" count={unassigned.length} />
-                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-0.5">
-                      {unassigned.slice(0, 10).map((lead, i) => (
-                        <motion.div key={lead.id}
-                          initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: i * 0.04 }}
-                          className="flex items-center gap-3 rounded-xl px-3 py-2"
-                          style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-white truncate">{lead.name}</p>
-                            <p className="text-[10px]" style={{ color: "#475569" }}>
-                              {Math.floor(hoursAgo(lead.createdAt))}h · {lead.tag || "sem tag"}
-                            </p>
-                          </div>
-                          <Select onValueChange={brokerId => assignMutation.mutate({ leadId: lead.id, brokerId })}>
-                            <SelectTrigger className="w-28 h-7 text-xs rounded-lg"
-                              style={{ borderColor: "rgba(239,68,68,0.3)", background: "var(--crm-surface)", color: "var(--crm-text-muted,#94A3B8)" }}>
-                              <SelectValue placeholder="Atribuir..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {presentBrokers.map(b => (
-                                <SelectItem key={b.id} value={b.id} className="text-xs">{b.name.split(" ")[0]}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </Panel>
-                )}
-
-                {/* Parados +24h */}
-                <Panel className="flex-1 min-h-0 flex flex-col">
-                  <SectionHeader label="Parados +24h" icon={AlertTriangle} color="#F59E0B" count={stalledLeads.length} />
-                  {stalledLeads.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center flex-1 gap-2" style={{ color: "#334155" }}>
-                      <CheckCircle2 className="w-8 h-8" style={{ color: "#10B981" }} />
-                      <p className="text-sm font-bold" style={{ color: "#10B981" }}>Equipe em dia!</p>
-                    </div>
-                  ) : (
-                    <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 min-h-0">
-                      {stalledLeads.map((lead, i) => {
-                        const h      = Math.floor(hoursAgo(lead.lastInteractionAt || lead.createdAt));
-                        const broker = lead.brokerId ? brokerMap[lead.brokerId] : null;
-                        const urgent = h > 48;
-                        return (
-                          <motion.div key={lead.id}
-                            initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: i * 0.03 }}
-                            className="flex items-center gap-3 rounded-xl px-3 py-2.5"
-                            style={{
-                              background: urgent ? "rgba(239,68,68,0.06)" : "rgba(245,158,11,0.05)",
-                              border: `1px solid ${urgent ? "rgba(239,68,68,0.2)" : "rgba(245,158,11,0.15)"}`,
-                            }}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold text-white truncate">{lead.name}</p>
-                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                <span className="text-xs font-black" style={{ color: urgent ? "#F87171" : "#FCD34D" }}>
-                                  {h}h parado
-                                </span>
-                                <span style={{ color: "#334155" }}>·</span>
-                                <span className="text-xs" style={{ color: "#475569" }}>
-                                  {broker?.name.split(" ")[0] || "—"}
-                                </span>
-                              </div>
+                {/* ── Card 1: Sem contato >2h ── */}
+                {(() => {
+                  const isOpen = expandedUrgente === "nocontact";
+                  const count  = noContactLeads.length;
+                  const color  = "#EF4444";
+                  return (
+                    <div className="rounded-2xl overflow-hidden shrink-0"
+                      style={{ border: `1px solid ${count > 0 ? "rgba(239,68,68,0.35)" : "#1E293B"}`, background: count > 0 ? "rgba(239,68,68,0.05)" : "var(--crm-glass)" }}>
+                      <button
+                        onClick={() => setExpandedUrgente(isOpen ? null : "nocontact")}
+                        className="w-full flex items-center gap-3 px-4 py-3 transition-all"
+                      >
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${count > 0 ? "animate-pulse" : ""}`}
+                          style={{ background: count > 0 ? "rgba(239,68,68,0.15)" : "rgba(51,65,85,0.3)", border: `1px solid ${count > 0 ? "rgba(239,68,68,0.3)" : "#1E293B"}` }}>
+                          <Bot className="w-4 h-4" style={{ color: count > 0 ? color : "#334155" }} />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className="text-xs font-black" style={{ color: count > 0 ? "#fff" : "#475569" }}>Bot nunca enviou</p>
+                          <p className="text-[10px]" style={{ color: count > 0 ? "#F87171" : "#334155" }}>
+                            {count === 0 ? "Todos os leads foram contatados" : `${count} lead${count > 1 ? "s" : ""} sem 1º contato há +2h`}
+                          </p>
+                        </div>
+                        <span className="text-lg font-black shrink-0" style={{ color: count > 0 ? color : "#334155" }}>{count}</span>
+                        <span className="text-[10px] shrink-0" style={{ color: "#334155" }}>{isOpen ? "▲" : "▼"}</span>
+                      </button>
+                      <AnimatePresence>
+                        {isOpen && count > 0 && (
+                          <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
+                            className="overflow-hidden">
+                            <div className="px-3 pb-3 space-y-1.5 max-h-48 overflow-y-auto">
+                              {noContactLeads.map((lead, i) => {
+                                const broker = lead.brokerId ? brokerMap[lead.brokerId] : null;
+                                const h = Math.floor(hoursAgo(lead.createdAt));
+                                return (
+                                  <div key={lead.id} className="flex items-center gap-3 rounded-xl px-3 py-2"
+                                    style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)" }}>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-bold text-white truncate">{lead.name}</p>
+                                      <p className="text-[10px]" style={{ color: "#475569" }}>
+                                        {broker?.name.split(" ")[0] || "—"} · {h}h sem contato
+                                      </p>
+                                    </div>
+                                    {broker && (
+                                      <button onClick={() => setAlertBroker({ broker, lead: { id: lead.id, name: lead.name } })}
+                                        className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
+                                        style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#F87171" }}>
+                                        <Bell className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
-                            <button
-                              onClick={() => setMonitorLead(lead)}
-                              className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
-                              title="Monitorar conversa"
-                              style={{ background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                            <Select
-                              defaultValue={lead.brokerId || ""}
-                              onValueChange={brokerId => assignMutation.mutate({ leadId: lead.id, brokerId })}
-                            >
-                              <SelectTrigger className="w-28 h-7 text-xs rounded-lg shrink-0"
-                                style={{ borderColor: urgent ? "rgba(239,68,68,0.3)" : "rgba(245,158,11,0.3)", background: "var(--crm-surface)", color: "var(--crm-text-muted,#94A3B8)" }}>
-                                <SelectValue placeholder="Mover..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {brokers.map(b => (
-                                  <SelectItem key={b.id} value={b.id} className="text-xs">{b.name.split(" ")[0]}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
                           </motion.div>
-                        );
-                      })}
+                        )}
+                      </AnimatePresence>
                     </div>
-                  )}
-                </Panel>
+                  );
+                })()}
+
+                {/* ── Card 2: Sem corretor ── */}
+                {(() => {
+                  const isOpen = expandedUrgente === "unassigned";
+                  const count  = unassigned.length;
+                  const color  = "#F59E0B";
+                  return (
+                    <div className="rounded-2xl overflow-hidden shrink-0"
+                      style={{ border: `1px solid ${count > 0 ? "rgba(245,158,11,0.35)" : "#1E293B"}`, background: count > 0 ? "rgba(245,158,11,0.04)" : "var(--crm-glass)" }}>
+                      <button
+                        onClick={() => setExpandedUrgente(isOpen ? null : "unassigned")}
+                        className="w-full flex items-center gap-3 px-4 py-3 transition-all"
+                      >
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                          style={{ background: count > 0 ? "rgba(245,158,11,0.15)" : "rgba(51,65,85,0.3)", border: `1px solid ${count > 0 ? "rgba(245,158,11,0.3)" : "#1E293B"}` }}>
+                          <UserX className="w-4 h-4" style={{ color: count > 0 ? color : "#334155" }} />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className="text-xs font-black" style={{ color: count > 0 ? "#fff" : "#475569" }}>Sem corretor</p>
+                          <p className="text-[10px]" style={{ color: count > 0 ? "#FCD34D" : "#334155" }}>
+                            {count === 0 ? "Todos os leads estão atribuídos" : `${count} lead${count > 1 ? "s" : ""} na fila sem atribuição`}
+                          </p>
+                        </div>
+                        <span className="text-lg font-black shrink-0" style={{ color: count > 0 ? color : "#334155" }}>{count}</span>
+                        <span className="text-[10px] shrink-0" style={{ color: "#334155" }}>{isOpen ? "▲" : "▼"}</span>
+                      </button>
+                      <AnimatePresence>
+                        {isOpen && count > 0 && (
+                          <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
+                            className="overflow-hidden">
+                            <div className="px-3 pb-3 space-y-1.5 max-h-48 overflow-y-auto">
+                              {unassigned.map(lead => (
+                                <div key={lead.id} className="flex items-center gap-3 rounded-xl px-3 py-2"
+                                  style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)" }}>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-bold text-white truncate">{lead.name}</p>
+                                    <p className="text-[10px]" style={{ color: "#475569" }}>
+                                      {Math.floor(hoursAgo(lead.createdAt))}h · {lead.tag || "sem tag"}
+                                    </p>
+                                  </div>
+                                  <Select onValueChange={brokerId => assignMutation.mutate({ leadId: lead.id, brokerId })}>
+                                    <SelectTrigger className="w-28 h-7 text-xs rounded-lg shrink-0"
+                                      style={{ borderColor: "rgba(245,158,11,0.3)", background: "var(--crm-surface)", color: "var(--crm-text-muted,#94A3B8)" }}>
+                                      <SelectValue placeholder="Atribuir..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {presentBrokers.map(b => (
+                                        <SelectItem key={b.id} value={b.id} className="text-xs">{b.name.split(" ")[0]}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })()}
+
+                {/* ── Card 3: Parados +24h ── */}
+                {(() => {
+                  const isOpen = expandedUrgente === "stalled";
+                  const count  = stalledLeads.length;
+                  const color  = count > 0 ? "#F59E0B" : "#10B981";
+                  return (
+                    <div className="rounded-2xl overflow-hidden shrink-0 flex-1 min-h-0 flex flex-col"
+                      style={{ border: `1px solid ${count > 0 ? "rgba(245,158,11,0.25)" : "#1E293B"}`, background: "var(--crm-glass)" }}>
+                      <button
+                        onClick={() => setExpandedUrgente(isOpen ? null : "stalled")}
+                        className="w-full flex items-center gap-3 px-4 py-3 transition-all shrink-0"
+                      >
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                          style={{ background: count > 0 ? "rgba(245,158,11,0.12)" : "rgba(16,185,129,0.1)", border: `1px solid ${count > 0 ? "rgba(245,158,11,0.25)" : "rgba(16,185,129,0.2)"}` }}>
+                          <Clock className="w-4 h-4" style={{ color }} />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className="text-xs font-black" style={{ color: count > 0 ? "#fff" : "#10B981" }}>Parados +24h</p>
+                          <p className="text-[10px]" style={{ color: count > 0 ? "#FCD34D" : "#10B981" }}>
+                            {count === 0 ? "Equipe em dia! Nenhum lead parado" : `${count} lead${count > 1 ? "s" : ""} sem interação há mais de 24h`}
+                          </p>
+                        </div>
+                        <span className="text-lg font-black shrink-0" style={{ color }}>{count}</span>
+                        <span className="text-[10px] shrink-0" style={{ color: "#334155" }}>{isOpen ? "▲" : "▼"}</span>
+                      </button>
+                      <AnimatePresence>
+                        {isOpen && count > 0 && (
+                          <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
+                            className="overflow-hidden flex-1 min-h-0">
+                            <div className="px-3 pb-3 space-y-1.5 max-h-64 overflow-y-auto">
+                              {stalledLeads.map((lead, i) => {
+                                const h      = Math.floor(hoursAgo(lead.lastInteractionAt || lead.createdAt));
+                                const broker = lead.brokerId ? brokerMap[lead.brokerId] : null;
+                                const urgent = h > 48;
+                                return (
+                                  <div key={lead.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+                                    style={{ background: urgent ? "rgba(239,68,68,0.06)" : "rgba(245,158,11,0.04)", border: `1px solid ${urgent ? "rgba(239,68,68,0.2)" : "rgba(245,158,11,0.12)"}` }}>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-bold text-white truncate">{lead.name}</p>
+                                      <div className="flex items-center gap-2 mt-0.5">
+                                        <span className="text-xs font-black" style={{ color: urgent ? "#F87171" : "#FCD34D" }}>{h}h</span>
+                                        <span className="text-xs" style={{ color: "#475569" }}>{broker?.name.split(" ")[0] || "—"}</span>
+                                      </div>
+                                    </div>
+                                    <button onClick={() => setMonitorLead(lead)}
+                                      className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
+                                      style={{ background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}>
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </button>
+                                    {broker && (
+                                      <button onClick={() => setAlertBroker({ broker, lead: { id: lead.id, name: lead.name } })}
+                                        className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
+                                        style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#F87171" }}>
+                                        <Bell className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })()}
               </motion.div>
             )}
 
@@ -1473,18 +1574,15 @@ export default function ManagerDashboard() {
         {/* ── DIREITA ──────────────────────────────────────────────────────── */}
         <div className={`flex-col gap-2 overflow-y-auto md:overflow-hidden md:min-h-0 w-full md:flex-[45] md:w-auto ${mobileView === "equipe" ? "flex" : "hidden"} md:flex`}>
 
-          {/* Tab selector — desktop: flex fixo / mobile: scroll horizontal */}
-          <div className="flex gap-1 shrink-0 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {/* Tab selector — 3 abas consolidadas */}
+          <div className="flex gap-1.5 shrink-0">
             {([
-              { v: "alertas",    label: "Semáforo", icon: Shield },
-              { v: "velocidade", label: "SLA",      icon: Zap, badge: velocidadeStats.uncontacted.filter(l => l.minsWaiting > 15).length },
-              { v: "ranking",    label: "Ranking",  icon: Trophy },
-              { v: "intel",      label: "Intel",    icon: Brain },
-              { v: "presenca",   label: "Presença", icon: UserCheck },
-              { v: "fila",       label: "Fila",     icon: GitMerge },
-            ] as { v: RightTab; label: string; icon: React.ElementType; badge?: number }[]).map(tab => (
+              { v: "equipe"     as RightTab, label: "Equipe",  icon: Shield },
+              { v: "velocidade" as RightTab, label: "SLA",     icon: Zap, badge: velocidadeStats.uncontacted.filter(l => l.minsWaiting > 15).length },
+              { v: "ranking"    as RightTab, label: "Ranking", icon: Trophy },
+            ]).map(tab => (
               <button key={tab.v} onClick={() => setRightTab(tab.v)}
-                className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 md:flex-1 md:justify-center"
+                className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex-1 justify-center"
                 style={rightTab === tab.v ? {
                   background: "linear-gradient(135deg, #0044cc, #0066ff)",
                   color: "#fff",
@@ -1517,48 +1615,82 @@ export default function ManagerDashboard() {
             >
 
               {/* SEMÁFORO */}
-              {rightTab === "alertas" && (
+              {rightTab === "equipe" && (
                 <Panel className="h-full overflow-y-auto">
-                  <SectionHeader label="Status da Equipe" icon={Shield} color="#00D4FF" />
+                  <SectionHeader label="Equipe" icon={Shield} color="#00D4FF" count={brokers.length} />
                   <div className="space-y-2">
                     {brokers.map((broker, i) => {
-                      const sem        = brokerSemaphore(broker, teamLeads);
-                      const c          = SEMAPHORE_COLORS[sem];
-                      const bl         = teamLeads.filter(l => l.brokerId === broker.id);
-                      const activeCount = bl.filter(l => !["CONCLUDED","ABANDONED","EXCLUDED"].includes(l.status)).length;
-                      const lastTs     = bl.map(l => l.lastBrokerWhatsappAt).filter(Boolean)
+                      const sem         = brokerSemaphore(broker, teamLeads);
+                      const c           = SEMAPHORE_COLORS[sem];
+                      const bl          = teamLeads.filter(l => l.brokerId === broker.id);
+                      const activeCount  = bl.filter(l => !["CONCLUDED","ABANDONED","EXCLUDED"].includes(l.status)).length;
+                      const lastTs       = bl.map(l => l.lastBrokerWhatsappAt).filter(Boolean)
                         .map(d => new Date(d!).getTime()).sort((a, b) => b - a)[0];
-                      const lastH      = lastTs ? Math.floor((Date.now() - lastTs) / 3600000) : null;
+                      const lastH        = lastTs ? Math.floor((Date.now() - lastTs) / 3600000) : null;
+                      const isPresent    = broker.leadAssignmentEnabled;
+                      const load         = activeCount === 0 ? "Livre" : activeCount < 20 ? "Normal" : "Cheio";
+                      const loadColor    = activeCount === 0 ? "#10B981" : activeCount < 20 ? "#F59E0B" : "#EF4444";
+                      const isLoading    = presencePending === broker.id;
 
                       return (
                         <motion.div key={broker.id}
                           initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: i * 0.04 }}
-                          className="flex items-center gap-3 rounded-xl px-3 py-2.5"
-                          style={{ background: c.bg, border: `1px solid ${c.border}` }}
+                          className="rounded-xl px-3 py-2.5"
+                          style={{ background: c.bg, border: `1px solid ${c.border}`, opacity: isPresent ? 1 : 0.65 }}
                         >
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-xs shrink-0"
-                            style={{ background: `${c.neon}20`, color: c.neon, border: `1px solid ${c.neon}40` }}>
-                            {initials(broker.name)}
+                          <div className="flex items-center gap-2.5">
+                            {/* Avatar + status dot */}
+                            <div className="relative shrink-0">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-xs"
+                                style={{ background: `${c.neon}20`, color: c.neon, border: `1px solid ${c.neon}40` }}>
+                                {initials(broker.name)}
+                              </div>
+                              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2"
+                                style={{ background: c.neon, borderColor: "var(--crm-surface, #080B14)" }} />
+                            </div>
+
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-white truncate leading-tight">{broker.name.split(" ")[0]}</p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[9px] font-bold" style={{ color: c.neon }}>{c.label}</span>
+                                <span style={{ color: "#1E293B" }}>·</span>
+                                <span className="text-[9px]" style={{ color: "#475569" }}>{activeCount} leads</span>
+                                {lastH !== null && (
+                                  <>
+                                    <span style={{ color: "#1E293B" }}>·</span>
+                                    <span className="text-[9px]" style={{ color: "#334155" }}>{lastH}h atrás</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Carga */}
+                            <span className="text-[9px] font-black px-2 py-0.5 rounded-full shrink-0"
+                              style={{ background: `${loadColor}15`, color: loadColor, border: `1px solid ${loadColor}30` }}>
+                              {load}
+                            </span>
+
+                            {/* Presença toggle */}
+                            <Switch
+                              checked={isPresent}
+                              onCheckedChange={() => {
+                                setPresencePending(broker.id);
+                                presenceMutation.mutate({ id: broker.id, present: !isPresent });
+                              }}
+                              disabled={isLoading}
+                              className="data-[state=checked]:bg-emerald-500 shrink-0"
+                            />
+
+                            {/* Alerta */}
+                            <button onClick={() => setAlertBroker({ broker })}
+                              className="p-1.5 rounded-lg transition-all hover:scale-105 shrink-0"
+                              style={{ background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}
+                              title="Enviar alerta">
+                              <Bell className="w-3.5 h-3.5" />
+                            </button>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-white truncate">{broker.name.split(" ")[0]}</p>
-                            <p className="text-[10px]" style={{ color: c.neon }}>
-                              {c.label} · {activeCount} ativos
-                              {lastH !== null ? ` · ${lastH}h atrás` : ""}
-                            </p>
-                          </div>
-                          {/* Botão de alerta */}
-                          <button
-                            onClick={() => setAlertBroker({ broker })}
-                            className="p-2 rounded-lg transition-all hover:scale-105 shrink-0"
-                            style={{ background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}
-                            title="Enviar alerta"
-                          >
-                            <Bell className="w-3.5 h-3.5" />
-                          </button>
-                          <div className="w-2 h-2 rounded-full shrink-0"
-                            style={{ background: c.neon, boxShadow: sem !== "off" ? `0 0 6px ${c.neon}` : "none" }} />
                         </motion.div>
                       );
                     })}
@@ -1570,9 +1702,6 @@ export default function ManagerDashboard() {
                         {SEMAPHORE_COLORS[s].label}
                       </span>
                     ))}
-                    <span className="ml-auto text-[10px] flex items-center gap-1" style={{ color: "#334155" }}>
-                      <Bell className="w-3 h-3" /> = alerta
-                    </span>
                   </div>
                 </Panel>
               )}
@@ -1629,8 +1758,8 @@ export default function ManagerDashboard() {
                 </Panel>
               )}
 
-              {/* INTELIGÊNCIA */}
-              {rightTab === "intel" && (() => {
+              {/* INTELIGÊNCIA — removida (fundida no painel de urgentes) */}
+              {false && (() => {
                 const activeLeads = teamLeads.filter(l => !["CONCLUDED","ABANDONED","EXCLUDED"].includes(l.status));
                 const withState   = activeLeads.map(l => ({ lead: l, state: leadStateMap[l.id] ?? null }));
                 const hot    = withState.filter(x => x.state?.intencao === "quente");
@@ -1748,8 +1877,8 @@ export default function ManagerDashboard() {
                 );
               })()}
 
-              {/* PRESENÇA */}
-              {rightTab === "presenca" && (
+              {/* PRESENÇA — fundida em Equipe */}
+              {false && (
                 <Panel className="h-full overflow-y-auto">
                   <SectionHeader label="Presença" icon={UserCheck} color="#10B981" />
                   <div className="grid grid-cols-2 gap-2 mb-4">
@@ -1809,8 +1938,8 @@ export default function ManagerDashboard() {
                 </Panel>
               )}
 
-              {/* FILA */}
-              {rightTab === "fila" && (
+              {/* FILA — fundida em Equipe */}
+              {false && (
                 <Panel className="h-full overflow-y-auto">
                   <SectionHeader label="Fila de Distribuição" icon={GitMerge} color="#818CF8" />
                   {presentBrokers.length === 0 ? (
@@ -1999,7 +2128,9 @@ export default function ManagerDashboard() {
           className="flex-1 flex flex-col items-center justify-center gap-0.5 transition-all"
           style={{ color: mobileView === "equipe" ? "#00D4FF" : "#475569" }}>
           <Shield className="w-5 h-5" />
-          <span className="text-[9px] font-bold uppercase">Equipe</span>
+          <span className="text-[9px] font-bold uppercase">
+            {rightTab === "equipe" ? "Equipe" : rightTab === "velocidade" ? "SLA" : "Ranking"}
+          </span>
         </button>
       </nav>
 
