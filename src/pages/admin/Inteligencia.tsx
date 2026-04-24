@@ -716,8 +716,8 @@ export default function Inteligencia() {
         </div>
       </section>
 
-      {/* ── Alertas Ativos (Guardian) ──────────────────────────────────────── */}
-      {alertasAtivos.length > 0 && (
+      {/* ── Alertas Ativos (Guardian) — oculto na visão executiva ─────────── */}
+      {false && alertasAtivos.length > 0 && (
         <section>
           <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-3 flex items-center gap-2">
             <Shield className="w-3.5 h-3.5 text-amber-400" />
@@ -822,8 +822,8 @@ export default function Inteligencia() {
         </Card>
       </section>
 
-      {/* ── Corretores Ignorando Leads ─────────────────────────────────────── */}
-      <section>
+      {/* ── Corretores Ignorando Leads — oculto na visão executiva ─────────── */}
+      {false && <section className="hidden">
         <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-3 flex items-center gap-2">
           <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
           Corretores Ignorando Leads
@@ -895,7 +895,7 @@ export default function Inteligencia() {
             )}
           </div>
         )}
-      </section>
+      </section>}
 
       {/* ── Cerebro Orquestrador ───────────────────────────────────────────── */}
       <section>
