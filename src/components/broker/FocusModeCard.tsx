@@ -10,7 +10,7 @@ import { differenceInMinutes, differenceInHours } from "date-fns";
 import {
   Flame, Zap, Calendar, FileText, Clock, Bot,
   MessageSquare, ChevronRight, ChevronLeft,
-  CheckCircle2, X, Check, AlertTriangle,
+  CheckCircle2, X, Check, AlertTriangle, UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -133,6 +133,7 @@ export function FocusModeCard({ onSelectLead, botActiveLeadIds = new Set() }: Fo
   const [index, setIndex] = useState(0);
   const [lostSheetOpen, setLostSheetOpen] = useState(false);
   const [pendingLostLeadId, setPendingLostLeadId] = useState<string | null>(null);
+  const [checkInLeadId, setCheckInLeadId] = useState<string | null>(null);
   const now = Date.now();
 
   const { data: leads = [] } = useQuery<Lead[]>({
@@ -287,6 +288,31 @@ export function FocusModeCard({ onSelectLead, botActiveLeadIds = new Set() }: Fo
               WhatsApp
             </button>
           )}
+
+          {/* Check-in manual — falou fora do chip */}
+          <button
+            onClick={async () => {
+              await registerBrokerContact(current.lead.id);
+              await supabase.from("lead_notes").insert({
+                lead_id: current.lead.id,
+                content: "✅ Check-in: corretor confirmou contato com o cliente fora do chip",
+              });
+              queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
+              setCheckInLeadId(current.lead.id);
+              setTimeout(() => setCheckInLeadId(null), 3000);
+            }}
+            disabled={checkInLeadId === current.lead.id}
+            title="Falei com o cliente agora (fora do chip)"
+            className={cn(
+              "flex items-center gap-1 px-2.5 py-2 rounded-lg text-[11px] font-black transition-all active:scale-95",
+              checkInLeadId === current.lead.id
+                ? "bg-emerald-500/20 text-emerald-300 cursor-default"
+                : "bg-white/5 hover:bg-sky-500/15 text-gray-400 hover:text-sky-300"
+            )}
+          >
+            <UserCheck className="w-3 h-3 shrink-0" />
+            {checkInLeadId === current.lead.id ? "✓" : ""}
+          </button>
 
           {next && (
             <button

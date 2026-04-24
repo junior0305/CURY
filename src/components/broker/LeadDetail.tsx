@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLeadsForDashboard, updateLeadStatus, touchLeadInteraction, registerBrokerContact } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
-import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin, Brain, BrainCircuit, ChevronLeft, ChevronRight, Home, Handshake } from "lucide-react";
+import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin, Brain, BrainCircuit, ChevronLeft, ChevronRight, Home, Handshake, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -55,6 +55,7 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
   const [isSendingNote, setIsSendingNote] = useState(false);
   const [showQualModal, setShowQualModal] = useState(false);
   const [nextHighlighted, setNextHighlighted] = useState(false);
+  const [checkInDone, setCheckInDone] = useState(false);
 
   const { data: leads = [], isLoading } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
@@ -200,6 +201,15 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
     // Registra contato — zera contador de horas e reinicia countdown de redistribuição
     registerBrokerContact(leadId);
     sendNoteMutation.mutate("Clicou para ligar");
+  };
+
+  const handleCheckIn = async () => {
+    if (!leadId || !lead) return;
+    await registerBrokerContact(leadId);
+    sendNoteMutation.mutate("✅ Check-in: corretor confirmou contato com o cliente fora do chip");
+    setCheckInDone(true);
+    toast.success("Check-in registrado!");
+    setTimeout(() => setCheckInDone(false), 3000);
   };
 
   if (!leadId) {
@@ -431,6 +441,20 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
             </button>
           ))}
         </div>
+
+        {/* Check-in manual — falou fora do chip */}
+        <button
+          onClick={handleCheckIn}
+          disabled={checkInDone}
+          className={cn(
+            "w-full flex items-center justify-center gap-2 py-2 rounded-xl border text-xs font-bold transition-all mb-2",
+            checkInDone
+              ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-300 cursor-default"
+              : "border-sky-500/25 bg-sky-500/8 hover:bg-sky-500/15 hover:border-sky-500/40 text-sky-400 active:scale-[0.98]"
+          )}>
+          <UserCheck className="w-3.5 h-3.5 shrink-0" />
+          {checkInDone ? "✓ Contato registrado!" : "Falei com o cliente agora"}
+        </button>
 
         {/* Input de nota */}
         <div className="flex gap-2 mb-3">
