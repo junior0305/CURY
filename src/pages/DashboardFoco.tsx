@@ -11,7 +11,7 @@ import {
   MessageSquare, Phone, Calendar, X, Zap, Flame, Trophy,
   LogOut, CheckCircle2, Loader2, Bot, UserCheck,
   ChevronLeft, ChevronRight, FileText, AlertTriangle, Copy, RefreshCw,
-  Volume2, VolumeX, PlusCircle, Shield, Star, Send, Sparkles,
+  Volume2, VolumeX, PlusCircle, Shield, Star, Send, Sparkles, ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -322,6 +322,7 @@ export default function DashboardFoco(){
   const [coachMessages,setCoachMessages]=useState<{role:"user"|"assistant";content:string}[]>([]);
   const [coachInput,setCoachInput]=useState("");
   const [coachLoading,setCoachLoading]=useState(false);
+  const [fllwExpanded,setFllwExpanded]=useState(false);
   const taRef=useRef<HTMLTextAreaElement>(null);
   const coachEndRef=useRef<HTMLDivElement>(null);
 
@@ -695,7 +696,7 @@ export default function DashboardFoco(){
                 <div className="text-center">
                   <p className="foco-disp text-xl font-bold text-emerald-400">MISSÃO CUMPRIDA!</p>
                   <p className="text-slate-400 text-sm mt-1">Todos os leads foram atendidos</p>
-                  {fllwCount>0&&<p className="text-slate-500 text-xs mt-2">🤖 {fllwCount} no follow-up automático</p>}
+                  {fllwCount>0&&<p className="text-slate-500 text-xs mt-2 cursor-pointer hover:text-slate-400 transition-colors" onClick={()=>setFllwExpanded(v=>!v)}>🤖 {fllwCount} no follow-up automático — ver</p>}
                 </div>
               </div>
             )}
@@ -920,6 +921,72 @@ export default function DashboardFoco(){
                   style={{background:"rgba(0,212,255,.08)",border:"1px solid rgba(0,212,255,.2)",color:"#00D4FF"}}>
                   Próximo <ChevronRight className="w-3.5 h-3.5"/>
                 </button>
+              </div>
+            )}
+            {/* ── FOLLOW-UP AUTOMÁTICO — seção expansível ── */}
+            {fllwCount>0&&(
+              <div className="shrink-0 rounded-xl overflow-hidden" style={{background:"rgba(100,116,139,.08)",border:"1px solid rgba(100,116,139,.2)"}}>
+                <button
+                  onClick={()=>setFllwExpanded(v=>!v)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 transition-all hover:brightness-110"
+                >
+                  <div className="flex items-center gap-2">
+                    <Bot className="w-3.5 h-3.5 text-slate-400"/>
+                    <span className="text-[11px] font-black uppercase tracking-wide text-slate-400">
+                      {fllwCount} lead{fllwCount>1?"s":""} com bot ativo
+                    </span>
+                  </div>
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${fllwExpanded?"rotate-180":""}`}/>
+                </button>
+                <AnimatePresence>
+                  {fllwExpanded&&(
+                    <motion.div
+                      initial={{height:0,opacity:0}} animate={{height:"auto",opacity:1}} exit={{height:0,opacity:0}}
+                      transition={{duration:.2}} className="overflow-hidden"
+                    >
+                      <div className="flex flex-col gap-1 px-2 pb-2">
+                        {followupLeads.map(fl=>{
+                          const minsAgoFl=fl.lastInteractionAt?Math.floor((Date.now()-new Date(fl.lastInteractionAt).getTime())/60000):null;
+                          const timeLabel=minsAgoFl===null?"—":minsAgoFl<60?`${minsAgoFl}min`:`${Math.floor(minsAgoFl/60)}h`;
+                          return(
+                            <div key={fl.id} className="flex items-center gap-2 px-2 py-2 rounded-lg" style={{background:"rgba(0,0,0,.2)"}}>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-bold text-slate-300 truncate">{fl.name}</p>
+                                <p className="text-[10px] text-slate-500">{fl.contactAttempts} tent. · {timeLabel} atrás</p>
+                              </div>
+                              <div className="flex gap-1 shrink-0">
+                                {fl.phone&&(
+                                  <button
+                                    onClick={()=>window.open(`https://wa.me/${fl.phone.replace(/\D/g,"")}`, "_blank")}
+                                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-emerald-400 transition-all hover:bg-emerald-500/10"
+                                    style={{border:"1px solid rgba(16,185,129,.25)"}}
+                                    title="Abrir WhatsApp"
+                                  >
+                                    <MessageSquare className="w-3 h-3"/>
+                                  </button>
+                                )}
+                                <button
+                                  onClick={async()=>{
+                                    await updateLeadStatus(fl.id,"IN_PROGRESS");
+                                    qc.invalidateQueries({queryKey:["focoLeads"]});
+                                    setFllwExpanded(false);
+                                    toast.success(`${fl.name} voltou para a fila`);
+                                  }}
+                                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-cyan-400 transition-all hover:bg-cyan-500/10"
+                                  style={{border:"1px solid rgba(0,212,255,.25)"}}
+                                  title="Retomar atendimento"
+                                >
+                                  <UserCheck className="w-3 h-3"/>
+                                  Retomar
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )}
           </div>
