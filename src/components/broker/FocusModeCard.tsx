@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { fetchLeadsForDashboard, registerBrokerContact, updateLeadStatus } from "@/integrations/supabase/leads";
+import { fetchLeadsForDashboard, registerBrokerContact, updateLeadStatus, togglePauseAutoMessages } from "@/integrations/supabase/leads";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { Lead, LeadStatus, NEXT_STATUS, LOST_REASON_LABEL, TIPO_TRABALHO_LABEL, LostReason } from "@/types/lead";
@@ -10,7 +10,7 @@ import { differenceInMinutes, differenceInHours } from "date-fns";
 import {
   Flame, Zap, Calendar, FileText, Clock, Bot,
   MessageSquare, ChevronRight, ChevronLeft,
-  CheckCircle2, X, Check, AlertTriangle, UserCheck,
+  CheckCircle2, X, Check, AlertTriangle, UserCheck, BellOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -134,6 +134,7 @@ export function FocusModeCard({ onSelectLead, botActiveLeadIds = new Set() }: Fo
   const [lostSheetOpen, setLostSheetOpen] = useState(false);
   const [pendingLostLeadId, setPendingLostLeadId] = useState<string | null>(null);
   const [checkInLeadId, setCheckInLeadId] = useState<string | null>(null);
+  const [pausingLeadId, setPausingLeadId] = useState<string | null>(null);
   const now = Date.now();
 
   const { data: leads = [] } = useQuery<Lead[]>({
@@ -273,7 +274,7 @@ export function FocusModeCard({ onSelectLead, botActiveLeadIds = new Set() }: Fo
         </div>
 
         {/* Ações */}
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {current.lead.phone && (
             <button
               onClick={() => {
@@ -324,6 +325,31 @@ export function FocusModeCard({ onSelectLead, botActiveLeadIds = new Set() }: Fo
               {next.label}
             </button>
           )}
+
+          {/* Toggle pausa automações */}
+          <button
+            onClick={async () => {
+              const lead = current.lead;
+              setPausingLeadId(lead.id);
+              try {
+                await togglePauseAutoMessages(lead.id, !lead.pauseAutoMessages);
+                queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
+              } finally {
+                setPausingLeadId(null);
+              }
+            }}
+            disabled={pausingLeadId === current.lead.id}
+            title={current.lead.pauseAutoMessages ? "Automações pausadas — clique para reativar" : "Pausar follow-up automático"}
+            className={cn(
+              "flex items-center gap-1 px-2.5 py-2 rounded-lg text-[11px] font-black transition-all active:scale-95",
+              current.lead.pauseAutoMessages
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                : "bg-white/5 hover:bg-white/10 text-gray-500 hover:text-gray-300"
+            )}
+          >
+            <BellOff className="w-3 h-3 shrink-0" />
+            {current.lead.pauseAutoMessages ? "Pausado" : ""}
+          </button>
 
           <button
             onClick={() => onSelectLead(current.lead.id)}
