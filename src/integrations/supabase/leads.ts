@@ -28,6 +28,7 @@ const mapLeadFromDB = (l: any): Lead => ({
   originalBrokerId:   l.original_broker_id  ?? null,
   redistributionCount: l.redistribution_count ?? 0,
   reactivatedAt:      l.reactivated_at      ?? null,
+  pauseAutoMessages:  l.pause_auto_messages ?? false,
 });
 
 // ─── XP por transição de status ───────────────────────────────────────────────
@@ -420,6 +421,18 @@ export const setLeadNegotiating = async (leadId: string) => {
       negotiating_since: now,
       last_interaction_at: now,
     })
+    .eq("id", leadId);
+  if (error) throw error;
+};
+
+/**
+ * Liga/desliga a pausa de mensagens automáticas de um lead.
+ * Quando pauseAutoMessages=true, nenhum agente envia WhatsApp para esse lead.
+ */
+export const togglePauseAutoMessages = async (leadId: string, pause: boolean): Promise<void> => {
+  const { error } = await supabase
+    .from("leads")
+    .update({ pause_auto_messages: pause })
     .eq("id", leadId);
   if (error) throw error;
 };
