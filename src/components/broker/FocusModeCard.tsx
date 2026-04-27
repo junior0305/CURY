@@ -110,6 +110,15 @@ function getPriority(lead: Lead, tasks: Task[], now: number, botIds: Set<string>
     }
   }
 
+  // 8. Automação pausada — manter lead visível para o corretor conduzir manualmente
+  if (lead.pauseAutoMessages) {
+    return {
+      lead, priority: "normal", icon: BellOff,
+      label: "Bot pausado",
+      action: `Follow-up automático pausado para ${lead.name} — conduza manualmente`,
+    };
+  }
+
   return null;
 }
 
