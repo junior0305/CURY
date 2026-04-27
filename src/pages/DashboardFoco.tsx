@@ -323,6 +323,7 @@ export default function DashboardFoco(){
   const [coachInput,setCoachInput]=useState("");
   const [coachLoading,setCoachLoading]=useState(false);
   const [fllwExpanded,setFllwExpanded]=useState(false);
+  const [statusPickerOpen,setStatusPickerOpen]=useState(false);
   const taRef=useRef<HTMLTextAreaElement>(null);
   const coachEndRef=useRef<HTMLDivElement>(null);
 
@@ -887,6 +888,56 @@ export default function DashboardFoco(){
                           <div className="grid grid-cols-2 gap-2">
                             {getOutcomes(lead).map(o=><OutcomeBtn key={o.id} o={o} loading={mutating}/>)}
                           </div>
+
+                          {/* ── ALTERAR STATUS MANUAL ── */}
+                          <button
+                            onClick={()=>setStatusPickerOpen(v=>!v)}
+                            className="w-full flex items-center justify-center gap-1.5 mt-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all hover:brightness-110"
+                            style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#475569"}}
+                          >
+                            <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${statusPickerOpen?"rotate-180":""}`}/>
+                            Alterar estágio manualmente
+                          </button>
+                          <AnimatePresence>
+                            {statusPickerOpen&&(
+                              <motion.div
+                                initial={{height:0,opacity:0}} animate={{height:"auto",opacity:1}} exit={{height:0,opacity:0}}
+                                transition={{duration:.18}} className="overflow-hidden mt-1"
+                              >
+                                <div className="grid grid-cols-3 gap-1.5 pt-1">
+                                  {([
+                                    {s:"NEW",           label:"Novo",        emoji:"⚡", color:"#38BDF8"},
+                                    {s:"IN_PROGRESS",   label:"Atendimento", emoji:"💬", color:"#818CF8"},
+                                    {s:"NEGOTIATING",   label:"Negociando",  emoji:"🤝", color:"#FB923C"},
+                                    {s:"VISIT_SCHEDULED",label:"Visita Marc.",emoji:"📅", color:"#34D399"},
+                                    {s:"VISITA_REALIZADA",label:"Veio à Visita",emoji:"🏠",color:"#10B981"},
+                                    {s:"DOCS_REQUESTED",label:"Docs Pend.",  emoji:"📄", color:"#FBBF24"},
+                                  ] as const).map(({s,label,emoji,color})=>{
+                                    const isCurrent=lead.status===s;
+                                    return(
+                                      <button key={s}
+                                        disabled={isCurrent||mutating}
+                                        onClick={async()=>{
+                                          setStatusPickerOpen(false);
+                                          await advance(s as LeadStatus);
+                                        }}
+                                        className="flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-default hover:brightness-110 active:scale-95"
+                                        style={{
+                                          background:isCurrent?`${color}22`:"rgba(255,255,255,.04)",
+                                          border:isCurrent?`1px solid ${color}55`:"1px solid rgba(255,255,255,.08)",
+                                          color:isCurrent?color:"#64748B",
+                                        }}
+                                      >
+                                        <span className="text-base leading-none">{emoji}</span>
+                                        <span className="leading-tight text-center">{label}</span>
+                                        {isCurrent&&<span className="text-[8px] opacity-60">atual</span>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </motion.div>
                       )}
                     </AnimatePresence>
