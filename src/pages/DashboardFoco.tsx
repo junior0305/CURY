@@ -310,6 +310,8 @@ export default function DashboardFoco(){
   const [lostSheet,setLostSheet]=useState(false);
   const [noShowSheet,setNoShowSheet]=useState(false);
   const [visitSheet,setVisitSheet]=useState(false);
+  const [saleSheet,setSaleSheet]=useState(false);
+  const [saleValue,setSaleValue]=useState("");
   const [visitDate,setVisitDate]=useState("");
   const [visitTime,setVisitTime]=useState("10:00");
   const [isLeadFormOpen,setIsLeadFormOpen]=useState(false);
@@ -583,7 +585,7 @@ export default function DashboardFoco(){
       res.push(
         {id:"visit", label:"Agendar Visita",          desc:"Próximo passo natural da negociação",            icon:<Calendar     className="w-4 h-4"/>,color:"#34D399",bg:"rgba(52,211,153,.15)",border:"rgba(52,211,153,.45)",primary:true,full:true,action:()=>{setVisitDate("");setVisitSheet(true);}},
         {id:"docs",  label:"Docs Recebidos",          desc:"Documentação entregue — quase lá!",              icon:<FileText     className="w-4 h-4"/>,color:"#FBBF24",bg:"rgba(251,191,36,.13)",border:"rgba(251,191,36,.4)",               action:()=>advance("DOCS_REQUESTED")},
-        {id:"close", label:"Fechar Venda 🏆",         desc:"Negócio concluído — parabéns!",                  icon:<Trophy       className="w-4 h-4"/>,color:"#F59E0B",bg:"rgba(245,158,11,.18)",border:"rgba(245,158,11,.5)",               action:()=>advance("CONCLUDED")},
+        {id:"close", label:"Fechar Venda 🏆",         desc:"Negócio concluído — parabéns!",                  icon:<Trophy       className="w-4 h-4"/>,color:"#F59E0B",bg:"rgba(245,158,11,.18)",border:"rgba(245,158,11,.5)",               action:()=>{setSaleValue("");setSaleSheet(true);}},
         {id:"no",    label:"Sem resposta",            desc:"Registra tentativa e vai para próximo lead",     icon:<Phone        className="w-4 h-4"/>,color:"#94A3B8",bg:"rgba(100,116,139,.1)", border:"rgba(100,116,139,.3)",             action:handleNoAnswer},
       );
     }
@@ -597,12 +599,12 @@ export default function DashboardFoco(){
     if(s==="VISITA_REALIZADA"){
       res.push(
         {id:"docs",  label:"Solicitar Documentos",   desc:"Move para etapa de documentação",                icon:<FileText     className="w-4 h-4"/>,color:"#FBBF24",bg:"rgba(251,191,36,.16)",border:"rgba(251,191,36,.5)",primary:true,full:true,action:()=>advance("DOCS_REQUESTED")},
-        {id:"close", label:"Fechar Venda 🏆",         desc:"Negócio fechado na visita — venda confirmada!",  icon:<Trophy       className="w-4 h-4"/>,color:"#F59E0B",bg:"rgba(245,158,11,.18)",border:"rgba(245,158,11,.5)",               action:()=>advance("CONCLUDED")},
+        {id:"close", label:"Fechar Venda 🏆",         desc:"Negócio fechado na visita — venda confirmada!",  icon:<Trophy       className="w-4 h-4"/>,color:"#F59E0B",bg:"rgba(245,158,11,.18)",border:"rgba(245,158,11,.5)",               action:()=>{setSaleValue("");setSaleSheet(true);}},
       );
     }
     if(s==="DOCS_REQUESTED"){
       res.push(
-        {id:"close", label:"Fechar Venda 🏆",         desc:"Documentação completa — venda confirmada!",      icon:<Trophy       className="w-4 h-4"/>,color:"#F59E0B",bg:"rgba(245,158,11,.2)", border:"rgba(245,158,11,.6)",primary:true,full:true,action:()=>advance("CONCLUDED")},
+        {id:"close", label:"Fechar Venda 🏆",         desc:"Documentação completa — venda confirmada!",      icon:<Trophy       className="w-4 h-4"/>,color:"#F59E0B",bg:"rgba(245,158,11,.2)", border:"rgba(245,158,11,.6)",primary:true,full:true,action:()=>{setSaleValue("");setSaleSheet(true);}},
       );
     }
     if(!["VISIT_SCHEDULED"].includes(s)){
@@ -1397,6 +1399,64 @@ export default function DashboardFoco(){
                   <p className="text-xs text-slate-500 mt-0.5">Lead perdido — informar o motivo e encerrar</p>
                 </div>
               </button>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* ── SHEET: CONFIRMAR VENDA ── */}
+        <Sheet open={saleSheet} onOpenChange={setSaleSheet}>
+          <SheetContent side="bottom" className="bg-[#080B14] border-white/10 text-white rounded-t-2xl pb-8">
+            <SheetHeader className="mb-5">
+              <SheetTitle className="text-white flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-amber-400"/>
+                Confirmar venda fechada
+              </SheetTitle>
+            </SheetHeader>
+            <div className="space-y-4">
+              {/* Lead destaque */}
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.3)"}}>
+                <span className="text-2xl">🏆</span>
+                <div>
+                  <p className="font-black text-white text-base">{lead?.name}</p>
+                  <p className="text-xs text-amber-400/70">{lead?.phone}</p>
+                </div>
+              </div>
+
+              {/* Valor da venda (opcional) */}
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-1.5 block">
+                  Valor da venda <span className="text-slate-600 normal-case font-normal">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={saleValue}
+                  onChange={e=>setSaleValue(e.target.value)}
+                  placeholder="Ex: R$ 180.000"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder-slate-600 outline-none focus:border-amber-500/50"
+                />
+              </div>
+
+              {/* Botões */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={()=>setSaleSheet(false)}
+                  className="flex-1 py-3 rounded-xl text-sm font-bold transition-all"
+                  style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",color:"#64748B"}}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={async()=>{
+                    setSaleSheet(false);
+                    await advance("CONCLUDED");
+                  }}
+                  disabled={mutating}
+                  className="flex-2 flex-1 py-3 rounded-xl text-sm font-black transition-all disabled:opacity-50 hover:brightness-110"
+                  style={{background:"linear-gradient(135deg,#F59E0B,#D97706)",color:"#080B14"}}
+                >
+                  🏆 Confirmar Venda
+                </button>
+              </div>
             </div>
           </SheetContent>
         </Sheet>
