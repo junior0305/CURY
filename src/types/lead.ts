@@ -79,6 +79,7 @@ export interface Lead {
   originalBrokerId: string | null;     // Corretor original antes de redistribuição
   redistributionCount: number;         // Quantas vezes foi redistribuído
   reactivatedAt: string | null;        // Quando o lead respondeu ao bot e foi reativado
+  pauseAutoMessages: boolean;          // Corretor pausou envios automáticos — está em conversa ativa
 }
 
 // Labels para exibição na UI

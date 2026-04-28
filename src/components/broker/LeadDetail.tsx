@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchLeadsForDashboard, updateLeadStatus, touchLeadInteraction, registerBrokerContact } from "@/integrations/supabase/leads";
+import { fetchLeadsForDashboard, updateLeadStatus, touchLeadInteraction, registerBrokerContact, togglePauseAutoMessages } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
-import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin, Brain, BrainCircuit, ChevronLeft, ChevronRight, Home, Handshake, UserCheck } from "lucide-react";
+import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin, Brain, BrainCircuit, ChevronLeft, ChevronRight, Home, Handshake, UserCheck, BellOff, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -56,6 +56,7 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
   const [showQualModal, setShowQualModal] = useState(false);
   const [nextHighlighted, setNextHighlighted] = useState(false);
   const [checkInDone, setCheckInDone] = useState(false);
+  const [togglingPause, setTogglingPause] = useState(false);
 
   const { data: leads = [], isLoading } = useQuery<Lead[]>({
     queryKey: ["dashboardLeads"],
@@ -455,6 +456,38 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
           <UserCheck className="w-3.5 h-3.5 shrink-0" />
           {checkInDone ? "✓ Contato registrado!" : "Falei com o cliente agora"}
         </button>
+
+        {/* Toggle: pausar mensagens automáticas */}
+        {lead && (
+          <button
+            onClick={async () => {
+              if (!leadId) return;
+              setTogglingPause(true);
+              try {
+                const next = !lead.pauseAutoMessages;
+                await togglePauseAutoMessages(leadId, next);
+                queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
+                toast.success(next
+                  ? "Automações pausadas — o bot não vai interferir nessa conversa."
+                  : "Automações reativadas — o sistema voltará a enviar follow-ups."
+                );
+              } finally {
+                setTogglingPause(false);
+              }
+            }}
+            disabled={togglingPause}
+            className={cn(
+              "w-full flex items-center justify-center gap-2 py-2 rounded-xl border text-xs font-bold transition-all mb-2",
+              lead.pauseAutoMessages
+                ? "border-amber-500/60 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 active:scale-[0.98]"
+                : "border-white/10 bg-white/5 text-gray-500 hover:bg-white/10 hover:text-gray-300 active:scale-[0.98]"
+            )}>
+            {lead.pauseAutoMessages
+              ? <><BellOff className="w-3.5 h-3.5 shrink-0" /> Automações pausadas — toque para reativar</>
+              : <><Bell className="w-3.5 h-3.5 shrink-0" /> Pausar follow-up automático</>
+            }
+          </button>
+        )}
 
         {/* Input de nota */}
         <div className="flex gap-2 mb-3">

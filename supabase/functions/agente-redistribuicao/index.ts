@@ -8,6 +8,18 @@ const corsHeaders = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Status que NÃO devem ser resetados para 'NEW' ao redistribuir.
+ * Lead em NEGOTIATING/VISIT_SCHEDULED/DOCS_REQUESTED não pode perder o estágio.
+ * Resetar para NEW faz o scheduler mandar mensagem de boas-vindas novamente,
+ * constrangendo o lead que já está avançado no funil.
+ */
+const ADVANCED_STATUSES = ['NEGOTIATING', 'VISIT_SCHEDULED', 'VISITA_REALIZADA', 'DOCS_REQUESTED'];
+
+function statusAfterRedistribution(currentStatus: string): string {
+  return ADVANCED_STATUSES.includes(currentStatus) ? currentStatus : 'NEW';
+}
+
 function getSetting(settings: any[], key: string, fallback: number): number {
   const s = settings.find((s: any) => s.key === key);
   return Math.max(1, parseInt(String(s?.value ?? fallback), 10) || fallback);
@@ -200,7 +212,7 @@ serve(async (req) => {
     // e o novo corretor também ficou sem responder por 48h
     const { data: stage2Leads } = await supabase
       .from('leads')
-      .select('id, name, tag, broker_id, manager_id, redistribution_stage, original_broker_id, broker:profiles!broker_id(id, first_name, protect_own_leads, manager_id)')
+      .select('id, name, tag, status, broker_id, manager_id, redistribution_stage, original_broker_id, broker:profiles!broker_id(id, first_name, protect_own_leads, manager_id)')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .eq('redistribution_stage', 1)
       .lt('redistributed_at', stage2ThresholdAgo)
@@ -231,7 +243,7 @@ serve(async (req) => {
 
       await supabase.from('leads').update({
         broker_id:             newBroker.id,
-        status:                'NEW',
+        status:                statusAfterRedistribution(lead.status),
         redistribution_stage:  2,
         redistributed_at:      now,
         no_redistribute:       false, // perde proteção de lead próprio
@@ -277,7 +289,7 @@ serve(async (req) => {
     // ── PASSO C: Stage 1 — Lead do gerente (no_redistribute=false) ───────────
     const { data: gerenteLeads } = await supabase
       .from('leads')
-      .select('id, name, tag, broker_id, last_lead_response_at, last_broker_whatsapp_at, broker:profiles!broker_id(id, first_name, protect_own_leads, bot_instance_id, manager_id, phone)')
+      .select('id, name, tag, status, broker_id, last_lead_response_at, last_broker_whatsapp_at, broker:profiles!broker_id(id, first_name, protect_own_leads, bot_instance_id, manager_id, phone)')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .eq('no_redistribute', false)
       .eq('redistribution_stage', 0)
@@ -323,7 +335,7 @@ serve(async (req) => {
 
       await supabase.from('leads').update({
         broker_id:             newBroker.id,
-        status:                'NEW',
+        status:                statusAfterRedistribution(lead.status),
         redistribution_stage:  1,
         redistributed_at:      now,
         original_broker_id:    oldBrokerId,
@@ -377,7 +389,7 @@ serve(async (req) => {
     // ── PASSO D: Stage 1 — Lead próprio (no_redistribute=true, 7 dias) ───────
     const { data: proprioLeads } = await supabase
       .from('leads')
-      .select('id, name, tag, broker_id, last_interaction_at, broker:profiles!broker_id(id, first_name, protect_own_leads, manager_id, phone)')
+      .select('id, name, tag, status, broker_id, last_interaction_at, broker:profiles!broker_id(id, first_name, protect_own_leads, manager_id, phone)')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .eq('no_redistribute', true)
       .eq('redistribution_stage', 0)
@@ -404,7 +416,7 @@ serve(async (req) => {
 
       await supabase.from('leads').update({
         broker_id:             newBroker.id,
-        status:                'NEW',
+        status:                statusAfterRedistribution(lead.status),
         redistribution_stage:  1,
         redistributed_at:      now,
         original_broker_id:    oldBrokerId,
@@ -496,7 +508,7 @@ serve(async (req) => {
 
       await supabase.from('leads').update({
         broker_id:               newBroker.id,
-        status:                  'NEW',
+        status:                  'IN_PROGRESS', // silencioso: nunca respondeu, vai para IN_PROGRESS (não NEW para não disparar welcome)
         redistribution_stage:    1,
         redistributed_at:        now,
         original_broker_id:      oldBrokerId,
