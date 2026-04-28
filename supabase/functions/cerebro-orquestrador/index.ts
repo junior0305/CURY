@@ -301,6 +301,7 @@ serve(async (req) => {
       .select('id, last_lead_response_at, last_broker_whatsapp_at')
       .in('status', ['NEW', 'IN_PROGRESS'])
       .not('broker_id', 'is', null)
+      .eq('pause_auto_messages', false)
       .or(`last_interaction_at.lt.${twentyFourAgo},and(last_interaction_at.is.null,created_at.lt.${twentyFourAgo})`)
       .limit(60);
 

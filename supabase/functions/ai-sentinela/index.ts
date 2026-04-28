@@ -279,6 +279,7 @@ serve(async (req) => {
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .lt('last_interaction_at', thresholdAgo)
       .not('broker_id', 'is', null)
+      .eq('pause_auto_messages', false)
       .limit(20);
 
     const { data: staleWithoutInteraction } = await supabase
@@ -288,6 +289,7 @@ serve(async (req) => {
       .is('last_interaction_at', null)
       .lt('created_at', thresholdAgo)
       .not('broker_id', 'is', null)
+      .eq('pause_auto_messages', false)
       .limit(10);
 
     // Deduplicar

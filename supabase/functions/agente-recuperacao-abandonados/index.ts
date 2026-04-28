@@ -59,6 +59,7 @@ serve(async (req) => {
       .not('broker_id', 'is', null)
       .not('phone', 'is', null)
       .lt('updated_at', abandonadosApartirDe)
+      .eq('pause_auto_messages', false)
       .limit(15);
 
     console.log(`[agente-recuperacao] ${abandonados?.length ?? 0} leads abandonados elegíveis`);

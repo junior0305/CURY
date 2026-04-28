@@ -59,6 +59,7 @@ serve(async (req) => {
       .in('status', ['NEW', 'IN_PROGRESS'])
       .not('broker_id', 'is', null)
       .gte('last_lead_response_at', ago30min)  // lead respondeu recentemente
+      .eq('pause_auto_messages', false)
       .limit(50);
 
     if (!hotLeads?.length) {
