@@ -201,8 +201,14 @@ serve(async (req) => {
       );
     }
 
-    const phoneNumber = payload?.data?.key?.remoteJid?.replace('@s.whatsapp.net', '') ||
-                        payload?.key?.remoteJid?.replace('@s.whatsapp.net', '');
+    const rawPhone = payload?.data?.key?.remoteJid?.replace('@s.whatsapp.net', '') ||
+                     payload?.key?.remoteJid?.replace('@s.whatsapp.net', '');
+    // Normaliza: remove prefixo '+' para comparação uniforme (Evolution nunca envia com +)
+    const phoneNumber = rawPhone;
+    // Variantes para lookup no banco (alguns leads são salvos com + outros sem)
+    const phoneVariantsGlobal = rawPhone
+      ? [rawPhone, `+${rawPhone}`, rawPhone.replace(/^\+/, '')].filter((v, i, a) => a.indexOf(v) === i)
+      : [];
     const fromMe = payload?.data?.key?.fromMe === true || payload?.key?.fromMe === true;
     const messageText = payload?.data?.message?.conversation || payload?.data?.message?.extendedTextMessage?.text || payload?.message?.conversation || payload?.message?.extendedTextMessage?.text;
     const messageId = payload?.data?.key?.id || payload?.key?.id;
@@ -242,7 +248,7 @@ serve(async (req) => {
         await supabase
           .from('leads')
           .update({ last_broker_whatsapp_at: now })
-          .eq('phone', phoneNumber)
+          .in('phone', phoneVariantsGlobal)
           .not('status', 'in', '("ABANDONED","EXCLUDED")');
         console.log(`[webhook_receiver] corretor → lead ${phoneNumber}`);
 
@@ -250,7 +256,7 @@ serve(async (req) => {
         const { data: humanLeads } = await supabase
           .from('leads')
           .select('id')
-          .eq('phone', phoneNumber)
+          .in('phone', phoneVariantsGlobal)
           .not('status', 'in', '("ABANDONED","EXCLUDED","CONCLUDED")')
           .limit(5);
         for (const l of humanLeads || []) {
@@ -268,7 +274,7 @@ serve(async (req) => {
         const { data: brokerLead } = await supabase
           .from('leads')
           .select('id, status')
-          .eq('phone', phoneNumber)
+          .in('phone', phoneVariantsGlobal)
           .not('status', 'in', '("ABANDONED","EXCLUDED")')
           .limit(1)
           .maybeSingle();
@@ -327,10 +333,13 @@ serve(async (req) => {
 
       } else {
         // ── Lead enviou mensagem → atualiza last_lead_response_at
+        // Normaliza o telefone: Evolution envia sem '+', mas alguns leads têm '+' no banco
+        const phoneVariants = [phoneNumber, `+${phoneNumber}`, phoneNumber.replace(/^\+/, '')].filter(Boolean);
+
         const { data: lead } = await supabase
           .from('leads')
-          .select('id, broker_id, name, welcome_responded_at, welcome_template_id, broker:profiles!broker_id(id, first_name, phone, bot_instance_id, manager_id)')
-          .eq('phone', phoneNumber)
+          .select('id, broker_id, name, welcome_responded_at, welcome_template_id, ai_qualification_queue_id, ai_qualified_at, broker:profiles!broker_id(id, first_name, phone, bot_instance_id, manager_id)')
+          .in('phone', phoneVariants)
           .not('status', 'in', '("ABANDONED","EXCLUDED")')
           .order('created_at', { ascending: false })
           .limit(1)
@@ -594,7 +603,7 @@ Responda APENAS em JSON válido, sem markdown:
     const { data: leadStatusCheck } = await supabase
       .from('leads')
       .select('id, status')
-      .eq('phone', phoneNumber)
+      .in('phone', phoneVariantsGlobal)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -606,11 +615,11 @@ Responda APENAS em JSON válido, sem markdown:
       });
     }
 
-    // Find active conversation for this lead
+    // Find active conversation for this lead (tenta todas as variantes do telefone)
     const { data: conversation } = await supabase
       .from('ia_conversations')
       .select('*')
-      .eq('lead_phone', phoneNumber)
+      .in('lead_phone', phoneVariantsGlobal)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
       .limit(1)
@@ -620,7 +629,7 @@ Responda APENAS em JSON válido, sem markdown:
       console.log('[webhook_receiver] no active conversation found for', phoneNumber);
       // Try to find lead to determine broker (só leads ativos)
       const { data: lead } = await supabase.from('leads').select('*, profiles!broker_id(*)')
-        .eq('phone', phoneNumber)
+        .in('phone', phoneVariantsGlobal)
         .not('status', 'in', '("ABANDONED","EXCLUDED","CONCLUDED")')
         .maybeSingle();
 
@@ -683,15 +692,67 @@ Responda APENAS em JSON válido, sem markdown:
       last_message_at: new Date().toISOString(),
     }).eq('id', conversation.id);
 
-    // Trigger IA engine to generate a reply (it will use conversation.bot_instance_id)
-    const { error: iaError } = await supabase.functions.invoke('ia_chat_engine', {
-      body: {
-        conversationId: conversation.id,
-        incomingMessage: messageText,
-      }
-    });
+    // ── Roteamento de resposta ─────────────────────────────────────────────
+    // Leads de qualificação IA (Judite/Josefa): aciona agente-qualificacao-ia
+    // Leads normais: usa ia_chat_engine
+    const { data: convLead } = await supabase
+      .from('leads')
+      .select('ai_qualification_queue_id, ai_qualified_at')
+      .eq('id', conversation.lead_id)
+      .maybeSingle();
 
-    if (iaError) console.error('[webhook_receiver] ia_chat_engine error', iaError.message);
+    if (convLead?.ai_qualification_queue_id && !convLead?.ai_qualified_at) {
+      // Lead ainda em qualificação → aciona agente IA
+      console.log(`[webhook_receiver] 🤖 Lead de qualificação IA — acionando agente-qualificacao-ia`);
+      supabase.functions.invoke('agente-qualificacao-ia', { body: {} }).catch(() => {});
+
+    } else if (convLead?.ai_qualification_queue_id && convLead?.ai_qualified_at) {
+      // Lead já qualificado e transferido → envia aviso automático via bot da fila
+      // (evita silêncio total quando o lead manda mensagem depois do handoff)
+      console.log(`[webhook_receiver] 🤝 Lead qualificado respondeu após handoff — enviando aviso`);
+      try {
+        const { data: queue } = await supabase
+          .from('distribution_queues')
+          .select('ai_agent_broker_id')
+          .eq('id', convLead.ai_qualification_queue_id)
+          .maybeSingle();
+
+        if (queue?.ai_agent_broker_id) {
+          const { data: aiAgent } = await supabase
+            .from('profiles')
+            .select('bot_instance_id, first_name')
+            .eq('id', queue.ai_agent_broker_id)
+            .maybeSingle();
+
+          if (aiAgent?.bot_instance_id) {
+            const { data: convLeadFull } = await supabase
+              .from('leads')
+              .select('name, phone, broker:profiles!broker_id(first_name)')
+              .eq('id', conversation.lead_id)
+              .maybeSingle();
+
+            const brokerName = (convLeadFull as any)?.broker?.first_name || 'nosso corretor';
+            const firstName = convLeadFull?.name?.split(' ')[0] || '';
+            const msg = `Oi ${firstName}! Você já está sendo atendido por ${brokerName}, que vai entrar em contato com você em breve. 😊`;
+
+            await supabase.functions.invoke('send_whatsapp_message', {
+              body: { botId: aiAgent.bot_instance_id, phone: convLeadFull?.phone, message: msg },
+            });
+          }
+        }
+      } catch (e: any) {
+        console.warn('[webhook_receiver] Falha ao enviar aviso pós-handoff:', e.message);
+      }
+
+    } else {
+      const { error: iaError } = await supabase.functions.invoke('ia_chat_engine', {
+        body: {
+          conversationId: conversation.id,
+          incomingMessage: messageText,
+        }
+      });
+      if (iaError) console.error('[webhook_receiver] ia_chat_engine error', iaError.message);
+    }
 
     return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 

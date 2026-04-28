@@ -388,12 +388,14 @@ serve(async (req) => {
     console.log(`[B4] Templates disponíveis — welcome: ${activeWelcome.length}, cadence steps: ${cadenceTextSteps.length}`);
 
     // Busca leads com last_interaction_at antigo (excluindo DOCS_REQUESTED — lead em fase de documentação)
+    // Exclui leads sob qualificação de agente IA (ai_qualification_queue_id NOT NULL)
     const { data: staleWithInteraction } = await supabase
       .from('leads')
       .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, welcome_responded_at, last_broker_whatsapp_at, last_lead_response_at, broker:profiles!broker_id(first_name, bot_instance_id)')
       .in('status', ['NEW', 'IN_PROGRESS'])
       .lt('last_interaction_at', thresholdAgo)
       .not('broker_id', 'is', null)
+      .is('ai_qualification_queue_id', null)
       .limit(30);
 
     // Busca leads sem last_interaction_at (nunca registrado) e criados há mais de X horas
@@ -404,6 +406,7 @@ serve(async (req) => {
       .is('last_interaction_at', null)
       .lt('created_at', thresholdAgo)
       .not('broker_id', 'is', null)
+      .is('ai_qualification_queue_id', null)
       .limit(20);
 
     // Unifica e deduplica
@@ -686,6 +689,18 @@ serve(async (req) => {
       }
     } catch (e: any) {
       console.error('[followup_scheduler] Bloco 16 error:', e.message);
+    }
+
+    // ── BLOCO 17: Agentes de Qualificação IA (Judite / Josefa) ───────────────
+    // Conduz conversas autônomas via WhatsApp para qualificar leads antes de
+    // transferi-los ao round-robin humano da fila de origem.
+    try {
+      const { data: qaData } = await supabase.functions.invoke('agente-qualificacao-ia', { body: {} });
+      if ((qaData?.processed ?? 0) > 0 || (qaData?.qualified ?? 0) > 0) {
+        console.log(`[followup_scheduler] Bloco 17 — IA Qualif: processados=${qaData?.processed} qualificados=${qaData?.qualified}`);
+      }
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 17 error:', e.message);
     }
 
     const total = criticalProcessed + coldProcessed + cadenceProcessed + staleProcessed + sentinelaProcessed + cerebroProcessed;

@@ -155,8 +155,23 @@ serve(async (req) => {
 
     console.log(`[MATCHING] Fila final: ${chosenQueue?.name || 'NENHUMA'}`);
 
-    // Round-robin otimista
-    if (chosenQueue && chosenQueue.broker_ids?.length > 0) {
+    // ── Roteamento para Agente IA ─────────────────────────────────────────────
+    // Se a fila configurada tem ai_agent_broker_id, o lead vai direto para o
+    // agente IA em vez de um corretor humano via round-robin.
+    if (chosenQueue?.ai_agent_broker_id) {
+      const { data: aiAgent } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', chosenQueue.ai_agent_broker_id)
+        .maybeSingle();
+      if (aiAgent) {
+        chosenBroker = aiAgent;
+        console.log(`[incoming-lead] 🤖 Agente IA: ${aiAgent.first_name} (fila ${chosenQueue.name})`);
+      }
+    }
+
+    // Round-robin otimista (só executa se NÃO é fila de agente IA)
+    if (!chosenQueue?.ai_agent_broker_id && chosenQueue && chosenQueue.broker_ids?.length > 0) {
       const isExclusive = chosenQueue.lock_after_assignment === true;
       const maxAttempts = chosenQueue.broker_ids.length + 2; // tenta todos os corretores da fila
 
@@ -191,7 +206,7 @@ serve(async (req) => {
       }
     }
 
-    if (!chosenBroker) {
+    if (!chosenBroker && !chosenQueue?.ai_agent_broker_id) {
       // Fallback RESTRITO À FILA: todos os corretores da fila estavam ausentes.
       // Nunca busca corretores de outras filas/equipes — evita atribuição cruzada.
       if (chosenQueue && chosenQueue.broker_ids?.length > 0) {
@@ -227,11 +242,13 @@ serve(async (req) => {
       last_interaction_at: nowIso,
       created_at: nowIso,
       received_at: nowIso,
-      // Travar redistribuição se: (a) fila marcada como exclusiva OU (b) payload traz exclusiva=true
-      no_redistribute: chosenQueue?.lock_after_assignment === true || sourceData.exclusiva === true,
+      // Travar redistribuição se: (a) fila de agente IA OU (b) fila exclusiva OU (c) payload traz exclusiva=true
+      no_redistribute: chosenQueue?.ai_agent_broker_id != null || chosenQueue?.lock_after_assignment === true || sourceData.exclusiva === true,
       // Campos MCMV opcionais (só incluídos se vieram no payload)
       ...(rendaDeclarada  ? { renda_declarada:  rendaDeclarada  } : {}),
       ...(tipoTrabalho    ? { tipo_trabalho:    tipoTrabalho    } : {}),
+      // Agente IA: marca o lead para qualificação automática
+      ...(chosenQueue?.ai_agent_broker_id ? { ai_qualification_queue_id: chosenQueue.id } : {}),
     };
 
     if (chosenBroker) insertPayload.broker_id = chosenBroker.id;
@@ -284,8 +301,9 @@ serve(async (req) => {
     // NOTIFICAR CORRETOR via bot do manager
     // Hierarquia ESTRITA: 1) bot do gerente → 2) Junior (superintendente/backup)
     // Nunca usa bot de equipe, busca por nome, ou bot de outro corretor.
+    // Agentes IA não recebem notificação — eles são acionados pelo followup_scheduler.
     let notificationSent = false;
-    if (chosenBroker?.phone) {
+    if (chosenBroker?.phone && !insertPayload.ai_qualification_queue_id) {
       const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'notify_brokers_enabled').maybeSingle();
 
       if (setting?.value === true || setting?.value === "true" || setting?.value === 1) {
@@ -446,8 +464,10 @@ Responda APENAS em JSON válido, sem markdown, sem explicação:
     }
 
     // BOAS-VINDAS PARA LEAD
+    // Leads de agente IA não recebem boas-vindas aqui — o agente-qualificacao-ia
+    // envia a primeira mensagem com seu próprio chip.
     let welcomeSent = false;
-    if (chosenBroker?.automation_settings?.welcome_enabled && chosenBroker.bot_instance_id) {
+    if (chosenBroker?.automation_settings?.welcome_enabled && chosenBroker.bot_instance_id && !insertPayload.ai_qualification_queue_id) {
       let text = `Olá ${name}! 👋\n\nObrigado pelo interesse!`;
       let usedTemplateId: string | null = null;
 
