@@ -12,7 +12,7 @@ import {
   LogOut, CheckCircle2, Loader2, Bot, UserCheck,
   ChevronLeft, ChevronRight, FileText, AlertTriangle, Copy, RefreshCw,
   Volume2, VolumeX, PlusCircle, Shield, Star, Send, Sparkles, ChevronDown,
-  Bell, BellOff,
+  Bell, BellOff, Target, Megaphone, Award, BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -31,8 +31,7 @@ import type { Task } from "@/types/task";
 import type { User } from "@/types/user";
 import { toast } from "sonner";
 import { useAudioArena } from "@/hooks/use-audio-arena";
-import { AchievementTicker } from "@/components/dashboard/AchievementTicker";
-import { MetaStrip } from "@/components/broker/MetaStrip";
+import { WallOfFameTicker } from "@/components/dashboard/WallOfFameTicker";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import LeadForm from "@/components/broker/LeadForm";
@@ -328,6 +327,9 @@ export default function DashboardFoco(){
   const [coachLoading,setCoachLoading]=useState(false);
   const [fllwExpanded,setFllwExpanded]=useState(false);
   const [pausingLeadId,setPausingLeadId]=useState<string|null>(null);
+  const [statusPickerOpen,setStatusPickerOpen]=useState(false);
+  const [drawerOpen,setDrawerOpen]=useState<"ranking"|"meta"|"campaign"|null>(null);
+  const [reportsOpen,setReportsOpen]=useState(false);
   const taRef=useRef<HTMLTextAreaElement>(null);
   const coachEndRef=useRef<HTMLDivElement>(null);
 
@@ -335,6 +337,21 @@ export default function DashboardFoco(){
   const {data:allLeads=[],isLoading:leadsLoading}=useQuery<Lead[]>({queryKey:["focoLeads"],queryFn:fetchLeadsForDashboard,refetchInterval:30000,enabled:!!user});
   const {data:ranking=[]}=useQuery<RankItem[]>({queryKey:["focoRanking"],queryFn:fetchRanking,refetchInterval:120000,enabled:!!user});
   const {data:profiles=[]}=useQuery<User[]>({queryKey:["focoProfiles"],queryFn:fetchProfiles,enabled:!!user});
+  const {data:activeCampaign=null}=useQuery({
+    queryKey:["focoActiveCampaign"],
+    enabled:!!user,
+    refetchInterval:5*60*1000,
+    queryFn:async()=>{
+      const {data}=await supabase
+        .from("active_campaigns")
+        .select("id,title,target_action,target_count,reward_amount,ends_at")
+        .eq("is_active",true)
+        .order("created_at",{ascending:false})
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+  });
 
   /* lead state map */
   const myIds=useMemo(()=>allLeads.map(l=>l.id),[allLeads]);
@@ -675,21 +692,90 @@ export default function DashboardFoco(){
               </button>
               <LeadForm onOpenChange={setIsLeadFormOpen} brokerId={user?.id??""} managerId={myProfile?.managerId??null}/>
             </Sheet>
+            <button onClick={()=>setDrawerOpen("meta")} title="Meus Indicadores"
+              className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:brightness-125"
+              style={{background:"rgba(16,185,129,.1)",border:"1px solid rgba(16,185,129,.25)"}}>
+              <BarChart3 className="w-3.5 h-3.5" style={{color:"#10B981"}}/>
+            </button>
+            <button onClick={()=>setReportsOpen(true)} title="Relatórios"
+              className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:brightness-125"
+              style={{background:"rgba(124,58,237,.1)",border:"1px solid rgba(124,58,237,.25)"}}>
+              <FileText className="w-3.5 h-3.5" style={{color:"#A78BFA"}}/>
+            </button>
             <ThemeToggle compact/>
             <button onClick={()=>setIsMuted(m=>!m)} className="w-7 h-7 rounded-lg flex items-center justify-center" style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)"}}>{isMuted?<VolumeX className="w-3.5 h-3.5 text-slate-500"/>:<Volume2 className="w-3.5 h-3.5 text-cyan-400"/>}</button>
             <button onClick={signOut} className="w-7 h-7 rounded-lg flex items-center justify-center" style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)"}}><LogOut className="w-3.5 h-3.5 text-slate-500"/></button>
           </div>
         </header>
 
-        <AchievementTicker/>
-        {isBroker&&<MetaStrip/>}
+        <WallOfFameTicker/>
         <WhatsAppQRBanner/>
+
+        {/* ── STRIP CLICÁVEL: Ranking · Meta · Campanha (desktop + mobile) ── */}
+        {isBroker&&(
+          <div className="grid grid-cols-3 gap-2 px-3 pt-2 shrink-0">
+            <button onClick={()=>setDrawerOpen("ranking")}
+              className="rounded-xl px-3 py-2 flex items-center gap-2.5 transition-all hover:brightness-110 active:scale-[.99] text-left"
+              style={{background:"rgba(8,11,20,.7)",border:"1px solid rgba(245,158,11,.25)"}}>
+              <Trophy className="w-4 h-4 shrink-0 text-amber-400"/>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="foco-disp text-[9px] font-black uppercase tracking-wider text-amber-400">RANKING</span>
+                  {myRankPos&&<span className="foco-disp text-[9px] font-black px-1.5 rounded" style={{background:"rgba(0,212,255,.15)",color:"#00D4FF"}}>#{myRankPos}</span>}
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5 overflow-hidden">
+                  {ranking.slice(0,3).map((r,i)=>(
+                    <div key={r.id} className="flex items-center gap-0.5 shrink-0">
+                      <div className="rounded-full flex items-center justify-center font-black"
+                        style={{
+                          width:16,height:16,fontSize:7,
+                          background:i===0?"linear-gradient(135deg,#F59E0B,#D97706)":r.id===user?.id?"linear-gradient(135deg,#7C3AED,#00D4FF)":"rgba(255,255,255,.1)",
+                          color:i===0||r.id===user?.id?"#080B14":"#94A3B8",
+                        }}>{r.avatar}</div>
+                      <span className="text-[9px] font-bold text-slate-400 truncate max-w-[60px]">{r.name.split(" ")[0]}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-600 shrink-0"/>
+            </button>
+
+            <button onClick={()=>setDrawerOpen("meta")}
+              className="rounded-xl px-3 py-2 flex items-center gap-2.5 transition-all hover:brightness-110 active:scale-[.99] text-left"
+              style={{background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.30)"}}>
+              <Target className="w-4 h-4 shrink-0" style={{color:"#10B981"}}/>
+              <div className="flex-1 min-w-0">
+                <span className="foco-disp text-[9px] font-black uppercase tracking-wider" style={{color:"#10B981"}}>META</span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="foco-disp text-sm font-black tabular-nums leading-none" style={{color:"#10B981"}}>{counts.CONCLUDED||0}</span>
+                  <span className="text-[10px] text-slate-500">vendas no mês</span>
+                </div>
+              </div>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-600 shrink-0"/>
+            </button>
+
+            <button onClick={()=>setDrawerOpen("campaign")}
+              className="rounded-xl px-3 py-2 flex items-center gap-2.5 transition-all hover:brightness-110 active:scale-[.99] text-left"
+              style={{background:activeCampaign?"linear-gradient(90deg,rgba(124,58,237,.18),rgba(236,72,153,.10))":"rgba(8,11,20,.5)",border:`1px solid ${activeCampaign?"rgba(124,58,237,.40)":"rgba(255,255,255,.06)"}`}}>
+              <Megaphone className="w-4 h-4 shrink-0" style={{color:activeCampaign?"#A78BFA":"#475569"}}/>
+              <div className="flex-1 min-w-0">
+                <span className="foco-disp text-[9px] font-black uppercase tracking-wider" style={{color:activeCampaign?"#A78BFA":"#64748B"}}>CAMPANHA</span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] font-bold truncate" style={{color:activeCampaign?"#E9D5FF":"#475569"}}>
+                    {activeCampaign?.title||"Sem campanha ativa"}
+                  </span>
+                </div>
+              </div>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-600 shrink-0"/>
+            </button>
+          </div>
+        )}
 
         {/* ── MAIN ── */}
         <main className="flex flex-1 overflow-hidden gap-3 p-3 pb-20 md:pb-3 min-h-0">
 
           {/* ─── LEFT: MISSÃO ─── */}
-          <div className={`flex flex-col gap-2 overflow-y-auto md:overflow-hidden md:min-h-0 w-full md:flex-[62] ${mobileTab==="missao"?"flex":"hidden md:flex"}`}>
+          <div className={`flex flex-col gap-2 overflow-y-auto md:overflow-hidden md:min-h-0 w-full md:flex-1 ${mobileTab==="missao"?"flex":"hidden md:flex"}`}>
 
             {leadsLoading&&<div className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 text-cyan-400 animate-spin"/></div>}
 
@@ -893,7 +979,7 @@ export default function DashboardFoco(){
                             {getOutcomes(lead).map(o=><OutcomeBtn key={o.id} o={o} loading={mutating}/>)}
                           </div>
 
-                          {/* ── TOGGLE AUTOMAÇÃO ── */}
+                          {/* ── TOGGLE AUTOMAÇÃO (POR LEAD) ── */}
                           <button
                             onClick={async()=>{
                               setPausingLeadId(lead.id);
@@ -916,10 +1002,10 @@ export default function DashboardFoco(){
                               : <Bell    className="w-4 h-4 shrink-0" style={{color:"#10B981"}}/>}
                             <div className="flex-1 text-left">
                               <div className="text-[11px] font-black uppercase tracking-wide" style={{color:lead.pauseAutoMessages?"#FBBF24":"#10B981"}}>
-                                {lead.pauseAutoMessages?"Automação pausada":"Automação ativa"}
+                                {lead.pauseAutoMessages?"Automação deste lead PAUSADA":"Automação deste lead ATIVA"}
                               </div>
                               <div className="text-[9px] font-medium opacity-70" style={{color:lead.pauseAutoMessages?"#FBBF24":"#10B981"}}>
-                                {lead.pauseAutoMessages?"Você está conduzindo manualmente":"IA segue o lead automaticamente"}
+                                {lead.pauseAutoMessages?"Você assumiu — IA não envia mensagens para este lead":"IA segue enviando follow-up automático para este lead"}
                               </div>
                             </div>
                             <div
@@ -935,6 +1021,56 @@ export default function DashboardFoco(){
                               />
                             </div>
                           </button>
+
+                          {/* ── ALTERAR ESTÁGIO MANUAL (colapsável) ── */}
+                          <button
+                            onClick={()=>setStatusPickerOpen(v=>!v)}
+                            className="w-full flex items-center justify-center gap-1.5 mt-2 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all hover:brightness-110"
+                            style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#475569"}}
+                          >
+                            <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${statusPickerOpen?"rotate-180":""}`}/>
+                            Alterar estágio manualmente
+                          </button>
+                          <AnimatePresence>
+                            {statusPickerOpen&&(
+                              <motion.div
+                                initial={{height:0,opacity:0}} animate={{height:"auto",opacity:1}} exit={{height:0,opacity:0}}
+                                transition={{duration:.18}} className="overflow-hidden mt-1"
+                              >
+                                <div className="grid grid-cols-3 gap-1.5 pt-1">
+                                  {([
+                                    {s:"NEW",            label:"Novo",         emoji:"⚡", color:"#38BDF8"},
+                                    {s:"IN_PROGRESS",    label:"Atendimento",  emoji:"💬", color:"#818CF8"},
+                                    {s:"NEGOTIATING",    label:"Negociando",   emoji:"🤝", color:"#FB923C"},
+                                    {s:"VISIT_SCHEDULED",label:"Visita Marc.", emoji:"📅", color:"#34D399"},
+                                    {s:"VISITA_REALIZADA",label:"Veio à Visita",emoji:"🏠",color:"#10B981"},
+                                    {s:"DOCS_REQUESTED", label:"Docs Pend.",   emoji:"📄", color:"#FBBF24"},
+                                  ] as const).map(({s,label,emoji,color})=>{
+                                    const isCurrent=lead.status===s;
+                                    return(
+                                      <button key={s}
+                                        disabled={isCurrent||mutating}
+                                        onClick={async()=>{
+                                          setStatusPickerOpen(false);
+                                          await advance(s as LeadStatus);
+                                        }}
+                                        className="flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-default hover:brightness-110 active:scale-95"
+                                        style={{
+                                          background:isCurrent?`${color}22`:"rgba(255,255,255,.04)",
+                                          border:isCurrent?`1px solid ${color}55`:"1px solid rgba(255,255,255,.08)",
+                                          color:isCurrent?color:"#64748B",
+                                        }}
+                                      >
+                                        <span className="text-base leading-none">{emoji}</span>
+                                        <span className="leading-tight text-center">{label}</span>
+                                        {isCurrent&&<span className="text-[8px] opacity-60">atual</span>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -1040,10 +1176,10 @@ export default function DashboardFoco(){
           </div>
 
           {/* ─── RIGHT: PAINEL ─── */}
-          <div className={`flex-col gap-2 overflow-y-auto md:overflow-hidden md:min-h-0 w-full md:flex-[38] ${mobileTab==="painel"?"flex":"hidden md:flex"}`}>
+          <div className={`flex-col gap-2 overflow-y-auto md:overflow-hidden md:min-h-0 w-full md:flex-1 ${mobileTab==="painel"?"flex":"hidden md:flex"}`}>
 
-            {/* 1. RANKING TOP 3 — pódio animado */}
-            <div className="shrink-0 rounded-2xl px-3 pt-3 pb-2" style={{background:"rgba(8,11,20,.8)",border:"1px solid rgba(245,158,11,.22)"}}>
+            {/* PÓDIO — escondido (acessível via strip clicável → drawer, em ambos desktop e mobile) */}
+            <div className="hidden shrink-0 rounded-2xl px-3 pt-3 pb-2" style={{background:"rgba(8,11,20,.8)",border:"1px solid rgba(245,158,11,.22)"}}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-1.5">
                   <Trophy className="w-3.5 h-3.5 text-amber-400"/>
@@ -1192,8 +1328,8 @@ export default function DashboardFoco(){
               );
             })()}
 
-            {/* 3. SITUAÇÃO DA FILA — horizontal fixo no rodapé */}
-            <div className="shrink-0 rounded-2xl px-3 py-2" style={{background:"rgba(8,11,20,.8)",border:"1px solid rgba(255,255,255,.07)"}}>
+            {/* 3. SITUAÇÃO DA FILA — escondida (info redundante com o strip clicável) */}
+            <div className="hidden shrink-0 rounded-2xl px-3 py-2" style={{background:"rgba(8,11,20,.8)",border:"1px solid rgba(255,255,255,.07)"}}>
               <div className="flex gap-2">
                 {[
                   {label:"Ação Agora", count:acaoCount,  color:"#00D4FF", sub:`${counts.NEW||0} novos · ${counts.IN_PROGRESS||0} atend.`},
@@ -1211,6 +1347,167 @@ export default function DashboardFoco(){
             </div>
 
           </div>
+
+          {/* ── DRAWER EXPANDIDO: Ranking · Meta · Campanha (responsivo) ── */}
+          <AnimatePresence>
+            {drawerOpen&&(
+              <>
+                <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+                  onClick={()=>setDrawerOpen(null)}
+                  className="fixed md:absolute inset-0 z-30" style={{background:"rgba(0,0,0,.5)",backdropFilter:"blur(4px)"}}/>
+                <motion.aside
+                  initial={{x:"100%",y:0}} animate={{x:0,y:0}} exit={{x:"100%",y:0}}
+                  transition={{type:"spring",damping:24,stiffness:240}}
+                  className="fixed md:absolute top-0 md:right-0 right-0 bottom-0 left-0 md:left-auto md:w-[420px] z-40 flex flex-col gap-3 p-4 overflow-y-auto"
+                  style={{background:"rgba(8,11,20,.98)",borderLeft:`1px solid ${drawerOpen==="ranking"?"#F59E0B33":drawerOpen==="meta"?"#10B98133":"#A78BFA33"}`}}>
+                  <div className="flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2">
+                      {drawerOpen==="ranking"&&<Trophy className="w-4 h-4" style={{color:"#F59E0B"}}/>}
+                      {drawerOpen==="meta"&&<Target className="w-4 h-4" style={{color:"#10B981"}}/>}
+                      {drawerOpen==="campaign"&&<Megaphone className="w-4 h-4" style={{color:"#A78BFA"}}/>}
+                      <span className="foco-disp text-xs font-black uppercase tracking-widest" style={{color:drawerOpen==="ranking"?"#F59E0B":drawerOpen==="meta"?"#10B981":"#A78BFA"}}>
+                        {drawerOpen==="ranking"?"RANKING DO MÊS":drawerOpen==="meta"?"MINHA META":"CAMPANHA"}
+                      </span>
+                    </div>
+                    <button onClick={()=>setDrawerOpen(null)} className="p-1 rounded-lg hover:bg-white/5"><X className="w-4 h-4 text-slate-500"/></button>
+                  </div>
+
+                  {/* RANKING — pódio + lista completa */}
+                  {drawerOpen==="ranking"&&(
+                    <>
+                      <div className="rounded-2xl px-3 pt-3 pb-2" style={{background:"rgba(8,11,20,.8)",border:"1px solid rgba(245,158,11,.22)"}}>
+                        <div className="grid grid-cols-3 items-end gap-2">
+                          {([
+                            {slotPlace:2,rankIdx:1,barH:28,avSize:30,color:"#64748B",barGrad:"rgba(100,116,139,.45)"},
+                            {slotPlace:1,rankIdx:0,barH:46,avSize:40,color:"#F59E0B",barGrad:"rgba(245,158,11,.55)"},
+                            {slotPlace:3,rankIdx:2,barH:18,avSize:26,color:"#92400E",barGrad:"rgba(180,83,9,.45)"},
+                          ] as const).map(slot=>{
+                            const r=ranking[slot.rankIdx]; if(!r) return <div key={slot.slotPlace}/>;
+                            const isMe=r.id===user?.id;
+                            const avBg=slot.slotPlace===1?"linear-gradient(135deg,#F59E0B,#D97706)":isMe?"linear-gradient(135deg,#7C3AED,#00D4FF)":"rgba(255,255,255,.1)";
+                            const avColor=slot.slotPlace===1||isMe?"#080B14":"#94A3B8";
+                            const nameColor=isMe?"#00D4FF":slot.slotPlace===1?"#FCD34D":"#CBD5E1";
+                            const ptsColor=slot.slotPlace===1?"#F59E0B":isMe?"#00D4FF":"#475569";
+                            return(
+                              <div key={r.id} className="flex flex-col items-center gap-1">
+                                {slot.slotPlace===1?<div className="text-xl animate-bounce leading-none">👑</div>:<div className="h-5"/>}
+                                <div className="rounded-full flex items-center justify-center font-black"
+                                  style={{width:slot.avSize,height:slot.avSize,fontSize:slot.slotPlace===1?13:11,background:avBg,color:avColor,
+                                    border:slot.slotPlace===1?"2px solid rgba(245,158,11,.6)":isMe?"2px solid rgba(0,212,255,.4)":"2px solid rgba(255,255,255,.08)"}}>{r.avatar}</div>
+                                <div className="text-center w-full px-0.5 mt-0.5">
+                                  <p className="text-xs font-black truncate leading-tight" style={{color:nameColor}}>{r.name.split(" ")[0]}</p>
+                                  <p className="foco-disp text-[9px] font-bold" style={{color:ptsColor}}>{r.pts}p</p>
+                                </div>
+                                <div className="w-full rounded-t-xl" style={{height:slot.barH,background:slot.barGrad,border:`1px solid ${slot.color}30`}}>
+                                  {slot.slotPlace===1&&<div className="flex items-center justify-center h-full opacity-30"><Star className="w-3 h-3 text-amber-200 animate-pulse"/></div>}
+                                </div>
+                                <div className="foco-disp text-[8px] font-black" style={{color:slot.color}}>#{slot.slotPlace}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl px-4 py-3" style={{background:"rgba(8,11,20,.8)",border:"1px solid rgba(255,255,255,.07)"}}>
+                        <span className="foco-disp text-[9px] font-black uppercase tracking-widest text-slate-500 mb-3 block">RANKING COMPLETO</span>
+                        <div className="flex flex-col gap-1">
+                          {ranking.map((r,i)=>{
+                            const isMe=r.id===user?.id;
+                            const next=isMe&&i>0?ranking[i-1]:null;
+                            return (
+                              <div key={r.id}>
+                                <div className="flex items-center gap-3 px-3 py-2 rounded-xl"
+                                  style={{background:isMe?"rgba(0,212,255,.08)":"rgba(255,255,255,.025)",border:`1px solid ${isMe?"rgba(0,212,255,.25)":"rgba(255,255,255,.04)"}`}}>
+                                  <span className="foco-disp text-[11px] font-black w-6 tabular-nums" style={{color:i<3?"#F59E0B":"#475569"}}>#{i+1}</span>
+                                  <div className="rounded-full flex items-center justify-center font-black shrink-0"
+                                    style={{width:30,height:30,fontSize:11,
+                                      background:i===0?"linear-gradient(135deg,#F59E0B,#D97706)":isMe?"linear-gradient(135deg,#7C3AED,#00D4FF)":"rgba(255,255,255,.08)",
+                                      color:i===0||isMe?"#080B14":"#94A3B8"}}>{r.avatar}</div>
+                                  <span className="text-sm font-bold flex-1 truncate" style={{color:isMe?"#00D4FF":"#E2E8F0"}}>{r.name}</span>
+                                  <span className="foco-disp text-sm font-black tabular-nums" style={{color:i===0?"#F59E0B":isMe?"#00D4FF":"#94A3B8"}}>{r.pts}p</span>
+                                </div>
+                                {isMe&&next&&(
+                                  <div className="flex items-center gap-2 px-3 py-1.5 my-1 rounded-lg" style={{background:"rgba(124,58,237,.08)",border:"1px dashed rgba(124,58,237,.3)"}}>
+                                    <Sparkles className="w-3 h-3" style={{color:"#A78BFA"}}/>
+                                    <span className="text-[10px] text-slate-300">
+                                      Faltam <b style={{color:"#A78BFA"}}>{next.pts-r.pts}p</b> para ultrapassar <b>{next.name.split(" ")[0]}</b>
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* META */}
+                  {drawerOpen==="meta"&&(
+                    <>
+                      <div className="rounded-2xl px-4 py-4" style={{background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.30)"}}>
+                        <span className="foco-disp text-[9px] font-black uppercase tracking-widest" style={{color:"#10B981"}}>VENDAS DO MÊS</span>
+                        <div className="flex items-end gap-2 mt-2 mb-3">
+                          <span className="foco-disp text-4xl font-black leading-none tabular-nums" style={{color:"#10B981"}}>{counts.CONCLUDED||0}</span>
+                          <span className="text-sm font-bold text-slate-500 mb-1">vendas fechadas</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">Acompanhe sua evolução no ranking e na meta de fechamentos do mês.</p>
+                      </div>
+
+                      <div className="rounded-2xl px-4 py-3" style={{background:"rgba(8,11,20,.8)",border:"1px solid rgba(255,255,255,.07)"}}>
+                        <span className="foco-disp text-[9px] font-black uppercase tracking-widest text-slate-500 mb-2 block">PIPELINE ATUAL</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            {label:"Atendimento",   count:counts.IN_PROGRESS||0,    color:"#818CF8"},
+                            {label:"Negociando",    count:counts.NEGOTIATING||0,    color:"#FB923C"},
+                            {label:"Visita Marc.",  count:counts.VISIT_SCHEDULED||0,color:"#34D399"},
+                            {label:"Em Documentação",count:counts.DOCS_REQUESTED||0,color:"#FBBF24"},
+                          ].map(b=>(
+                            <div key={b.label} className="rounded-xl px-3 py-2" style={{background:`${b.color}10`,border:`1px solid ${b.color}25`}}>
+                              <span className="text-[9px] font-bold uppercase" style={{color:b.color}}>{b.label}</span>
+                              <div className="flex items-end gap-1 mt-0.5">
+                                <span className="foco-disp text-lg font-black leading-none tabular-nums" style={{color:b.color}}>{b.count}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* CAMPANHA */}
+                  {drawerOpen==="campaign"&&(
+                    <>
+                      {activeCampaign?(
+                        <>
+                          <div className="rounded-2xl px-4 py-3" style={{background:"linear-gradient(120deg,rgba(124,58,237,.22),rgba(236,72,153,.16))",border:"1px solid rgba(124,58,237,.4)"}}>
+                            <div className="flex items-center gap-2 mb-1">
+                              <Megaphone className="w-4 h-4" style={{color:"#A78BFA"}}/>
+                              <span className="foco-disp text-[9px] font-black uppercase tracking-wider" style={{color:"#A78BFA"}}>CAMPANHA ATIVA</span>
+                            </div>
+                            <p className="text-sm font-black" style={{color:"#F3E8FF"}}>{activeCampaign.title}</p>
+                            <p className="text-[11px] text-slate-300 mt-1">
+                              Bônus de <b style={{color:"#A78BFA"}}>R$ {Number(activeCampaign.reward_amount||0).toLocaleString("pt-BR")}</b> ao atingir <b>{activeCampaign.target_count}</b> {activeCampaign.target_action}
+                            </p>
+                            {activeCampaign.ends_at&&(
+                              <p className="text-[10px] text-slate-500 mt-1">Termina em {new Date(activeCampaign.ends_at).toLocaleDateString("pt-BR")}</p>
+                            )}
+                          </div>
+                        </>
+                      ):(
+                        <div className="rounded-2xl px-4 py-6 text-center" style={{background:"rgba(8,11,20,.8)",border:"1px solid rgba(255,255,255,.07)"}}>
+                          <Megaphone className="w-8 h-8 mx-auto mb-2 text-slate-700"/>
+                          <p className="text-sm font-bold text-slate-400">Nenhuma campanha ativa</p>
+                          <p className="text-[11px] text-slate-600 mt-1">Quando o gestor lançar uma campanha, ela aparecerá aqui.</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </motion.aside>
+              </>
+            )}
+          </AnimatePresence>
+
         </main>
 
         {/* ── MOBILE BOTTOM NAV ── */}
@@ -1453,6 +1750,89 @@ export default function DashboardFoco(){
                 </button>
               </div>
             </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* ── SHEET: RELATÓRIOS DO MÊS ── */}
+        <Sheet open={reportsOpen} onOpenChange={setReportsOpen}>
+          <SheetContent side="right" className="bg-[#080B14] border-white/10 text-white sm:max-w-md w-full overflow-y-auto">
+            <SheetHeader className="mb-4">
+              <SheetTitle className="text-white flex items-center gap-2 foco-disp uppercase tracking-widest text-xs">
+                <FileText className="w-4 h-4 text-violet-400"/>Relatórios
+              </SheetTitle>
+            </SheetHeader>
+
+            {(()=>{
+              const startMonth=new Date(); startMonth.setDate(1); startMonth.setHours(0,0,0,0);
+              const myConcluded=myLeads.filter(l=>l.status==="CONCLUDED" && l.lastInteractionAt && new Date(l.lastInteractionAt)>=startMonth);
+              const myAbandoned=myLeads.filter(l=>l.status==="ABANDONED" && l.lastInteractionAt && new Date(l.lastInteractionAt)>=startMonth);
+              const myVisits=myLeads.filter(l=>l.status==="VISIT_SCHEDULED");
+              const myDocs=myLeads.filter(l=>l.status==="DOCS_REQUESTED");
+              const taxaConv=myLeads.length>0?((myConcluded.length/myLeads.length)*100).toFixed(1):"0";
+              return (
+                <div className="space-y-3">
+                  <div className="rounded-2xl px-4 py-3" style={{background:"rgba(124,58,237,.08)",border:"1px solid rgba(124,58,237,.25)"}}>
+                    <span className="foco-disp text-[9px] font-black uppercase tracking-widest" style={{color:"#A78BFA"}}>RESUMO DO MÊS</span>
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <div className="rounded-xl px-3 py-2" style={{background:"rgba(16,185,129,.10)",border:"1px solid rgba(16,185,129,.25)"}}>
+                        <span className="text-[9px] font-bold uppercase" style={{color:"#10B981"}}>Vendas</span>
+                        <div className="foco-disp text-2xl font-black tabular-nums leading-none mt-1" style={{color:"#10B981"}}>{myConcluded.length}</div>
+                      </div>
+                      <div className="rounded-xl px-3 py-2" style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.20)"}}>
+                        <span className="text-[9px] font-bold uppercase text-red-400">Perdidos</span>
+                        <div className="foco-disp text-2xl font-black tabular-nums leading-none mt-1 text-red-400">{myAbandoned.length}</div>
+                      </div>
+                      <div className="rounded-xl px-3 py-2" style={{background:"rgba(52,211,153,.08)",border:"1px solid rgba(52,211,153,.20)"}}>
+                        <span className="text-[9px] font-bold uppercase" style={{color:"#34D399"}}>Visitas marcadas</span>
+                        <div className="foco-disp text-2xl font-black tabular-nums leading-none mt-1" style={{color:"#34D399"}}>{myVisits.length}</div>
+                      </div>
+                      <div className="rounded-xl px-3 py-2" style={{background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.20)"}}>
+                        <span className="text-[9px] font-bold uppercase" style={{color:"#FBBF24"}}>Em documentação</span>
+                        <div className="foco-disp text-2xl font-black tabular-nums leading-none mt-1" style={{color:"#FBBF24"}}>{myDocs.length}</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500 uppercase tracking-wider">Taxa de conversão</span>
+                      <span className="foco-disp text-lg font-black tabular-nums" style={{color:"#A78BFA"}}>{taxaConv}%</span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl px-4 py-3" style={{background:"rgba(8,11,20,.8)",border:"1px solid rgba(255,255,255,.07)"}}>
+                    <span className="foco-disp text-[9px] font-black uppercase tracking-widest text-emerald-400 mb-3 block">VENDAS DO MÊS</span>
+                    {myConcluded.length===0?(
+                      <p className="text-[11px] text-slate-500 text-center py-4">Nenhuma venda fechada este mês ainda.</p>
+                    ):(
+                      <div className="flex flex-col gap-1.5">
+                        {myConcluded.map(l=>(
+                          <div key={l.id} className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{background:"rgba(16,185,129,.05)",border:"1px solid rgba(16,185,129,.15)"}}>
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" style={{color:"#10B981"}}/>
+                            <span className="text-[12px] font-bold text-slate-100 flex-1 truncate">{l.name}</span>
+                            <span className="text-[10px] text-slate-500 shrink-0">{l.lastInteractionAt?new Date(l.lastInteractionAt).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"}):""}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl px-4 py-3" style={{background:"rgba(8,11,20,.8)",border:"1px solid rgba(255,255,255,.07)"}}>
+                    <span className="foco-disp text-[9px] font-black uppercase tracking-widest text-red-400 mb-3 block">LEADS PERDIDOS</span>
+                    {myAbandoned.length===0?(
+                      <p className="text-[11px] text-slate-500 text-center py-4">Sem perdas este mês 🎉</p>
+                    ):(
+                      <div className="flex flex-col gap-1.5">
+                        {myAbandoned.map(l=>(
+                          <div key={l.id} className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{background:"rgba(239,68,68,.04)",border:"1px solid rgba(239,68,68,.12)"}}>
+                            <X className="w-3.5 h-3.5 shrink-0 text-red-400"/>
+                            <span className="text-[12px] font-bold text-slate-100 flex-1 truncate">{l.name}</span>
+                            <span className="text-[10px] text-slate-600 shrink-0">{l.lostReason?LOST_REASON_LABEL[l.lostReason as NonNullable<LostReason>]:""}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </SheetContent>
         </Sheet>
 
