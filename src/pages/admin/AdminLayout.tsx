@@ -105,16 +105,15 @@ const GROUPS = [
     ],
   },
   {
-    // Central IA — restrita ao SUPERINTENDENT (seção em desenvolvimento)
     value: "ia",
     label: "Central IA",
     icon: BrainCircuit,
-    roles: ["SUPERINTENDENT"],
+    roles: ["ADMIN", "SUPERINTENDENT"],
     subtabs: [
-      { value: "ia-builder", label: "IA Builder",  roles: ["SUPERINTENDENT"] },
-      { value: "agentes",    label: "Agentes",     roles: ["SUPERINTENDENT"] },
-      { value: "prospeccao", label: "Prospecção",  roles: ["SUPERINTENDENT"] },
-      { value: "central-ia", label: "Central IA",  roles: ["SUPERINTENDENT"] },
+      { value: "ia-builder", label: "IA Builder",  roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "agentes",    label: "Agentes",     roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "prospeccao", label: "Prospecção",  roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "central-ia", label: "Central IA",  roles: ["ADMIN", "SUPERINTENDENT"] },
     ],
   },
   {
