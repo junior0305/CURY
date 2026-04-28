@@ -12,6 +12,7 @@ import {
   LogOut, CheckCircle2, Loader2, Bot, UserCheck,
   ChevronLeft, ChevronRight, FileText, AlertTriangle, Copy, RefreshCw,
   Volume2, VolumeX, PlusCircle, Shield, Star, Send, Sparkles, ChevronDown,
+  Bell, BellOff,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -20,6 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   fetchLeadsForDashboard, updateLeadStatus,
   registerContactAttempt, setLeadNegotiating, setLeadFollowUpAuto,
+  togglePauseAutoMessages,
 } from "@/integrations/supabase/leads";
 import { fetchOpenTasks, createTask } from "@/integrations/supabase/tasks";
 import { fetchProfiles } from "@/integrations/supabase/profiles";
@@ -325,7 +327,7 @@ export default function DashboardFoco(){
   const [coachInput,setCoachInput]=useState("");
   const [coachLoading,setCoachLoading]=useState(false);
   const [fllwExpanded,setFllwExpanded]=useState(false);
-  const [statusPickerOpen,setStatusPickerOpen]=useState(false);
+  const [pausingLeadId,setPausingLeadId]=useState<string|null>(null);
   const taRef=useRef<HTMLTextAreaElement>(null);
   const coachEndRef=useRef<HTMLDivElement>(null);
 
@@ -891,55 +893,48 @@ export default function DashboardFoco(){
                             {getOutcomes(lead).map(o=><OutcomeBtn key={o.id} o={o} loading={mutating}/>)}
                           </div>
 
-                          {/* ── ALTERAR STATUS MANUAL ── */}
+                          {/* ── TOGGLE AUTOMAÇÃO ── */}
                           <button
-                            onClick={()=>setStatusPickerOpen(v=>!v)}
-                            className="w-full flex items-center justify-center gap-1.5 mt-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all hover:brightness-110"
-                            style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#475569"}}
+                            onClick={async()=>{
+                              setPausingLeadId(lead.id);
+                              try{
+                                await togglePauseAutoMessages(lead.id,!lead.pauseAutoMessages);
+                                await qc.invalidateQueries({queryKey:["focoLeads"]});
+                              }finally{
+                                setPausingLeadId(null);
+                              }
+                            }}
+                            disabled={pausingLeadId===lead.id}
+                            className="w-full flex items-center gap-2.5 mt-3 px-3 py-2.5 rounded-xl transition-all hover:brightness-110 active:scale-[.98] disabled:opacity-50"
+                            style={{
+                              background:lead.pauseAutoMessages?"rgba(251,191,36,.12)":"rgba(16,185,129,.10)",
+                              border:`1px solid ${lead.pauseAutoMessages?"rgba(251,191,36,.35)":"rgba(16,185,129,.30)"}`,
+                            }}
                           >
-                            <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${statusPickerOpen?"rotate-180":""}`}/>
-                            Alterar estágio manualmente
+                            {lead.pauseAutoMessages
+                              ? <BellOff className="w-4 h-4 shrink-0" style={{color:"#FBBF24"}}/>
+                              : <Bell    className="w-4 h-4 shrink-0" style={{color:"#10B981"}}/>}
+                            <div className="flex-1 text-left">
+                              <div className="text-[11px] font-black uppercase tracking-wide" style={{color:lead.pauseAutoMessages?"#FBBF24":"#10B981"}}>
+                                {lead.pauseAutoMessages?"Automação pausada":"Automação ativa"}
+                              </div>
+                              <div className="text-[9px] font-medium opacity-70" style={{color:lead.pauseAutoMessages?"#FBBF24":"#10B981"}}>
+                                {lead.pauseAutoMessages?"Você está conduzindo manualmente":"IA segue o lead automaticamente"}
+                              </div>
+                            </div>
+                            <div
+                              className="relative w-9 h-5 rounded-full transition-colors shrink-0"
+                              style={{background:lead.pauseAutoMessages?"rgba(251,191,36,.25)":"rgba(16,185,129,.30)"}}
+                            >
+                              <div
+                                className="absolute top-0.5 w-4 h-4 rounded-full transition-all"
+                                style={{
+                                  left:lead.pauseAutoMessages?"2px":"18px",
+                                  background:lead.pauseAutoMessages?"#FBBF24":"#10B981",
+                                }}
+                              />
+                            </div>
                           </button>
-                          <AnimatePresence>
-                            {statusPickerOpen&&(
-                              <motion.div
-                                initial={{height:0,opacity:0}} animate={{height:"auto",opacity:1}} exit={{height:0,opacity:0}}
-                                transition={{duration:.18}} className="overflow-hidden mt-1"
-                              >
-                                <div className="grid grid-cols-3 gap-1.5 pt-1">
-                                  {([
-                                    {s:"NEW",           label:"Novo",        emoji:"⚡", color:"#38BDF8"},
-                                    {s:"IN_PROGRESS",   label:"Atendimento", emoji:"💬", color:"#818CF8"},
-                                    {s:"NEGOTIATING",   label:"Negociando",  emoji:"🤝", color:"#FB923C"},
-                                    {s:"VISIT_SCHEDULED",label:"Visita Marc.",emoji:"📅", color:"#34D399"},
-                                    {s:"VISITA_REALIZADA",label:"Veio à Visita",emoji:"🏠",color:"#10B981"},
-                                    {s:"DOCS_REQUESTED",label:"Docs Pend.",  emoji:"📄", color:"#FBBF24"},
-                                  ] as const).map(({s,label,emoji,color})=>{
-                                    const isCurrent=lead.status===s;
-                                    return(
-                                      <button key={s}
-                                        disabled={isCurrent||mutating}
-                                        onClick={async()=>{
-                                          setStatusPickerOpen(false);
-                                          await advance(s as LeadStatus);
-                                        }}
-                                        className="flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-default hover:brightness-110 active:scale-95"
-                                        style={{
-                                          background:isCurrent?`${color}22`:"rgba(255,255,255,.04)",
-                                          border:isCurrent?`1px solid ${color}55`:"1px solid rgba(255,255,255,.08)",
-                                          color:isCurrent?color:"#64748B",
-                                        }}
-                                      >
-                                        <span className="text-base leading-none">{emoji}</span>
-                                        <span className="leading-tight text-center">{label}</span>
-                                        {isCurrent&&<span className="text-[8px] opacity-60">atual</span>}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
                         </motion.div>
                       )}
                     </AnimatePresence>
