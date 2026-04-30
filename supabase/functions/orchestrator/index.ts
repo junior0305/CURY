@@ -6,16 +6,51 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-function getRandomInt(max: number): number {
-  return Math.floor(Math.random() * max);
-}
-
 function randomBetween(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ── Carrega templates de prospecção da biblioteca ─────────────────────────
+// Prioridade:
+//   1. campaign.template_ids (subset explícito)
+//   2. campaign.template_category (filtro por categoria)
+//   3. todos os templates com is_active = true
+// Fallback: se a biblioteca estiver vazia/não retornar nada, usa
+// campaign.message_templates (formato legado jsonb) para retrocompatibilidade.
+async function loadTemplates(supabase: any, campaign: any) {
+  let query = supabase
+    .from('prospecting_message_templates')
+    .select('id, name, message, category')
+    .eq('is_active', true);
+
+  if (campaign.template_ids && Array.isArray(campaign.template_ids) && campaign.template_ids.length > 0) {
+    query = query.in('id', campaign.template_ids);
+  } else if (campaign.template_category) {
+    query = query.eq('category', campaign.template_category);
+  }
+
+  // Round-robin justo: o que foi usado há mais tempo (ou nunca usado) vem primeiro
+  query = query.order('last_used_at', { ascending: true, nullsFirst: true });
+
+  const { data: libraryTemplates, error } = await query;
+
+  if (!error && libraryTemplates && libraryTemplates.length > 0) {
+    console.log(`[orchestrator] 📚 Biblioteca: ${libraryTemplates.length} templates ativos`);
+    return libraryTemplates.map((t: any) => ({ id: t.id, text: t.message, name: t.name }));
+  }
+
+  // Fallback legado: lê do campo jsonb antigo da campanha
+  const legacy = campaign.message_templates || [];
+  if (legacy.length > 0) {
+    console.log(`[orchestrator] ⚠️ Biblioteca vazia — usando ${legacy.length} templates legados da campanha`);
+    return legacy.map((t: any) => ({ id: null, text: t.text || t.message || '', name: null }));
+  }
+
+  return [];
 }
 
 serve(async (req) => {
@@ -42,8 +77,13 @@ serve(async (req) => {
     }
 
     console.log('[orchestrator] ✅ Campanha:', campaign.name);
-    const messageTemplates = campaign.message_templates || [];
+
+    const messageTemplates = await loadTemplates(supabaseClient, campaign);
     console.log('[orchestrator] 💬 Variações disponíveis:', messageTemplates.length);
+
+    if (messageTemplates.length === 0) {
+      return new Response(JSON.stringify({ error: 'No active templates available (library empty and no legacy fallback)' }), { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
     // Determine bot pool: priority -> prospect_instance_ids (explicit list) -> bot_instance_id (single) -> pool is_prospecting
     let bots: any[] = [];
@@ -67,7 +107,6 @@ serve(async (req) => {
       }
     }
 
-    // Determine delays (in seconds) from campaign settings; provide sensible defaults
     const minDelaySec = (campaign.delay_between_messages_min && Number(campaign.delay_between_messages_min)) || 120;
     const maxDelaySec = (campaign.delay_between_messages_max && Number(campaign.delay_between_messages_max)) || 480;
     const minDelayMs = Math.max(0, Math.floor(minDelaySec) * 1000);
@@ -85,16 +124,13 @@ serve(async (req) => {
       const targetAudience = campaign.target_audience || {};
       const daysWithoutContact = targetAudience.days_without_contact || 3;
       const leadStatus = targetAudience.lead_status || [];
-      // Statuses que NUNCA devem receber mensagem, independente da configuração da campanha
       const NEVER_CONTACT = ['CONCLUDED', 'EXCLUDED', 'ABANDONED', 'VISIT_SCHEDULED'];
       let leadsQuery = supabaseClient.from('leads').select('id, name, phone, broker_id, status');
       if (leadStatus.length > 0) {
-        // Remove da seleção qualquer status proibido que o admin possa ter incluído por engano
         const safeStatuses = leadStatus.filter((s: string) => !NEVER_CONTACT.includes(s));
         if (safeStatuses.length > 0) leadsQuery = leadsQuery.in('status', safeStatuses);
         else leadsQuery = leadsQuery.in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED']);
       } else {
-        // Sem filtro configurado: só contata leads ativos
         leadsQuery = leadsQuery.in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED']);
       }
       const cutoffDate = new Date(); cutoffDate.setDate(cutoffDate.getDate() - daysWithoutContact);
@@ -110,9 +146,9 @@ serve(async (req) => {
 
     const assignments: any[] = [];
     let botIndex = 0;
+    let templateIndex = 0; // Round-robin entre templates da biblioteca
 
     for (const [i, lead] of leads.entries()) {
-      // use_broker_chip: se habilitado e lead tem broker, usar o chip pessoal do corretor
       let bot = bots[botIndex % bots.length];
       botIndex++;
 
@@ -140,27 +176,48 @@ serve(async (req) => {
 
       console.log(`[orchestrator] 🧾 Processando lead ${i + 1}/${leads.length} -> ${lead.name || lead.phone} via bot ${bot.name}`);
 
-      const { data: conversation } = await supabaseClient.from('ia_conversations').insert({ campaign_id: campaignId, bot_instance_id: bot.id, lead_id: lead.source === 'crm' ? lead.id : null, lead_name: lead.name, lead_phone: lead.phone, status: 'active', sentiment: 'unknown' }).select().single();
+      // Round-robin nos templates (não random) — distribuição justa pra A/B test
+      const selectedTemplate = messageTemplates[templateIndex % messageTemplates.length];
+      templateIndex++;
+
+      if (!selectedTemplate?.text) {
+        console.warn(`[orchestrator] ⚠️ Template selecionado sem texto, pulando lead ${lead.name}`);
+        continue;
+      }
+
+      const { data: conversation } = await supabaseClient.from('ia_conversations').insert({
+        campaign_id: campaignId,
+        bot_instance_id: bot.id,
+        lead_id: lead.source === 'crm' ? lead.id : null,
+        lead_name: lead.name,
+        lead_phone: lead.phone,
+        status: 'active',
+        sentiment: 'unknown',
+        template_id: selectedTemplate.id,  // pode ser null em modo legado
+      }).select().single();
       if (!conversation) continue;
 
-      const randomIndex = getRandomInt(messageTemplates.length);
-      const selectedTemplate = messageTemplates[randomIndex];
-      console.log('[orchestrator] 🎲 Mensagem selecionada index:', randomIndex + 1);
-      
-      if (selectedTemplate?.text) {
-        let message = selectedTemplate.text.replace(/\{nome\}/gi, lead.name || 'amigo').replace(/\{name\}/gi, lead.name || 'amigo');
-        console.log('[orchestrator] 📨 Enviando (preview):', message.substring(0, 80));
+      const message = selectedTemplate.text
+        .replace(/\{nome\}/gi, lead.name || 'amigo')
+        .replace(/\{name\}/gi, lead.name || 'amigo');
+      console.log(`[orchestrator] 📨 Enviando (template "${selectedTemplate.name || 'legacy'}"):`, message.substring(0, 80));
 
-        // Invoke the sender function with explicit instanceName to avoid DB mismatch
-        await supabaseClient.functions.invoke('send_whatsapp_message', { body: { botId: bot.id, phone: lead.phone, message, conversationId: conversation.id, instanceName: bot.instance_name } });
-        assignments.push({ lead, bot });
+      await supabaseClient.functions.invoke('send_whatsapp_message', {
+        body: { botId: bot.id, phone: lead.phone, message, conversationId: conversation.id, instanceName: bot.instance_name }
+      });
 
-        // After sending, if this is not the last lead, await a randomized delay between min and max
-        if (i < leads.length - 1) {
-          const delayMs = minDelayMs === maxDelayMs ? minDelayMs : randomBetween(minDelayMs, maxDelayMs);
-          console.log(`[orchestrator] ⏳ Aguardando ${Math.round(delayMs / 1000)}s antes do próximo envio`);
-          await sleep(delayMs);
-        }
+      // Incrementa métricas do template (só se vier da biblioteca)
+      if (selectedTemplate.id) {
+        await supabaseClient.rpc('increment_template_sent', { p_template_id: selectedTemplate.id })
+          .then(() => {}, (err: any) => console.warn('[orchestrator] increment_template_sent falhou:', err?.message));
+      }
+
+      assignments.push({ lead, bot, templateId: selectedTemplate.id });
+
+      if (i < leads.length - 1) {
+        const delayMs = minDelayMs === maxDelayMs ? minDelayMs : randomBetween(minDelayMs, maxDelayMs);
+        console.log(`[orchestrator] ⏳ Aguardando ${Math.round(delayMs / 1000)}s antes do próximo envio`);
+        await sleep(delayMs);
       }
 
       if (lead.source === 'upload') {

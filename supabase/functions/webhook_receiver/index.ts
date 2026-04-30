@@ -602,7 +602,7 @@ Responda APENAS em JSON válido, sem markdown:
     // Verifica status do lead ANTES de qualquer resposta automática
     const { data: leadStatusCheck } = await supabase
       .from('leads')
-      .select('id, status')
+      .select('id, status, pause_auto_messages')
       .in('phone', phoneVariantsGlobal)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -613,6 +613,14 @@ Responda APENAS em JSON válido, sem markdown:
       return new Response(JSON.stringify({ success: true, blocked: true, reason: leadStatusCheck.status }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
+    }
+
+    // Toggle por lead: corretor pausou automações no dashboard.
+    // Registra a mensagem normalmente (histórico, last_lead_response_at, messages_count),
+    // mas NÃO invoca nenhuma IA (ia_chat_engine, agente-qualificacao-ia).
+    const pauseAutoMessages = leadStatusCheck?.pause_auto_messages === true;
+    if (pauseAutoMessages) {
+      console.log(`[webhook_receiver] ⏸️ Lead ${phoneNumber} com pause_auto_messages=true — IA não responderá (mensagem ainda será registrada)`);
     }
 
     // Find active conversation for this lead (tenta todas as variantes do telefone)
@@ -660,11 +668,15 @@ Responda APENAS em JSON válido, sem markdown:
               sender_type: 'lead',
               created_at: new Date().toISOString(),
             });
-            const { error: iaErr } = await supabase.functions.invoke('ia_chat_engine', {
-              body: { conversationId: newConv.id, incomingMessage: messageText }
-            });
-            if (iaErr) console.error('[webhook_receiver] ia_chat_engine error (first msg):', iaErr.message);
-            else console.log('[webhook_receiver] IA respondeu à primeira mensagem do lead');
+            if (pauseAutoMessages) {
+              console.log('[webhook_receiver] ⏸️ pause_auto_messages=true — pulando ia_chat_engine (primeira msg)');
+            } else {
+              const { error: iaErr } = await supabase.functions.invoke('ia_chat_engine', {
+                body: { conversationId: newConv.id, incomingMessage: messageText }
+              });
+              if (iaErr) console.error('[webhook_receiver] ia_chat_engine error (first msg):', iaErr.message);
+              else console.log('[webhook_receiver] IA respondeu à primeira mensagem do lead');
+            }
           }
 
           return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -686,6 +698,14 @@ Responda APENAS em JSON válido, sem markdown:
       created_at: new Date().toISOString(),
     });
 
+    // Métrica de template: primeira resposta do lead numa conversa que originou de um template
+    // (messages_count antes do incremento conta apenas as mensagens outgoing iniciais do disparador)
+    const isFirstLeadResponse = !conversation.last_message_at; // ainda não houve resposta antes
+    if (isFirstLeadResponse && conversation.template_id) {
+      await supabase.rpc('increment_template_response', { p_template_id: conversation.template_id })
+        .then(() => {}, (err: any) => console.warn('[webhook_receiver] increment_template_response falhou:', err?.message));
+    }
+
     // Update conversation metadata
     await supabase.from('ia_conversations').update({
       messages_count: (conversation.messages_count || 0) + 1,
@@ -703,10 +723,14 @@ Responda APENAS em JSON válido, sem markdown:
 
     if (convLead?.ai_qualification_queue_id && !convLead?.ai_qualified_at) {
       // Lead ainda em qualificação → aciona agente IA
-      console.log(`[webhook_receiver] 🤖 Lead de qualificação IA — acionando agente-qualificacao-ia`);
-      supabase.functions.invoke('agente-qualificacao-ia', { body: {} }).catch(() => {});
+      if (pauseAutoMessages) {
+        console.log('[webhook_receiver] ⏸️ pause_auto_messages=true — pulando agente-qualificacao-ia');
+      } else {
+        console.log(`[webhook_receiver] 🤖 Lead de qualificação IA — acionando agente-qualificacao-ia`);
+        supabase.functions.invoke('agente-qualificacao-ia', { body: {} }).then(() => {}, () => {});
+      }
 
-    } else if (convLead?.ai_qualification_queue_id && convLead?.ai_qualified_at) {
+    } else if (convLead?.ai_qualification_queue_id && convLead?.ai_qualified_at && !pauseAutoMessages) {
       // Lead já qualificado e transferido → envia aviso automático via bot da fila
       // (evita silêncio total quando o lead manda mensagem depois do handoff)
       console.log(`[webhook_receiver] 🤝 Lead qualificado respondeu após handoff — enviando aviso`);
@@ -745,13 +769,17 @@ Responda APENAS em JSON válido, sem markdown:
       }
 
     } else {
-      const { error: iaError } = await supabase.functions.invoke('ia_chat_engine', {
-        body: {
-          conversationId: conversation.id,
-          incomingMessage: messageText,
-        }
-      });
-      if (iaError) console.error('[webhook_receiver] ia_chat_engine error', iaError.message);
+      if (pauseAutoMessages) {
+        console.log('[webhook_receiver] ⏸️ pause_auto_messages=true — pulando ia_chat_engine');
+      } else {
+        const { error: iaError } = await supabase.functions.invoke('ia_chat_engine', {
+          body: {
+            conversationId: conversation.id,
+            incomingMessage: messageText,
+          }
+        });
+        if (iaError) console.error('[webhook_receiver] ia_chat_engine error', iaError.message);
+      }
     }
 
     return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

@@ -220,6 +220,16 @@ serve(async (req) => {
       sentiment,
     }).eq('id', conversationId);
 
+    // ── Métrica de template: incrementar qualified_count UMA vez por conversa
+    // (só se a conversa transitou agora pra qualified/escalated e veio de um template)
+    const transitionedToQualified =
+      ['qualified', 'escalated'].includes(newStatus) &&
+      !['qualified', 'escalated'].includes(conversation.status);
+    if (transitionedToQualified && conversation.template_id) {
+      await supabase.rpc('increment_template_qualified', { p_template_id: conversation.template_id })
+        .then(() => {}, (err: any) => console.warn('[ia_chat_engine] increment_template_qualified falhou:', err?.message));
+    }
+
     // ── Melhoria B: fechar ciclo se qualificado/escalado ─────────────────
     if (['qualified', 'escalated'].includes(newStatus) && conversation.lead_id) {
       await handleLeadQualification(supabase, conversation, newStatus);

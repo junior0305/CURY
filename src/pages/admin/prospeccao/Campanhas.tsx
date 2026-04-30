@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -117,6 +117,9 @@ export default function Campanhas() {
       source: 'crm',
     },
     message_templates: [{ id: 1, text: "" }],
+    template_mode: 'all' as 'all' | 'category' | 'specific',
+    template_ids: [] as string[],
+    template_category: "" as string,
     ai_instructions: "",
     scheduled_start: "",
     scheduled_end: "",
@@ -127,6 +130,29 @@ export default function Campanhas() {
     delay_between_messages_max: 480,
     use_broker_chip: false,
   });
+
+  const [libraryTemplates, setLibraryTemplates] = useState<{ id: string; name: string; message: string; category: string | null; is_active: boolean }[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from("prospecting_message_templates")
+      .select("id, name, message, category, is_active")
+      .eq("is_active", true)
+      .order("name")
+      .then(({ data }) => setLibraryTemplates(data || []));
+  }, [modalOpen]);
+
+  const libraryCategories = useMemo(() => {
+    const set = new Set<string>();
+    libraryTemplates.forEach(t => { if (t.category) set.add(t.category); });
+    return Array.from(set).sort();
+  }, [libraryTemplates]);
+
+  const previewSelectedTemplates = useMemo(() => {
+    if (formData.template_mode === 'all') return libraryTemplates;
+    if (formData.template_mode === 'category') return libraryTemplates.filter(t => t.category === formData.template_category);
+    return libraryTemplates.filter(t => formData.template_ids.includes(t.id));
+  }, [libraryTemplates, formData.template_mode, formData.template_category, formData.template_ids]);
 
   const loadCampaigns = async () => {
     setLoading(true);
@@ -276,8 +302,15 @@ export default function Campanhas() {
       toast({ title: "Nome obrigatório", variant: "destructive" });
       return;
     }
-    if (!formData.message_templates[0]?.text.trim()) {
-      toast({ title: "Adicione uma mensagem", variant: "destructive" });
+    // Validação: precisa ter algum template (biblioteca ou legado)
+    const hasLegacy = formData.message_templates.some(t => t.text.trim());
+    const hasLibrary = (() => {
+      if (formData.template_mode === 'all') return libraryTemplates.length > 0;
+      if (formData.template_mode === 'category') return formData.template_category && libraryTemplates.some(t => t.category === formData.template_category);
+      return formData.template_ids.length > 0;
+    })();
+    if (!hasLegacy && !hasLibrary) {
+      toast({ title: "Selecione ao menos 1 template", description: "Use a biblioteca em /admin/prospecção/Mensagens ou adicione mensagens manuais.", variant: "destructive" });
       return;
     }
     if (leadSource === 'upload' && !uploadFile && !editCampaign) {
@@ -295,6 +328,8 @@ export default function Campanhas() {
       prospect_instance_ids: Array.isArray(formData.prospect_instance_ids) ? formData.prospect_instance_ids : [],
       target_audience: { ...formData.target_audience, source: leadSource },
       message_templates: formData.message_templates,
+      template_ids: formData.template_mode === 'specific' ? formData.template_ids : null,
+      template_category: formData.template_mode === 'category' ? (formData.template_category || null) : null,
       ai_instructions: formData.ai_instructions || null,
       scheduled_start: formData.scheduled_start || null,
       scheduled_end: formData.scheduled_end || null,
@@ -352,6 +387,7 @@ export default function Campanhas() {
       bot_instance_id: null, prospect_instance_ids: [],
       target_audience: { lead_status: [], days_without_contact: 3, tags: [], exclude_converted: true, source: 'crm' },
       message_templates: [{ id: 1, text: "" }],
+      template_mode: 'all', template_ids: [], template_category: "",
       ai_instructions: "", scheduled_start: "", scheduled_end: "",
       working_hours: { start: "09:00", end: "18:00" },
       max_leads: null, max_messages_per_lead: 3,
@@ -372,6 +408,9 @@ export default function Campanhas() {
       bot_instance_id: campaign.bot_instance_id || null,
       prospect_instance_ids: campaign.prospect_instance_ids || [],
       target_audience: campaign.target_audience, message_templates: campaign.message_templates,
+      template_mode: (campaign as any).template_ids?.length ? 'specific' : (campaign as any).template_category ? 'category' : 'all',
+      template_ids: (campaign as any).template_ids || [],
+      template_category: (campaign as any).template_category || "",
       ai_instructions: campaign.ai_instructions || "", scheduled_start: campaign.scheduled_start || "",
       scheduled_end: campaign.scheduled_end || "", working_hours: campaign.working_hours,
       max_leads: campaign.max_leads, max_messages_per_lead: campaign.max_messages_per_lead,
@@ -793,15 +832,105 @@ export default function Campanhas() {
             {currentStep === 2 && (
               <>
                 <div>
-                  <div className="flex items-center justify-between mb-2"><Label className="text-gray-400 text-xs uppercase">Mensagens *</Label><Button type="button" onClick={addMessageTemplate} size="sm" variant="outline" className="border-blue-500/30 text-blue-400 hover:bg-blue-900/20"><Plus className="w-3.5 h-3.5 mr-1" />Adicionar</Button></div>
-                  <div className="space-y-3">
-                    {formData.message_templates.map((template, index) => (
-                      <div key={template.id} className="relative bg-slate-800/50 rounded-lg p-3 border border-gray-700">
-                        <div className="flex items-center justify-between mb-2"><span className="text-xs text-gray-500">Mensagem {index + 1}</span>{formData.message_templates.length > 1 && <Button type="button" onClick={() => removeMessageTemplate(template.id)} size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400 hover:bg-red-900/20"><Trash2 className="w-3.5 h-3.5" /></Button>}</div>
-                        <Textarea value={template.text} onChange={e => updateMessageTemplate(template.id, e.target.value)} placeholder="Use {nome} para personalizar" className="bg-slate-900 border-gray-600 text-white min-h-[100px]" />
-                      </div>
+                  <Label className="text-gray-400 text-xs uppercase">Mensagens *</Label>
+                  <p className="text-xs text-gray-500 mt-1 mb-3">
+                    O disparador faz round-robin entre os templates selecionados. Crie templates em <span className="text-pink-400 font-semibold">Mensagens</span> (aba ao lado) para acompanhar performance.
+                  </p>
+
+                  {/* Modo de seleção */}
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    {(['all','category','specific'] as const).map(mode => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, template_mode: mode })}
+                        className={`p-2.5 rounded-lg border text-sm font-semibold transition-all ${formData.template_mode === mode ? 'border-pink-500 bg-pink-900/30 text-pink-200' : 'border-gray-700 bg-slate-800/50 text-gray-400 hover:border-gray-600'}`}
+                      >
+                        {mode === 'all' && 'Todos ativos'}
+                        {mode === 'category' && 'Por categoria'}
+                        {mode === 'specific' && 'Selecionar'}
+                      </button>
                     ))}
                   </div>
+
+                  {/* Modo: Por categoria */}
+                  {formData.template_mode === 'category' && (
+                    <div className="bg-slate-800/50 rounded-lg p-3 border border-gray-700 mb-3">
+                      <Label className="text-xs text-gray-500">Categoria</Label>
+                      <Select value={formData.template_category || "__none__"} onValueChange={v => setFormData({ ...formData, template_category: v === "__none__" ? "" : v })}>
+                        <SelectTrigger className="bg-slate-900 border-gray-600 text-white mt-1">
+                          <SelectValue placeholder="Selecionar categoria..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {libraryCategories.length === 0 && <SelectItem value="__none__" disabled>Nenhuma categoria cadastrada</SelectItem>}
+                          {libraryCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Modo: Selecionar específicos */}
+                  {formData.template_mode === 'specific' && (
+                    <div className="bg-slate-800/50 rounded-lg p-3 border border-gray-700 mb-3 max-h-[300px] overflow-y-auto">
+                      {libraryTemplates.length === 0 ? (
+                        <p className="text-sm text-gray-500 text-center py-4">Nenhum template cadastrado. Vá para a aba Mensagens.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {libraryTemplates.map(t => {
+                            const checked = formData.template_ids.includes(t.id);
+                            return (
+                              <label key={t.id} className={`flex items-start gap-2 p-2 rounded cursor-pointer transition-all ${checked ? 'bg-pink-900/20 border border-pink-500/30' : 'hover:bg-slate-900/60 border border-transparent'}`}>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={e => {
+                                    setFormData({
+                                      ...formData,
+                                      template_ids: e.target.checked
+                                        ? [...formData.template_ids, t.id]
+                                        : formData.template_ids.filter(id => id !== t.id)
+                                    });
+                                  }}
+                                  className="mt-1 accent-pink-500"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-sm font-semibold text-white truncate">{t.name}</span>
+                                    {t.category && <Badge variant="outline" className="text-xs bg-slate-700 border-gray-600 text-gray-300">{t.category}</Badge>}
+                                  </div>
+                                  <p className="text-xs text-gray-400 line-clamp-2 mt-1">{t.message}</p>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Preview de qual subset será usado */}
+                  <div className="bg-slate-900/60 rounded-lg p-2.5 border border-gray-700 text-xs text-gray-400">
+                    <span className="text-pink-400 font-semibold">{previewSelectedTemplates.length}</span> template{previewSelectedTemplates.length === 1 ? '' : 's'} {previewSelectedTemplates.length === 1 ? 'será usado' : 'serão usados'} no round-robin.
+                    {previewSelectedTemplates.length === 0 && libraryTemplates.length === 0 && (
+                      <span className="text-yellow-400 ml-2">⚠️ Biblioteca vazia. Cadastre na aba Mensagens.</span>
+                    )}
+                  </div>
+
+                  {/* Modo legado: textareas inline (só visível se editando campanha que tem mensagens legadas) */}
+                  {editCampaign && formData.message_templates.some(t => t.text.trim()) && (
+                    <details className="mt-4 bg-yellow-900/10 rounded-lg p-3 border border-yellow-500/30">
+                      <summary className="text-xs text-yellow-400 cursor-pointer font-semibold">⚠️ Mensagens legadas desta campanha (clique para ver/editar)</summary>
+                      <div className="space-y-2 mt-2">
+                        {formData.message_templates.map((template, index) => (
+                          <div key={template.id} className="relative bg-slate-800/50 rounded-lg p-2 border border-gray-700">
+                            <div className="flex items-center justify-between mb-1"><span className="text-xs text-gray-500">Legado {index + 1}</span><Button type="button" onClick={() => removeMessageTemplate(template.id)} size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400 hover:bg-red-900/20"><Trash2 className="w-3.5 h-3.5" /></Button></div>
+                            <Textarea value={template.text} onChange={e => updateMessageTemplate(template.id, e.target.value)} placeholder="Use {nome}" className="bg-slate-900 border-gray-600 text-white min-h-[80px] text-sm" />
+                          </div>
+                        ))}
+                        <p className="text-xs text-gray-500">A biblioteca tem prioridade. As mensagens legadas só são usadas se a biblioteca estiver vazia.</p>
+                      </div>
+                    </details>
+                  )}
                 </div>
                 <div>
                   <Label className="text-gray-400 text-xs uppercase">Instruções {formData.ai_profile_id && "(Opcional)"}</Label>

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bot, MessageSquare, BarChart3, Settings as SettingsIcon, Rocket, Activity } from "lucide-react";
+import { Bot, MessageSquare, BarChart3, Settings as SettingsIcon, Rocket, Activity, Megaphone } from "lucide-react";
 import Exercito from "./prospeccao/Exercito";
 import Campanhas from "./prospeccao/Campanhas";
+import Mensagens from "./prospeccao/Mensagens";
 import Conversas from "./prospeccao/Conversas";
 import Analytics from "./prospeccao/Analytics";
 import Configuracoes from "./prospeccao/Configuracoes";
@@ -33,7 +34,7 @@ export function Prospeccao() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="bg-slate-900/80 border border-gray-700/50 p-1 gap-1 rounded-xl backdrop-blur-sm grid grid-cols-6">
+        <TabsList className="bg-slate-900/80 border border-gray-700/50 p-1 gap-1 rounded-xl backdrop-blur-sm grid grid-cols-7">
           <TabsTrigger
             value="exercito"
             className="flex items-center gap-2 py-2.5 px-3 rounded-lg data-[state=active]:bg-green-900/60 data-[state=active]:text-green-200 data-[state=active]:border-green-500/50 border border-transparent"
@@ -48,6 +49,14 @@ export function Prospeccao() {
           >
             <Rocket className="w-4 h-4" />
             <span className="hidden md:inline font-semibold">Campanhas</span>
+          </TabsTrigger>
+
+          <TabsTrigger
+            value="mensagens"
+            className="flex items-center gap-2 py-2.5 px-3 rounded-lg data-[state=active]:bg-pink-900/60 data-[state=active]:text-pink-200 data-[state=active]:border-pink-500/50 border border-transparent"
+          >
+            <Megaphone className="w-4 h-4" />
+            <span className="hidden md:inline font-semibold">Mensagens</span>
           </TabsTrigger>
 
           <TabsTrigger
@@ -89,6 +98,10 @@ export function Prospeccao() {
 
         <TabsContent value="campanhas" className="mt-6">
           <Campanhas />
+        </TabsContent>
+
+        <TabsContent value="mensagens" className="mt-6">
+          <Mensagens />
         </TabsContent>
 
         <TabsContent value="conversas" className="mt-6">
