@@ -252,7 +252,14 @@ const PIPELINE_STEPS: {status: LeadStatus; label: string}[] = [
 ];
 const PIPELINE_ORDER = PIPELINE_STEPS.map(s=>s.status);
 
-function PipelineStrip({currentStatus}:{currentStatus:LeadStatus}){
+function PipelineStrip({
+  currentStatus, leadName, onMove, disabled,
+}:{
+  currentStatus:LeadStatus;
+  leadName:string;
+  onMove:(target:LeadStatus, fromLabel:string, toLabel:string)=>void|Promise<void>;
+  disabled?:boolean;
+}){
   const curIdx = PIPELINE_ORDER.indexOf(currentStatus);
   if(curIdx<0) return null;
   return(
@@ -260,10 +267,18 @@ function PipelineStrip({currentStatus}:{currentStatus:LeadStatus}){
       {PIPELINE_STEPS.map((step,i)=>{
         const isPast    = i < curIdx;
         const isCurrent = i === curIdx;
+        // NEW (i=0) só clicável se for o atual; não dá pra retroceder pra ele
+        const canClick = !disabled && !isCurrent && step.status!=="NEW";
+        const fromLabel = PIPELINE_STEPS[curIdx].label;
         return(
           <div key={step.status} className="flex items-center flex-1 min-w-0">
-            <div className="flex flex-col items-center flex-1 min-w-0">
-              <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+            <button
+              type="button"
+              onClick={canClick?()=>onMove(step.status, fromLabel, step.label):undefined}
+              disabled={!canClick}
+              title={isCurrent?`${leadName} está aqui`:canClick?`Mover ${leadName} para ${step.label}`:`Não disponível`}
+              className="flex flex-col items-center flex-1 min-w-0 group disabled:cursor-default enabled:hover:brightness-125 enabled:active:scale-95 transition-all">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-all enabled:group-hover:scale-110"
                 style={{
                   background: isPast?"#10B981":isCurrent?"#00D4FF":"rgba(255,255,255,.08)",
                   border: isCurrent?"2px solid #00D4FF":isPast?"2px solid #10B981":"2px solid rgba(255,255,255,.14)",
@@ -276,7 +291,7 @@ function PipelineStrip({currentStatus}:{currentStatus:LeadStatus}){
                 style={{color:isPast?"#10B981":isCurrent?"#00D4FF":"rgba(255,255,255,.22)"}}>
                 {step.label}
               </span>
-            </div>
+            </button>
             {i < PIPELINE_STEPS.length-1 && (
               <div className="h-px flex-1 mx-1 shrink-0"
                 style={{background:i<curIdx?"rgba(16,185,129,.45)":"rgba(255,255,255,.08)",minWidth:10}}/>
@@ -327,7 +342,6 @@ export default function DashboardFoco(){
   const [coachLoading,setCoachLoading]=useState(false);
   const [fllwExpanded,setFllwExpanded]=useState(false);
   const [pausingLeadId,setPausingLeadId]=useState<string|null>(null);
-  const [statusPickerOpen,setStatusPickerOpen]=useState(false);
   const [drawerOpen,setDrawerOpen]=useState<"ranking"|"meta"|"campaign"|null>(null);
   const [reportsOpen,setReportsOpen]=useState(false);
   const taRef=useRef<HTMLTextAreaElement>(null);
@@ -825,10 +839,27 @@ export default function DashboardFoco(){
                       </div>
                     </div>
 
-                    {/* ── PIPELINE ── */}
+                    {/* ── PIPELINE clicável ── */}
                     {PIPELINE_ORDER.includes(lead.status)&&(
                       <div className="px-1">
-                        <PipelineStrip currentStatus={lead.status}/>
+                        <PipelineStrip
+                          currentStatus={lead.status}
+                          leadName={lead.name}
+                          disabled={mutating}
+                          onMove={async(target,fromLabel,toLabel)=>{
+                            if(target==="CONCLUDED"){ setSaleSheet(true); return; }
+                            const prev=lead.status;
+                            await advance(target);
+                            toast.success(`Movido para ${toLabel}`,{
+                              description:`${lead.name} · de ${fromLabel}`,
+                              action:{
+                                label:"Desfazer",
+                                onClick:async()=>{ await advance(prev); toast.info(`Voltou para ${fromLabel}`); },
+                              },
+                              duration:5000,
+                            });
+                          }}
+                        />
                       </div>
                     )}
 
@@ -1022,55 +1053,6 @@ export default function DashboardFoco(){
                             </div>
                           </button>
 
-                          {/* ── ALTERAR ESTÁGIO MANUAL (colapsável) ── */}
-                          <button
-                            onClick={()=>setStatusPickerOpen(v=>!v)}
-                            className="w-full flex items-center justify-center gap-1.5 mt-2 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all hover:brightness-110"
-                            style={{background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#475569"}}
-                          >
-                            <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${statusPickerOpen?"rotate-180":""}`}/>
-                            Alterar estágio manualmente
-                          </button>
-                          <AnimatePresence>
-                            {statusPickerOpen&&(
-                              <motion.div
-                                initial={{height:0,opacity:0}} animate={{height:"auto",opacity:1}} exit={{height:0,opacity:0}}
-                                transition={{duration:.18}} className="overflow-hidden mt-1"
-                              >
-                                <div className="grid grid-cols-3 gap-1.5 pt-1">
-                                  {([
-                                    {s:"NEW",            label:"Novo",         emoji:"⚡", color:"#38BDF8"},
-                                    {s:"IN_PROGRESS",    label:"Atendimento",  emoji:"💬", color:"#818CF8"},
-                                    {s:"NEGOTIATING",    label:"Negociando",   emoji:"🤝", color:"#FB923C"},
-                                    {s:"VISIT_SCHEDULED",label:"Visita Marc.", emoji:"📅", color:"#34D399"},
-                                    {s:"VISITA_REALIZADA",label:"Veio à Visita",emoji:"🏠",color:"#10B981"},
-                                    {s:"DOCS_REQUESTED", label:"Docs Pend.",   emoji:"📄", color:"#FBBF24"},
-                                  ] as const).map(({s,label,emoji,color})=>{
-                                    const isCurrent=lead.status===s;
-                                    return(
-                                      <button key={s}
-                                        disabled={isCurrent||mutating}
-                                        onClick={async()=>{
-                                          setStatusPickerOpen(false);
-                                          await advance(s as LeadStatus);
-                                        }}
-                                        className="flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl text-[9px] font-black uppercase tracking-wide transition-all disabled:opacity-40 disabled:cursor-default hover:brightness-110 active:scale-95"
-                                        style={{
-                                          background:isCurrent?`${color}22`:"rgba(255,255,255,.04)",
-                                          border:isCurrent?`1px solid ${color}55`:"1px solid rgba(255,255,255,.08)",
-                                          color:isCurrent?color:"#64748B",
-                                        }}
-                                      >
-                                        <span className="text-base leading-none">{emoji}</span>
-                                        <span className="leading-tight text-center">{label}</span>
-                                        {isCurrent&&<span className="text-[8px] opacity-60">atual</span>}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
                         </motion.div>
                       )}
                     </AnimatePresence>
