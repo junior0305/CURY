@@ -583,27 +583,75 @@ export default function Campanhas() {
                   <div className="mt-3">
                     {formData.use_broker_chip ? (
                       <div className="p-3 bg-blue-900/20 rounded-lg border border-blue-500/30">
-                        <p className="text-xs font-semibold text-blue-300 mb-1">Chip de fallback (quando corretor não tem chip)</p>
-                        <div className="grid grid-cols-1 gap-1.5 max-h-44 overflow-y-auto">
-                          {botOptions.length === 0 ? (
-                            <p className="text-xs text-gray-500 py-2">Nenhum chip de prospecção online no momento.</p>
-                          ) : (
-                            botOptions.map(bot => (
-                              <label key={bot.id} className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">
-                                <input
-                                  type="radio"
-                                  name="fallback_chip"
-                                  checked={formData.bot_instance_id === bot.id}
-                                  onChange={() => setFormData(fd => ({ ...fd, bot_instance_id: bot.id }))}
-                                  className="accent-blue-500"
-                                />
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                                <span className="text-white text-sm font-semibold">{bot.name}</span>
-                                <span className="text-gray-500 text-xs">{bot.instance_name}</span>
-                              </label>
-                            ))
-                          )}
+                        <div className="flex items-center justify-between mb-2 gap-2">
+                          <p className="text-xs font-semibold text-blue-300">Chip de fallback (quando corretor não tem chip)</p>
+                          <input
+                            type="text"
+                            value={chipSearch}
+                            onChange={e => setChipSearch(e.target.value)}
+                            placeholder="Buscar chip..."
+                            className="text-xs bg-slate-800 border border-gray-700 rounded px-2 py-1 text-white w-40 focus:outline-none focus:border-blue-500"
+                          />
                         </div>
+                        {(() => {
+                          const q = chipSearch.trim().toLowerCase();
+                          const filtered = botOptions.filter(b =>
+                            !q || (b.name||'').toLowerCase().includes(q) ||
+                                  (b.instance_name||'').toLowerCase().includes(q) ||
+                                  (b.team_name||'').toLowerCase().includes(q)
+                          );
+                          const groups = new Map<string, any[]>();
+                          for (const b of filtered) {
+                            const t = b.team_name || 'Sem equipe';
+                            if (!groups.has(t)) groups.set(t, []);
+                            groups.get(t)!.push(b);
+                          }
+                          const sortedGroups = Array.from(groups.entries()).sort(([a],[b]) => {
+                            if (a === 'Sem equipe') return 1;
+                            if (b === 'Sem equipe') return -1;
+                            return a.localeCompare(b);
+                          });
+                          return (
+                            <div className="grid grid-cols-1 gap-1 max-h-72 overflow-y-auto p-2 bg-slate-900/40 rounded-lg">
+                              {filtered.length === 0 ? (
+                                <p className="text-xs text-gray-500 py-2 text-center">{botOptions.length === 0 ? "Nenhum chip de prospecção online." : "Nenhum chip bate com a busca."}</p>
+                              ) : sortedGroups.map(([team, bots]) => {
+                                const isCollapsed = collapsedTeams.has(team);
+                                const selectedInTeam = bots.some(b => formData.bot_instance_id === b.id);
+                                return (
+                                  <div key={team} className="rounded-md overflow-hidden">
+                                    <div className="flex items-center justify-between px-2 py-1.5 bg-slate-900/60 sticky top-0 z-10">
+                                      <button
+                                        type="button"
+                                        onClick={() => setCollapsedTeams(s => { const n = new Set(s); n.has(team) ? n.delete(team) : n.add(team); return n; })}
+                                        className="flex items-center gap-1.5 text-xs font-bold text-gray-200"
+                                      >
+                                        <span className="text-[10px]">{isCollapsed ? '▶' : '▼'}</span>
+                                        <span>🎯 {team.toUpperCase()}</span>
+                                        <span className="text-[10px] text-gray-500 font-normal">({bots.length})</span>
+                                        {selectedInTeam && <span className="text-[10px] text-blue-300 font-normal">· selecionado</span>}
+                                      </button>
+                                    </div>
+                                    {!isCollapsed && bots.map(bot => (
+                                      <label key={bot.id} className="flex items-center gap-2.5 p-2 pl-4 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">
+                                        <input
+                                          type="radio"
+                                          name="fallback_chip"
+                                          checked={formData.bot_instance_id === bot.id}
+                                          onChange={() => setFormData(fd => ({ ...fd, bot_instance_id: bot.id }))}
+                                          className="accent-blue-500"
+                                        />
+                                        <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                        <span className="text-white text-sm font-semibold">{bot.name}</span>
+                                        <span className="text-gray-500 text-xs">{bot.instance_name}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
                         <p className="text-xs text-gray-500 mt-2">Se o corretor não tiver chip cadastrado, o sistema usará o chip selecionado acima.</p>
                       </div>
                     ) : (
