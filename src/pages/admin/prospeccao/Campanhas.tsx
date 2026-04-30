@@ -91,6 +91,8 @@ export default function Campanhas() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [aiProfiles, setAiProfiles] = useState<AIProfile[]>([]);
   const [botOptions, setBotOptions] = useState<any[]>([]);
+  const [chipSearch, setChipSearch] = useState("");
+  const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
   const [campaignStats, setCampaignStats] = useState<Record<string, CampaignStats>>({});
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -223,10 +225,24 @@ export default function Campanhas() {
   useEffect(() => {
     loadCampaigns();
     loadAIProfiles();
-    // load available prospecting bots for selection
+    // load available prospecting bots + identify team (manager) of each
     (async () => {
-      const { data } = await supabase.from('bot_instances').select('*').eq('is_prospecting', true).in('status', ['active', 'open']).order('name', { ascending: true });
-      setBotOptions(data || []);
+      const [{ data: bots }, { data: profiles }] = await Promise.all([
+        supabase.from('bot_instances').select('*').eq('is_prospecting', true).in('status', ['active', 'open']).order('name', { ascending: true }),
+        supabase.from('profiles').select('id, first_name, role, manager_id, bot_instance_id').not('bot_instance_id', 'is', null),
+      ]);
+      const ownerByBot = new Map<string, any>((profiles || []).map((p: any) => [p.bot_instance_id, p]));
+      const managerById = new Map<string, any>((profiles || []).filter((p: any) => p.role === 'MANAGER').map((p: any) => [p.id, p]));
+      const enriched = (bots || []).map((b: any) => {
+        const owner = ownerByBot.get(b.id);
+        let team = 'Sem equipe';
+        if (owner) {
+          if (owner.role === 'MANAGER') team = owner.first_name || team;
+          else if (owner.manager_id) team = managerById.get(owner.manager_id)?.first_name || team;
+        }
+        return { ...b, team_name: team };
+      });
+      setBotOptions(enriched);
     })();
 
     const channel = supabase.channel("ia_campaigns_changes").on("postgres_changes", { event: "*", schema: "public", table: "ia_campaigns" }, loadCampaigns).subscribe();
@@ -592,34 +608,95 @@ export default function Campanhas() {
                       </div>
                     ) : (
                       <div>
-                        <p className="text-xs font-semibold text-gray-300 mb-2">Chips de prospecção <span className="text-gray-500 font-normal">(selecione 1 ou mais)</span></p>
-                        <div className="grid grid-cols-1 gap-1.5 max-h-44 overflow-y-auto p-2 bg-slate-800 rounded-lg border border-gray-700">
-                          {botOptions.length === 0 ? (
-                            <p className="text-xs text-gray-500 py-2 text-center">Nenhum chip de prospecção online.<br/>Verifique se os chips estão conectados.</p>
-                          ) : (
-                            botOptions.map(bot => (
-                              <label key={bot.id} className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">
-                                <input
-                                  type="checkbox"
-                                  checked={Array.isArray(formData.prospect_instance_ids) && formData.prospect_instance_ids.includes(bot.id)}
-                                  onChange={e => {
-                                    const checked = e.target.checked;
-                                    setFormData(fd => {
-                                      const cur = new Set(Array.isArray(fd.prospect_instance_ids) ? fd.prospect_instance_ids : []);
-                                      if (checked) cur.add(bot.id); else cur.delete(bot.id);
-                                      return { ...fd, prospect_instance_ids: Array.from(cur) };
-                                    });
-                                  }}
-                                  className="accent-blue-500 w-4 h-4"
-                                />
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                                <span className="text-white text-sm font-semibold">{bot.name}</span>
-                                <span className="text-gray-500 text-xs">{bot.instance_name}</span>
-                                <span className="ml-auto text-xs text-cyan-400">{bot.messages_today || 0} hoje</span>
-                              </label>
-                            ))
-                          )}
+                        <div className="flex items-center justify-between mb-2 gap-2">
+                          <p className="text-xs font-semibold text-gray-300">Chips de prospecção <span className="text-gray-500 font-normal">(selecione 1 ou mais)</span></p>
+                          <input
+                            type="text"
+                            value={chipSearch}
+                            onChange={e => setChipSearch(e.target.value)}
+                            placeholder="Buscar chip..."
+                            className="text-xs bg-slate-800 border border-gray-700 rounded px-2 py-1 text-white w-40 focus:outline-none focus:border-blue-500"
+                          />
                         </div>
+                        {(() => {
+                          const q = chipSearch.trim().toLowerCase();
+                          const filtered = botOptions.filter(b =>
+                            !q || (b.name||'').toLowerCase().includes(q) ||
+                                  (b.instance_name||'').toLowerCase().includes(q) ||
+                                  (b.team_name||'').toLowerCase().includes(q)
+                          );
+                          const groups = new Map<string, any[]>();
+                          for (const b of filtered) {
+                            const t = b.team_name || 'Sem equipe';
+                            if (!groups.has(t)) groups.set(t, []);
+                            groups.get(t)!.push(b);
+                          }
+                          const sortedGroups = Array.from(groups.entries()).sort(([a],[b]) => {
+                            if (a === 'Sem equipe') return 1;
+                            if (b === 'Sem equipe') return -1;
+                            return a.localeCompare(b);
+                          });
+                          const selected = new Set(Array.isArray(formData.prospect_instance_ids) ? formData.prospect_instance_ids : []);
+                          return (
+                            <div className="grid grid-cols-1 gap-1 max-h-72 overflow-y-auto p-2 bg-slate-800 rounded-lg border border-gray-700">
+                              {filtered.length === 0 ? (
+                                <p className="text-xs text-gray-500 py-2 text-center">{botOptions.length === 0 ? "Nenhum chip de prospecção online." : "Nenhum chip bate com a busca."}</p>
+                              ) : sortedGroups.map(([team, bots]) => {
+                                const teamSelected = bots.filter(b => selected.has(b.id)).length;
+                                const allSelected = teamSelected === bots.length;
+                                const isCollapsed = collapsedTeams.has(team);
+                                return (
+                                  <div key={team} className="rounded-md overflow-hidden">
+                                    <div className="flex items-center justify-between px-2 py-1.5 bg-slate-900/60 sticky top-0 z-10">
+                                      <button
+                                        type="button"
+                                        onClick={() => setCollapsedTeams(s => { const n = new Set(s); n.has(team) ? n.delete(team) : n.add(team); return n; })}
+                                        className="flex items-center gap-1.5 text-xs font-bold text-gray-200"
+                                      >
+                                        <span className="text-[10px]">{isCollapsed ? '▶' : '▼'}</span>
+                                        <span>🎯 {team.toUpperCase()}</span>
+                                        <span className="text-[10px] text-gray-500 font-normal">({teamSelected}/{bots.length})</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setFormData(fd => {
+                                          const cur = new Set(Array.isArray(fd.prospect_instance_ids) ? fd.prospect_instance_ids : []);
+                                          if (allSelected) bots.forEach(b => cur.delete(b.id));
+                                          else bots.forEach(b => cur.add(b.id));
+                                          return { ...fd, prospect_instance_ids: Array.from(cur) };
+                                        })}
+                                        className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors ${allSelected ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30' : 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30'}`}
+                                      >
+                                        {allSelected ? 'Limpar equipe' : 'Selecionar equipe'}
+                                      </button>
+                                    </div>
+                                    {!isCollapsed && bots.map(bot => (
+                                      <label key={bot.id} className="flex items-center gap-2.5 p-2 pl-4 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">
+                                        <input
+                                          type="checkbox"
+                                          checked={selected.has(bot.id)}
+                                          onChange={e => {
+                                            const checked = e.target.checked;
+                                            setFormData(fd => {
+                                              const cur = new Set(Array.isArray(fd.prospect_instance_ids) ? fd.prospect_instance_ids : []);
+                                              if (checked) cur.add(bot.id); else cur.delete(bot.id);
+                                              return { ...fd, prospect_instance_ids: Array.from(cur) };
+                                            });
+                                          }}
+                                          className="accent-blue-500 w-4 h-4"
+                                        />
+                                        <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                        <span className="text-white text-sm font-semibold">{bot.name}</span>
+                                        <span className="text-gray-500 text-xs">{bot.instance_name}</span>
+                                        <span className="ml-auto text-xs text-cyan-400">{bot.messages_today || 0} hoje</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
                         <p className="text-xs text-gray-500 mt-2">
                           {Array.isArray(formData.prospect_instance_ids) && formData.prospect_instance_ids.length > 0
                             ? `✅ ${formData.prospect_instance_ids.length} chip(s) selecionado(s) — round-robin entre eles`

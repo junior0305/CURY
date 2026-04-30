@@ -86,6 +86,7 @@ export default function Monitor() {
           bot_instances!bot_instance_id(name, instance_name),
           ia_campaigns!campaign_id(name)
         `)
+        .eq("is_crm_lead", false)
         .order("created_at", { ascending: false })
         .limit(50),
     ]);
