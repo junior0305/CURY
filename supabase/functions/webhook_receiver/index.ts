@@ -239,7 +239,7 @@ serve(async (req) => {
         payload: { messageId, phone: phoneNumber },
         status_code: 200,
         response_body: 'dedup_marker',
-      }).catch(() => {});
+      }).then(() => {}, () => {});
     }
 
     if (phoneNumber) {
@@ -267,7 +267,7 @@ serve(async (req) => {
             p_ultimo_evento:  'corretor_respondeu',
             p_proxima_acao:   'aguardar',
             p_atualizado_por: 'webhook_receiver',
-          }).catch(() => {});
+          }).then(() => {}, () => {});
         }
 
         // Pausar sessão Sentinela ativa se corretor assumiu a conversa
@@ -486,7 +486,7 @@ Responda APENAS em JSON válido, sem markdown:
                   p_ultimo_evento:  'lead_respondeu',
                   p_proxima_acao:   cls.intencao === 'quente' ? 'alertar_gerente' : 'aguardar',
                   p_atualizado_por: 'classificador_ia',
-                }).catch(() => {});
+                }).then(() => {}, () => {});
 
                 console.log(`[webhook_receiver] Classificação: ${cls.intencao}/${cls.tema}/${cls.momento}`);
               } catch (e: any) {
@@ -499,7 +499,7 @@ Responda APENAS em JSON válido, sem markdown:
                 p_ultimo_evento:  'lead_respondeu',
                 p_proxima_acao:   'aguardar',
                 p_atualizado_por: 'webhook_receiver',
-              }).catch(() => {});
+              }).then(() => {}, () => {});
             }
           }
 
@@ -530,7 +530,7 @@ Responda APENAS em JSON válido, sem markdown:
                       ? `${lead.status} → ${statusAnalysis.suggested_status}: ${statusAnalysis.reason}`
                       : `sem mudança: ${statusAnalysis?.reason || 'nenhuma evidência'}`,
                     recipient_phone: lead.phone,
-                  }).catch(() => {});
+                  }).then(() => {}, () => {});
 
                   if (statusAnalysis?.suggested_status) {
                     const PIPELINE_ORDER = ['NEW', 'IN_PROGRESS', 'VISIT_SCHEDULED', 'DOCS_REQUESTED', 'CONCLUDED'];
@@ -546,7 +546,7 @@ Responda APENAS em JSON válido, sem markdown:
                         lead_id: lead.id,
                         content: `📊 Status atualizado pela IA: ${lead.status} → ${statusAnalysis.suggested_status}. Motivo: ${statusAnalysis.reason}`,
                         type: 'SYSTEM',
-                      }).catch(() => {});
+                      }).then(() => {}, () => {});
 
                       console.log(`[webhook_receiver] 📊 ${lead.name}: ${lead.status} → ${statusAnalysis.suggested_status}`);
                     }
