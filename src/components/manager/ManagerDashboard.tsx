@@ -19,6 +19,7 @@ import {
   Loader2, Sparkles,
 } from "lucide-react";
 import { LeadMonitorDrawer } from "./LeadMonitorDrawer";
+import { TeamProspeccaoTab } from "./TeamProspeccaoTab";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -708,7 +709,7 @@ function AlertModal({ broker, fromId, lead, onClose }: {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 type RightTab  = "equipe" | "velocidade" | "ranking";
-type LeftPanel = "urgente" | "recentes" | "redistribuir" | "descarte" | "busca";
+type LeftPanel = "urgente" | "recentes" | "redistribuir" | "descarte" | "prospeccao";
 type RecentWindow = 6 | 12 | 24;
 
 export default function ManagerDashboard() {
@@ -1068,7 +1069,7 @@ export default function ManagerDashboard() {
               { v: "recentes",     label: "Recentes",     icon: Sparkles,      color: "#A78BFA" },
               { v: "redistribuir", label: "Redistribuir", icon: RotateCcw,     color: "#00D4FF" },
               { v: "descarte",     label: "Descarte",     icon: Trash2,        color: "#F59E0B", badge: stats.discarded },
-              { v: "busca",        label: "Buscar",       icon: Search,        color: "#10B981" },
+              { v: "prospeccao",   label: "Prospecção",   icon: Send,          color: "#10B981" },
             ] as { v: LeftPanel; label: string; icon: React.ElementType; color: string; badge?: number }[]).map(tab => (
               <button key={tab.v} onClick={() => setLeftPanel(tab.v)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shrink-0 md:flex-1 md:justify-center relative"
@@ -1435,7 +1436,15 @@ export default function ManagerDashboard() {
               </motion.div>
             )}
             {/* ── BUSCA ──────────────────────────────────────────────────────── */}
-            {leftPanel === "busca" && (
+            {leftPanel === "prospeccao" && user?.id && (
+              <motion.div key="prospeccao" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 8 }} transition={{ duration: 0.18 }}
+                className="flex-1 min-h-0 overflow-hidden flex flex-col gap-2">
+                <TeamProspeccaoTab managerId={user.id} />
+              </motion.div>
+            )}
+            {/* Mantido em segredo: bloco busca ainda referenciado por search popover do header */}
+            {false && leftPanel === ("busca" as any) && (
               <motion.div key="busca" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 8 }} transition={{ duration: 0.18 }}
                 className="flex-1 min-h-0 overflow-hidden flex flex-col gap-2">
