@@ -16,10 +16,11 @@ import {
   RefreshCw, TrendingUp, Target, Shield,
   Bell, X, Send, Trash2, RotateCcw, Filter, Eye,
   Search, MessageSquare, Phone, Brain, Bot, Flame, Minus,
-  Loader2, Sparkles,
+  Loader2, Sparkles, UserPlus,
 } from "lucide-react";
 import { LeadMonitorDrawer } from "./LeadMonitorDrawer";
 import { TeamProspeccaoTab } from "./TeamProspeccaoTab";
+import { NewLeadModal } from "./NewLeadModal";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -731,6 +732,7 @@ export default function ManagerDashboard() {
   const [recentOnlyNew, setRecentOnlyNew] = useState<boolean>(false);
   const [distributePopover, setDistributePopover] = useState<string | null>(null);
   const [headerSearchOpen, setHeaderSearchOpen] = useState<boolean>(false);
+  const [newLeadOpen, setNewLeadOpen] = useState<boolean>(false);
 
   // Manager's team_id
   useEffect(() => {
@@ -1028,6 +1030,13 @@ export default function ManagerDashboard() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button onClick={() => setNewLeadOpen(true)}
+            className="px-2.5 py-1.5 rounded-md transition-all flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider"
+            style={{ background: "rgba(0,212,255,0.12)", color: "#00D4FF", border: "1px solid rgba(0,212,255,0.4)" }}
+            title="Adicionar lead manualmente (parceiro / venda direta)">
+            <UserPlus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Lead</span>
+          </button>
           <button onClick={() => setHeaderSearchOpen(true)}
             className="p-1.5 rounded-md transition-colors"
             style={{ color: t.textSubtle, background: "var(--crm-glass)", border: "1px solid var(--crm-border-mid)" }}
@@ -1045,6 +1054,16 @@ export default function ManagerDashboard() {
           </button>
         </div>
       </header>
+
+      {/* ── NEW LEAD MODAL ────────────────────────────────────────────────────── */}
+      {newLeadOpen && user?.id && (
+        <NewLeadModal
+          managerId={user.id}
+          managerName={(user.user_metadata as any)?.first_name || "Gerente"}
+          brokers={brokers}
+          onClose={() => setNewLeadOpen(false)}
+        />
+      )}
 
       {/* ── SEARCH OVERLAY (Cmd+K style) ──────────────────────────────────────── */}
       {headerSearchOpen && (
