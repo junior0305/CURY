@@ -888,6 +888,7 @@ export default function DashboardFoco(){
                     <div>
                       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                         <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded" style={{background:st.bg,color:st.text}}>{st.emoji} {st.label}</span>
+                        {lead.product&&<span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{background:"rgba(0,212,255,.12)",color:"#00D4FF",border:"1px solid rgba(0,212,255,.25)"}} title="Produto/empreendimento">📦 {lead.product}</span>}
                         {lead.rendaDeclarada&&<span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{background:"rgba(129,140,248,.12)",color:"#818CF8",border:"1px solid rgba(129,140,248,.25)"}}>R$ {lead.rendaDeclarada}</span>}
                         {mcmvQual?.faixa&&FAIXA[mcmvQual.faixa]&&<span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{background:`${FAIXA[mcmvQual.faixa].color}18`,color:FAIXA[mcmvQual.faixa].color,border:`1px solid ${FAIXA[mcmvQual.faixa].color}40`}}>{FAIXA[mcmvQual.faixa].label}</span>}
                         {lead.tipoTrabalho&&<span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{background:"rgba(129,140,248,.08)",color:"#818CF8",border:"1px solid rgba(129,140,248,.2)"}}>{TIPO_TRABALHO_LABEL[lead.tipoTrabalho]}</span>}

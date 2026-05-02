@@ -207,6 +207,7 @@ export function FocusModeCard({ onSelectLead, botActiveLeadIds = new Set() }: Fo
         if (state.intencao && state.intencao !== "sem_info") {
           parts.push(state.intencao === "quente" ? "🔥 Quente" : state.intencao === "morno" ? "🟡 Morno" : "🔵 Frio");
         }
+        if (lead.product)        parts.push(`📦 ${lead.product}`);
         if (lead.rendaDeclarada) parts.push(`R$ ${lead.rendaDeclarada}`);
         if (lead.tipoTrabalho)   parts.push(TIPO_TRABALHO_LABEL[lead.tipoTrabalho] ?? "");
         if (parts.length) item.stateCtx = parts.join(" · ");
