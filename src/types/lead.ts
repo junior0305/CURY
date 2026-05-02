@@ -69,6 +69,7 @@ export interface Lead {
   // Campos MCMV
   rendaDeclarada: string | null;       // Vem do formulário Facebook (opcional)
   tipoTrabalho: TipoTrabalho;          // CLT | AUTONOMO | FUNCIONARIO_PUBLICO (opcional)
+  product: string | null;              // Produto/empreendimento (vem do Make como 'produto'/'product')
   lostReason: LostReason;              // Motivo de perda ao ir para ABANDONED
   visitaConfirmada: boolean | null;    // Lead confirmou presença antes da visita
   // Ciclo de vida — adicionados em 2026-04

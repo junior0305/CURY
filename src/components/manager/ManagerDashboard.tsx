@@ -1656,6 +1656,31 @@ export default function ManagerDashboard() {
                                     <span className="font-mono">há {ago}</span>
                                     {lead.tag && <><span>·</span><span className="truncate">{lead.tag}</span></>}
                                   </div>
+                                  {(lead.product || lead.rendaDeclarada || lead.tipoTrabalho) && (
+                                    <div className="flex items-center gap-1 flex-wrap mt-1">
+                                      {lead.product && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1"
+                                          style={{ background: "rgba(0,212,255,0.1)", color: "#00D4FF", border: "1px solid rgba(0,212,255,0.25)" }}
+                                          title="Produto/empreendimento">
+                                          📦 <span className="truncate max-w-[120px]">{lead.product}</span>
+                                        </span>
+                                      )}
+                                      {lead.rendaDeclarada && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1"
+                                          style={{ background: "rgba(16,185,129,0.1)", color: "#10B981", border: "1px solid rgba(16,185,129,0.25)" }}
+                                          title="Renda declarada">
+                                          💰 {lead.rendaDeclarada}
+                                        </span>
+                                      )}
+                                      {lead.tipoTrabalho && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1"
+                                          style={{ background: "rgba(167,139,250,0.1)", color: "#A78BFA", border: "1px solid rgba(167,139,250,0.25)" }}
+                                          title="Tipo de trabalho">
+                                          💼 {lead.tipoTrabalho === "CLT" ? "CLT" : lead.tipoTrabalho === "AUTONOMO" ? "Autônomo" : "Func. Público"}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="flex flex-col items-end gap-1.5 shrink-0">
                                   {broker ? (

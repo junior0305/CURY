@@ -247,6 +247,8 @@ serve(async (req) => {
       // Campos MCMV opcionais (só incluídos se vieram no payload)
       ...(rendaDeclarada  ? { renda_declarada:  rendaDeclarada  } : {}),
       ...(tipoTrabalho    ? { tipo_trabalho:    tipoTrabalho    } : {}),
+      // Produto vem do Make/Facebook (alias 'produto' ou 'product')
+      ...(leadValues.product ? { product: leadValues.product } : {}),
       // Agente IA: marca o lead para qualificação automática
       ...(chosenQueue?.ai_agent_broker_id ? { ai_qualification_queue_id: chosenQueue.id } : {}),
     };

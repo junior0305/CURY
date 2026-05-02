@@ -18,6 +18,7 @@ const mapLeadFromDB = (l: any): Lead => ({
   // Campos MCMV
   rendaDeclarada: l.renda_declarada ?? null,
   tipoTrabalho: (l.tipo_trabalho ?? null) as TipoTrabalho,
+  product: l.product ?? null,
   lostReason: (l.lost_reason ?? null) as LostReason,
   visitaConfirmada: l.visita_confirmada ?? null,
   // Ciclo de vida
