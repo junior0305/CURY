@@ -28,6 +28,7 @@ interface CoachAnalysis {
   suggestion: string | null;
   created_at?: string;
   cached?: boolean;
+  source?: 'auto_metrics' | 'manual_request' | string;  // métrica vs LLM
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -189,32 +190,88 @@ export function LeadMonitorDrawer({ lead, broker, onClose }: Props) {
       });
   }, [lead.id]);
 
-  // Fetch AI Coach analysis for THIS conversation (cache 1h)
-  const loadCoach = async (force = false) => {
+  // Fetch coach analysis — PRIMEIRO tenta cache do banco (qualquer fonte), depois métricas.
+  // LLM só roda se manager clicar em "Análise IA Profunda".
+  const loadCoachFromDB = async () => {
+    if (!conversationId) return null;
+    const { data } = await supabase
+      .from("ai_coach_analysis")
+      .select("quality_score, severity, summary, positives, errors, sample_conversations, conversation_origin, created_at")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) return null;
+    return {
+      quality_score: data.quality_score,
+      severity: data.severity,
+      errors: Array.isArray(data.errors) ? data.errors : [],
+      positives: Array.isArray(data.positives) ? data.positives : [],
+      summary: data.summary || "",
+      suggestion: (data.sample_conversations as any)?.suggestion ?? null,
+      created_at: data.created_at,
+      source: data.conversation_origin || (data.sample_conversations as any)?.source,
+      cached: true,
+    } as CoachAnalysis;
+  };
+
+  const loadCoachMetrics = async () => {
     if (!conversationId) return;
     setCoachLoading(true);
     setCoachError(null);
-    const { data, error } = await supabase.functions.invoke("ai-coach-conversation", {
-      body: { conversationId, force },
+    const { data, error } = await supabase.functions.invoke("coach-conversation-metrics", {
+      body: { conversationId },
     });
     setCoachLoading(false);
     if (error) { setCoachError(error.message || "Falha ao analisar"); return; }
-    if (data?.empty) { setCoach(null); setCoachError(data.reason || "Sem mensagens"); return; }
-    if (data?.analysis) {
+    if ((data as any)?.empty) { setCoach(null); setCoachError("Sem mensagens nesta conversa"); return; }
+    if (data && (data as any).quality_score !== undefined) {
       setCoach({
-        quality_score: data.analysis.quality_score,
-        severity: data.analysis.severity,
-        errors: Array.isArray(data.analysis.errors) ? data.analysis.errors : [],
-        positives: Array.isArray(data.analysis.positives) ? data.analysis.positives : [],
-        summary: data.analysis.summary || "",
-        suggestion: data.analysis.suggestion ?? null,
-        created_at: data.analysis.created_at,
-        cached: data.cached,
+        quality_score: (data as any).quality_score,
+        severity: (data as any).severity,
+        errors: Array.isArray((data as any).errors) ? (data as any).errors : [],
+        positives: Array.isArray((data as any).positives) ? (data as any).positives : [],
+        summary: (data as any).summary || "",
+        suggestion: (data as any).suggestion ?? null,
+        source: 'auto_metrics',
       });
     }
   };
 
-  useEffect(() => { loadCoach(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [conversationId]);
+  const loadCoachLLM = async () => {
+    if (!conversationId) return;
+    setCoachLoading(true);
+    setCoachError(null);
+    const { data, error } = await supabase.functions.invoke("ai-coach-conversation", {
+      body: { conversationId, force: true },
+    });
+    setCoachLoading(false);
+    if (error) { setCoachError(error.message || "Falha ao analisar"); return; }
+    if ((data as any)?.empty) return;
+    if ((data as any)?.analysis) {
+      const a = (data as any).analysis;
+      setCoach({
+        quality_score: a.quality_score,
+        severity: a.severity,
+        errors: Array.isArray(a.errors) ? a.errors : [],
+        positives: Array.isArray(a.positives) ? a.positives : [],
+        summary: a.summary || "",
+        suggestion: a.suggestion ?? null,
+        source: 'manual_request',
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!conversationId) return;
+    (async () => {
+      const cached = await loadCoachFromDB();
+      if (cached) { setCoach(cached); return; }
+      // Sem cache → roda métricas (instantâneo, zero custo)
+      loadCoachMetrics();
+    })();
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [conversationId]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -279,24 +336,42 @@ export function LeadMonitorDrawer({ lead, broker, onClose }: Props) {
             <ScoreArc score={coach?.quality_score ?? null} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2 mb-1">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap">
                   <Star className="w-3.5 h-3.5 shrink-0" style={{ color: "#A78BFA" }} />
                   <span className="text-[10px] font-black uppercase tracking-widest truncate" style={{ color: "#A78BFA" }}>
-                    AI Coach desta conversa
+                    AI Coach
                   </span>
-                  {coach?.cached && (
+                  {coach?.source === 'auto_metrics' && (
                     <span className="text-[8px] px-1 py-0.5 rounded uppercase tracking-wider"
-                      style={{ background: "rgba(148,163,184,0.1)", color: "#64748B", border: "1px solid rgba(148,163,184,0.2)" }}>
-                      cache
+                      style={{ background: "rgba(16,185,129,0.1)", color: "#10B981", border: "1px solid rgba(16,185,129,0.2)" }}
+                      title="Score calculado por métricas (sem custo de IA)">
+                      📊 Métricas
+                    </span>
+                  )}
+                  {coach?.source === 'manual_request' && (
+                    <span className="text-[8px] px-1 py-0.5 rounded uppercase tracking-wider"
+                      style={{ background: "rgba(167,139,250,0.1)", color: "#A78BFA", border: "1px solid rgba(167,139,250,0.2)" }}
+                      title="Análise contextual com LLM">
+                      🧠 IA Profunda
                     </span>
                   )}
                 </div>
-                <button onClick={() => loadCoach(true)} disabled={coachLoading}
-                  className="p-1 rounded-md transition disabled:opacity-50"
-                  style={{ background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.2)" }}
-                  title="Re-analisar conversa">
-                  <RefreshCw className={`w-3 h-3 ${coachLoading ? "animate-spin" : ""}`} style={{ color: "#A78BFA" }} />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  {coach?.source !== 'manual_request' && (
+                    <button onClick={loadCoachLLM} disabled={coachLoading}
+                      className="px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider transition disabled:opacity-50 flex items-center gap-1"
+                      style={{ background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.3)", color: "#A78BFA" }}
+                      title="Análise contextual com IA (gera custo de LLM)">
+                      🧠 IA Profunda
+                    </button>
+                  )}
+                  <button onClick={loadCoachMetrics} disabled={coachLoading}
+                    className="p-1 rounded-md transition disabled:opacity-50"
+                    style={{ background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.2)" }}
+                    title="Recalcular métricas">
+                    <RefreshCw className={`w-3 h-3 ${coachLoading ? "animate-spin" : ""}`} style={{ color: "#A78BFA" }} />
+                  </button>
+                </div>
               </div>
 
               {coachLoading && !coach ? (
