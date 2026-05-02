@@ -120,14 +120,35 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
     );
 
+    // Lista branca de produtos/empreendimentos/regiões conhecidas — usada como
+    // fallback quando o Make não envia o campo 'produto' explicitamente
+    const KNOWN_PRODUCTS = [
+      'BARRA_FUNDA','BARRA FUNDA','ZONA SUL','ZONA OESTE','ZONA NORTE','ZONA LESTE',
+      'JAGUARE','JAGUARÉ','CARRAO','CARRÃO','GRANJA_JULIETA','GRANJA JULIETA',
+      'LAPA','BUTANTA','BUTANTÃ','BUTANTTA','LEOPOLDINA','AGUA BRANCA','ÁGUA BRANCA',
+      'PERDIZES','VILA OLIMPIA','MOEMA','TATUAPE','TATUAPÉ','PINHEIROS','SANTANA',
+      'IPIRANGA','MOOCA','ANALIA FRANCO','LIBERDADE','PENHA','SAUDE','VILA MARIANA',
+    ];
+    const tagUpper = (tag || '').toString().toUpperCase();
+    const productFromMake = (sourceData.produto || sourceData.product || '').toString();
+    // Fallback: se Make não enviou produto, tenta extrair da tag se for nome conhecido
+    const productInferred = !productFromMake && tagUpper
+      ? (KNOWN_PRODUCTS.find(p => tagUpper.includes(p)) || '')
+      : productFromMake;
+
     const leadValues: Record<string, string> = {
       tag:           (tag || '').toString(),
       source:        (origin || '').toString(),
-      product:       (sourceData.produto || sourceData.product || '').toString(),   // 'produto' = alias Make
+      product:       productInferred,
       campaign:      (sourceData.campanha || sourceData.campaign || '').toString(), // 'campanha' = alias Make
       tipo_trabalho: (tipoTrabalho || '').toString(),  // CLT | AUTONOMO | FUNCIONARIO_PUBLICO
       faixa_mcmv:    (faixaMcmv || '').toString(),     // FAIXA_1 | FAIXA_2 | FAIXA_3 | FORA
     };
+
+    // Log debug do payload bruto recebido (apenas chaves + tipos pra diagnóstico)
+    // Útil pra investigar quando Make não manda 'produto' em algum fluxo.
+    console.log('[incoming-lead] Payload keys:', Object.keys(sourceData || {}).join(','));
+    console.log('[incoming-lead] product=' + productFromMake + ' tag=' + tag + ' inferred=' + productInferred);
 
     const { data: queues } = await supabase.from('distribution_queues').select('*').eq('is_active', true).order('created_at', { ascending: true });
 
@@ -539,9 +560,17 @@ Responda APENAS em JSON válido, sem markdown, sem explicação:
     }
 
     // Log do webhook recebido (visível em Admin/Pipeline/Logs/Webhooks)
+    // Inclui payload completo do Make pra debug — útil pra ver qual fluxo manda
+    // 'produto' explicitamente e qual não.
     await supabase.from('webhook_logs').insert({
       integration_key: 'make',
-      payload: { name, phone, email, tag, origin },
+      payload: {
+        name, phone, email, tag, origin,
+        product_from_make: productFromMake,
+        product_inferred: productInferred,
+        raw_keys: Object.keys(sourceData || {}),
+        raw_payload: sourceData,  // payload completo pra debug
+      },
       status_code: 200,
       response_body: JSON.stringify({ lead_id: newLead.id, broker: chosenBroker?.first_name || null, queue: chosenQueue?.name || 'FALLBACK' }),
     }).then(() => {}).catch(() => {}); // fire-and-forget, nunca bloqueia
