@@ -2,8 +2,8 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
-  RefreshCw, MessageSquare, Bot, User as UserIcon, UserCheck, UserX,
-  Bell, Send, Eye, Filter, Loader2, Inbox,
+  RefreshCw, MessageSquare, Bot, User as UserIcon, UserCheck,
+  Bell, Eye, Filter, Loader2, Inbox, Flame, Ban, HelpCircle, Sparkles,
 } from "lucide-react";
 
 interface ConvRow {
@@ -19,16 +19,23 @@ interface ConvRow {
   msgs_out_ia: number;
   msgs_out_broker: number;
   last_msg_at: string;
-  last_msg_sender: "ia" | "broker" | "lead" | string;
+  last_msg_sender: string;
   last_outgoing_at: string | null;
-  last_outgoing_sender: "ia" | "broker" | string | null;
-  // From lead lookup
+  last_outgoing_sender: string | null;
+  last_lead_msg_text: string | null;     // preview e classificação
+  // Lead
   lead_status: string | null;
   broker_id: string | null;
   broker_name: string | null;
   manager_name: string | null;
   manager_bot_instance_id: string | null;
   broker_phone: string | null;
+  // Inferência: dono do chip que atendeu
+  chip_owner_id: string | null;
+  chip_owner_name: string | null;
+  chip_owner_manager_id: string | null;
+  // Classificação textual
+  classification: "quente" | "opt_out" | "pergunta" | "neutro";
 }
 
 interface Profile {
@@ -47,10 +54,40 @@ const WINDOW_OPTIONS = [
   { v: 720, label: "30d" },
 ] as const;
 
+// ─── Classificação textual (sem LLM) ─────────────────────────────────────────
+const OPT_OUT_KEYWORDS = [
+  "nao quero", "não quero", "nao tenho interesse", "não tenho interesse",
+  "sem interesse", "para de", "pare de", "me retire", "me tire",
+  "descadastra", "descadastrar", "remova", "remover", "stop",
+  "unsubscribe", "numero errado", "número errado", "nao sou",
+  "não me incomod", "nao me incomod", "deixa de", "perdi o interesse",
+  "ja comprei", "já comprei",
+];
+const QUENTE_KEYWORDS = [
+  "quero", "tenho interesse", "preço", "preco", "valor", "quanto custa",
+  "quando posso", "como funciona", "documento", "visita", "agendar",
+  "marcar", "fgts", "renda", "comprovante", "entrada", "parcela",
+  "financiar", "aprovado", "vamos", "bora", "sim", "topo", "topar",
+];
+function classify(text: string | null): ConvRow["classification"] {
+  if (!text) return "neutro";
+  const t = text.toLowerCase().trim();
+  for (const kw of OPT_OUT_KEYWORDS) if (t.includes(kw)) return "opt_out";
+  for (const kw of QUENTE_KEYWORDS) if (t.includes(kw)) return "quente";
+  if (t.endsWith("?")) return "pergunta";
+  return "neutro";
+}
+const CLASSIFICATION_META: Record<ConvRow["classification"], { label: string; color: string; icon: any }> = {
+  quente:    { label: "Quente",  color: "#EF4444", icon: Flame },
+  opt_out:   { label: "Opt-out", color: "#94A3B8", icon: Ban },
+  pergunta:  { label: "Pergunta",color: "#00D4FF", icon: HelpCircle },
+  neutro:    { label: "Neutro",  color: "#64748B", icon: MessageSquare },
+};
+
 function senderLabel(s: string|null) {
-  if (s === "ia")     return { label: "IA",      color: "#A78BFA", icon: Bot };
-  if (s === "broker") return { label: "Corretor",color: "#10B981", icon: UserIcon };
-  if (s === "lead")   return { label: "Lead",    color: "#00D4FF", icon: MessageSquare };
+  if (s === "ia")     return { label: "IA Auto",  color: "#A78BFA", icon: Bot };
+  if (s === "broker") return { label: "Corretor", color: "#10B981", icon: UserIcon };
+  if (s === "lead")   return { label: "Lead",     color: "#00D4FF", icon: MessageSquare };
   return { label: "—", color: "#64748B", icon: MessageSquare };
 }
 
@@ -68,14 +105,13 @@ export default function Respostas() {
   const [rows, setRows] = useState<ConvRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [windowH, setWindowH] = useState<number>(168);
-  const [filterStatus, setFilterStatus] = useState<"todos"|"sem_corretor"|"com_corretor"|"ia_atendendo"|"esperando_humano">("todos");
+  const [filterStatus, setFilterStatus] = useState<"todos"|"sem_corretor"|"com_corretor"|"ia_atendendo"|"esperando_humano"|"quentes"|"opt_outs">("todos");
   const [filterCampaign, setFilterCampaign] = useState<string>("todas");
   const [campaigns, setCampaigns] = useState<{id: string; name: string}[]>([]);
   const [allBrokers, setAllBrokers] = useState<Profile[]>([]);
   const [assigningConv, setAssigningConv] = useState<string|null>(null);
   const [busyConv, setBusyConv] = useState<string|null>(null);
 
-  // ── Carregar campanhas + brokers (usados pelo dropdown) ────────────────────
   useEffect(() => {
     supabase.from("ia_campaigns").select("id, name").order("name")
       .then(({ data }) => setCampaigns(data || []));
@@ -84,12 +120,10 @@ export default function Respostas() {
       .then(({ data }) => setAllBrokers((data || []) as Profile[]));
   }, []);
 
-  // ── Carregar conversas com resposta ────────────────────────────────────────
   const load = useCallback(async () => {
     setLoading(true);
     const cutoff = new Date(Date.now() - windowH * 3600000).toISOString();
 
-    // 1) Conversas com pelo menos 1 mensagem incoming na janela
     let q = supabase
       .from("ia_conversations")
       .select(`
@@ -109,22 +143,28 @@ export default function Respostas() {
     const { data: convs } = await q;
     if (!convs || convs.length === 0) { setRows([]); setLoading(false); return; }
 
-    // 2) Pra cada conv, pegar mensagens (em batch)
     const convIds = convs.map((c: any) => c.id);
     const { data: msgs } = await supabase
       .from("ia_messages")
-      .select("conversation_id, direction, sender_type, created_at")
+      .select("conversation_id, direction, sender_type, message_text, created_at")
       .in("conversation_id", convIds)
       .order("created_at", { ascending: true });
 
-    type MsgAgg = { msgs_lead: number; msgs_out_ia: number; msgs_out_broker: number; last_msg_at: string; last_msg_sender: string; last_outgoing_at: string|null; last_outgoing_sender: string|null };
+    type MsgAgg = {
+      msgs_lead: number; msgs_out_ia: number; msgs_out_broker: number;
+      last_msg_at: string; last_msg_sender: string;
+      last_outgoing_at: string|null; last_outgoing_sender: string|null;
+      last_lead_msg_text: string|null;
+    };
     const aggMap = new Map<string, MsgAgg>();
-    for (const c of convs) aggMap.set(c.id, { msgs_lead: 0, msgs_out_ia: 0, msgs_out_broker: 0, last_msg_at: "", last_msg_sender: "", last_outgoing_at: null, last_outgoing_sender: null });
+    for (const c of convs) aggMap.set(c.id, { msgs_lead: 0, msgs_out_ia: 0, msgs_out_broker: 0, last_msg_at: "", last_msg_sender: "", last_outgoing_at: null, last_outgoing_sender: null, last_lead_msg_text: null });
     for (const m of msgs || []) {
       const a = aggMap.get(m.conversation_id);
       if (!a) continue;
-      if (m.direction === "incoming") a.msgs_lead++;
-      else if (m.sender_type === "ia") a.msgs_out_ia++;
+      if (m.direction === "incoming") {
+        a.msgs_lead++;
+        a.last_lead_msg_text = m.message_text || null;
+      } else if (m.sender_type === "ia") a.msgs_out_ia++;
       else if (m.sender_type === "broker") a.msgs_out_broker++;
       a.last_msg_at = m.created_at;
       a.last_msg_sender = m.direction === "incoming" ? "lead" : (m.sender_type || "");
@@ -134,10 +174,8 @@ export default function Respostas() {
       }
     }
 
-    // 3) Filtra só convs com pelo menos 1 msg do lead
     const withResponse = convs.filter((c: any) => (aggMap.get(c.id)?.msgs_lead ?? 0) > 0);
 
-    // 4) Buscar dados dos leads (broker) em batch
     const leadIds = withResponse.map((c: any) => c.lead_id).filter(Boolean) as string[];
     const leadMap = new Map<string, any>();
     if (leadIds.length > 0) {
@@ -148,7 +186,6 @@ export default function Respostas() {
       (leads || []).forEach((l: any) => leadMap.set(l.id, l));
     }
 
-    // 5) Buscar bot_instance_id dos managers (pra cobrança via WhatsApp)
     const managerIds = Array.from(new Set(
       Array.from(leadMap.values()).map((l: any) => l.profiles?.manager_id).filter(Boolean)
     ));
@@ -160,12 +197,26 @@ export default function Respostas() {
       (managers || []).forEach((m: any) => managerBotMap.set(m.id, { bot_instance_id: m.bot_instance_id, first_name: m.first_name }));
     }
 
-    // 6) Montar rows
+    // ── Inferir dono do chip (broker que atendeu) ──
+    const botIds = Array.from(new Set(withResponse.map((c: any) => c.bot_instance_id).filter(Boolean)));
+    const chipOwnerMap = new Map<string, { id: string; first_name: string; manager_id: string|null }>();
+    if (botIds.length > 0) {
+      const { data: owners } = await supabase
+        .from("profiles")
+        .select("id, first_name, manager_id, bot_instance_id, role")
+        .in("bot_instance_id", botIds)
+        .eq("role", "BROKER");
+      (owners || []).forEach((p: any) => {
+        if (p.bot_instance_id) chipOwnerMap.set(p.bot_instance_id, { id: p.id, first_name: p.first_name, manager_id: p.manager_id });
+      });
+    }
+
     const out: ConvRow[] = withResponse.map((c: any) => {
       const a = aggMap.get(c.id)!;
       const lead = c.lead_id ? leadMap.get(c.lead_id) : null;
       const broker = lead?.profiles;
       const manager = broker?.manager_id ? managerBotMap.get(broker.manager_id) : null;
+      const owner = c.bot_instance_id ? chipOwnerMap.get(c.bot_instance_id) : null;
       return {
         id: c.id,
         lead_id: c.lead_id,
@@ -182,12 +233,17 @@ export default function Respostas() {
         last_msg_sender: a.last_msg_sender,
         last_outgoing_at: a.last_outgoing_at,
         last_outgoing_sender: a.last_outgoing_sender,
+        last_lead_msg_text: a.last_lead_msg_text,
         lead_status: lead?.status || null,
         broker_id: broker?.id || null,
         broker_name: broker ? `${broker.first_name || ""} ${broker.last_name || ""}`.trim() : null,
         manager_name: manager?.first_name || null,
         manager_bot_instance_id: manager?.bot_instance_id || null,
         broker_phone: broker?.phone || null,
+        chip_owner_id: owner?.id || null,
+        chip_owner_name: owner?.first_name || null,
+        chip_owner_manager_id: owner?.manager_id || null,
+        classification: classify(a.last_lead_msg_text),
       };
     });
 
@@ -197,18 +253,18 @@ export default function Respostas() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Filtros derivados ──────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     return rows.filter(r => {
       if (filterStatus === "sem_corretor"   && r.broker_id) return false;
       if (filterStatus === "com_corretor"   && !r.broker_id) return false;
       if (filterStatus === "ia_atendendo"   && r.last_outgoing_sender !== "ia") return false;
       if (filterStatus === "esperando_humano") {
-        // Lead falou por último E sem resposta humana há >2h
         if (r.last_msg_sender !== "lead") return false;
         const hours = r.last_msg_at ? (Date.now() - new Date(r.last_msg_at).getTime()) / 3600000 : 0;
         if (hours < 2) return false;
       }
+      if (filterStatus === "quentes"  && r.classification !== "quente")  return false;
+      if (filterStatus === "opt_outs" && r.classification !== "opt_out") return false;
       return true;
     });
   }, [rows, filterStatus]);
@@ -217,8 +273,8 @@ export default function Respostas() {
     total: rows.length,
     com_corretor: rows.filter(r => r.broker_id).length,
     sem_corretor: rows.filter(r => !r.broker_id).length,
-    ia_atendeu: rows.filter(r => r.msgs_out_ia > 0).length,
-    humano_atendeu: rows.filter(r => r.msgs_out_broker > 0).length,
+    quentes: rows.filter(r => r.classification === "quente").length,
+    opt_outs: rows.filter(r => r.classification === "opt_out").length,
     esperando_humano: rows.filter(r => {
       if (r.last_msg_sender !== "lead") return false;
       const h = r.last_msg_at ? (Date.now() - new Date(r.last_msg_at).getTime()) / 3600000 : 0;
@@ -226,21 +282,20 @@ export default function Respostas() {
     }).length,
   }), [rows]);
 
-  // ── Atribuir corretor a um lead ────────────────────────────────────────────
-  async function assignBroker(row: ConvRow, brokerId: string) {
+  // ── Atribuir corretor (criando lead se órfão) ──
+  async function assignBroker(row: ConvRow, brokerId: string, isAutoPromote = false) {
     setBusyConv(row.id);
     try {
       const broker = allBrokers.find(b => b.id === brokerId);
       if (!broker) throw new Error("Corretor não encontrado");
 
-      // Se conv já tem lead_id, só atualiza broker
-      if (row.lead_id) {
+      let leadId = row.lead_id;
+      if (leadId) {
         const { error } = await supabase.from("leads")
           .update({ broker_id: brokerId, manager_id: broker.manager_id, status: "REACTIVATED", last_interaction_at: new Date().toISOString() })
-          .eq("id", row.lead_id);
+          .eq("id", leadId);
         if (error) throw error;
       } else {
-        // Cria novo lead a partir da conversation
         const { data: newLead, error } = await supabase.from("leads").insert({
           name: row.lead_name || "Lead da prospecção",
           phone: row.lead_phone || "",
@@ -252,20 +307,21 @@ export default function Respostas() {
           contact_attempts: 0,
         }).select().single();
         if (error) throw error;
-        // Vincula a conversation ao lead novo
+        leadId = newLead.id;
         await supabase.from("ia_conversations")
           .update({ lead_id: newLead.id, is_crm_lead: true })
           .eq("id", row.id);
       }
 
-      // Auditoria
       await supabase.from("lead_notes").insert({
-        lead_id: row.lead_id || undefined,
-        content: `Lead atribuído a ${broker.first_name} via aba Respostas (Admin) — origem campanha "${row.campaign_name || "—"}"`,
+        lead_id: leadId,
+        content: isAutoPromote
+          ? `Lead auto-promovido (classificado QUENTE) → atribuído a ${broker.first_name}. Campanha "${row.campaign_name || "—"}"`
+          : `Lead atribuído a ${broker.first_name} via aba Respostas (Admin). Campanha "${row.campaign_name || "—"}"`,
         type: "SYSTEM",
       }).then(() => {}, () => {});
 
-      toast.success(`Lead atribuído a ${broker.first_name}`);
+      toast.success(isAutoPromote ? `🔥 Lead promovido a ${broker.first_name}` : `Lead atribuído a ${broker.first_name}`);
       setAssigningConv(null);
       await load();
     } catch (e: any) {
@@ -275,7 +331,6 @@ export default function Respostas() {
     }
   }
 
-  // ── Cobrar corretor (Dashboard + WhatsApp) ─────────────────────────────────
   async function chargeBroker(row: ConvRow) {
     if (!row.broker_id) { toast.error("Lead sem corretor"); return; }
     setBusyConv(row.id);
@@ -283,7 +338,6 @@ export default function Respostas() {
       const hoursWaiting = row.last_msg_at ? Math.round((Date.now() - new Date(row.last_msg_at).getTime()) / 3600000) : 0;
       const message = `🔔 *Cobrança do gerente*\n\nO lead *${row.lead_name || row.lead_phone}* respondeu sua campanha e está aguardando há ${hoursWaiting}h.\n\nAtenda agora.`;
 
-      // Notification interna
       await supabase.from("internal_notifications").insert({
         to_id: row.broker_id,
         type: "MANAGER_ALERT",
@@ -292,18 +346,14 @@ export default function Respostas() {
         related_lead_id: row.lead_id,
       }).then(() => {}, () => {});
 
-      // WhatsApp se possível
       if (row.broker_phone && row.manager_bot_instance_id) {
         const { data: result } = await supabase.functions.invoke("send_whatsapp_message", {
           body: { botId: row.manager_bot_instance_id, phone: row.broker_phone, message },
         });
-        if (result?.success) {
-          toast.success(`✅ Cobrança enviada (Dashboard + WhatsApp)`);
-        } else {
-          toast.warning(`Cobrança salva no Dashboard. WhatsApp falhou: ${result?.error || "—"}`);
-        }
+        if (result?.success) toast.success(`✅ Cobrança enviada (Dashboard + WhatsApp)`);
+        else toast.warning(`Cobrança salva no Dashboard. WhatsApp falhou: ${result?.error || "—"}`);
       } else {
-        toast.success(`Cobrança salva no Dashboard ${!row.manager_bot_instance_id ? "(manager sem bot configurado)" : "(corretor sem telefone)"}`);
+        toast.success(`Cobrança salva no Dashboard ${!row.manager_bot_instance_id ? "(manager sem bot)" : "(corretor sem telefone)"}`);
       }
     } catch (e: any) {
       toast.error("Erro: " + e.message);
@@ -314,7 +364,6 @@ export default function Respostas() {
 
   return (
     <div className="space-y-4">
-      {/* Header + filtros */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h3 className="text-lg font-bold text-white flex items-center gap-2">
           <Inbox className="w-5 h-5 text-orange-400" />
@@ -327,15 +376,14 @@ export default function Respostas() {
         </button>
       </div>
 
-      {/* Stats cards */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
         {[
           { label: "Total",            value: stats.total,            color: "#94A3B8", filter: "todos" as const },
-          { label: "Com corretor",     value: stats.com_corretor,     color: "#10B981", filter: "com_corretor" as const },
+          { label: "🔥 Quentes",        value: stats.quentes,          color: "#EF4444", filter: "quentes" as const },
+          { label: "🚫 Opt-out",        value: stats.opt_outs,         color: "#94A3B8", filter: "opt_outs" as const },
           { label: "Sem corretor",     value: stats.sem_corretor,     color: "#F59E0B", filter: "sem_corretor" as const },
-          { label: "IA atendeu",       value: stats.ia_atendeu,       color: "#A78BFA", filter: "ia_atendendo" as const },
-          { label: "Humano atendeu",   value: stats.humano_atendeu,   color: "#00D4FF", filter: "todos" as const },
-          { label: "Esperando humano", value: stats.esperando_humano, color: "#EF4444", filter: "esperando_humano" as const },
+          { label: "Com corretor",     value: stats.com_corretor,     color: "#10B981", filter: "com_corretor" as const },
+          { label: "Esperando humano", value: stats.esperando_humano, color: "#F97316", filter: "esperando_humano" as const },
         ].map(s => (
           <button key={s.label} onClick={() => setFilterStatus(s.filter)}
             className="rounded-lg p-2.5 text-left transition-all"
@@ -349,7 +397,6 @@ export default function Respostas() {
         ))}
       </div>
 
-      {/* Filtros janela + campanha */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex items-center gap-1 bg-slate-900/50 rounded-lg p-1 border border-slate-700/50">
           <Filter className="w-3.5 h-3.5 text-gray-500 ml-1" />
@@ -371,13 +418,8 @@ export default function Respostas() {
         </select>
       </div>
 
-      {/* Tabela */}
       <div className="bg-slate-900/40 border border-slate-700/40 rounded-xl overflow-hidden">
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-5 h-5 animate-spin text-orange-400" />
-          </div>
-        )}
+        {loading && <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-orange-400" /></div>}
         {!loading && filtered.length === 0 && (
           <div className="text-center py-12 text-gray-500 text-sm">
             <Inbox className="w-10 h-10 opacity-20 mx-auto mb-3" />
@@ -388,12 +430,12 @@ export default function Respostas() {
           <table className="w-full text-xs">
             <thead className="bg-slate-800/60 border-b border-slate-700/50">
               <tr>
-                <th className="text-left px-3 py-2.5 text-[10px] uppercase tracking-wider text-gray-500">Lead</th>
+                <th className="text-left px-3 py-2.5 text-[10px] uppercase tracking-wider text-gray-500">Lead · Última msg dele</th>
                 <th className="text-left px-2 py-2.5 text-[10px] uppercase tracking-wider text-gray-500">Campanha · Chip</th>
                 <th className="text-center px-2 py-2.5 text-[10px] uppercase tracking-wider text-gray-500">Trocas</th>
-                <th className="text-left px-2 py-2.5 text-[10px] uppercase tracking-wider text-gray-500">Última msg da conv</th>
-                <th className="text-left px-2 py-2.5 text-[10px] uppercase tracking-wider text-gray-500">Última outgoing</th>
-                <th className="text-left px-2 py-2.5 text-[10px] uppercase tracking-wider text-gray-500">Corretor</th>
+                <th className="text-left px-2 py-2.5 text-[10px] uppercase tracking-wider text-gray-500">Quem falou por último</th>
+                <th className="text-left px-2 py-2.5 text-[10px] uppercase tracking-wider text-gray-500">Nosso último envio</th>
+                <th className="text-left px-2 py-2.5 text-[10px] uppercase tracking-wider text-gray-500">Corretor atribuído</th>
                 <th className="text-right px-3 py-2.5 text-[10px] uppercase tracking-wider text-gray-500">Ação</th>
               </tr>
             </thead>
@@ -401,16 +443,33 @@ export default function Respostas() {
               {filtered.map(r => {
                 const lastSender = senderLabel(r.last_msg_sender);
                 const lastOut    = senderLabel(r.last_outgoing_sender);
+                const cm = CLASSIFICATION_META[r.classification];
+                const ClassIcon = cm.icon;
                 const LastIcon = lastSender.icon;
                 const OutIcon  = lastOut.icon;
                 const hoursWaiting = r.last_msg_sender === "lead" && r.last_msg_at
                   ? (Date.now() - new Date(r.last_msg_at).getTime()) / 3600000 : 0;
                 const isCold = hoursWaiting >= 2;
+                const isQuenteOrfao = r.classification === "quente" && !r.broker_id;
+                const ownerSugestao = r.chip_owner_name && r.chip_owner_id && !r.broker_id;
+
                 return (
                   <tr key={r.id} className="border-b border-slate-800/40 hover:bg-slate-800/30">
                     <td className="px-3 py-2.5">
-                      <div className="font-bold text-white text-[12px]">{r.lead_name || "(sem nome)"}</div>
-                      <div className="text-[10px] text-gray-500 font-mono">{r.lead_phone}</div>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="font-bold text-white text-[12px]">{r.lead_name || "(sem nome)"}</span>
+                        <span className="inline-flex items-center gap-1 text-[9px] font-black px-1 py-0.5 rounded uppercase tracking-wider"
+                          style={{ background: `${cm.color}15`, color: cm.color, border: `1px solid ${cm.color}40` }}>
+                          <ClassIcon className="w-2.5 h-2.5" />{cm.label}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-gray-500 font-mono mb-0.5">{r.lead_phone}</div>
+                      {r.last_lead_msg_text && (
+                        <div className="text-[10px] italic max-w-[260px] truncate" style={{ color: cm.color }}
+                          title={r.last_lead_msg_text}>
+                          "{r.last_lead_msg_text.slice(0, 60)}{r.last_lead_msg_text.length > 60 ? "…" : ""}"
+                        </div>
+                      )}
                     </td>
                     <td className="px-2 py-2.5">
                       <div className="text-[11px] text-gray-300">{r.campaign_name || "—"}</div>
@@ -422,7 +481,7 @@ export default function Respostas() {
                       <span className="text-[10px] text-purple-300">{r.msgs_out_ia}</span>
                       <span className="text-[10px] text-gray-600 mx-0.5">·</span>
                       <span className="text-[10px] text-emerald-300">{r.msgs_out_broker}</span>
-                      <div className="text-[9px] text-gray-600 mt-0.5">lead·IA·broker</div>
+                      <div className="text-[9px] text-gray-600 mt-0.5">lead·IA·corretor</div>
                     </td>
                     <td className="px-2 py-2.5">
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded"
@@ -438,6 +497,9 @@ export default function Respostas() {
                             style={{ background: `${lastOut.color}15`, color: lastOut.color, border: `1px solid ${lastOut.color}30` }}>
                             <OutIcon className="w-3 h-3" /> {lastOut.label}
                           </span>
+                          {r.last_outgoing_sender === "broker" && r.chip_owner_name && (
+                            <div className="text-[10px] text-emerald-400 mt-0.5">{r.chip_owner_name}</div>
+                          )}
                           <div className="text-[10px] text-gray-500 mt-0.5">há {timeAgo(r.last_outgoing_at)}</div>
                         </>
                       ) : <span className="text-[10px] text-gray-600">—</span>}
@@ -453,15 +515,36 @@ export default function Respostas() {
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {!r.broker_name && (
-                          <button onClick={() => setAssigningConv(assigningConv === r.id ? null : r.id)}
-                            disabled={busyConv === r.id}
-                            className="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider flex items-center gap-1"
-                            style={{ background: "rgba(0,212,255,0.12)", color: "#00D4FF", border: "1px solid rgba(0,212,255,0.3)" }}>
-                            <UserCheck className="w-3 h-3" /> Atribuir
+                      <div className="flex flex-col items-end gap-1">
+                        {/* Auto-atribuição: lead Quente + órfão */}
+                        {isQuenteOrfao && r.chip_owner_id && (
+                          <button onClick={() => assignBroker(r, r.chip_owner_id!, true)} disabled={busyConv === r.id}
+                            className="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider flex items-center gap-1 animate-pulse"
+                            style={{ background: "rgba(239,68,68,0.18)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.5)" }}
+                            title={`Promove a ${r.chip_owner_name} (que já atendeu)`}>
+                            <Sparkles className="w-3 h-3" /> Promover quente → {r.chip_owner_name}
                           </button>
                         )}
+                        {/* Atribuir manual quando órfão */}
+                        {!r.broker_name && (
+                          <div className="flex gap-1">
+                            {ownerSugestao && r.classification !== "quente" && (
+                              <button onClick={() => assignBroker(r, r.chip_owner_id!)} disabled={busyConv === r.id}
+                                className="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider flex items-center gap-1"
+                                style={{ background: "rgba(16,185,129,0.12)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}
+                                title={`Atribuir a ${r.chip_owner_name} que já atendeu`}>
+                                <UserCheck className="w-3 h-3" /> {r.chip_owner_name}
+                              </button>
+                            )}
+                            <button onClick={() => setAssigningConv(assigningConv === r.id ? null : r.id)}
+                              disabled={busyConv === r.id}
+                              className="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider flex items-center gap-1"
+                              style={{ background: "rgba(0,212,255,0.12)", color: "#00D4FF", border: "1px solid rgba(0,212,255,0.3)" }}>
+                              <UserCheck className="w-3 h-3" /> Outro
+                            </button>
+                          </div>
+                        )}
+                        {/* Cobrar */}
                         {r.broker_name && (
                           <button onClick={() => chargeBroker(r)} disabled={busyConv === r.id}
                             className="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider flex items-center gap-1"
@@ -494,9 +577,11 @@ export default function Respostas() {
         )}
       </div>
 
-      <p className="text-[10px] text-gray-600">
-        Aparecem conversas de campanhas com pelo menos 1 resposta do lead na janela selecionada. "Cobrar" envia notif Dashboard + WhatsApp pelo bot do gerente do corretor.
-      </p>
+      <div className="text-[10px] text-gray-600 space-y-0.5">
+        <p>📊 <strong>Classificação textual</strong> da última msg do lead: 🔥 Quente (interesse: "quero", "preço", "documento", "visita"…) · 🚫 Opt-out ("não quero", "pare", "sem interesse"…) · ❓ Pergunta · Neutro.</p>
+        <p>🔵 <strong>Última msg da conv</strong>: quem falou por último (Lead/IA Auto/Corretor). 🔵 <strong>Nosso último envio</strong>: a última mensagem que NÓS enviamos (IA Auto se foi pelo ia_chat_engine, Corretor se foi humano via chip).</p>
+        <p>✨ <strong>Promover quente</strong>: cria lead em REACTIVATED e atribui ao corretor que já atendeu via chip.</p>
+      </div>
     </div>
   );
 }
