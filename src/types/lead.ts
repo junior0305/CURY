@@ -27,6 +27,7 @@ export type LostReason =
   | 'FOI_CONCORRENTE'     // Foi para concorrente
   | 'DESISTIU'            // Desistiu / mudou de plano
   | 'SEM_RETORNO'         // Sem retorno após múltiplos contatos
+  | 'NUMERO_ERRADO'       // Número de telefone inválido / não pertence ao lead
   | null;
 
 // Mantido para retrocompatibilidade com campos antigos de exclusão
@@ -108,6 +109,7 @@ export const LOST_REASON_LABEL: Record<NonNullable<LostReason>, string> = {
   FOI_CONCORRENTE:    'Foi para concorrente',
   DESISTIU:           'Desistiu / mudou de plano',
   SEM_RETORNO:        'Sem retorno após contatos',
+  NUMERO_ERRADO:      'Número errado / não é do lead',
 };
 
 export const TIPO_TRABALHO_LABEL: Record<NonNullable<TipoTrabalho>, string> = {
