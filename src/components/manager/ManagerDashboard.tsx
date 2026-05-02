@@ -15,7 +15,7 @@ import {
   RefreshCw, TrendingUp, Target, Shield,
   Bell, X, Send, Trash2, RotateCcw, Filter, Eye,
   Search, MessageSquare, Phone, Brain, Bot, Flame, Minus,
-  Loader2,
+  Loader2, Sparkles,
 } from "lucide-react";
 import { LeadMonitorDrawer } from "./LeadMonitorDrawer";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -707,7 +707,8 @@ function AlertModal({ broker, fromId, lead, onClose }: {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 type RightTab  = "equipe" | "velocidade" | "ranking";
-type LeftPanel = "urgente" | "redistribuir" | "descarte" | "busca";
+type LeftPanel = "urgente" | "recentes" | "redistribuir" | "descarte" | "busca";
+type RecentWindow = 6 | 12 | 24;
 
 export default function ManagerDashboard() {
   const { user, signOut } = useAuth();
@@ -724,6 +725,8 @@ export default function ManagerDashboard() {
   const [redistFilter, setRedistFilter] = useState<string>("todos");
   const [searchQuery, setSearchQuery]   = useState<string>("");
   const [mobileView, setMobileView]     = useState<"leads" | "equipe">("leads");
+  const [recentWindow, setRecentWindow] = useState<RecentWindow>(24);
+  const [recentOnlyNew, setRecentOnlyNew] = useState<boolean>(false);
 
   // Manager's team_id
   useEffect(() => {
@@ -1044,6 +1047,7 @@ export default function ManagerDashboard() {
           <div className="flex gap-1.5 shrink-0 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {([
               { v: "urgente",      label: "Urgentes",     icon: AlertTriangle, color: "#EF4444" },
+              { v: "recentes",     label: "Recentes",     icon: Sparkles,      color: "#A78BFA" },
               { v: "redistribuir", label: "Redistribuir", icon: RotateCcw,     color: "#00D4FF" },
               { v: "descarte",     label: "Descarte",     icon: Trash2,        color: "#F59E0B", badge: stats.discarded },
               { v: "busca",        label: "Buscar",       icon: Search,        color: "#10B981" },
@@ -1567,6 +1571,125 @@ export default function ManagerDashboard() {
                 </Panel>
               </motion.div>
             )}
+
+            {/* ── RECENTES ───────────────────────────────────────────────────── */}
+            {leftPanel === "recentes" && (() => {
+              const cutoff = Date.now() - recentWindow * 3600000;
+              const recentLeads = teamLeads
+                .filter(l => l.createdAt && new Date(l.createdAt).getTime() >= cutoff)
+                .filter(l => !recentOnlyNew || l.status === "NEW")
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+              const semBroker = recentLeads.filter(l => !l.brokerId).length;
+              const color = "#A78BFA";
+
+              return (
+                <motion.div key="recentes" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 8 }} transition={{ duration: 0.18 }}
+                  className="flex-1 min-h-0 overflow-hidden flex flex-col gap-2">
+
+                  {/* Filtros */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] font-black uppercase tracking-widest" style={{ color }}>Janela</span>
+                    {([6, 12, 24] as RecentWindow[]).map(w => (
+                      <button key={w} onClick={() => setRecentWindow(w)}
+                        className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all"
+                        style={recentWindow === w ? {
+                          background: `${color}15`, color, border: `1px solid ${color}40`, boxShadow: `0 0 8px ${color}20`,
+                        } : {
+                          background: "var(--crm-glass)", color: "var(--crm-text-subtle)", border: "1px solid var(--crm-border-mid)",
+                        }}>
+                        {w}h
+                      </button>
+                    ))}
+                    <div className="ml-auto flex items-center gap-1.5">
+                      <Switch checked={recentOnlyNew} onCheckedChange={setRecentOnlyNew} />
+                      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: recentOnlyNew ? color : "var(--crm-text-muted)" }}>
+                        Só NEW
+                      </span>
+                    </div>
+                  </div>
+
+                  <Panel className="flex-1 min-h-0 flex flex-col">
+                    <div className="flex items-center justify-between mb-2 shrink-0">
+                      <span className="text-[10px] font-black uppercase tracking-widest" style={{ color }}>
+                        {recentLeads.length} lead{recentLeads.length !== 1 ? "s" : ""} chegou{recentLeads.length !== 1 ? "ram" : ""}
+                      </span>
+                      {semBroker > 0 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(239,68,68,0.1)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.3)" }}>
+                          {semBroker} sem corretor
+                        </span>
+                      )}
+                    </div>
+
+                    {recentLeads.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center flex-1 gap-3 py-8">
+                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: `${color}10`, border: `1px solid ${color}30` }}>
+                          <Sparkles className="w-5 h-5" style={{ color }} />
+                        </div>
+                        <p className="text-sm font-bold text-center" style={{ color: "var(--crm-text-muted)" }}>
+                          Nenhum lead novo nas últimas {recentWindow}h
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 min-h-0">
+                        {recentLeads.map((lead, i) => {
+                          const broker = lead.brokerId ? brokerMap[lead.brokerId] : null;
+                          const st = STATUS_LABELS[lead.status] ?? { label: lead.status, color: "#475569" };
+                          const minsAgo = Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / 60000);
+                          const ago = minsAgo < 60 ? `${minsAgo}min` : minsAgo < 1440 ? `${Math.floor(minsAgo / 60)}h` : `${Math.floor(minsAgo / 1440)}d`;
+                          return (
+                            <motion.div key={lead.id}
+                              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: Math.min(i * 0.02, 0.2) }}
+                              className="rounded-xl px-3 py-2.5"
+                              style={{ background: "var(--crm-glass)", border: "1px solid var(--crm-border)" }}>
+                              <div className="flex items-start gap-2.5">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="text-sm font-bold truncate" style={{ color: "var(--crm-text)" }}>{lead.name}</span>
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider shrink-0"
+                                      style={{ background: `${st.color}15`, color: st.color, border: `1px solid ${st.color}30` }}>
+                                      {st.label}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] flex items-center gap-1.5 flex-wrap" style={{ color: "var(--crm-text-muted)" }}>
+                                    <span className="font-mono">há {ago}</span>
+                                    {lead.tag && <><span>·</span><span className="truncate">{lead.tag}</span></>}
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                  {broker ? (
+                                    <button onClick={() => { setRightTab("equipe"); setMobileView("equipe"); }}
+                                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg transition-all hover:opacity-80"
+                                      style={{ background: `${color}10`, border: `1px solid ${color}30` }}
+                                      title={`Ver ${broker.name} no painel da equipe`}>
+                                      <UserCheck className="w-3 h-3" style={{ color }} />
+                                      <span className="text-[10px] font-black uppercase tracking-wide" style={{ color }}>{broker.name.split(" ")[0]}</span>
+                                    </button>
+                                  ) : (
+                                    <span className="flex items-center gap-1 px-2 py-1 rounded-lg"
+                                      style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)" }}>
+                                      <UserX className="w-3 h-3" style={{ color: "#EF4444" }} />
+                                      <span className="text-[10px] font-black uppercase tracking-wide" style={{ color: "#EF4444" }}>Sem corretor</span>
+                                    </span>
+                                  )}
+                                  <button onClick={() => setMonitorLead(lead)}
+                                    className="px-2 py-1 rounded-lg transition-all hover:opacity-80"
+                                    style={{ background: "var(--crm-surface)", border: "1px solid var(--crm-border-mid)" }}
+                                    title="Abrir conversa do lead">
+                                    <Eye className="w-3 h-3" style={{ color: "#00D4FF" }} />
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </Panel>
+                </motion.div>
+              );
+            })()}
 
           </AnimatePresence>
         </div>
