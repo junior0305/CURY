@@ -728,6 +728,7 @@ export default function ManagerDashboard() {
   const [mobileView, setMobileView]     = useState<"leads" | "equipe">("leads");
   const [recentWindow, setRecentWindow] = useState<RecentWindow>(24);
   const [recentOnlyNew, setRecentOnlyNew] = useState<boolean>(false);
+  const [distributePopover, setDistributePopover] = useState<string | null>(null);
 
   // Manager's team_id
   useEffect(() => {
@@ -1726,14 +1727,60 @@ export default function ManagerDashboard() {
                                       <span className="text-[10px] font-black uppercase tracking-wide" style={{ color: "#EF4444" }}>Sem corretor</span>
                                     </span>
                                   )}
-                                  <button onClick={() => setMonitorLead(lead)}
-                                    className="px-2 py-1 rounded-lg transition-all hover:opacity-80"
-                                    style={{ background: "var(--crm-surface)", border: "1px solid var(--crm-border-mid)" }}
-                                    title="Abrir conversa do lead">
-                                    <Eye className="w-3 h-3" style={{ color: "#00D4FF" }} />
-                                  </button>
+                                  <div className="flex items-center gap-1">
+                                    <button onClick={() => setDistributePopover(distributePopover === lead.id ? null : lead.id)}
+                                      className="px-2 py-1 rounded-lg transition-all hover:opacity-80 flex items-center gap-1"
+                                      style={{ background: "rgba(0,212,255,0.1)", border: "1px solid rgba(0,212,255,0.3)" }}
+                                      title={broker ? "Redistribuir lead" : "Atribuir corretor"}>
+                                      <RotateCcw className="w-3 h-3" style={{ color: "#00D4FF" }} />
+                                      <span className="text-[9px] font-black uppercase tracking-wider" style={{ color: "#00D4FF" }}>{broker ? "Redist" : "Atribuir"}</span>
+                                    </button>
+                                    {broker && (
+                                      <button onClick={() => setAlertBroker({ broker, lead: { id: lead.id, name: lead.name } })}
+                                        className="px-2 py-1 rounded-lg transition-all hover:opacity-80 flex items-center gap-1"
+                                        style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)" }}
+                                        title="Notificar corretor (Dashboard + WhatsApp)">
+                                        <Bell className="w-3 h-3" style={{ color: "#F59E0B" }} />
+                                        <span className="text-[9px] font-black uppercase tracking-wider" style={{ color: "#F59E0B" }}>Notif</span>
+                                      </button>
+                                    )}
+                                    <button onClick={() => setMonitorLead(lead)}
+                                      className="px-2 py-1 rounded-lg transition-all hover:opacity-80"
+                                      style={{ background: "var(--crm-surface)", border: "1px solid var(--crm-border-mid)" }}
+                                      title="Abrir conversa do lead">
+                                      <Eye className="w-3 h-3" style={{ color: "#00D4FF" }} />
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
+                              {/* Popover de distribuição */}
+                              {distributePopover === lead.id && (
+                                <div className="mt-2 pt-2 border-t flex flex-wrap gap-1" style={{ borderColor: "var(--crm-border)" }}>
+                                  <span className="text-[9px] font-black uppercase tracking-widest mr-1 self-center" style={{ color: "var(--crm-text-muted)" }}>
+                                    Atribuir a:
+                                  </span>
+                                  {brokers.filter(b => b.leadAssignmentEnabled && b.id !== lead.brokerId).map(b => (
+                                    <button key={b.id}
+                                      onClick={() => {
+                                        assignMutation.mutate({ leadId: lead.id, brokerId: b.id });
+                                        setDistributePopover(null);
+                                      }}
+                                      disabled={assignMutation.isPending}
+                                      className="px-2 py-1 rounded-md text-[10px] font-bold transition-all hover:opacity-80 disabled:opacity-50"
+                                      style={{ background: "var(--crm-glass)", border: "1px solid var(--crm-border-mid)", color: "var(--crm-text)" }}>
+                                      {b.name.split(" ")[0]}
+                                    </button>
+                                  ))}
+                                  {brokers.filter(b => b.leadAssignmentEnabled && b.id !== lead.brokerId).length === 0 && (
+                                    <span className="text-[10px]" style={{ color: "var(--crm-text-muted)" }}>Nenhum corretor ativo disponível</span>
+                                  )}
+                                  <button onClick={() => setDistributePopover(null)}
+                                    className="ml-auto px-2 py-1 rounded-md text-[10px] font-bold"
+                                    style={{ color: "var(--crm-text-muted)" }}>
+                                    Cancelar
+                                  </button>
+                                </div>
+                              )}
                             </motion.div>
                           );
                         })}
