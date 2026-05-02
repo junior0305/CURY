@@ -203,7 +203,7 @@ serve(async (req) => {
       console.log(`[orchestrator] 📨 Enviando (template "${selectedTemplate.name || 'legacy'}"):`, message.substring(0, 80));
 
       await supabaseClient.functions.invoke('send_whatsapp_message', {
-        body: { botId: bot.id, phone: lead.phone, message, conversationId: conversation.id, instanceName: bot.instance_name }
+        body: { botId: bot.id, phone: lead.phone, message, conversationId: conversation.id, instanceName: bot.instance_name, send_source: 'campaign' }
       });
 
       // Incrementa métricas do template (só se vier da biblioteca)

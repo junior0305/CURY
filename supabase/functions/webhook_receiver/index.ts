@@ -341,6 +341,7 @@ serve(async (req) => {
                 message_text: messageText,
                 direction: 'outgoing',
                 sender_type: 'broker',
+                send_source: 'broker_manual',
                 created_at: now,
               });
             }

@@ -416,6 +416,7 @@ serve(async (req) => {
             botId: broker.bot_instance_id,
             phone: lead.phone,
             message: messageText,
+            send_source: 'ai_followup',
           },
         });
 

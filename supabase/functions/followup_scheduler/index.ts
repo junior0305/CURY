@@ -171,6 +171,7 @@ serve(async (req) => {
           body: {
             botId: broker.bot_instance_id,
             phone: lead.phone,
+            send_source: 'ai_followup',
             message: `Olá ${lead.name}! 😊\n\n${brokerName} está verificando sua solicitação e entra em contato em breve.\n\nAgradecemos sua paciência!`,
           },
         });
@@ -226,6 +227,7 @@ serve(async (req) => {
         body: {
           botId: broker.bot_instance_id,
           phone: lead.phone,
+          send_source: 'campaign',
           message: `Olá ${lead.name}! 👋\n\nPassamos aqui para saber se você ainda tem interesse no imóvel.\n\nEstamos à disposição! 😊`,
         },
       });
@@ -328,6 +330,7 @@ serve(async (req) => {
             message,
             conversationId: null,
             instanceName: bot.instance_name,
+            send_source: 'ai_followup',
           },
         });
 
@@ -482,6 +485,7 @@ serve(async (req) => {
           botId: broker.bot_instance_id,
           phone: lead.phone,
           message,
+          send_source: 'campaign',
         },
       });
       console.log(`[B4] send ${lead.id} → success=${result?.success}, status=${result?.status}, err=${sendErr?.message}`);

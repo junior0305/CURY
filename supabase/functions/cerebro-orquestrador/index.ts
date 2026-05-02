@@ -35,10 +35,10 @@ function nextWindowOpen(): string {
 }
 
 // ── WhatsApp helper ────────────────────────────────────────────────────────
-async function sendMsg(supabase: any, botId: string, phone: string, message: string): Promise<boolean> {
+async function sendMsg(supabase: any, botId: string, phone: string, message: string, send_source: string = 'ai_followup'): Promise<boolean> {
   try {
     const { data } = await supabase.functions.invoke('send_whatsapp_message', {
-      body: { botId, phone, message },
+      body: { botId, phone, message, send_source },
     });
     return data?.success === true;
   } catch {

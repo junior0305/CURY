@@ -495,7 +495,7 @@ serve(async (req) => {
 
           try {
             await supabase.functions.invoke('send_whatsapp_message', {
-              body: { botId: broker.bot_instance_id, phone: lead.phone, message: handoffMsg },
+              body: { botId: broker.bot_instance_id, phone: lead.phone, message: handoffMsg, send_source: 'ai_qualification' },
             });
           } catch {}
 
@@ -534,7 +534,7 @@ serve(async (req) => {
         } else if (aiResult.message) {
           // ── Enviar mensagem ───────────────────────────────────────────
           const { data: sendResult } = await supabase.functions.invoke('send_whatsapp_message', {
-            body: { botId: broker.bot_instance_id, phone: lead.phone, message: aiResult.message },
+            body: { botId: broker.bot_instance_id, phone: lead.phone, message: aiResult.message, send_source: 'ai_qualification' },
           });
 
           if (sendResult?.success) {

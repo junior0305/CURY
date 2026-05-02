@@ -105,7 +105,7 @@ serve(async (req) => {
       const message = buildMessage(lead.name, lead.tag);
 
       const { data: result } = await supabase.functions.invoke('send_whatsapp_message', {
-        body: { botId: broker.bot_instance_id, phone: lead.phone, message },
+        body: { botId: broker.bot_instance_id, phone: lead.phone, message, send_source: 'campaign' },
       });
 
       // Log da tentativa (sucesso ou falha)
