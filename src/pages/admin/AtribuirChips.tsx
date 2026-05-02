@@ -8,7 +8,7 @@ import { useNavigate } from "react-router-dom";
 interface Bot { id: string; name: string; instance_name: string; status: string; team_manager_id: string|null; }
 interface Manager { id: string; first_name: string|null; last_name: string|null; }
 
-export default function AtribuirChips() {
+export default function AtribuirChips({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -75,34 +75,31 @@ export default function AtribuirChips() {
     onError: (e: any) => toast.error("Erro: " + e.message),
   });
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-slate-900/80 backdrop-blur border-b border-slate-700/50 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/admin")} className="p-2 rounded-lg hover:bg-white/5">
-            <ArrowLeft className="w-4 h-4 text-gray-400" />
-          </button>
-          <div>
-            <h1 className="text-lg font-black flex items-center gap-2">
-              <Send className="w-5 h-5 text-emerald-400" />
-              Atribuir Chips à Equipe
-            </h1>
-            <p className="text-xs text-gray-500">Define qual chip pertence a qual gerente — usado nas campanhas de prospecção</p>
-          </div>
-        </div>
-        {Object.keys(pendingChanges).length > 0 && (
-          <button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}
-            className="px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-2"
-            style={{ background: "rgba(16,185,129,0.18)", border: "1px solid rgba(16,185,129,0.5)", color: "#10B981" }}>
-            <CheckCircle2 className="w-4 h-4" />
-            Salvar {Object.keys(pendingChanges).length} mudança(s)
-          </button>
-        )}
-      </header>
+  const SaveButton = Object.keys(pendingChanges).length > 0 ? (
+    <button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}
+      className="px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-2"
+      style={{ background: "rgba(16,185,129,0.18)", border: "1px solid rgba(16,185,129,0.5)", color: "#10B981" }}>
+      <CheckCircle2 className="w-4 h-4" />
+      Salvar {Object.keys(pendingChanges).length} mudança(s)
+    </button>
+  ) : null;
 
-      <main className="max-w-5xl mx-auto p-4 space-y-4">
-        {/* Stats + filtros */}
+  if (embedded) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-gray-500">Define qual chip pertence a qual gerente — usado nas campanhas de prospecção do Manager</p>
+          {SaveButton}
+        </div>
+        {renderBody()}
+      </div>
+    );
+  }
+
+  function renderBody() {
+    return (
+      <>
+      {/* Stats + filtros */}
         <div className="grid grid-cols-3 gap-3">
           {[
             { label: "Total", value: stats.total, color: "#94A3B8", filter: "todos" as const },
@@ -179,6 +176,31 @@ export default function AtribuirChips() {
             );
           })}
         </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white">
+      {/* Header */}
+      <header className="sticky top-0 z-10 bg-slate-900/80 backdrop-blur border-b border-slate-700/50 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate("/admin")} className="p-2 rounded-lg hover:bg-white/5">
+            <ArrowLeft className="w-4 h-4 text-gray-400" />
+          </button>
+          <div>
+            <h1 className="text-lg font-black flex items-center gap-2">
+              <Send className="w-5 h-5 text-emerald-400" />
+              Atribuir Chips à Equipe
+            </h1>
+            <p className="text-xs text-gray-500">Define qual chip pertence a qual gerente — usado nas campanhas de prospecção</p>
+          </div>
+        </div>
+        {SaveButton}
+      </header>
+
+      <main className="max-w-5xl mx-auto p-4 space-y-4">
+        {renderBody()}
       </main>
     </div>
   );

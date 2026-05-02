@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Pencil, Trash2, AlertTriangle } from "lucide-react";
+import { Users, Pencil, Trash2, AlertTriangle, Send } from "lucide-react";
+import AtribuirChips from "@/pages/admin/AtribuirChips";
 
 interface Profile {
   id: string;
@@ -33,6 +34,7 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
+  const [activeTab, setActiveTab] = useState<"users" | "chips">("users");
   const [saving, setSaving] = useState(false);
   const [deletingUser, setDeletingUser] = useState<Profile | null>(null);
   const [redirectTo, setRedirectTo] = useState("");
@@ -159,6 +161,32 @@ export default function UserManagement() {
         <p className="text-gray-400">Edite, gerencie permissões ou exclua usuários</p>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6 border-b border-slate-700/50">
+        {([
+          { v: "users", label: "Usuários", icon: Users },
+          { v: "chips", label: "Atribuir Chips", icon: Send },
+        ] as const).map(t => (
+          <button key={t.v} onClick={() => setActiveTab(t.v)}
+            className="px-4 py-2.5 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors"
+            style={{
+              borderColor: activeTab === t.v ? "#EF4444" : "transparent",
+              color: activeTab === t.v ? "#FFFFFF" : "#94A3B8",
+            }}>
+            <t.icon className="w-4 h-4" />
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "chips" && (
+        <div className="bg-slate-900/40 border border-slate-700/40 rounded-xl p-4">
+          <AtribuirChips embedded />
+        </div>
+      )}
+
+      {activeTab === "users" && <>
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {["ADMIN", "SUPERINTENDENT", "MANAGER", "BROKER"].map((role) => (
@@ -263,6 +291,7 @@ export default function UserManagement() {
           </div>
         </CardContent>
       </Card>
+      </>}
 
       {/* Modal Editar */}
       <Dialog open={!!editingUser} onOpenChange={(o) => !o && setEditingUser(null)}>

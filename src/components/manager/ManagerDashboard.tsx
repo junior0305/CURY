@@ -730,6 +730,7 @@ export default function ManagerDashboard() {
   const [recentWindow, setRecentWindow] = useState<RecentWindow>(24);
   const [recentOnlyNew, setRecentOnlyNew] = useState<boolean>(false);
   const [distributePopover, setDistributePopover] = useState<string | null>(null);
+  const [headerSearchOpen, setHeaderSearchOpen] = useState<boolean>(false);
 
   // Manager's team_id
   useEffect(() => {
@@ -1027,6 +1028,12 @@ export default function ManagerDashboard() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button onClick={() => setHeaderSearchOpen(true)}
+            className="p-1.5 rounded-md transition-colors"
+            style={{ color: t.textSubtle, background: "var(--crm-glass)", border: "1px solid var(--crm-border-mid)" }}
+            title="Buscar leads (Ctrl+K)">
+            <Search className="w-4 h-4" />
+          </button>
           <ThemeToggle compact />
           <button onClick={signOut}
             className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
@@ -1038,6 +1045,70 @@ export default function ManagerDashboard() {
           </button>
         </div>
       </header>
+
+      {/* ── SEARCH OVERLAY (Cmd+K style) ──────────────────────────────────────── */}
+      {headerSearchOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] p-4"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => setHeaderSearchOpen(false)}>
+          <div className="w-full max-w-2xl rounded-2xl"
+            style={{ background: "var(--crm-surface-hex, #0D1117)", border: "1px solid rgba(16,185,129,0.4)", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}
+            onClick={e => e.stopPropagation()}>
+            <div className="relative p-3 border-b" style={{ borderColor: "var(--crm-border)" }}>
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#10B981" }} />
+              <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Nome, telefone, tag, corretor ou status…"
+                className="w-full pl-9 pr-12 py-2 rounded-lg text-sm outline-none"
+                style={{ background: "var(--crm-surface)", border: "1px solid var(--crm-border-mid)", color: "var(--crm-text)" }}
+                onKeyDown={e => { if (e.key === "Escape") setHeaderSearchOpen(false); }}
+              />
+              <button onClick={() => setHeaderSearchOpen(false)}
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] px-1.5 py-0.5 rounded"
+                style={{ color: "var(--crm-text-muted)", border: "1px solid var(--crm-border-mid)" }}>
+                ESC
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto p-2">
+              {!searchQuery.trim() ? (
+                <p className="text-center text-xs py-8" style={{ color: "var(--crm-text-muted)" }}>
+                  {teamLeads.length} leads disponíveis · digite pra buscar
+                </p>
+              ) : searchResults.length === 0 ? (
+                <p className="text-center text-xs py-8" style={{ color: "var(--crm-text-muted)" }}>
+                  Nenhum resultado para "{searchQuery}"
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest px-2 mb-1" style={{ color: "#10B981" }}>
+                    {searchResults.length} resultado{searchResults.length !== 1 ? "s" : ""}
+                  </p>
+                  {searchResults.slice(0, 30).map(lead => {
+                    const broker = lead.brokerId ? brokerMap[lead.brokerId] : null;
+                    const st = STATUS_LABELS[lead.status] ?? { label: lead.status, color: "#475569" };
+                    return (
+                      <button key={lead.id}
+                        onClick={() => { setMonitorLead(lead); setHeaderSearchOpen(false); }}
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors hover:bg-white/5"
+                        style={{ background: "var(--crm-glass)", border: "1px solid var(--crm-border)" }}>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-bold truncate" style={{ color: "var(--crm-text)" }}>{lead.name}</div>
+                          <div className="text-[10px]" style={{ color: "var(--crm-text-muted)" }}>
+                            {lead.phone} · {broker?.name?.split(" ")[0] || "—"} · {lead.tag || "sem tag"}
+                          </div>
+                        </div>
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded uppercase shrink-0"
+                          style={{ background: `${st.color}15`, color: st.color, border: `1px solid ${st.color}30` }}>
+                          {st.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── WHATSAPP BANNER ─────────────────────────────────────────────────── */}
       <WhatsAppQRBanner />
