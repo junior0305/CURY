@@ -938,17 +938,33 @@ export default function ManagerDashboard() {
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
-    return teamLeads.filter(lead => {
+    const qDigits = q.replace(/\D/g, "");
+
+    // Score por relevância: match em nome > phone > tag > corretor > status
+    const scored: { lead: Lead; score: number }[] = [];
+    for (const lead of teamLeads) {
       const broker = lead.brokerId ? brokerMap[lead.brokerId] : null;
-      return (
-        lead.name?.toLowerCase().includes(q) ||
-        lead.phone?.replace(/\D/g, "").includes(q.replace(/\D/g, "")) ||
-        lead.tag?.toLowerCase().includes(q) ||
-        (lead as any).origin?.toLowerCase().includes(q) ||
-        broker?.name?.toLowerCase().includes(q) ||
-        STATUS_LABELS[lead.status]?.label?.toLowerCase().includes(q)
-      );
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const name   = (lead.name || "").toLowerCase();
+      const phone  = (lead.phone || "").replace(/\D/g, "");
+      const tag    = (lead.tag || "").toLowerCase();
+      const bName  = (broker?.name || "").toLowerCase();
+      const stLbl  = (STATUS_LABELS[lead.status]?.label || "").toLowerCase();
+
+      let score = 0;
+      if (name.startsWith(q))                                        score = Math.max(score, 100);
+      else if (name.includes(q))                                     score = Math.max(score, 80);
+      // phone: só se a query tiver pelo menos 3 dígitos
+      if (qDigits.length >= 3 && phone.includes(qDigits))            score = Math.max(score, 70);
+      if (tag.includes(q))                                           score = Math.max(score, 50);
+      if (bName.includes(q))                                         score = Math.max(score, 30);
+      if (stLbl.includes(q))                                         score = Math.max(score, 10);
+
+      if (score > 0) scored.push({ lead, score });
+    }
+
+    return scored
+      .sort((a, b) => b.score - a.score || new Date(b.lead.createdAt).getTime() - new Date(a.lead.createdAt).getTime())
+      .map(s => s.lead);
   }, [searchQuery, teamLeads, brokerMap]);
 
   if (loadingBrokers) {
