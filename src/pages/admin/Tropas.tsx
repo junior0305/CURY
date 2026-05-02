@@ -112,7 +112,7 @@ export default function Tropas() {
     setLoading(true);
     const { data, error } = await supabase
       .from("profiles")
-      .select("*, bot_instances(*), teams:team_id(id, name), managers:profiles!manager_id(id, email, first_name, full_name)")
+      .select("*, bot_instances!bot_instance_id(*), teams:team_id(id, name), managers:profiles!manager_id(id, email, first_name, full_name)")
       .order("email", { ascending: true });
     
     if (error) {
