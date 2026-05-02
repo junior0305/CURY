@@ -22,6 +22,7 @@ import CommandCenter from "./pages/CommandCenter";
 import BootstrapAdmin from "@/pages/BootstrapAdmin";
 import ProfileDebug from "@/pages/ProfileDebug";
 import UserManagement from "@/pages/UserManagement";
+import AtribuirChips from "@/pages/admin/AtribuirChips";
 import ForcePasswordChange from "@/pages/ForcePasswordChange";
 
 const queryClient = new QueryClient();
@@ -88,6 +89,7 @@ const App = () => (
             <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
             <Route path="/command-center" element={<ProtectedAdminRoute><CommandCenter /></ProtectedAdminRoute>} />
             <Route path="/user-management" element={<ProtectedAdminRoute><UserManagement /></ProtectedAdminRoute>} />
+            <Route path="/atribuir-chips" element={<ProtectedAdminRoute><AtribuirChips /></ProtectedAdminRoute>} />
             <Route path="/force-password-change" element={<ForcePasswordChange />} />
             <Route path="/bootstrap-admin" element={<BootstrapAdmin />} />
             <Route path="/profile-debug" element={<ProfileDebug />} />
