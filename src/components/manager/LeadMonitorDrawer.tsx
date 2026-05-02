@@ -6,7 +6,7 @@ import type { User } from "@/types/user";
 import {
   X, Bot, User as UserIcon, MessageSquare,
   Star, AlertCircle, CheckCircle, Clock,
-  TrendingUp, TrendingDown, Minus, Eye,
+  TrendingUp, TrendingDown, Minus, Eye, RefreshCw, Lightbulb, Loader2,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -22,11 +22,12 @@ interface Message {
 interface CoachAnalysis {
   quality_score: number | null;
   severity: string | null;
-  errors: { type: string; description: string }[];
+  errors: { description: string; severity?: string }[];
   positives: string[];
   summary: string;
-  avg_first_response_time: number | null;
-  analysis_period: string;
+  suggestion: string | null;
+  created_at?: string;
+  cached?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -152,12 +153,15 @@ interface Props {
 }
 
 export function LeadMonitorDrawer({ lead, broker, onClose }: Props) {
-  const [messages, setMessages]       = useState<Message[]>([]);
-  const [coach, setCoach]             = useState<CoachAnalysis | null>(null);
-  const [loadingMsgs, setLoadingMsgs] = useState(true);
+  const [messages, setMessages]         = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [coach, setCoach]               = useState<CoachAnalysis | null>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachError, setCoachError]     = useState<string | null>(null);
+  const [loadingMsgs, setLoadingMsgs]   = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Fetch messages
+  // Fetch messages + capture conversationId
   useEffect(() => {
     setLoadingMsgs(true);
     supabase.from("ia_conversations")
@@ -167,7 +171,8 @@ export function LeadMonitorDrawer({ lead, broker, onClose }: Props) {
       .limit(1)
       .maybeSingle()
       .then(async ({ data: conv }) => {
-        if (!conv) { setMessages([]); setLoadingMsgs(false); return; }
+        if (!conv) { setMessages([]); setConversationId(null); setLoadingMsgs(false); return; }
+        setConversationId(conv.id);
         const { data: msgs } = await supabase
           .from("ia_messages")
           .select("id, message_text, direction, sender_type, created_at")
@@ -184,25 +189,32 @@ export function LeadMonitorDrawer({ lead, broker, onClose }: Props) {
       });
   }, [lead.id]);
 
-  // Fetch AI Coach for broker
-  useEffect(() => {
-    if (!broker?.id) return;
-    supabase.from("ai_coach_analysis")
-      .select("quality_score, severity, errors, positives, summary, avg_first_response_time, analysis_period")
-      .eq("broker_id", broker.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => setCoach(data ? {
-        quality_score: data.quality_score,
-        severity: data.severity,
-        errors: Array.isArray(data.errors) ? data.errors : [],
-        positives: Array.isArray(data.positives) ? data.positives : [],
-        summary: data.summary || "",
-        avg_first_response_time: data.avg_first_response_time,
-        analysis_period: data.analysis_period,
-      } : null));
-  }, [broker?.id]);
+  // Fetch AI Coach analysis for THIS conversation (cache 1h)
+  const loadCoach = async (force = false) => {
+    if (!conversationId) return;
+    setCoachLoading(true);
+    setCoachError(null);
+    const { data, error } = await supabase.functions.invoke("ai-coach-conversation", {
+      body: { conversationId, force },
+    });
+    setCoachLoading(false);
+    if (error) { setCoachError(error.message || "Falha ao analisar"); return; }
+    if (data?.empty) { setCoach(null); setCoachError(data.reason || "Sem mensagens"); return; }
+    if (data?.analysis) {
+      setCoach({
+        quality_score: data.analysis.quality_score,
+        severity: data.analysis.severity,
+        errors: Array.isArray(data.analysis.errors) ? data.analysis.errors : [],
+        positives: Array.isArray(data.analysis.positives) ? data.analysis.positives : [],
+        summary: data.analysis.summary || "",
+        suggestion: data.analysis.suggestion ?? null,
+        created_at: data.analysis.created_at,
+        cached: data.cached,
+      });
+    }
+  };
+
+  useEffect(() => { loadCoach(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [conversationId]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -259,53 +271,93 @@ export function LeadMonitorDrawer({ lead, broker, onClose }: Props) {
         </button>
       </div>
 
-      {/* ── AI Coach Score Strip ─────────────────────────────────────────── */}
-      {broker && (
+      {/* ── AI Coach desta conversa ──────────────────────────────────────── */}
+      {conversationId && (
         <div className="shrink-0 px-4 py-3"
           style={{ borderBottom: "1px solid rgba(124,58,237,0.15)", background: "rgba(124,58,237,0.04)" }}>
           <div className="flex items-center gap-4">
             <ScoreArc score={coach?.quality_score ?? null} />
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <Star className="w-3.5 h-3.5" style={{ color: "#A78BFA" }} />
-                <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#A78BFA" }}>
-                  AI Coach · {broker.name.split(" ")[0]}
-                </span>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Star className="w-3.5 h-3.5 shrink-0" style={{ color: "#A78BFA" }} />
+                  <span className="text-[10px] font-black uppercase tracking-widest truncate" style={{ color: "#A78BFA" }}>
+                    AI Coach desta conversa
+                  </span>
+                  {coach?.cached && (
+                    <span className="text-[8px] px-1 py-0.5 rounded uppercase tracking-wider"
+                      style={{ background: "rgba(148,163,184,0.1)", color: "#64748B", border: "1px solid rgba(148,163,184,0.2)" }}>
+                      cache
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => loadCoach(true)} disabled={coachLoading}
+                  className="p-1 rounded-md transition disabled:opacity-50"
+                  style={{ background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.2)" }}
+                  title="Re-analisar conversa">
+                  <RefreshCw className={`w-3 h-3 ${coachLoading ? "animate-spin" : ""}`} style={{ color: "#A78BFA" }} />
+                </button>
               </div>
-              {coach ? (
+
+              {coachLoading && !coach ? (
+                <div className="flex items-center gap-2 py-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: "#A78BFA" }} />
+                  <span className="text-[11px]" style={{ color: "#94A3B8" }}>Analisando mensagens...</span>
+                </div>
+              ) : coachError && !coach ? (
+                <p className="text-[10px]" style={{ color: "#EF4444" }}>{coachError}</p>
+              ) : coach ? (
                 <>
                   <div className="flex items-center gap-2 mb-1.5">
                     {severityIcon(coach.severity)}
                     <span className="text-xs font-bold" style={{ color: scoreC }}>
                       {scoreLabel(coach.quality_score)}
+                      {coach.quality_score !== null && <span className="text-[10px] font-normal ml-1" style={{ color: "#64748B" }}>· {coach.quality_score}/10</span>}
                     </span>
-                    {coach.avg_first_response_time !== null && (
-                      <span className="text-[10px]" style={{ color: "#334155" }}>
-                        · 1ª resp: {Math.round(coach.avg_first_response_time / 60)}min
-                      </span>
-                    )}
                   </div>
                   {coach.summary && (
-                    <p className="text-[10px] leading-relaxed line-clamp-2" style={{ color: "#64748b" }}>
+                    <p className="text-[11px] leading-relaxed mb-1.5" style={{ color: "#94A3B8" }}>
                       {coach.summary}
                     </p>
                   )}
-                  {/* Pontos positivos / erros */}
-                  <div className="flex gap-3 mt-2">
-                    {coach.positives.slice(0, 2).map((p, i) => (
-                      <span key={i} className="flex items-center gap-1 text-[9px]" style={{ color: "#10B981" }}>
-                        <TrendingUp className="w-3 h-3 shrink-0" /> {p.slice(0, 28)}
-                      </span>
-                    ))}
-                    {coach.errors.slice(0, 1).map((e, i) => (
-                      <span key={i} className="flex items-center gap-1 text-[9px]" style={{ color: "#EF4444" }}>
-                        <TrendingDown className="w-3 h-3 shrink-0" /> {e.description.slice(0, 28)}
-                      </span>
-                    ))}
-                  </div>
+                  {/* Pontos positivos */}
+                  {coach.positives.length > 0 && (
+                    <div className="space-y-0.5 mb-1.5">
+                      {coach.positives.slice(0, 3).map((p, i) => (
+                        <div key={`p-${i}`} className="flex items-start gap-1 text-[10px]" style={{ color: "#10B981" }}>
+                          <TrendingUp className="w-3 h-3 shrink-0 mt-0.5" />
+                          <span className="leading-relaxed">{p}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Erros */}
+                  {coach.errors.length > 0 && (
+                    <div className="space-y-0.5 mb-1.5">
+                      {coach.errors.slice(0, 3).map((e, i) => (
+                        <div key={`e-${i}`} className="flex items-start gap-1 text-[10px]" style={{ color: "#EF4444" }}>
+                          <TrendingDown className="w-3 h-3 shrink-0 mt-0.5" />
+                          <span className="leading-relaxed">{e.description}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Sugestão de próximo passo */}
+                  {coach.suggestion && (
+                    <div className="flex items-start gap-1.5 mt-2 pt-2 px-2 py-2 rounded-lg"
+                      style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)" }}>
+                      <Lightbulb className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: "#F59E0B" }} />
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-widest block mb-0.5" style={{ color: "#F59E0B" }}>
+                          Próximo passo sugerido
+                        </span>
+                        <span className="text-[11px] leading-relaxed" style={{ color: "#FEF3C7" }}>{coach.suggestion}</span>
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
-                <p className="text-[10px]" style={{ color: "#334155" }}>Análise ainda não gerada para este corretor</p>
+                <p className="text-[10px]" style={{ color: "#334155" }}>Sem análise disponível</p>
               )}
             </div>
           </div>
