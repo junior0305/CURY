@@ -888,12 +888,35 @@ export default function DashboardFoco(){
                     <div>
                       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                         <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded" style={{background:st.bg,color:st.text}}>{st.emoji} {st.label}</span>
-                        {lead.product&&<span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{background:"rgba(0,212,255,.12)",color:"#00D4FF",border:"1px solid rgba(0,212,255,.25)"}} title="Produto/empreendimento">📦 {lead.product}</span>}
-                        {lead.rendaDeclarada&&<span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{background:"rgba(129,140,248,.12)",color:"#818CF8",border:"1px solid rgba(129,140,248,.25)"}}>R$ {lead.rendaDeclarada}</span>}
                         {mcmvQual?.faixa&&FAIXA[mcmvQual.faixa]&&<span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{background:`${FAIXA[mcmvQual.faixa].color}18`,color:FAIXA[mcmvQual.faixa].color,border:`1px solid ${FAIXA[mcmvQual.faixa].color}40`}}>{FAIXA[mcmvQual.faixa].label}</span>}
-                        {lead.tipoTrabalho&&<span className="text-[10px] font-semibold px-2 py-0.5 rounded" style={{background:"rgba(129,140,248,.08)",color:"#818CF8",border:"1px solid rgba(129,140,248,.2)"}}>{TIPO_TRABALHO_LABEL[lead.tipoTrabalho]}</span>}
                         {lead.contactAttempts>0&&<span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{background:"rgba(251,191,36,.1)",color:"#FBBF24",border:"1px solid rgba(251,191,36,.25)"}}>{lead.contactAttempts} tentativa{lead.contactAttempts>1?"s":""}</span>}
                       </div>
+                      {/* ── QUALIFICAÇÃO (destaque) — produto / renda / tipo trabalho ── */}
+                      {(lead.product||lead.rendaDeclarada||lead.tipoTrabalho)&&(
+                        <div className="flex items-center gap-2 flex-wrap mb-2">
+                          {lead.product&&(
+                            <span className="text-sm font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                              style={{background:"rgba(0,212,255,.14)",color:"#00D4FF",border:"1px solid rgba(0,212,255,.35)",boxShadow:"0 0 12px rgba(0,212,255,.15)"}}
+                              title="Produto/empreendimento de interesse">
+                              <span className="text-base">📦</span> {lead.product}
+                            </span>
+                          )}
+                          {lead.rendaDeclarada&&(
+                            <span className="text-sm font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                              style={{background:"rgba(16,185,129,.12)",color:"#10B981",border:"1px solid rgba(16,185,129,.35)",boxShadow:"0 0 12px rgba(16,185,129,.12)"}}
+                              title="Renda declarada">
+                              <span className="text-base">💰</span> R$ {lead.rendaDeclarada}
+                            </span>
+                          )}
+                          {lead.tipoTrabalho&&(
+                            <span className="text-sm font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                              style={{background:"rgba(167,139,250,.12)",color:"#A78BFA",border:"1px solid rgba(167,139,250,.35)",boxShadow:"0 0 12px rgba(167,139,250,.12)"}}
+                              title="Tipo de trabalho">
+                              <span className="text-base">💼</span> {TIPO_TRABALHO_LABEL[lead.tipoTrabalho]}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <h1 className="foco-disp text-3xl sm:text-[2.4rem] font-black text-white leading-none">{lead.name}</h1>
                       <p className="text-lg text-cyan-400 font-semibold mt-1">{lead.phone}</p>
                     </div>
