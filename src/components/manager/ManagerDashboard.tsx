@@ -6,6 +6,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { fetchTeamBrokers, toggleBrokerPresence } from "@/integrations/supabase/profiles";
 import { fetchTeamLeads, fetchUnassignedLeads, updateLeadBroker } from "@/integrations/supabase/leads";
 import type { Lead } from "@/types/lead";
+import { LOST_REASON_LABEL } from "@/types/lead";
 import type { User } from "@/types/user";
 import { toast } from "sonner";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
@@ -1401,8 +1402,19 @@ export default function ManagerDashboard() {
                               <p className="text-sm font-bold text-white truncate">{lead.name}</p>
                               <p className="text-[10px]" style={{ color: "#475569" }}>
                                 {broker?.name.split(" ")[0] || "—"} · {lead.tag || "sem tag"}
-                                {lead.notes && ` · "${lead.notes.slice(0, 30)}..."`}
+                                {(lead as any).notes && ` · "${(lead as any).notes.slice(0, 30)}..."`}
                               </p>
+                              <div className="flex items-center gap-1 mt-1">
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1 max-w-full"
+                                  style={{
+                                    background: lead.lostReason ? "rgba(239,68,68,0.1)" : "rgba(148,163,184,0.08)",
+                                    color: lead.lostReason ? "#EF4444" : "#94A3B8",
+                                    border: `1px solid ${lead.lostReason ? "rgba(239,68,68,0.25)" : "rgba(148,163,184,0.2)"}`,
+                                  }}
+                                  title={lead.lostReason ? "Motivo do descarte" : "Sem motivo registrado"}>
+                                  ⚠️ <span className="truncate">{lead.lostReason ? LOST_REASON_LABEL[lead.lostReason] : "Sem motivo"}</span>
+                                </span>
+                              </div>
                             </div>
                             <button
                               onClick={() => discardRestore.mutate(lead.id)}
