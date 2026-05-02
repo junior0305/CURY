@@ -53,7 +53,18 @@ serve(async (req) => {
     const name = sourceData.name || sourceData.nome || sourceData.fullName || 'Lead Sem Nome';
     const rawPhone = sourceData.phone || sourceData.telefone || sourceData.cellphone || sourceData.whatsapp || sourceData.contact;
     // Remove prefixes like "p:" sent by some integrations (e.g. Facebook via Make)
-    const phone = rawPhone ? String(rawPhone).replace(/^[a-z]+:/i, '').replace(/[^0-9+]/g, '') : null;
+    let phone = rawPhone ? String(rawPhone).replace(/^[a-z]+:/i, '').replace(/[^0-9+]/g, '') : null;
+    // Normaliza pra formato Evolution: 55 + DDD + número (ex: 5511973334121)
+    // Casos: "11973334121" (10-11d sem 55) → adiciona "55"; "+5511973334121" → remove "+"
+    if (phone) {
+      const onlyDigits = phone.replace(/^\+/, '');
+      if (/^[1-9][1-9][0-9]{8,9}$/.test(onlyDigits)) {
+        // Sem código país: DDD válido (10-11 dígitos) → prefixa 55
+        phone = '55' + onlyDigits;
+      } else if (/^55[1-9][1-9][0-9]{8,9}$/.test(onlyDigits)) {
+        phone = onlyDigits;
+      }
+    }
     const email = sourceData.email || sourceData.mail || '';
     const origin = sourceData.source || sourceData.origin || sourceData.origem ||
                    sourceData.campaign || sourceData.campaign_name || sourceData.ad_name ||

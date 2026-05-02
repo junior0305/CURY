@@ -206,9 +206,25 @@ serve(async (req) => {
     // Normaliza: remove prefixo '+' para comparação uniforme (Evolution nunca envia com +)
     const phoneNumber = rawPhone;
     // Variantes para lookup no banco (alguns leads são salvos com + outros sem)
-    const phoneVariantsGlobal = rawPhone
-      ? [rawPhone, `+${rawPhone}`, rawPhone.replace(/^\+/, '')].filter((v, i, a) => a.indexOf(v) === i)
-      : [];
+    // Inclui variantes com/sem prefixo país 55 — leads históricos foram salvos
+    // sem "55" no incoming-lead antigo, e Evolution sempre envia com 55
+    const phoneVariantsGlobal = (() => {
+      if (!rawPhone) return [];
+      const noPlus = rawPhone.replace(/^\+/, '');
+      const variants = [rawPhone, `+${noPlus}`, noPlus];
+      // Se tem 55 como código país (12-13 dígitos) gera também sem o "55"
+      const m55 = noPlus.match(/^55([1-9][1-9][0-9]{8,9})$/);
+      if (m55) {
+        variants.push(m55[1]);
+        variants.push(`+${m55[1]}`);
+      }
+      // Se NÃO tem 55 mas é DDD válido (10-11 dígitos) gera também com "55"
+      else if (/^[1-9][1-9][0-9]{8,9}$/.test(noPlus)) {
+        variants.push(`55${noPlus}`);
+        variants.push(`+55${noPlus}`);
+      }
+      return variants.filter((v, i, a) => a.indexOf(v) === i);
+    })();
     const fromMe = payload?.data?.key?.fromMe === true || payload?.key?.fromMe === true;
     const messageText = payload?.data?.message?.conversation || payload?.data?.message?.extendedTextMessage?.text || payload?.message?.conversation || payload?.message?.extendedTextMessage?.text;
     const messageId = payload?.data?.key?.id || payload?.key?.id;
@@ -334,7 +350,7 @@ serve(async (req) => {
       } else {
         // ── Lead enviou mensagem → atualiza last_lead_response_at
         // Normaliza o telefone: Evolution envia sem '+', mas alguns leads têm '+' no banco
-        const phoneVariants = [phoneNumber, `+${phoneNumber}`, phoneNumber.replace(/^\+/, '')].filter(Boolean);
+        const phoneVariants = phoneVariantsGlobal;
 
         const { data: lead } = await supabase
           .from('leads')
