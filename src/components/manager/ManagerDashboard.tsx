@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { LeadMonitorDrawer } from "./LeadMonitorDrawer";
 import { TeamProspeccaoTab } from "./TeamProspeccaoTab";
+import RespostasPanel from "./RespostasPanel";
 import { NewLeadModal } from "./NewLeadModal";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -710,7 +711,7 @@ function AlertModal({ broker, fromId, lead, onClose }: {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 type RightTab  = "equipe" | "velocidade" | "ranking";
-type LeftPanel = "urgente" | "recentes" | "redistribuir" | "descarte" | "prospeccao";
+type LeftPanel = "urgente" | "recentes" | "respostas" | "redistribuir" | "descarte" | "prospeccao";
 type RecentWindow = 6 | 12 | 24;
 
 export default function ManagerDashboard() {
@@ -1157,6 +1158,7 @@ export default function ManagerDashboard() {
             {([
               { v: "urgente",      label: "Urgentes",     icon: AlertTriangle, color: "#EF4444" },
               { v: "recentes",     label: "Recentes",     icon: Sparkles,      color: "#A78BFA" },
+              { v: "respostas",    label: "Respostas",    icon: MessageSquare, color: "#F472B6" },
               { v: "redistribuir", label: "Redistribuir", icon: RotateCcw,     color: "#00D4FF" },
               { v: "descarte",     label: "Descarte",     icon: Trash2,        color: "#F59E0B", badge: stats.discarded },
               { v: "prospeccao",   label: "Prospecção",   icon: Send,          color: "#10B981" },
@@ -1523,6 +1525,14 @@ export default function ManagerDashboard() {
                     </div>
                   )}
                 </Panel>
+              </motion.div>
+            )}
+            {/* ── RESPOSTAS DAS CAMPANHAS ───────────────────────────────────── */}
+            {leftPanel === "respostas" && user?.id && (
+              <motion.div key="respostas" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 8 }} transition={{ duration: 0.18 }}
+                className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 pr-1">
+                <RespostasPanel managerId={user.id} onOpenLead={(id) => setMonitorLead({ id } as any)} />
               </motion.div>
             )}
             {/* ── BUSCA ──────────────────────────────────────────────────────── */}
