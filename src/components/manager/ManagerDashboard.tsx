@@ -16,11 +16,14 @@ import {
   RefreshCw, TrendingUp, Target, Shield,
   Bell, X, Send, Trash2, RotateCcw, Filter, Eye,
   Search, MessageSquare, Phone, Brain, Bot, Flame, Minus,
-  Loader2, Sparkles, UserPlus,
+  Loader2, Sparkles, UserPlus, BarChart3,
 } from "lucide-react";
 import { LeadMonitorDrawer } from "./LeadMonitorDrawer";
 import { TeamProspeccaoTab } from "./TeamProspeccaoTab";
 import RespostasPanel from "./RespostasPanel";
+import MetaForecastHeader from "./MetaForecastHeader";
+import PerformancePanel from "./PerformancePanel";
+import AnalisePanel from "./AnalisePanel";
 import { NewLeadModal } from "./NewLeadModal";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -710,8 +713,8 @@ function AlertModal({ broker, fromId, lead, onClose }: {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-type RightTab  = "equipe" | "velocidade" | "ranking";
-type LeftPanel = "urgente" | "recentes" | "respostas" | "redistribuir" | "descarte" | "prospeccao";
+type RightTab  = "equipe" | "performance" | "velocidade" | "ranking";
+type LeftPanel = "urgente" | "recentes" | "respostas" | "analise" | "redistribuir" | "descarte" | "prospeccao";
 type RecentWindow = 6 | 12 | 24;
 
 export default function ManagerDashboard() {
@@ -1137,6 +1140,13 @@ export default function ManagerDashboard() {
       <MetaCorrida teamId={teamId} brokers={brokers} teamLeads={teamLeads} />
 
       {/* ── KPI BAR ─────────────────────────────────────────────────────────── */}
+      {/* ── META + FORECAST DA SEMANA ─────────────────────────────────────────── */}
+      {user?.id && (
+        <div className="shrink-0 px-3 sm:px-4 pt-2">
+          <MetaForecastHeader managerId={user.id} />
+        </div>
+      )}
+
       <div className="shrink-0 grid grid-cols-3 sm:grid-cols-7 gap-1.5 sm:gap-2 px-3 sm:px-4 pt-2 pb-0">
         <KpiCard delay={0.00} label="Presentes"    value={`${stats.present}/${stats.total}`} icon={UserCheck}     neon={stats.present < stats.total ? "#F59E0B" : "#10B981"} />
         <KpiCard delay={0.04} label="Novos hoje"   value={stats.newToday}                    icon={Zap}           neon="#00D4FF" />
@@ -1159,6 +1169,7 @@ export default function ManagerDashboard() {
               { v: "urgente",      label: "Urgentes",     icon: AlertTriangle, color: "#EF4444" },
               { v: "recentes",     label: "Recentes",     icon: Sparkles,      color: "#A78BFA" },
               { v: "respostas",    label: "Respostas",    icon: MessageSquare, color: "#F472B6" },
+              { v: "analise",      label: "Análise",      icon: BarChart3,     color: "#06B6D4" },
               { v: "redistribuir", label: "Redistribuir", icon: RotateCcw,     color: "#00D4FF" },
               { v: "descarte",     label: "Descarte",     icon: Trash2,        color: "#F59E0B", badge: stats.discarded },
               { v: "prospeccao",   label: "Prospecção",   icon: Send,          color: "#10B981" },
@@ -1535,6 +1546,14 @@ export default function ManagerDashboard() {
                 <RespostasPanel managerId={user.id} onOpenLead={(id) => setMonitorLead({ id } as any)} />
               </motion.div>
             )}
+            {/* ── ANÁLISE — heatmap competitivo, motivos de perda, produto ─── */}
+            {leftPanel === "analise" && user?.id && (
+              <motion.div key="analise" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 8 }} transition={{ duration: 0.18 }}
+                className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 pr-1">
+                <AnalisePanel managerId={user.id} />
+              </motion.div>
+            )}
             {/* ── BUSCA ──────────────────────────────────────────────────────── */}
             {leftPanel === "prospeccao" && user?.id && (
               <motion.div key="prospeccao" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
@@ -1909,9 +1928,10 @@ export default function ManagerDashboard() {
           {/* Tab selector — 3 abas consolidadas */}
           <div className="flex gap-1.5 shrink-0">
             {([
-              { v: "equipe"     as RightTab, label: "Equipe",  icon: Shield },
-              { v: "velocidade" as RightTab, label: "SLA",     icon: Zap, badge: velocidadeStats.uncontacted.filter(l => l.minsWaiting > 15).length },
-              { v: "ranking"    as RightTab, label: "Ranking", icon: Trophy },
+              { v: "equipe"      as RightTab, label: "Equipe",  icon: Shield },
+              { v: "performance" as RightTab, label: "Perf",    icon: BarChart3 },
+              { v: "velocidade"  as RightTab, label: "SLA",     icon: Zap, badge: velocidadeStats.uncontacted.filter(l => l.minsWaiting > 15).length },
+              { v: "ranking"     as RightTab, label: "Ranking", icon: Trophy },
             ]).map(tab => (
               <button key={tab.v} onClick={() => setRightTab(tab.v)}
                 className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex-1 justify-center"
@@ -2035,6 +2055,14 @@ export default function ManagerDashboard() {
                       </span>
                     ))}
                   </div>
+                </Panel>
+              )}
+
+              {/* PERFORMANCE — TPR + ratios + 1:1 coaching */}
+              {rightTab === "performance" && user?.id && (
+                <Panel className="h-full overflow-y-auto">
+                  <SectionHeader label="Performance da Equipe" icon={BarChart3} color="#06B6D4" />
+                  <PerformancePanel managerId={user.id} periodDays={30} />
                 </Panel>
               )}
 
