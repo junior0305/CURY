@@ -131,8 +131,29 @@ serve(async (req) => {
 
     const results: BotMetrics[] = [];
     let pausedCount = 0;
+    let warmupCompleted = 0;
 
     for (const bot of bots || []) {
+      // ── Warm-up: detectar conclusão (chip que cruzou 30d) ─────────────────
+      const ageDays = ageDaysFromIso(bot.created_at);
+      if (ageDays >= 30) {
+        const { data: prevEvent } = await supabase
+          .from('bot_health_events')
+          .select('id')
+          .eq('bot_instance_id', bot.id)
+          .eq('event', 'warmup_completed')
+          .limit(1)
+          .maybeSingle();
+        if (!prevEvent) {
+          await supabase.from('bot_health_events').insert({
+            bot_instance_id: bot.id,
+            event: 'warmup_completed',
+            reason: `Chip atingiu maturidade (${ageDays} dias)`,
+            metrics_snapshot: { age_days: ageDays },
+          });
+          warmupCompleted++;
+        }
+      }
       const cap = capForBot(bot, settings);
 
       const { count: sendsToday } = await supabase
@@ -252,6 +273,7 @@ serve(async (req) => {
       feature_enabled: featureEnabled,
       bots_checked: results.length,
       auto_paused: pausedCount,
+      warmup_completed: warmupCompleted,
       results,
     }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error: any) {

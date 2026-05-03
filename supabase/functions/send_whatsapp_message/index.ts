@@ -27,10 +27,34 @@ async function getSettings(supabase: any): Promise<Record<string, any>> {
       'chip_health_enabled',
       'chip_cap_warmup_d1_7', 'chip_cap_warmup_d8_30', 'chip_cap_mature',
       'chip_send_window_start', 'chip_send_window_end',
+      'chip_typing_simulation_enabled', 'chip_typing_min_ms', 'chip_typing_max_ms',
     ]);
   const out: Record<string, any> = {};
   for (const r of data || []) out[r.key] = r.value;
   return out;
+}
+
+function rand(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// Envia presence "composing" (digitando…) e dorme até durationMs.
+// Falhas de presence são silenciosas — não bloqueiam o envio do texto.
+async function simulateTyping(base: string, instance: string, apiKey: string, phone: string, durationMs: number) {
+  try {
+    await fetch(`${base}/chat/sendPresence/${instance}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
+      body: JSON.stringify({ number: phone, options: { delay: durationMs, presence: 'composing' } }),
+    });
+  } catch (e: any) {
+    console.log('⌨️ presence falhou (segue):', e?.message);
+  }
+  await sleep(durationMs);
 }
 
 function capForBot(bot: any, settings: Record<string, any>): number {
@@ -144,12 +168,24 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    const apiKey = (bot.evolution_api_key || '').toString().trim();
+
+    // ── Simulação de "digitando..." (apenas em envios cold) ─────────────────
+    const typingEnabled = settings.chip_typing_simulation_enabled === true;
+    if (typingEnabled && isColdSend) {
+      const minMs = Number(settings.chip_typing_min_ms ?? 3000);
+      const maxMs = Number(settings.chip_typing_max_ms ?? 8000);
+      const dur = rand(minMs, maxMs);
+      console.log(`⌨️ typing ${dur}ms antes do envio`);
+      await simulateTyping(base, instance, apiKey, cleanPhone, dur);
+    }
+
     const url = `${base}/message/sendText/${instance}`;
     console.log('🚀 sendText', url);
 
     const evolutionResponse = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'apikey': (bot.evolution_api_key || '').toString().trim() },
+      headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
       body: JSON.stringify({ number: cleanPhone, text: message }),
     });
 

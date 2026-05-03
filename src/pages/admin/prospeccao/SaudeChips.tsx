@@ -63,6 +63,9 @@ interface SystemConfig {
   chip_send_window_start: number;
   chip_send_window_end: number;
   chip_blocklist_auto_enabled: boolean;
+  chip_typing_simulation_enabled: boolean;
+  chip_typing_min_ms: number;
+  chip_typing_max_ms: number;
 }
 
 const DEFAULT_CONFIG: SystemConfig = {
@@ -76,6 +79,9 @@ const DEFAULT_CONFIG: SystemConfig = {
   chip_send_window_start: 7,
   chip_send_window_end: 22,
   chip_blocklist_auto_enabled: true,
+  chip_typing_simulation_enabled: true,
+  chip_typing_min_ms: 3000,
+  chip_typing_max_ms: 8000,
 };
 
 function ageDaysFromIso(iso: string): number {
@@ -703,6 +709,21 @@ function ConfigPanel({ config, onSave, saving }: { config: SystemConfig; onSave:
         <div className="grid grid-cols-2 gap-3">
           <Field label="Início (hora)" value={draft.chip_send_window_start} onChange={(v) => setDraft({ ...draft, chip_send_window_start: v })} hint="Disparos só a partir desta hora" />
           <Field label="Fim (hora)" value={draft.chip_send_window_end} onChange={(v) => setDraft({ ...draft, chip_send_window_end: v })} hint="Para de disparar nesta hora" />
+        </div>
+      </div>
+
+      <div className="bg-slate-900/40 border border-gray-700/50 rounded-xl p-4">
+        <h3 className="text-sm font-bold text-gray-200 mb-3">Simulação de "digitando..." (humaniza envio)</h3>
+        <p className="text-xs text-gray-500 mb-4">Antes de enviar mensagem em campanha, o chip exibe "digitando..." pra simular comportamento humano. Aplica apenas em envios cold (campanha + qualificação IA).</p>
+        <Toggle
+          label="Mostrar digitando antes do envio"
+          value={draft.chip_typing_simulation_enabled}
+          onChange={(v) => setDraft({ ...draft, chip_typing_simulation_enabled: v })}
+          hint="Tempo aleatório entre min e max abaixo. Adiciona latência por envio."
+        />
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <Field label="Mín (ms)" value={draft.chip_typing_min_ms} onChange={(v) => setDraft({ ...draft, chip_typing_min_ms: v })} hint="ex: 3000 = 3s" />
+          <Field label="Máx (ms)" value={draft.chip_typing_max_ms} onChange={(v) => setDraft({ ...draft, chip_typing_max_ms: v })} hint="ex: 8000 = 8s" />
         </div>
       </div>
 
