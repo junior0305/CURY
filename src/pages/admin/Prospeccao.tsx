@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bot, MessageSquare, BarChart3, Settings as SettingsIcon, Rocket, Activity, Megaphone, Inbox, Shield } from "lucide-react";
+import { Bot, MessageSquare, BarChart3, Settings as SettingsIcon, Rocket, Activity, Megaphone, Inbox, Shield, FlaskConical } from "lucide-react";
 import Exercito from "./prospeccao/Exercito";
 import Campanhas from "./prospeccao/Campanhas";
 import Mensagens from "./prospeccao/Mensagens";
@@ -10,6 +10,7 @@ import Analytics from "./prospeccao/Analytics";
 import Configuracoes from "./prospeccao/Configuracoes";
 import Monitor from "./prospeccao/Monitor";
 import SaudeChips from "./prospeccao/SaudeChips";
+import AbLab from "./prospeccao/AbLab";
 
 export function Prospeccao() {
   const [activeTab, setActiveTab] = useState("exercito");
@@ -36,7 +37,7 @@ export function Prospeccao() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="bg-slate-900/80 border border-gray-700/50 p-1 gap-1 rounded-xl backdrop-blur-sm grid grid-cols-9">
+        <TabsList className="bg-slate-900/80 border border-gray-700/50 p-1 gap-1 rounded-xl backdrop-blur-sm grid grid-cols-10">
           <TabsTrigger
             value="exercito"
             className="flex items-center gap-2 py-2.5 px-3 rounded-lg data-[state=active]:bg-green-900/60 data-[state=active]:text-green-200 data-[state=active]:border-green-500/50 border border-transparent"
@@ -102,6 +103,14 @@ export function Prospeccao() {
           </TabsTrigger>
 
           <TabsTrigger
+            value="ablab"
+            className="flex items-center gap-2 py-2.5 px-3 rounded-lg data-[state=active]:bg-fuchsia-900/60 data-[state=active]:text-fuchsia-200 data-[state=active]:border-fuchsia-500/50 border border-transparent"
+          >
+            <FlaskConical className="w-4 h-4" />
+            <span className="hidden md:inline font-semibold">A/B Lab</span>
+          </TabsTrigger>
+
+          <TabsTrigger
             value="monitor"
             className="flex items-center gap-2 py-2.5 px-3 rounded-lg data-[state=active]:bg-cyan-900/60 data-[state=active]:text-cyan-200 data-[state=active]:border-cyan-500/50 border border-transparent"
           >
@@ -140,6 +149,10 @@ export function Prospeccao() {
 
         <TabsContent value="saude" className="mt-6">
           <SaudeChips />
+        </TabsContent>
+
+        <TabsContent value="ablab" className="mt-6">
+          <AbLab />
         </TabsContent>
 
         <TabsContent value="monitor" className="mt-6">

@@ -48,6 +48,49 @@ async function hasRecentAutoFollowup(supabase: any, leadId: string, hours: numbe
 }
 
 /**
+ * Garante uma ia_conversation pro lead+bot e propaga template_id+kind.
+ * Reusa conversa existente; se já tinha template_id e o novo é diferente,
+ * NÃO sobrescreve (preserva a primeira atribuição pra rastreio honesto).
+ */
+async function ensureConvWithTemplate(
+  supabase: any, leadId: string, botId: string,
+  leadName: string, leadPhone: string,
+  templateId: string | null, templateKind: string | null,
+): Promise<string | null> {
+  const { data: existing } = await supabase
+    .from('ia_conversations')
+    .select('id, template_id, template_kind')
+    .eq('lead_id', leadId)
+    .eq('bot_instance_id', botId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.id) {
+    if (!existing.template_id && templateId) {
+      await supabase.from('ia_conversations')
+        .update({ template_id: templateId, template_kind: templateKind })
+        .eq('id', existing.id);
+    }
+    return existing.id;
+  }
+
+  const { data: created } = await supabase.from('ia_conversations').insert({
+    bot_instance_id: botId,
+    lead_id: leadId,
+    lead_name: leadName,
+    lead_phone: leadPhone,
+    status: 'active',
+    sentiment: 'unknown',
+    is_crm_lead: true,
+    template_id: templateId,
+    template_kind: templateKind,
+  }).select('id').single();
+
+  return created?.id || null;
+}
+
+/**
  * Interpola variáveis {nome} e {broker} no template.
  */
 function interpolate(template: string, name: string, brokerName: string): string {
@@ -313,7 +356,7 @@ serve(async (req) => {
         const stepNumber = (exec.current_step || 0) + 1;
         const { data: stepData } = await supabase
           .from('cadence_steps')
-          .select('content')
+          .select('id, content')
           .eq('cadence_id', exec.cadence_id)
           .eq('step_number', stepNumber)
           .eq('media_type', 'text')
@@ -323,16 +366,26 @@ serve(async (req) => {
         const rawMessage = stepData?.content || exec.message || getFallbackMessage(lead.status, lead.name, lead.tag, 0, brokerName);
         const message = interpolate(rawMessage, lead.name, brokerName);
 
+        const conversationId = await ensureConvWithTemplate(
+          supabase, lead.id, bot.id, lead.name, lead.phone,
+          stepData?.id || null, stepData?.id ? 'cadence_step' : null,
+        );
+
         const { error: sendError } = await supabase.functions.invoke('send_whatsapp_message', {
           body: {
             botId: bot.id,
             phone: lead.phone,
             message,
-            conversationId: null,
+            conversationId,
             instanceName: bot.instance_name,
             send_source: 'ai_followup',
           },
         });
+
+        if (!sendError && stepData?.id) {
+          await supabase.rpc('track_template_sent', { p_template_id: stepData.id, p_kind: 'cadence_step' })
+            .then(() => {}, () => {});
+        }
 
         if (sendError) {
           console.error('[B3] send error', sendError.message);
@@ -461,33 +514,47 @@ serve(async (req) => {
       // ── Escolha do template ──────────────────────────────────────────────────
       let message: string;
       let templateSource: string;
+      let chosenTemplateId: string | null = null;
+      let chosenTemplateKind: string | null = null;
 
       const hadConversation = !!lead.welcome_responded_at;
 
       if (!hadConversation && activeWelcome.length > 0) {
-        // Nunca interagiu → usa welcome_template aleatório
         const tpl = activeWelcome[Math.floor(Math.random() * activeWelcome.length)];
         message = interpolate(tpl.message, lead.name, brokerName);
         templateSource = `welcome_template: ${tpl.name}`;
+        chosenTemplateId = tpl.id;
+        chosenTemplateKind = 'welcome';
       } else if (hadConversation && cadenceTextSteps.length > 0) {
-        // Já conversou e esfriou → usa passo de cadência aleatório
         const step = cadenceTextSteps[Math.floor(Math.random() * cadenceTextSteps.length)];
         message = interpolate(step.content, lead.name, brokerName);
         templateSource = `cadence_step: ${step.id}`;
+        chosenTemplateId = step.id;
+        chosenTemplateKind = 'cadence_step';
       } else {
-        // Fallback: sem templates configurados → mensagem hardcoded por status/tempo
         message = getFallbackMessage(lead.status, lead.name, lead.tag, hoursStale, brokerName);
         templateSource = 'fallback_hardcoded';
       }
+
+      const conversationId = await ensureConvWithTemplate(
+        supabase, lead.id, broker.bot_instance_id, lead.name, lead.phone,
+        chosenTemplateId, chosenTemplateKind,
+      );
 
       const { data: result, error: sendErr } = await supabase.functions.invoke('send_whatsapp_message', {
         body: {
           botId: broker.bot_instance_id,
           phone: lead.phone,
           message,
+          conversationId,
           send_source: 'campaign',
         },
       });
+
+      if (result?.success && chosenTemplateId && chosenTemplateKind) {
+        await supabase.rpc('track_template_sent', { p_template_id: chosenTemplateId, p_kind: chosenTemplateKind })
+          .then(() => {}, () => {});
+      }
       console.log(`[B4] send ${lead.id} → success=${result?.success}, status=${result?.status}, err=${sendErr?.message}`);
 
       try { await supabase.from('automation_logs').insert({

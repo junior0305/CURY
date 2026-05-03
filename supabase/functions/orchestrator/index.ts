@@ -14,43 +14,69 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// ── Carrega templates de prospecção da biblioteca ─────────────────────────
+// ── Carrega templates de prospecção (com score) ───────────────────────────
 // Prioridade:
 //   1. campaign.template_ids (subset explícito)
 //   2. campaign.template_category (filtro por categoria)
 //   3. todos os templates com is_active = true
-// Fallback: se a biblioteca estiver vazia/não retornar nada, usa
-// campaign.message_templates (formato legado jsonb) para retrocompatibilidade.
+// Filtros sempre aplicados: is_active=true, is_draft=false, auto_paused_at IS NULL.
+// Fallback: se a biblioteca estiver vazia, usa campaign.message_templates (legado jsonb).
 async function loadTemplates(supabase: any, campaign: any) {
   let query = supabase
-    .from('prospecting_message_templates')
-    .select('id, name, message, category')
-    .eq('is_active', true);
+    .from('v_template_stats')
+    .select('id, name, message, segment, sent, qualified, opted_out, score, auto_paused_at, is_draft, is_active')
+    .eq('kind', 'prospecting')
+    .eq('is_active', true)
+    .eq('is_draft', false)
+    .is('auto_paused_at', null);
 
   if (campaign.template_ids && Array.isArray(campaign.template_ids) && campaign.template_ids.length > 0) {
     query = query.in('id', campaign.template_ids);
   } else if (campaign.template_category) {
-    query = query.eq('category', campaign.template_category);
+    query = query.eq('segment', campaign.template_category);
   }
-
-  // Round-robin justo: o que foi usado há mais tempo (ou nunca usado) vem primeiro
-  query = query.order('last_used_at', { ascending: true, nullsFirst: true });
 
   const { data: libraryTemplates, error } = await query;
 
   if (!error && libraryTemplates && libraryTemplates.length > 0) {
     console.log(`[orchestrator] 📚 Biblioteca: ${libraryTemplates.length} templates ativos`);
-    return libraryTemplates.map((t: any) => ({ id: t.id, text: t.message, name: t.name }));
+    return libraryTemplates.map((t: any) => ({ id: t.id, text: t.message, name: t.name, sent: t.sent, score: Number(t.score) || 0 }));
   }
 
-  // Fallback legado: lê do campo jsonb antigo da campanha
+  // Fallback legado
   const legacy = campaign.message_templates || [];
   if (legacy.length > 0) {
     console.log(`[orchestrator] ⚠️ Biblioteca vazia — usando ${legacy.length} templates legados da campanha`);
-    return legacy.map((t: any) => ({ id: null, text: t.text || t.message || '', name: null }));
+    return legacy.map((t: any) => ({ id: null, text: t.text || t.message || '', name: null, sent: 0, score: 0 }));
   }
 
   return [];
+}
+
+// Round-robin ponderado:
+//   < 30 envios (exploração)         → peso 40
+//   score >= 50 (campeão)             → peso 100
+//   score 30-49 (forte)               → peso 60
+//   score 15-29 (médio)               → peso 30
+//   score < 15 e >= 30 envios (fraco) → peso 10
+function pickWeighted<T extends { sent: number; score: number }>(templates: T[]): T {
+  const weighted = templates.map(t => {
+    let w = 30;
+    if (t.sent < 30)        w = 40;
+    else if (t.score >= 50) w = 100;
+    else if (t.score >= 30) w = 60;
+    else if (t.score >= 15) w = 30;
+    else                    w = 10;
+    return { t, w };
+  });
+  const total = weighted.reduce((s, x) => s + x.w, 0);
+  if (total <= 0) return templates[0];
+  let r = Math.random() * total;
+  for (const x of weighted) {
+    r -= x.w;
+    if (r <= 0) return x.t;
+  }
+  return weighted[0].t;
 }
 
 serve(async (req) => {
@@ -146,7 +172,6 @@ serve(async (req) => {
 
     const assignments: any[] = [];
     let botIndex = 0;
-    let templateIndex = 0; // Round-robin entre templates da biblioteca
 
     for (const [i, lead] of leads.entries()) {
       let bot = bots[botIndex % bots.length];
@@ -176,9 +201,9 @@ serve(async (req) => {
 
       console.log(`[orchestrator] 🧾 Processando lead ${i + 1}/${leads.length} -> ${lead.name || lead.phone} via bot ${bot.name}`);
 
-      // Round-robin nos templates (não random) — distribuição justa pra A/B test
-      const selectedTemplate = messageTemplates[templateIndex % messageTemplates.length];
-      templateIndex++;
+      // Weighted picking — campeões puxam mais, novos têm cota de exploração
+      const selectedTemplate = pickWeighted(messageTemplates);
+      console.log(`[orchestrator] 🎯 Template selecionado: ${selectedTemplate.name} (score ${selectedTemplate.score}, ${selectedTemplate.sent} envios)`);
 
       if (!selectedTemplate?.text) {
         console.warn(`[orchestrator] ⚠️ Template selecionado sem texto, pulando lead ${lead.name}`);
@@ -193,7 +218,8 @@ serve(async (req) => {
         lead_phone: lead.phone,
         status: 'active',
         sentiment: 'unknown',
-        template_id: selectedTemplate.id,  // pode ser null em modo legado
+        template_id: selectedTemplate.id,
+        template_kind: selectedTemplate.id ? 'prospecting' : null,
       }).select().single();
       if (!conversation) continue;
 
@@ -208,8 +234,8 @@ serve(async (req) => {
 
       // Incrementa métricas do template (só se vier da biblioteca)
       if (selectedTemplate.id) {
-        await supabaseClient.rpc('increment_template_sent', { p_template_id: selectedTemplate.id })
-          .then(() => {}, (err: any) => console.warn('[orchestrator] increment_template_sent falhou:', err?.message));
+        await supabaseClient.rpc('track_template_sent', { p_template_id: selectedTemplate.id, p_kind: 'prospecting' })
+          .then(() => {}, (err: any) => console.warn('[orchestrator] track_template_sent falhou:', err?.message));
       }
 
       assignments.push({ lead, bot, templateId: selectedTemplate.id });
