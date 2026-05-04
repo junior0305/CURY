@@ -72,6 +72,83 @@ export function TeamProspeccaoTab({ managerId }: Props) {
     refetchInterval: 15000,
   });
 
+  // Resultados detalhados por campanha (resp, qualified, converted, opt-out)
+  const { data: campaignResults = {} } = useQuery<Record<string, any>>({
+    queryKey: ["teamCampaignResults", campaigns.map(c => c.id).join(",")],
+    queryFn: async () => {
+      if (campaigns.length === 0) return {};
+      const ids = campaigns.map(c => c.id);
+      const QUALIFIED = ["IN_PROGRESS","NEGOTIATING","VISIT_SCHEDULED","VISITA_REALIZADA","DOCS_REQUESTED","CONCLUDED"];
+      const OPTOUT_KW = ["nao quero","não quero","sem interesse","para de","pare de","descadastr","remov","stop","numero errado","número errado"];
+
+      const { data: convs } = await supabase
+        .from("ia_conversations")
+        .select("id, campaign_id, lead_id, lead_name, lead_phone, messages_count")
+        .in("campaign_id", ids);
+
+      const convIds = (convs || []).map((c: any) => c.id);
+      const { data: msgs } = convIds.length
+        ? await supabase.from("ia_messages")
+            .select("conversation_id, direction, message_text")
+            .in("conversation_id", convIds)
+        : { data: [] as any[] };
+
+      const respondedConvs = new Set<string>();
+      const optOutConvs = new Set<string>();
+      const lastLeadMsgByConv = new Map<string, string>();
+      for (const m of msgs || []) {
+        if (m.direction === "incoming") {
+          respondedConvs.add(m.conversation_id);
+          lastLeadMsgByConv.set(m.conversation_id, m.message_text || "");
+        }
+      }
+      for (const [convId, text] of lastLeadMsgByConv) {
+        const t = (text || "").toLowerCase();
+        if (OPTOUT_KW.some(k => t.includes(k))) optOutConvs.add(convId);
+      }
+
+      const leadIds = Array.from(new Set((convs || []).map((c: any) => c.lead_id).filter(Boolean))) as string[];
+      const { data: leads } = leadIds.length
+        ? await supabase.from("leads").select("id, status, broker_id").in("id", leadIds)
+        : { data: [] as any[] };
+      const leadStatusMap = new Map<string, { status: string; broker_id: string|null }>();
+      (leads || []).forEach((l: any) => leadStatusMap.set(l.id, { status: l.status, broker_id: l.broker_id }));
+
+      const out: Record<string, any> = {};
+      for (const id of ids) {
+        out[id] = { sent: 0, responded: 0, qualified: 0, converted: 0, opted_out: 0, conversations: [] };
+      }
+      for (const c of convs || []) {
+        const r = out[c.campaign_id];
+        if (!r) continue;
+        r.sent++;
+        const responded = respondedConvs.has(c.id);
+        const optedOut = optOutConvs.has(c.id);
+        const lead = c.lead_id ? leadStatusMap.get(c.lead_id) : null;
+        const qualified = lead && QUALIFIED.includes(lead.status);
+        const converted = lead?.status === "CONCLUDED";
+
+        if (responded) r.responded++;
+        if (qualified) r.qualified++;
+        if (converted) r.converted++;
+        if (optedOut) r.opted_out++;
+
+        if (responded) {
+          r.conversations.push({
+            id: c.id, lead_id: c.lead_id, lead_name: c.lead_name, lead_phone: c.lead_phone,
+            last_msg: lastLeadMsgByConv.get(c.id) || "",
+            opted_out: optedOut,
+            qualified, converted,
+            status: lead?.status,
+          });
+        }
+      }
+      return out;
+    },
+    enabled: campaigns.length > 0,
+    refetchInterval: 30000,
+  });
+
   const hasActive = campaigns.some(c => c.status === "active");
 
   // ── Mutations ────────────────────────────────────────────────────────────
@@ -179,6 +256,41 @@ export function TeamProspeccaoTab({ managerId }: Props) {
                     <div className="h-1 rounded-full overflow-hidden mt-1.5" style={{ background: "rgba(148,163,184,0.15)" }}>
                       <div className="h-full transition-all" style={{ width: `${progress}%`, background: statusColor }} />
                     </div>
+                    {/* Resultados — métricas curtas */}
+                    {(() => {
+                      const r = campaignResults[c.id];
+                      if (!r || r.sent === 0) return null;
+                      const respRate = r.sent > 0 ? Math.round((r.responded / r.sent) * 100) : 0;
+                      const qualRate = r.sent > 0 ? Math.round((r.qualified / r.sent) * 100) : 0;
+                      return (
+                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                            style={{ background: "rgba(167,139,250,0.12)", color: "#A78BFA", border: "1px solid rgba(167,139,250,0.3)" }}
+                            title="Quantos responderam">
+                            💬 {r.responded} resp ({respRate}%)
+                          </span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                            style={{ background: "rgba(16,185,129,0.12)", color: "#10B981", border: "1px solid rgba(16,185,129,0.3)" }}
+                            title="Em IN_PROGRESS+ (entrou no funil de verdade)">
+                            ✅ {r.qualified} qualif ({qualRate}%)
+                          </span>
+                          {r.converted > 0 && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                              style={{ background: "rgba(245,158,11,0.15)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.4)" }}
+                              title="Vendas fechadas">
+                              💰 {r.converted} venda{r.converted > 1 ? "s" : ""}
+                            </span>
+                          )}
+                          {r.opted_out > 0 && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                              style={{ background: "rgba(239,68,68,0.1)", color: "#EF4444", border: "1px solid rgba(239,68,68,0.3)" }}
+                              title="Pediram pra parar">
+                              🚫 {r.opted_out} opt-out
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
                     {c.status === "draft" && (
@@ -216,15 +328,63 @@ export function TeamProspeccaoTab({ managerId }: Props) {
                     </button>
                   </div>
                 </div>
-                {/* Detail expandido */}
-                {activeCampaignDetailId === c.id && (
-                  <div className="mt-2 pt-2 border-t flex flex-col gap-1 text-[10px]" style={{ borderColor: "var(--crm-border)", color: "var(--crm-text-muted)" }}>
-                    <div>📅 Criada: {new Date(c.created_at).toLocaleString("pt-BR")}</div>
-                    <div>✅ Contactados: {stats.contacted}</div>
-                    <div>⏳ Pendentes: {stats.pending}</div>
-                    <div>💬 Responderam: {c.leads_responded || 0}</div>
-                  </div>
-                )}
+                {/* Detail expandido — lista de respondentes */}
+                {activeCampaignDetailId === c.id && (() => {
+                  const r = campaignResults[c.id];
+                  return (
+                    <div className="mt-2 pt-2 border-t flex flex-col gap-2 text-[10px]" style={{ borderColor: "var(--crm-border)", color: "var(--crm-text-muted)" }}>
+                      <div className="grid grid-cols-2 gap-1">
+                        <div>📅 Criada: {new Date(c.created_at).toLocaleDateString("pt-BR")}</div>
+                        <div>✅ Contactados: {stats.contacted}/{stats.total}</div>
+                        <div>⏳ Pendentes: {stats.pending}</div>
+                        <div>💬 Responderam: {r?.responded ?? 0}</div>
+                        <div>🎯 Qualificados: {r?.qualified ?? 0}</div>
+                        <div>💰 Vendas: {r?.converted ?? 0}</div>
+                      </div>
+                      {r?.conversations?.length > 0 && (
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider mt-1" style={{ color: "#A78BFA" }}>
+                            Respondentes ({r.conversations.length})
+                          </div>
+                          <div className="max-h-48 overflow-y-auto space-y-0.5 mt-1">
+                            {r.conversations.slice(0, 30).map((conv: any) => {
+                              const tag = conv.opted_out ? { label: "Opt-out", color: "#EF4444", bg: "rgba(239,68,68,0.1)" }
+                                       : conv.converted ? { label: "Vendido", color: "#F59E0B", bg: "rgba(245,158,11,0.15)" }
+                                       : conv.qualified ? { label: "Qualificado", color: "#10B981", bg: "rgba(16,185,129,0.12)" }
+                                       : { label: "Respondeu", color: "#A78BFA", bg: "rgba(167,139,250,0.12)" };
+                              return (
+                                <div key={conv.id} className="flex items-center gap-1.5 px-1.5 py-1 rounded text-[10px]"
+                                  style={{ background: "var(--crm-glass)", border: "1px solid var(--crm-border)" }}>
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0"
+                                    style={{ background: tag.bg, color: tag.color, border: `1px solid ${tag.color}40` }}>
+                                    {tag.label}
+                                  </span>
+                                  <span className="font-bold truncate" style={{ color: "var(--crm-text)" }}>{conv.lead_name || conv.lead_phone}</span>
+                                  {conv.last_msg && (
+                                    <span className="italic truncate flex-1" style={{ color: "var(--crm-text-muted)" }}
+                                      title={conv.last_msg}>
+                                      "{conv.last_msg.substring(0, 50)}{conv.last_msg.length > 50 ? "…" : ""}"
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {r.conversations.length > 30 && (
+                            <div className="text-[9px] text-center mt-1" style={{ color: "var(--crm-text-muted)" }}>
+                              + {r.conversations.length - 30} respondentes
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {(!r || r.responded === 0) && stats.contacted > 0 && (
+                        <div className="text-[10px] italic text-center py-2">
+                          Nenhuma resposta ainda. Cuide do follow-up!
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })
