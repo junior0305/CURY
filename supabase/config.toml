@@ -120,6 +120,9 @@ verify_jwt = false  # INTERNA — disparo manual setup
 [functions.rescue-pending-leads-notify]
 verify_jwt = false  # INTERNA — disparo manual emergencial
 
+[functions.monitor-lead-notifications]
+verify_jwt = false  # INTERNA — pg_cron horário
+
 [functions.generate-message]
 verify_jwt = false  # INTERNA
 
