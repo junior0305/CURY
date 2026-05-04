@@ -1794,6 +1794,24 @@ export default function ManagerDashboard() {
                           const st = STATUS_LABELS[lead.status] ?? { label: lead.status, color: "#475569" };
                           const minsAgo = Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / 60000);
                           const ago = minsAgo < 60 ? `${minsAgo}min` : minsAgo < 1440 ? `${Math.floor(minsAgo / 60)}h` : `${Math.floor(minsAgo / 1440)}d`;
+
+                          // Sinaleiro de atendimento
+                          let attendBadge: { label: string; bg: string; color: string; border: string } | null = null;
+                          if (!lead.brokerId) {
+                            attendBadge = { label: "Sem corretor", bg: "rgba(239,68,68,0.12)", color: "#EF4444", border: "rgba(239,68,68,0.4)" };
+                          } else if (lead.lastBrokerWhatsappAt) {
+                            const respondedAfterLead = !lead.lastLeadResponseAt
+                              || new Date(lead.lastBrokerWhatsappAt).getTime() >= new Date(lead.lastLeadResponseAt).getTime();
+                            attendBadge = respondedAfterLead
+                              ? { label: "Atendido", bg: "rgba(16,185,129,0.12)", color: "#10B981", border: "rgba(16,185,129,0.4)" }
+                              : { label: "Lead aguarda", bg: "rgba(245,158,11,0.15)", color: "#F59E0B", border: "rgba(245,158,11,0.4)" };
+                          } else if (minsAgo < 30) {
+                            attendBadge = { label: "Recente", bg: "rgba(99,102,241,0.12)", color: "#818CF8", border: "rgba(99,102,241,0.4)" };
+                          } else if (minsAgo < 120) {
+                            attendBadge = { label: "Aguardando", bg: "rgba(245,158,11,0.15)", color: "#F59E0B", border: "rgba(245,158,11,0.4)" };
+                          } else {
+                            attendBadge = { label: "🔴 Parado", bg: "rgba(239,68,68,0.15)", color: "#EF4444", border: "rgba(239,68,68,0.5)" };
+                          }
                           return (
                             <motion.div key={lead.id}
                               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
@@ -1802,12 +1820,19 @@ export default function ManagerDashboard() {
                               style={{ background: "var(--crm-glass)", border: "1px solid var(--crm-border)" }}>
                               <div className="flex items-start gap-2.5">
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-0.5">
+                                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                                     <span className="text-sm font-bold truncate" style={{ color: "var(--crm-text)" }}>{lead.name}</span>
                                     <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider shrink-0"
                                       style={{ background: `${st.color}15`, color: st.color, border: `1px solid ${st.color}30` }}>
                                       {st.label}
                                     </span>
+                                    {attendBadge && (
+                                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider shrink-0"
+                                        style={{ background: attendBadge.bg, color: attendBadge.color, border: `1px solid ${attendBadge.border}` }}
+                                        title="Status do atendimento">
+                                        {attendBadge.label}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="text-[11px] flex items-center gap-1.5 flex-wrap" style={{ color: "var(--crm-text-muted)" }}>
                                     <span className="font-mono">há {ago}</span>
