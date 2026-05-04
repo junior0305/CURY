@@ -178,12 +178,34 @@ export function LeadMonitorDrawer({ lead, broker, onClose }: Props) {
     }
     setSending(true);
     try {
+      // Garante que existe ia_conversation pro lead+chip do corretor
+      // (necessário pra send_whatsapp_message gravar a msg em ia_messages)
+      let convId = conversationId;
+      if (!convId) {
+        const { data: newConv, error: convErr } = await supabase.from("ia_conversations").insert({
+          bot_instance_id: broker.botInstanceId,
+          lead_id: lead.id,
+          lead_name: lead.name,
+          lead_phone: lead.phone,
+          status: "active",
+          sentiment: "unknown",
+          is_crm_lead: true,
+        }).select("id").single();
+        if (convErr) {
+          toast.error("Falha ao criar conversa: " + convErr.message);
+          setSending(false);
+          return;
+        }
+        convId = newConv?.id || null;
+        setConversationId(convId);
+      }
+
       const { data: result, error } = await supabase.functions.invoke("send_whatsapp_message", {
         body: {
           botId: broker.botInstanceId,
           phone: lead.phone,
           message: text,
-          conversationId: conversationId,
+          conversationId: convId,
           send_source: "broker_manual",
         },
       });
@@ -514,13 +536,21 @@ export function LeadMonitorDrawer({ lead, broker, onClose }: Props) {
             <span className="text-sm">Carregando conversa...</span>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3" style={{ color: "#334155" }}>
-            <MessageSquare className="w-10 h-10 opacity-20" />
-            <p className="text-sm text-center">
-              Nenhuma mensagem registrada para este lead.
-              <br />
-              <span className="text-[10px]">As mensagens aparecem após o corretor interagir via WhatsApp.</span>
+          <div className="flex flex-col items-center justify-center h-full gap-3 px-4" style={{ color: "#64748B" }}>
+            <MessageSquare className="w-10 h-10 opacity-30" style={{ color: "#A78BFA" }} />
+            <p className="text-sm text-center font-bold" style={{ color: "#94A3B8" }}>
+              💬 Conversa ainda não foi capturada
             </p>
+            <p className="text-[11px] text-center leading-relaxed max-w-[300px]" style={{ color: "#64748B" }}>
+              Pode ser que o corretor tenha falado pelo WhatsApp pessoal do celular
+              dele — nesses casos a Evolution às vezes não captura. Ou o lead ainda
+              não respondeu.
+            </p>
+            {broker?.botInstanceId && (
+              <p className="text-[11px] text-center font-bold mt-2" style={{ color: "#34D399" }}>
+                ↓ Você pode iniciar a conversa digitando abaixo
+              </p>
+            )}
           </div>
         ) : (
           Object.entries(grouped).map(([day, msgs]) => (
