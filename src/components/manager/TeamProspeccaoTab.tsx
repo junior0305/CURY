@@ -430,7 +430,7 @@ function CampaignBuilder({ managerId, hasActive, onClose }: { managerId: string;
     },
   });
 
-  // Chips do manager
+  // Chips do manager — aceita open/active/connecting (não só os "perfeitos")
   const { data: bots = [] } = useQuery<Bot[]>({
     queryKey: ["teamBots", managerId],
     queryFn: async () => {
@@ -438,7 +438,7 @@ function CampaignBuilder({ managerId, hasActive, onClose }: { managerId: string;
         .from("bot_instances")
         .select("id, name, status, team_manager_id")
         .eq("team_manager_id", managerId)
-        .in("status", ["open", "active"])
+        .not("status", "in", "(offline,paused,paused_safety)")
         .order("name");
       return (data || []) as Bot[];
     },
@@ -562,18 +562,24 @@ function CampaignBuilder({ managerId, hasActive, onClose }: { managerId: string;
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {bots.length === 0 && <p className="text-xs" style={{ color: "var(--crm-text-muted)" }}>Nenhum chip atribuído à sua equipe. Peça pro admin atribuir em Atribuir Chips.</p>}
-                  {bots.map(b => (
-                    <button key={b.id}
-                      onClick={() => setSelectedBots(prev => prev.includes(b.id) ? prev.filter(x => x !== b.id) : [...prev, b.id])}
-                      className="px-2.5 py-1 rounded-md text-[11px] font-bold transition-all"
-                      style={{
-                        background: selectedBots.includes(b.id) ? "rgba(16,185,129,0.18)" : "var(--crm-glass)",
-                        border: `1px solid ${selectedBots.includes(b.id) ? "rgba(16,185,129,0.5)" : "var(--crm-border-mid)"}`,
-                        color: selectedBots.includes(b.id) ? "#10B981" : "var(--crm-text)",
-                      }}>
-                      {b.name}
-                    </button>
-                  ))}
+                  {bots.map(b => {
+                    const isOk = b.status === "open" || b.status === "active";
+                    const dotColor = isOk ? "#10B981" : "#F59E0B";
+                    return (
+                      <button key={b.id}
+                        onClick={() => setSelectedBots(prev => prev.includes(b.id) ? prev.filter(x => x !== b.id) : [...prev, b.id])}
+                        className="px-2.5 py-1 rounded-md text-[11px] font-bold transition-all flex items-center gap-1.5"
+                        title={`Status: ${b.status}${isOk ? "" : " (chip pode estar reconectando — confirma com admin se for usar)"}`}
+                        style={{
+                          background: selectedBots.includes(b.id) ? "rgba(16,185,129,0.18)" : "var(--crm-glass)",
+                          border: `1px solid ${selectedBots.includes(b.id) ? "rgba(16,185,129,0.5)" : "var(--crm-border-mid)"}`,
+                          color: selectedBots.includes(b.id) ? "#10B981" : "var(--crm-text)",
+                        }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: dotColor }} />
+                        {b.name}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
