@@ -5,9 +5,10 @@ import type { Lead } from "@/types/lead";
 import type { User } from "@/types/user";
 import {
   X, Bot, User as UserIcon, MessageSquare,
-  Star, AlertCircle, CheckCircle, Clock,
+  Star, AlertCircle, CheckCircle, Clock, Send, Shield,
   TrendingUp, TrendingDown, Minus, Eye, RefreshCw, Lightbulb, Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -160,7 +161,73 @@ export function LeadMonitorDrawer({ lead, broker, onClose }: Props) {
   const [coachLoading, setCoachLoading] = useState(false);
   const [coachError, setCoachError]     = useState<string | null>(null);
   const [loadingMsgs, setLoadingMsgs]   = useState(true);
+  const [draftMessage, setDraftMessage] = useState<string>("");
+  const [sending, setSending]           = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  async function handleManagerSend() {
+    const text = draftMessage.trim();
+    if (!text) return;
+    if (!broker?.botInstanceId) {
+      toast.error("Corretor não tem chip vinculado. Não dá pra enviar via WhatsApp.");
+      return;
+    }
+    if (!lead?.phone) {
+      toast.error("Lead sem telefone");
+      return;
+    }
+    setSending(true);
+    try {
+      const { data: result, error } = await supabase.functions.invoke("send_whatsapp_message", {
+        body: {
+          botId: broker.botInstanceId,
+          phone: lead.phone,
+          message: text,
+          conversationId: conversationId,
+          send_source: "broker_manual",
+        },
+      });
+      if (error || !result?.success) {
+        const reason = (result as any)?.skipped || error?.message || "falha ao enviar";
+        toast.error("❌ " + reason);
+        return;
+      }
+      // Aparece na conversa imediatamente
+      setMessages(prev => [...prev, {
+        id: `tmp-${Date.now()}`,
+        text,
+        direction: "outgoing",
+        senderType: "broker",
+        createdAt: new Date().toISOString(),
+      }]);
+      setDraftMessage("");
+
+      // Audit log + notif pro corretor
+      try {
+        await supabase.rpc("log_audit", {
+          p_action_type: "MANAGER_TAKEOVER_MESSAGE",
+          p_entity_type: "lead",
+          p_entity_id: lead.id,
+          p_payload: { lead_phone: lead.phone, broker_id: broker.id, message_preview: text.slice(0, 100) },
+          p_notes: `Gerente enviou msg pelo chip de ${broker.name?.split(" ")[0] || "corretor"} pro lead ${lead.name}`,
+        });
+      } catch { /* não bloqueia */ }
+
+      try {
+        await supabase.from("internal_notifications").insert({
+          to_id: broker.id,
+          type: "MANAGER_TAKEOVER",
+          message: `Seu gerente respondeu o lead ${lead.name} pelo seu chip. Olha a conversa pra alinhar.`,
+        });
+      } catch { /* não bloqueia */ }
+
+      toast.success("✅ Enviado pelo chip do corretor");
+    } catch (e: any) {
+      toast.error("❌ " + (e?.message || "erro inesperado"));
+    } finally {
+      setSending(false);
+    }
+  }
 
   // Fetch messages + capture conversationId
   useEffect(() => {
@@ -483,13 +550,60 @@ export function LeadMonitorDrawer({ lead, broker, onClose }: Props) {
         <div ref={bottomRef} />
       </div>
 
-      {/* ── Footer ───────────────────────────────────────────────────────── */}
-      <div className="shrink-0 px-4 py-2.5 flex items-center gap-2"
+      {/* ── Footer — input de envio (chip do corretor) ──────────────────── */}
+      <div className="shrink-0"
         style={{ borderTop: "1px solid rgba(0,212,255,0.08)", background: "rgba(8,11,20,0.8)" }}>
-        <Eye className="w-3.5 h-3.5" style={{ color: "#334155" }} />
-        <span className="text-[10px]" style={{ color: "#334155" }}>
-          Modo leitura — {messages.length} mensagens · Gerente não pode responder
-        </span>
+        {broker?.botInstanceId ? (
+          <>
+            <div className="px-4 pt-2 pb-1 flex items-center gap-1.5">
+              <Shield className="w-3 h-3" style={{ color: "#34D399" }} />
+              <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: "#34D399" }}>
+                Você falará pelo chip do {broker.name?.split(" ")[0] || "corretor"} — ele será notificado
+              </span>
+            </div>
+            <div className="px-4 pb-3 flex items-end gap-2">
+              <textarea
+                value={draftMessage}
+                onChange={(e) => setDraftMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleManagerSend();
+                  }
+                }}
+                disabled={sending}
+                placeholder="Digite a mensagem... (Enter envia, Shift+Enter quebra linha)"
+                rows={2}
+                className="flex-1 rounded-lg px-3 py-2 text-sm resize-none outline-none disabled:opacity-50"
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(0,212,255,0.2)",
+                  color: "#E2E8F0",
+                }}
+              />
+              <button
+                onClick={handleManagerSend}
+                disabled={sending || !draftMessage.trim()}
+                className="px-3 py-2 rounded-lg flex items-center gap-1.5 text-sm font-bold disabled:opacity-50 transition-all hover:scale-[1.03]"
+                style={{
+                  background: draftMessage.trim() ? "rgba(52,211,153,0.18)" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${draftMessage.trim() ? "rgba(52,211,153,0.5)" : "rgba(255,255,255,0.08)"}`,
+                  color: draftMessage.trim() ? "#34D399" : "#475569",
+                }}
+              >
+                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Enviar
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="px-4 py-2.5 flex items-center gap-2">
+            <AlertCircle className="w-3.5 h-3.5" style={{ color: "#F59E0B" }} />
+            <span className="text-[10px]" style={{ color: "#F59E0B" }}>
+              Corretor sem chip vinculado — modo leitura. Atribua um chip ao corretor pra poder assumir a conversa.
+            </span>
+          </div>
+        )}
       </div>
     </motion.div>
   );
