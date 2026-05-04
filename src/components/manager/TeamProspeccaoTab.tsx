@@ -430,7 +430,7 @@ function CampaignBuilder({ managerId, hasActive, onClose }: { managerId: string;
     },
   });
 
-  // Chips do manager — aceita open/active/connecting (não só os "perfeitos")
+  // Chips do manager — TODOS, mas só os ONLINE são selecionáveis
   const { data: bots = [] } = useQuery<Bot[]>({
     queryKey: ["teamBots", managerId],
     queryFn: async () => {
@@ -438,11 +438,11 @@ function CampaignBuilder({ managerId, hasActive, onClose }: { managerId: string;
         .from("bot_instances")
         .select("id, name, status, team_manager_id")
         .eq("team_manager_id", managerId)
-        .not("status", "in", "(offline,paused,paused_safety)")
         .order("name");
       return (data || []) as Bot[];
     },
   });
+  const onlineBots = bots.filter(b => b.status === "open" || b.status === "active");
 
   const validInline = useMemo(() => inlineLeads.filter(l => l.name.trim() && l.phone.trim()), [inlineLeads]);
 
@@ -558,29 +558,47 @@ function CampaignBuilder({ managerId, hasActive, onClose }: { managerId: string;
 
               <div>
                 <label className="text-[11px] font-bold uppercase tracking-wider block mb-1.5" style={{ color: "var(--crm-text-muted)" }}>
-                  Chips da equipe ({selectedBots.length} de {bots.length})
+                  Chips da equipe ({selectedBots.length} selecionados · {onlineBots.length} de {bots.length} online)
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {bots.length === 0 && <p className="text-xs" style={{ color: "var(--crm-text-muted)" }}>Nenhum chip atribuído à sua equipe. Peça pro admin atribuir em Atribuir Chips.</p>}
                   {bots.map(b => {
                     const isOk = b.status === "open" || b.status === "active";
-                    const dotColor = isOk ? "#10B981" : "#F59E0B";
+                    const isConnecting = b.status === "connecting";
+                    const dotColor = isOk ? "#10B981" : isConnecting ? "#F59E0B" : "#EF4444";
+                    const statusLabel = isOk ? "Pronto" : isConnecting ? "Conectando" : (b.status || "Offline");
+                    const isSelected = selectedBots.includes(b.id);
+
                     return (
                       <button key={b.id}
-                        onClick={() => setSelectedBots(prev => prev.includes(b.id) ? prev.filter(x => x !== b.id) : [...prev, b.id])}
-                        className="px-2.5 py-1 rounded-md text-[11px] font-bold transition-all flex items-center gap-1.5"
-                        title={`Status: ${b.status}${isOk ? "" : " (chip pode estar reconectando — confirma com admin se for usar)"}`}
+                        onClick={() => {
+                          if (!isOk) return; // só aceita selecionar quem tá online de verdade
+                          setSelectedBots(prev => prev.includes(b.id) ? prev.filter(x => x !== b.id) : [...prev, b.id]);
+                        }}
+                        disabled={!isOk}
+                        className="px-2.5 py-1 rounded-md text-[11px] font-bold transition-all flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
+                        title={isOk
+                          ? `${b.name} · pronto pra disparo`
+                          : isConnecting
+                            ? `${b.name} está reconectando — não dá pra usar agora. Aguarde ficar verde.`
+                            : `${b.name} está OFFLINE. Peça pro admin reconectar antes de disparar.`}
                         style={{
-                          background: selectedBots.includes(b.id) ? "rgba(16,185,129,0.18)" : "var(--crm-glass)",
-                          border: `1px solid ${selectedBots.includes(b.id) ? "rgba(16,185,129,0.5)" : "var(--crm-border-mid)"}`,
-                          color: selectedBots.includes(b.id) ? "#10B981" : "var(--crm-text)",
+                          background: isSelected ? "rgba(16,185,129,0.18)" : "var(--crm-glass)",
+                          border: `1px solid ${isSelected ? "rgba(16,185,129,0.5)" : "var(--crm-border-mid)"}`,
+                          color: isSelected ? "#10B981" : isOk ? "var(--crm-text)" : "var(--crm-text-muted)",
                         }}>
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: dotColor }} />
                         {b.name}
+                        {!isOk && <span className="text-[9px] uppercase tracking-wider" style={{ color: dotColor }}>· {statusLabel}</span>}
                       </button>
                     );
                   })}
                 </div>
+                {bots.length > onlineBots.length && (
+                  <p className="text-[10px] mt-2 px-2 py-1 rounded" style={{ background: "rgba(245,158,11,0.08)", color: "#F59E0B", border: "1px solid rgba(245,158,11,0.25)" }}>
+                    ⚠️ {bots.length - onlineBots.length} chip(s) offline ou conectando — não selecionável. Disparar com poucos chips sobrecarrega os ativos e pode banir.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
