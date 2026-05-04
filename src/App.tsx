@@ -23,6 +23,7 @@ import BootstrapAdmin from "@/pages/BootstrapAdmin";
 import ProfileDebug from "@/pages/ProfileDebug";
 import UserManagement from "@/pages/UserManagement";
 import AtribuirChips from "@/pages/admin/AtribuirChips";
+import Secretaria from "@/pages/Secretaria";
 import ForcePasswordChange from "@/pages/ForcePasswordChange";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, role, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" />;
+  if (role === "SECRETARY") return <Navigate to="/secretaria" />;
   if (role !== "SUPERINTENDENT" && role !== "ADMIN") {
     if (role === "MANAGER") return <Navigate to="/manager" />;
     return <Navigate to="/dashboard" />;
@@ -56,6 +58,7 @@ const ProtectedManagerRoute = ({ children }: { children: React.ReactNode }) => {
   if (loading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" />;
   if (role === "ADMIN" || role === "SUPERINTENDENT") return <Navigate to="/admin" />;
+  if (role === "SECRETARY") return <Navigate to="/secretaria" />;
   if (role !== "MANAGER") return <Navigate to="/dashboard" />;
   if (mustChangePassword) return <Navigate to="/force-password-change" replace />;
   return <WhatsAppGatekeeper>{children}</WhatsAppGatekeeper>;
@@ -67,8 +70,20 @@ const ProtectedBrokerRoute = ({ children }: { children: React.ReactNode }) => {
   if (!session) return <Navigate to="/login" />;
   if (role === "ADMIN" || role === "SUPERINTENDENT") return <Navigate to="/admin" />;
   if (role === "MANAGER") return <Navigate to="/manager" />;
+  if (role === "SECRETARY") return <Navigate to="/secretaria" />;
   if (mustChangePassword) return <Navigate to="/force-password-change" replace />;
   return <WhatsAppGatekeeper>{children}</WhatsAppGatekeeper>;
+};
+
+const ProtectedSecretaryRoute = ({ children }: { children: React.ReactNode }) => {
+  const { session, role, loading, mustChangePassword } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!session) return <Navigate to="/login" />;
+  if (role === "ADMIN" || role === "SUPERINTENDENT") return <Navigate to="/admin" />;
+  if (role === "MANAGER") return <Navigate to="/manager" />;
+  if (role !== "SECRETARY") return <Navigate to="/dashboard" />;
+  if (mustChangePassword) return <Navigate to="/force-password-change" replace />;
+  return <>{children}</>;
 };
 
 const App = () => (
@@ -90,6 +105,7 @@ const App = () => (
             <Route path="/command-center" element={<ProtectedAdminRoute><CommandCenter /></ProtectedAdminRoute>} />
             <Route path="/user-management" element={<ProtectedAdminRoute><UserManagement /></ProtectedAdminRoute>} />
             <Route path="/atribuir-chips" element={<ProtectedAdminRoute><AtribuirChips /></ProtectedAdminRoute>} />
+            <Route path="/secretaria" element={<ProtectedSecretaryRoute><Secretaria /></ProtectedSecretaryRoute>} />
             <Route path="/force-password-change" element={<ForcePasswordChange />} />
             <Route path="/bootstrap-admin" element={<BootstrapAdmin />} />
             <Route path="/profile-debug" element={<ProfileDebug />} />
