@@ -1,0 +1,163 @@
+# ==============================================================================
+# Supabase config — flags por edge function
+# ==============================================================================
+# Esse arquivo trava as configurações de cada função no git.
+# Toda vez que `supabase functions deploy` rodar, ele respeita isso.
+# Sem esse arquivo, deploys sem flag explícita resetam pro default (verify_jwt=true)
+# e quebram a cadeia incoming-lead → send_whatsapp_message silenciosamente.
+#
+# Categorias:
+#  - PÚBLICA: webhook externo (Make, Facebook, Evolution) — verify_jwt = false
+#  - INTERNA: chamada por outras edge functions ou pg_cron — verify_jwt = false
+#  - FRONTEND: chamada apenas pelo dashboard com user logado — verify_jwt = true
+#
+# Toda função que aparece no incoming-lead, scheduler, agentes, ou cron deve
+# estar com verify_jwt = false pra cadeia automática funcionar.
+# ==============================================================================
+
+[functions.send_whatsapp_message]
+verify_jwt = false  # INTERNA — chamada por orchestrator, scheduler, agentes
+
+[functions.send-whatsapp]
+verify_jwt = false  # INTERNA — wrapper alternativo
+
+[functions.webhook_receiver]
+verify_jwt = false  # PÚBLICA — Evolution API webhook
+
+[functions.incoming-lead]
+verify_jwt = false  # PÚBLICA — Make/Facebook webhook
+
+[functions.orchestrator]
+verify_jwt = false  # INTERNA — disparado por trigger_active_campaigns + frontend
+
+[functions.followup_scheduler]
+verify_jwt = false  # INTERNA — pg_cron + invoke
+
+[functions.chip-health-monitor]
+verify_jwt = false  # INTERNA — pg_cron a cada 30min
+
+[functions.ai-sentinela]
+verify_jwt = false  # INTERNA — pg_cron + scheduler invoke
+
+[functions.cerebro-orquestrador]
+verify_jwt = false  # INTERNA — pg_cron + scheduler invoke
+
+[functions.agente-recuperacao-abandonados]
+verify_jwt = false  # INTERNA — invocado por followup_scheduler
+
+[functions.agente-qualificacao-ia]
+verify_jwt = false  # INTERNA — invocado por followup_scheduler
+
+[functions.agente-redistribuicao]
+verify_jwt = false  # INTERNA
+
+[functions.agente-relatorio-diario]
+verify_jwt = false  # INTERNA — pg_cron diário
+
+[functions.agente-anti-sobrecarga]
+verify_jwt = false  # INTERNA
+
+[functions.agente-scoring]
+verify_jwt = false  # INTERNA — pg_cron */30
+
+[functions.agente-sentinela-quentes]
+verify_jwt = false  # INTERNA — pg_cron */5
+
+[functions.agente-visitas]
+verify_jwt = false  # INTERNA — pg_cron diário
+
+[functions.agente-documentacao]
+verify_jwt = false  # INTERNA — pg_cron diário
+
+[functions.agente-briefing-corretor]
+verify_jwt = false  # INTERNA — pg_cron 11h
+
+[functions.agente-classificacao-retroativa]
+verify_jwt = false  # INTERNA — pg_cron 12h
+
+[functions.ai_coach_processor]
+verify_jwt = false  # INTERNA
+
+[functions.notify-managers]
+verify_jwt = false  # INTERNA — pg_cron 12h
+
+[functions.notify-brokers]
+verify_jwt = false  # INTERNA — pg_cron
+
+[functions.notify-disconnected-brokers]
+verify_jwt = false  # INTERNA
+
+[functions.sistema-guardian]
+verify_jwt = false  # INTERNA — pg_cron horário
+
+[functions.check-bot-health]
+verify_jwt = false  # INTERNA
+
+[functions.cleanup-webhook-logs]
+verify_jwt = false  # INTERNA — pg_cron 3h
+
+[functions.batch-followup-once]
+verify_jwt = false  # INTERNA — disparo manual
+
+[functions.cadence_executor]
+verify_jwt = false  # INTERNA
+
+[functions.automation_engine]
+verify_jwt = false  # INTERNA
+
+[functions.manager_notification_scheduler]
+verify_jwt = false  # INTERNA — pg_cron
+
+[functions.coach_manager_summary]
+verify_jwt = false  # INTERNA
+
+[functions.coach_executive_summary]
+verify_jwt = false  # INTERNA
+
+[functions.setup-evolution-webhooks]
+verify_jwt = false  # INTERNA — disparo manual setup
+
+[functions.rescue-pending-leads-notify]
+verify_jwt = false  # INTERNA — disparo manual emergencial
+
+[functions.generate-message]
+verify_jwt = false  # INTERNA
+
+[functions.create-user]
+verify_jwt = false  # INTERNA — chamada via UI mas com tratamento próprio de auth
+
+[functions.create-admin]
+verify_jwt = false  # INTERNA — bootstrap
+
+[functions.set-admin-role]
+verify_jwt = false  # INTERNA — bootstrap
+
+[functions.delete-user]
+verify_jwt = true   # FRONTEND — admin via UI
+
+[functions.get-whatsapp-qr]
+verify_jwt = false  # INTERNA — UI mas frequentemente chamada por scripts
+
+[functions.ai-smart-suggestions]
+verify_jwt = false  # FRONTEND/INTERNA — modo coach pode ser chamado por backend
+
+[functions.ai-coach-conversation]
+verify_jwt = false  # INTERNA + FRONTEND — coaching drawer
+
+[functions.coach-conversation-metrics]
+verify_jwt = false  # INTERNA + FRONTEND
+
+[functions.upload_campaign_leads]
+verify_jwt = false  # FRONTEND — upload via UI
+
+[functions.upload_campaign_leads_v2]
+verify_jwt = false  # FRONTEND — upload via UI
+
+[functions.generate-template-variations]
+verify_jwt = false  # FRONTEND/INTERNA — pode ser chamada por automação futura
+
+[functions.ia_chat_engine]
+verify_jwt = false  # INTERNA — invocado por outras funções
+
+# NOTA: agente-prospecção-ativa tem caractere acentuado no nome — CLI não
+# aceita em config.toml. Configure manualmente no dashboard se necessário.
