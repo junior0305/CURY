@@ -239,7 +239,20 @@ export function TeamProspeccaoTab({ managerId }: Props) {
                               : c.status === "completed" ? "#64748B" : "#A78BFA";
             return (
               <div key={c.id} className="rounded-xl px-3 py-2.5"
-                style={{ background: "var(--crm-glass)", border: `1px solid ${statusColor}30` }}>
+                style={{
+                  background: c.status === "draft" && stats.total > 0 ? "rgba(245,158,11,0.08)" : "var(--crm-glass)",
+                  border: `1px solid ${c.status === "draft" && stats.total > 0 ? "rgba(245,158,11,0.5)" : statusColor + "30"}`,
+                  boxShadow: c.status === "draft" && stats.total > 0 ? "0 0 12px rgba(245,158,11,0.2)" : undefined,
+                }}>
+                {c.status === "draft" && stats.total > 0 && (
+                  <div className="mb-2 px-2 py-1.5 rounded-md flex items-center gap-1.5"
+                    style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.4)" }}>
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" style={{ color: "#F59E0B" }} />
+                    <span className="text-[10px] font-bold" style={{ color: "#F59E0B" }}>
+                      ⚠️ EM RASCUNHO — {stats.total} leads esperando. Clique em ▶️ INICIAR pra disparar.
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -490,6 +503,13 @@ function CampaignBuilder({ managerId, hasActive, onClose }: { managerId: string;
       if (r.invalid?.length > 0) msg += ` · ${r.invalid.length} inválidos`;
       if (r.capped) msg += ` · cap 500 atingido`;
       toast.success(msg);
+      // Aviso pra clicar em iniciar (UX crítica — Dudu criou e achou que ia disparar)
+      setTimeout(() => {
+        toast("⚠️ Campanha está em RASCUNHO — clique em ▶️ INICIAR no card pra começar a disparar.", {
+          duration: 8000,
+          style: { background: "#92400e", color: "#fef3c7", border: "1px solid #f59e0b" },
+        });
+      }, 500);
       onClose();
     } catch (e: any) {
       toast.error("Erro: " + e.message);
