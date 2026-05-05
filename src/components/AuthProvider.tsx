@@ -256,7 +256,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             navigate('/admin', { replace: true });
           }
         } else if (role === 'MANAGER') {
-          if (path !== '/manager') {
+          // Whitelist: /manager (v1) + tudo dentro de /manager (v2 + subtelas)
+          if (path !== '/manager' && !path.startsWith('/manager')) {
             navigate('/manager', { replace: true });
           }
         } else {

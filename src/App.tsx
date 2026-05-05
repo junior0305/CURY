@@ -17,6 +17,14 @@ import Dashboard from "./pages/Dashboard"; // mantido como backup
 import DashboardWolf from "./pages/DashboardWolf";
 import DashboardFoco from "./pages/DashboardFoco";
 import ManagerDashboard from "./pages/ManagerDashboard";
+import ManagerV2 from "./pages/ManagerV2";
+import CoachIndex from "./pages/manager-v2/CoachIndex";
+import CoachBroker from "./pages/manager-v2/CoachBroker";
+import CampanhaIndex from "./pages/manager-v2/CampanhaIndex";
+import CampanhaNova from "./pages/manager-v2/CampanhaNova";
+import CampanhaDetalhe from "./pages/manager-v2/CampanhaDetalhe";
+import LigaPage from "./pages/manager-v2/LigaPage";
+import AnalisePage from "./pages/manager-v2/AnalisePage";
 import { Loader2 } from "lucide-react";
 import CommandCenter from "./pages/CommandCenter";
 import BootstrapAdmin from "@/pages/BootstrapAdmin";
@@ -100,7 +108,22 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<ProtectedBrokerRoute><DashboardFoco /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-wolf" element={<ProtectedBrokerRoute><DashboardWolf /></ProtectedBrokerRoute>} />
-            <Route path="/manager" element={<ProtectedManagerRoute><ManagerDashboard /></ProtectedManagerRoute>} />
+            {/* /manager = novo cockpit (v2). /manager-v1 = backup do antigo. */}
+            <Route path="/manager" element={<ProtectedManagerRoute><ManagerV2 /></ProtectedManagerRoute>} />
+            <Route path="/manager-v1" element={<ProtectedManagerRoute><ManagerDashboard /></ProtectedManagerRoute>} />
+            <Route path="/manager/coach" element={<ProtectedManagerRoute><CoachIndex /></ProtectedManagerRoute>} />
+            <Route path="/manager/coach/:brokerId" element={<ProtectedManagerRoute><CoachBroker /></ProtectedManagerRoute>} />
+            <Route path="/manager/campanha" element={<ProtectedManagerRoute><CampanhaIndex /></ProtectedManagerRoute>} />
+            <Route path="/manager/campanha/nova" element={<ProtectedManagerRoute><CampanhaNova /></ProtectedManagerRoute>} />
+            <Route path="/manager/campanha/:id" element={<ProtectedManagerRoute><CampanhaDetalhe /></ProtectedManagerRoute>} />
+            <Route path="/manager/liga" element={<ProtectedManagerRoute><LigaPage /></ProtectedManagerRoute>} />
+            <Route path="/manager/analise" element={<ProtectedManagerRoute><AnalisePage /></ProtectedManagerRoute>} />
+            {/* Aliases legados — redirecionam pra nova URL */}
+            <Route path="/manager-v2" element={<Navigate to="/manager" replace />} />
+            <Route path="/manager-v2/coach" element={<Navigate to="/manager/coach" replace />} />
+            <Route path="/manager-v2/liga" element={<Navigate to="/manager/liga" replace />} />
+            <Route path="/manager-v2/campanha" element={<Navigate to="/manager/campanha" replace />} />
+            <Route path="/manager-v2/analise" element={<Navigate to="/manager/analise" replace />} />
             <Route path="/admin" element={<ProtectedAdminRoute><Admin /></ProtectedAdminRoute>} />
             <Route path="/command-center" element={<ProtectedAdminRoute><CommandCenter /></ProtectedAdminRoute>} />
             <Route path="/user-management" element={<ProtectedAdminRoute><UserManagement /></ProtectedAdminRoute>} />
