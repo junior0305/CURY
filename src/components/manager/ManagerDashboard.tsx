@@ -1233,12 +1233,12 @@ export default function ManagerDashboard() {
                         {isOpen && count > 0 && (
                           <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
                             className="overflow-hidden">
-                            <div className="px-3 pb-3 space-y-1.5 max-h-48 overflow-y-auto">
+                            <div className="px-3 pb-3 space-y-1.5 max-h-[35vh] overflow-y-auto">
                               {noContactLeads.map((lead, i) => {
                                 const broker = lead.brokerId ? brokerMap[lead.brokerId] : null;
                                 const h = Math.floor(hoursAgo(lead.createdAt));
                                 return (
-                                  <div key={lead.id} className="flex items-center gap-3 rounded-xl px-3 py-2"
+                                  <div key={lead.id} className="flex items-center gap-2 rounded-xl px-3 py-2"
                                     style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)" }}>
                                     <div className="flex-1 min-w-0">
                                       <p className="text-sm font-bold text-white truncate">{lead.name}</p>
@@ -1246,12 +1246,33 @@ export default function ManagerDashboard() {
                                         {broker?.name.split(" ")[0] || "—"} · {h}h sem contato
                                       </p>
                                     </div>
+                                    <button onClick={() => setMonitorLead(lead)}
+                                      title="Ver conversa"
+                                      className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
+                                      style={{ background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}>
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </button>
                                     {broker && (
-                                      <button onClick={() => setAlertBroker({ broker, lead: { id: lead.id, name: lead.name } })}
-                                        className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
-                                        style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#F87171" }}>
-                                        <Bell className="w-3.5 h-3.5" />
-                                      </button>
+                                      <>
+                                        <button onClick={() => setAlertBroker({ broker, lead: { id: lead.id, name: lead.name } })}
+                                          title="Cobrar corretor"
+                                          className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
+                                          style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#F87171" }}>
+                                          <Bell className="w-3.5 h-3.5" />
+                                        </button>
+                                        <Select onValueChange={brokerId => assignMutation.mutate({ leadId: lead.id, brokerId })}>
+                                          <SelectTrigger className="w-24 h-7 text-xs rounded-lg shrink-0"
+                                            title="Redistribuir lead"
+                                            style={{ borderColor: "rgba(0,212,255,0.2)", background: "var(--crm-surface)", color: "var(--crm-text-muted,#94A3B8)" }}>
+                                            <SelectValue placeholder="Mover…" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {brokers.filter(b => b.id !== broker.id).map(b => (
+                                              <SelectItem key={b.id} value={b.id} className="text-xs">{b.name.split(" ")[0]}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </>
                                     )}
                                   </div>
                                 );
@@ -1293,9 +1314,9 @@ export default function ManagerDashboard() {
                         {isOpen && count > 0 && (
                           <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
                             className="overflow-hidden">
-                            <div className="px-3 pb-3 space-y-1.5 max-h-48 overflow-y-auto">
+                            <div className="px-3 pb-3 space-y-1.5 max-h-[35vh] overflow-y-auto">
                               {unassigned.map(lead => (
-                                <div key={lead.id} className="flex items-center gap-3 rounded-xl px-3 py-2"
+                                <div key={lead.id} className="flex items-center gap-2 rounded-xl px-3 py-2"
                                   style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)" }}>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-bold text-white truncate">{lead.name}</p>
@@ -1303,6 +1324,12 @@ export default function ManagerDashboard() {
                                       {Math.floor(hoursAgo(lead.createdAt))}h · {lead.tag || "sem tag"}
                                     </p>
                                   </div>
+                                  <button onClick={() => setMonitorLead(lead)}
+                                    title="Ver conversa"
+                                    className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
+                                    style={{ background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}>
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </button>
                                   <Select onValueChange={brokerId => assignMutation.mutate({ leadId: lead.id, brokerId })}>
                                     <SelectTrigger className="w-28 h-7 text-xs rounded-lg shrink-0"
                                       style={{ borderColor: "rgba(245,158,11,0.3)", background: "var(--crm-surface)", color: "var(--crm-text-muted,#94A3B8)" }}>
@@ -1353,13 +1380,13 @@ export default function ManagerDashboard() {
                         {isOpen && count > 0 && (
                           <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
                             className="overflow-hidden flex-1 min-h-0">
-                            <div className="px-3 pb-3 space-y-1.5 max-h-64 overflow-y-auto">
+                            <div className="px-3 pb-3 space-y-1.5 max-h-[40vh] overflow-y-auto">
                               {stalledLeads.map((lead, i) => {
                                 const h      = Math.floor(hoursAgo(lead.lastInteractionAt || lead.createdAt));
                                 const broker = lead.brokerId ? brokerMap[lead.brokerId] : null;
                                 const urgent = h > 48;
                                 return (
-                                  <div key={lead.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+                                  <div key={lead.id} className="flex items-center gap-2 rounded-xl px-3 py-2.5"
                                     style={{ background: urgent ? "rgba(239,68,68,0.06)" : "rgba(245,158,11,0.04)", border: `1px solid ${urgent ? "rgba(239,68,68,0.2)" : "rgba(245,158,11,0.12)"}` }}>
                                     <div className="flex-1 min-w-0">
                                       <p className="text-sm font-bold text-white truncate">{lead.name}</p>
@@ -1369,16 +1396,32 @@ export default function ManagerDashboard() {
                                       </div>
                                     </div>
                                     <button onClick={() => setMonitorLead(lead)}
+                                      title="Ver conversa"
                                       className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
                                       style={{ background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}>
                                       <Eye className="w-3.5 h-3.5" />
                                     </button>
                                     {broker && (
-                                      <button onClick={() => setAlertBroker({ broker, lead: { id: lead.id, name: lead.name } })}
-                                        className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
-                                        style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#F87171" }}>
-                                        <Bell className="w-3.5 h-3.5" />
-                                      </button>
+                                      <>
+                                        <button onClick={() => setAlertBroker({ broker, lead: { id: lead.id, name: lead.name } })}
+                                          title="Cobrar corretor"
+                                          className="p-1.5 rounded-lg shrink-0 transition hover:scale-105"
+                                          style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#F87171" }}>
+                                          <Bell className="w-3.5 h-3.5" />
+                                        </button>
+                                        <Select onValueChange={brokerId => assignMutation.mutate({ leadId: lead.id, brokerId })}>
+                                          <SelectTrigger className="w-24 h-7 text-xs rounded-lg shrink-0"
+                                            title="Redistribuir lead"
+                                            style={{ borderColor: "rgba(0,212,255,0.2)", background: "var(--crm-surface)", color: "var(--crm-text-muted,#94A3B8)" }}>
+                                            <SelectValue placeholder="Mover…" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {brokers.filter(b => b.id !== broker.id).map(b => (
+                                              <SelectItem key={b.id} value={b.id} className="text-xs">{b.name.split(" ")[0]}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </>
                                     )}
                                   </div>
                                 );
