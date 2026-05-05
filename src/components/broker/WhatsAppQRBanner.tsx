@@ -96,7 +96,7 @@ export function WhatsAppQRBanner() {
         setJustConnected(true);
         if (pollRef.current) clearInterval(pollRef.current);
       }
-    }, 5000);
+    }, 15000);
 
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [open, botInstanceId, justConnected]);

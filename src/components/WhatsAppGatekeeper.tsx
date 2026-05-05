@@ -213,7 +213,9 @@ function useBotStatus(userId: string | undefined, role: string | null) {
       }
     }
 
-    intervalRef.current = setInterval(() => checkConnection(), 5000);
+    // Poll a cada 15s — antes era 5s, gerava ~12 chamadas/min/usuário pra Evolution.
+    // Com vários managers logados a Evolution saturava e tudo ficava lento.
+    intervalRef.current = setInterval(() => checkConnection(), 15000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [status, checkConnection]);
 
