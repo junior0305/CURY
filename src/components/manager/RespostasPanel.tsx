@@ -106,38 +106,34 @@ export default function RespostasPanel({ managerId, onOpenLead }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // 1) Corretores do manager
-      const { data: brokers } = await supabase
-        .from("profiles")
-        .select("id, first_name, last_name, phone")
-        .eq("manager_id", managerId)
-        .eq("role", "BROKER");
+      // 1) Manager (chip próprio) + corretores do time — em paralelo
+      const [{ data: managerProfile }, { data: brokers }] = await Promise.all([
+        supabase.from("profiles").select("bot_instance_id").eq("id", managerId).maybeSingle(),
+        supabase.from("profiles")
+          .select("id, first_name, last_name, phone, bot_instance_id")
+          .eq("manager_id", managerId).eq("role", "BROKER"),
+      ]);
 
-      const brokerIds = (brokers || []).map((b: any) => b.id);
       const brokerMap = new Map<string, any>();
       (brokers || []).forEach((b: any) => brokerMap.set(b.id, b));
 
-      if (brokerIds.length === 0) { setRows([]); setLoading(false); return; }
+      // Bots do time (manager + corretores) — qualquer chip que tenha disparado campanha
+      const teamBotIds = new Set<string>();
+      if (managerProfile?.bot_instance_id) teamBotIds.add(managerProfile.bot_instance_id);
+      (brokers || []).forEach((b: any) => { if (b.bot_instance_id) teamBotIds.add(b.bot_instance_id); });
 
-      // 2) Leads desses corretores
-      const { data: leads } = await supabase
-        .from("leads")
-        .select("id, status, broker_id")
-        .in("broker_id", brokerIds);
+      const botIdsArr = Array.from(teamBotIds);
+      if (botIdsArr.length === 0) { setRows([]); setLoading(false); return; }
 
-      const leadIds = (leads || []).map((l: any) => l.id);
-      const leadMap = new Map<string, any>();
-      (leads || []).forEach((l: any) => leadMap.set(l.id, l));
-
-      if (leadIds.length === 0) { setRows([]); setLoading(false); return; }
-
-      // 3) Conversas dessas leads — apenas conversas vindas de campanha
+      // 2) Conversas dos bots do time — campanhas, mesmo sem lead vinculado.
+      // Antes filtrava por lead_id IN (leads-do-time) e escondia respostas
+      // de leads ainda não cadastrados no CRM (caso comum em prospecção).
       const cutoff = new Date(Date.now() - windowH * 3600000).toISOString();
       const { data: convs } = await supabase
         .from("ia_conversations")
         .select(`id, lead_id, lead_name, lead_phone, campaign_id, bot_instance_id,
                  ia_campaigns!campaign_id(name), bot_instances!bot_instance_id(name)`)
-        .in("lead_id", leadIds)
+        .in("bot_instance_id", botIdsArr)
         .gte("last_message_at", cutoff)
         .gte("messages_count", 2)
         .not("campaign_id", "is", null)
@@ -145,6 +141,15 @@ export default function RespostasPanel({ managerId, onOpenLead }: Props) {
         .limit(150);
 
       if (!convs || convs.length === 0) { setRows([]); setLoading(false); return; }
+
+      // 3) Leads vinculados (só pra enriquecer status e corretor; conv pode não ter)
+      const leadIdsFromConvs = (convs || []).map((c: any) => c.lead_id).filter(Boolean) as string[];
+      const leadMap = new Map<string, any>();
+      if (leadIdsFromConvs.length > 0) {
+        const { data: leads } = await supabase
+          .from("leads").select("id, status, broker_id").in("id", leadIdsFromConvs);
+        (leads || []).forEach((l: any) => leadMap.set(l.id, l));
+      }
 
       // 4) Mensagens dessas conversas
       const convIds = convs.map((c: any) => c.id);
