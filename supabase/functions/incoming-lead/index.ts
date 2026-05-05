@@ -517,17 +517,41 @@ Responda APENAS em JSON válido, sem markdown, sem explicação:
         usedTemplateId = templates[idx].id;
       }
 
-      const { data: result } = await supabase.functions.invoke('send-whatsapp', {
+      // Pré-cria conversa pra que send_whatsapp_message logue em ia_messages.
+      // Welcome aparece no histórico do lead, A/B Lab traceia métricas dos
+      // welcome_templates (sent/responded/qualified) e Coach IA avalia a abertura.
+      const { data: newConv } = await supabase.from('ia_conversations').insert({
+        bot_instance_id: chosenBroker.bot_instance_id,
+        lead_id: newLead.id,
+        lead_name: name,
+        lead_phone: phone,
+        status: 'active',
+        sentiment: 'unknown',
+        is_crm_lead: true,
+        template_id: usedTemplateId,
+        template_kind: usedTemplateId ? 'welcome' : null,
+      }).select('id').single();
+
+      const { data: result } = await supabase.functions.invoke('send_whatsapp_message', {
         body: {
-          instance_id: chosenBroker.bot_instance_id,
+          botId: chosenBroker.bot_instance_id,
           phone: phone,
           message: text,
-          lead_id: newLead.id,
-          type: 'welcome'
+          conversationId: newConv?.id,
+          send_source: 'welcome',  // não conta no cap, não dispara blocklist em opt-out
         }
       });
 
       welcomeSent = result?.success || false;
+
+      // Mantém entry no automation_logs pra compat com queries existentes
+      // (Runbook 14 do sistema-doctor depende desse entity_type pra diagnóstico)
+      await supabase.from('automation_logs').insert({
+        entity_type: 'welcome', entity_id: newLead.id,
+        status: welcomeSent ? 'success' : 'failed',
+        message_sent: text, recipient_phone: phone,
+        error_message: welcomeSent ? null : ((result as any)?.skipped || (result as any)?.error || 'falha ao enviar via send_whatsapp_message'),
+      }).then(() => {}, () => {});
 
       // Registra qual template foi usado e atualiza stats
       if (welcomeSent && usedTemplateId) {
