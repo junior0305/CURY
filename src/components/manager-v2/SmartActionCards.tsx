@@ -33,6 +33,9 @@ interface Props {
   brokers: Broker[];
   unassigned: Lead[];
   managerId: string;
+  onMonitor: (lead: Lead) => void;
+  onCharge: (lead: Lead) => void;
+  onRedist: (leadId: string, newBrokerId: string) => void;
 }
 
 function hoursSince(iso: string | null) {
@@ -47,7 +50,7 @@ function formatHours(h: number) {
   return `${Math.floor(h / 24)}d`;
 }
 
-export default function SmartActionCards({ leads, brokers, unassigned }: Props) {
+export default function SmartActionCards({ leads, brokers, unassigned, onMonitor, onCharge, onRedist }: Props) {
   const brokerMap = useMemo(() => {
     const m = new Map<string, string>();
     brokers.forEach((b) => m.set(b.id, b.first_name || "—"));
@@ -202,6 +205,10 @@ export default function SmartActionCards({ leads, brokers, unassigned }: Props) 
             <ExpandedList
               category={categories.find((c) => c.id === expanded)!}
               brokerMap={brokerMap}
+              brokers={brokers}
+              onMonitor={onMonitor}
+              onCharge={onCharge}
+              onRedist={onRedist}
             />
           </motion.div>
         )}
@@ -213,11 +220,20 @@ export default function SmartActionCards({ leads, brokers, unassigned }: Props) 
 function ExpandedList({
   category,
   brokerMap,
+  brokers,
+  onMonitor,
+  onCharge,
+  onRedist,
 }: {
   category: { id: string; label: string; color: string; leads: Lead[] };
   brokerMap: Map<string, string>;
+  brokers: Broker[];
+  onMonitor: (lead: Lead) => void;
+  onCharge: (lead: Lead) => void;
+  onRedist: (leadId: string, newBrokerId: string) => void;
 }) {
   const list = category.leads.slice(0, 12);
+  const [redistOpen, setRedistOpen] = useState<string | null>(null);
 
   if (list.length === 0) {
     return (
@@ -283,10 +299,47 @@ function ExpandedList({
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <ActionBtn icon={Eye} label="Ver" color="#06B6D4" />
-                {broker && <ActionBtn icon={Bell} label="Cobrar" color="#EF4444" />}
-                <ActionBtn icon={RotateCcw} label="Mover" color="#A78BFA" />
+              <div className="flex items-center gap-1.5 shrink-0 relative">
+                <ActionBtn icon={Eye} label="Ver" color="#06B6D4"
+                  onClick={() => onMonitor(lead)} />
+                {broker && (
+                  <ActionBtn icon={Bell} label="Cobrar" color="#EF4444"
+                    onClick={() => onCharge(lead)} />
+                )}
+                <ActionBtn icon={RotateCcw} label="Mover" color="#A78BFA"
+                  onClick={() => setRedistOpen(redistOpen === lead.id ? null : lead.id)} />
+
+                {/* Popover de redistribuir */}
+                {redistOpen === lead.id && (
+                  <div
+                    className="absolute right-0 top-full mt-1 z-50 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl p-2 min-w-[180px]"
+                    style={{ boxShadow: "0 12px 24px rgba(0,0,0,0.6)" }}
+                  >
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold px-2 mb-1">
+                      Mover pra:
+                    </p>
+                    <div className="max-h-48 overflow-y-auto">
+                      {brokers.filter((b) => b.id !== lead.broker_id).map((b) => (
+                        <button
+                          key={b.id}
+                          onClick={() => { onRedist(lead.id, b.id); setRedistOpen(null); }}
+                          className="w-full text-left px-2 py-1.5 text-xs text-slate-300 hover:bg-violet-500/15 hover:text-violet-200 rounded transition"
+                        >
+                          {b.first_name}
+                        </button>
+                      ))}
+                      {brokers.filter((b) => b.id !== lead.broker_id).length === 0 && (
+                        <p className="text-xs text-slate-500 px-2 py-2">Sem outros corretores no time.</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setRedistOpen(null)}
+                      className="w-full text-left px-2 py-1 text-[10px] text-slate-600 hover:text-slate-400 mt-1 border-t border-slate-800"
+                    >
+                      cancelar
+                    </button>
+                  </div>
+                )}
               </div>
             </motion.div>
           );
@@ -303,9 +356,12 @@ function ExpandedList({
   );
 }
 
-function ActionBtn({ icon: Icon, label, color }: { icon: any; label: string; color: string }) {
+function ActionBtn({
+  icon: Icon, label, color, onClick,
+}: { icon: any; label: string; color: string; onClick?: () => void }) {
   return (
     <motion.button
+      onClick={onClick}
       whileHover={{ scale: 1.08 }}
       whileTap={{ scale: 0.95 }}
       title={label}

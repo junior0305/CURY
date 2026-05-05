@@ -34,6 +34,9 @@ interface Action {
   title: string;
   detail: string;
   cta: string;
+  // Discriminator pra saber qual handler chamar
+  kind: "charge_broker" | "show_unassigned" | "redistribute_broker" | "info";
+  payload?: { brokerId?: string; brokerIds?: string[] };
 }
 
 function hoursSince(iso: string | null) {
@@ -78,6 +81,8 @@ function generateActions(
         title: `Cobrar ${brokerName.get(bid)}`,
         detail: `${count} lead${count > 1 ? "s" : ""} respondeu e foi ignorado`,
         cta: "Cobrar agora",
+        kind: "charge_broker",
+        payload: { brokerId: bid },
       });
     }
   }
@@ -92,6 +97,7 @@ function generateActions(
       title: `${unassigned.length} lead${unassigned.length > 1 ? "s" : ""} sem corretor`,
       detail: "esperando atribuição na fila",
       cta: "Atribuir",
+      kind: "show_unassigned",
     });
   }
 
@@ -117,6 +123,8 @@ function generateActions(
         .filter(Boolean)
         .join(", "),
       cta: "Redistribuir",
+      kind: "redistribute_broker",
+      payload: { brokerIds: ausentesComLeads.map((b) => b.id) },
     });
   }
 
@@ -138,6 +146,7 @@ function generateActions(
       } parada${negotiatingParados.length > 1 ? "s" : ""} +7d`,
       detail: "podem virar perda — revise pessoalmente",
       cta: "Ver lista",
+      kind: "info",
     });
   }
 
@@ -150,9 +159,15 @@ interface Props {
   brokers: any[];
   unassigned: any[];
   managerName?: string;
+  onChargeBroker?: (brokerId: string) => void;
+  onShowUnassigned?: () => void;
+  onRedistributeBroker?: (brokerId: string) => void;
 }
 
-export default function WhatYouNeedToDo({ leads, brokers, unassigned, managerName }: Props) {
+export default function WhatYouNeedToDo({
+  leads, brokers, unassigned, managerName,
+  onChargeBroker, onShowUnassigned, onRedistributeBroker,
+}: Props) {
   const actions = useMemo(
     () => generateActions(leads as Lead[], brokers as Broker[], unassigned as Lead[]),
     [leads, brokers, unassigned]
@@ -191,14 +206,25 @@ export default function WhatYouNeedToDo({ leads, brokers, unassigned, managerNam
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
         {actions.map((a, i) => {
           const Icon = a.icon;
+          const handleClick = () => {
+            if (a.kind === "charge_broker" && a.payload?.brokerId) {
+              onChargeBroker?.(a.payload.brokerId);
+            } else if (a.kind === "show_unassigned") {
+              onShowUnassigned?.();
+            } else if (a.kind === "redistribute_broker" && a.payload?.brokerIds?.[0]) {
+              onRedistributeBroker?.(a.payload.brokerIds[0]);
+            }
+          };
           return (
             <motion.button
               key={a.id}
+              onClick={handleClick}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: i * 0.05 }}
               whileHover={{ y: -2 }}
-              className="group rounded-xl p-3.5 text-left transition-all border"
+              whileTap={{ scale: 0.98 }}
+              className="group rounded-xl p-3.5 text-left transition-all border cursor-pointer"
               style={{
                 background: `linear-gradient(135deg, ${a.color}10, rgba(24,24,27,0.6))`,
                 borderColor: `${a.color}40`,

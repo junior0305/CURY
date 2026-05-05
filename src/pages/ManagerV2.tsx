@@ -3,12 +3,14 @@
 //         + Smart Action Cards | Equipe + Saúde + CoachChat drawer + Campaigns
 
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+import { LeadMonitorDrawer } from "@/components/manager/LeadMonitorDrawer";
 
 import MetaThermometer from "@/components/manager-v2/MetaThermometer";
 import WhatYouNeedToDo from "@/components/manager-v2/WhatYouNeedToDo";
@@ -116,13 +118,108 @@ export default function ManagerV2() {
   const userId = session?.user?.id;
   const { data, isLoading } = useTeamData(userId);
 
+  const queryClient = useQueryClient();
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachCount, setCoachCount] = useState(getCoachTodayCount());
   const [coachQuestion, setCoachQuestion] = useState<string | null>(null);
+  const [monitorLead, setMonitorLead] = useState<any>(null);
 
   function askCoach(question: string) {
     setCoachQuestion(question);
     setCoachOpen(true);
+  }
+
+  // ─── Handlers das ações dos cards ────────────────────────────────────
+  function openMonitor(rawLead: any) {
+    // Converte snake_case (supabase) → camelCase (formato esperado pelo drawer v1)
+    setMonitorLead({
+      id: rawLead.id,
+      name: rawLead.name,
+      phone: rawLead.phone,
+      status: rawLead.status,
+      brokerId: rawLead.broker_id,
+      managerId: rawLead.manager_id,
+      createdAt: rawLead.created_at,
+      lastInteractionAt: rawLead.last_interaction_at,
+      lastLeadResponseAt: rawLead.last_lead_response_at,
+      lastBrokerWhatsappAt: rawLead.last_broker_whatsapp_at,
+      contactAttempts: rawLead.contact_attempts,
+      noRedistribute: rawLead.no_redistribute,
+      tag: rawLead.tag,
+    });
+  }
+
+  async function chargeBroker(rawLead: any, customMessage?: string) {
+    const broker = (data?.brokers || []).find((b: any) => b.id === rawLead.broker_id);
+    if (!broker) { toast.error("Lead sem corretor"); return; }
+    const leadName = rawLead.name || rawLead.phone || "Lead";
+
+    // 1. Insere notificação in-app
+    await supabase.from("internal_notifications").insert({
+      to_id: broker.id,
+      from_id: userId,
+      type: "MANAGER_NUDGE",
+      message: customMessage || `🚨 Atenção em ${leadName} — abra agora.`,
+    });
+
+    // 2. WhatsApp via chip do manager (se disponível)
+    if (data?.manager?.bot_instance_id && broker.phone) {
+      try {
+        await supabase.functions.invoke("send_whatsapp_message", {
+          body: {
+            botId: data.manager.bot_instance_id,
+            phone: broker.phone,
+            message: customMessage ||
+              `🚨 *Cobrança do gerente*\n\nO lead *${leadName}* (${rawLead.phone}) precisa de você AGORA. Atende, por favor.`,
+          },
+        });
+      } catch { /* notif in-app já garante o aviso */ }
+    }
+    toast.success(`✅ ${broker.first_name} foi cobrado`);
+  }
+
+  async function chargeAllOfBroker(brokerId: string) {
+    const broker = (data?.brokers || []).find((b: any) => b.id === brokerId);
+    if (!broker) return;
+    const leads = (data?.leads || []).filter((l: any) => {
+      if (l.broker_id !== brokerId) return false;
+      if (!l.last_lead_response_at) return false;
+      const respH = (Date.now() - new Date(l.last_lead_response_at).getTime()) / 3600000;
+      const brokerH = l.last_broker_whatsapp_at
+        ? (Date.now() - new Date(l.last_broker_whatsapp_at).getTime()) / 3600000 : Infinity;
+      return respH > 2 && respH < 48 && brokerH > respH;
+    });
+    if (leads.length === 0) {
+      toast.warning(`${broker.first_name} não tem leads quentes parados agora`);
+      return;
+    }
+    await chargeBroker(leads[0],
+      `🚨 *${broker.first_name}*, você tem *${leads.length} lead${leads.length > 1 ? "s" : ""} quente${leads.length > 1 ? "s" : ""}* esperando resposta há mais de 2h. Atende AGORA — esses convertem 3x mais quando rápido.`
+    );
+  }
+
+  async function redistributeLead(leadId: string, newBrokerId: string) {
+    const newBroker = (data?.brokers || []).find((b: any) => b.id === newBrokerId);
+    if (!newBroker) { toast.error("Corretor inválido"); return; }
+    const { error } = await supabase
+      .from("leads")
+      .update({
+        broker_id: newBrokerId,
+        manager_id: newBroker.manager_id || userId,
+        status: "REACTIVATED",
+        last_interaction_at: new Date().toISOString(),
+      })
+      .eq("id", leadId);
+    if (error) { toast.error(error.message); return; }
+    // Notifica novo corretor
+    await supabase.from("internal_notifications").insert({
+      to_id: newBrokerId,
+      from_id: userId,
+      type: "NEW_LEAD",
+      message: `🎯 Novo lead atribuído a você pelo gerente. Abra no painel.`,
+    });
+    toast.success(`✅ Lead movido pra ${newBroker.first_name}`);
+    queryClient.invalidateQueries({ queryKey: ["v2-team-data"] });
   }
 
   // Quando fecha o drawer, re-checa o counter (incrementou enquanto aberto)
@@ -226,6 +323,23 @@ export default function ManagerV2() {
           brokers={brokers}
           unassigned={unassigned}
           managerName={firstName}
+          onChargeBroker={chargeAllOfBroker}
+          onRedistributeBroker={(brokerId) => {
+            // Manager precisa redistribuir leads de um broker ausente
+            const ausenteLeads = leads.filter((l: any) =>
+              l.broker_id === brokerId && !["CONCLUDED", "ABANDONED", "EXCLUDED"].includes(l.status)
+            );
+            if (ausenteLeads.length === 0) {
+              toast.warning("Esse corretor não tem leads ativos pra redistribuir");
+              return;
+            }
+            toast.info(`💡 ${ausenteLeads.length} leads ativos. Abra a aba Urgentes ou click em um lead pra redistribuir individualmente.`);
+          }}
+          onShowUnassigned={() => {
+            // Vai pra aba urgentes do v1 onde tem o cards "Sem corretor"
+            // Por enquanto: toast com instrução
+            toast.info("💡 Os leads sem corretor aparecem no card 'Sem corretor' na 'Ação no time' abaixo. Click pra atribuir.");
+          }}
         />
       </section>
 
@@ -241,6 +355,9 @@ export default function ManagerV2() {
             brokers={brokers}
             unassigned={unassigned}
             managerId={userId}
+            onMonitor={openMonitor}
+            onCharge={(l) => chargeBroker(l)}
+            onRedist={redistributeLead}
           />
         </motion.div>
 
@@ -283,6 +400,30 @@ export default function ManagerV2() {
         daysInMonth={new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()}
         onAsk={askCoach}
       />
+
+      {/* ─── Lead Monitor Drawer (👁️ ação) ─────────────────────────────── */}
+      <AnimatePresence>
+        {monitorLead && (
+          <LeadMonitorDrawer
+            lead={monitorLead}
+            broker={
+              monitorLead.brokerId
+                ? (() => {
+                    const b = (brokers as any[]).find((b: any) => b.id === monitorLead.brokerId);
+                    if (!b) return null;
+                    return {
+                      id: b.id,
+                      name: `${b.first_name || ""} ${b.last_name || ""}`.trim() || "—",
+                      phone: b.phone,
+                      botInstanceId: b.bot_instance_id,
+                    } as any;
+                  })()
+                : null
+            }
+            onClose={() => setMonitorLead(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
