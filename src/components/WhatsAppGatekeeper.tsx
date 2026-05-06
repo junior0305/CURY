@@ -546,49 +546,140 @@ function GkQRCode({
 export function WhatsAppGatekeeper({ children }: { children: React.ReactNode }) {
   const { user, role, loading: authLoading } = useAuth();
   const { status, qrBase64, errorDetail, refreshing, checkConnection, resetAndRetry } = useBotStatus(user?.id, role);
-  const [bypassed, setBypassed] = useState(false);
-  const globalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [nagDismissed, setNagDismissed] = useState(false);
 
-  const handleBypass = useCallback(() => setBypassed(true), []);
-
-  // Segurança global: 90s sem conectar → entra automaticamente
-  useEffect(() => {
-    if (authLoading) return;
-    if (status === "connected" || status === "success" || bypassed) {
-      if (globalTimerRef.current) clearTimeout(globalTimerRef.current);
-      return;
-    }
-    if (globalTimerRef.current) return;
-    globalTimerRef.current = setTimeout(() => {
-      globalTimerRef.current = null;
-      setBypassed(true);
-    }, GLOBAL_BYPASS_MS);
-    return () => {
-      if (globalTimerRef.current) { clearTimeout(globalTimerRef.current); globalTimerRef.current = null; }
-    };
-  }, [authLoading, status, bypassed]);
-
+  // Sempre renderiza children (não-bloqueante).
+  // Estados que não exigem ação: loading, connected, success, no_instance.
+  // Estados que mostram nag flutuante: disconnected, connecting, qr_error.
   if (authLoading || status === "loading") return <GkLoading />;
   if (status === "success") return <GkSuccess />;
-  if (bypassed || status === "connected") return <>{children}</>;
-  if (status === "no_instance") return <GkNoInstance>{children}</GkNoInstance>;
-  if (status === "connecting") return <GkConnecting onBypass={handleBypass} />;
-  if (status === "qr_error") return (
-    <GkQRError
-      errorDetail={errorDetail}
-      onRetry={resetAndRetry}
-      onBypass={handleBypass}
-      refreshing={refreshing}
-    />
-  );
-  if (status === "disconnected") return (
-    <GkQRCode
-      qrBase64={qrBase64}
-      refreshing={refreshing}
-      onRefresh={() => checkConnection(true)}
-      onBypass={handleBypass}
-    />
-  );
 
-  return <>{children}</>;
+  const needsConnection =
+    status === "disconnected" || status === "connecting" || status === "qr_error";
+
+  return (
+    <>
+      {children}
+      {needsConnection && !nagDismissed && (
+        <ConnectionNag
+          status={status}
+          onConnect={() => setShowQRModal(true)}
+          onDismiss={() => setNagDismissed(true)}
+        />
+      )}
+      {showQRModal && (
+        <ConnectionModal
+          status={status}
+          qrBase64={qrBase64}
+          errorDetail={errorDetail}
+          refreshing={refreshing}
+          onRefresh={() => checkConnection(true)}
+          onRetry={resetAndRetry}
+          onClose={() => setShowQRModal(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Bolha flutuante no canto inferior direito ─────────────────────────────────
+function ConnectionNag({
+  status, onConnect, onDismiss,
+}: { status: GkStatus; onConnect: () => void; onDismiss: () => void }) {
+  const labels: Record<string, { titulo: string; sub: string; cor: string }> = {
+    disconnected: { titulo: "WhatsApp desconectado", sub: "Click pra escanear o QR", cor: "#F59E0B" },
+    connecting:   { titulo: "WhatsApp conectando…", sub: "Click se quiser ver o status", cor: "#06B6D4" },
+    qr_error:     { titulo: "Erro no chip WhatsApp", sub: "Click pra tentar de novo", cor: "#EF4444" },
+  };
+  const cur = labels[status] || labels.disconnected;
+
+  return (
+    <>
+      <style>{STYLES}</style>
+      <div
+        className="gk-ui gk-fadein fixed z-[100] bottom-5 right-5 max-w-[340px] rounded-2xl backdrop-blur-md shadow-2xl border"
+        style={{
+          background: `linear-gradient(135deg, ${cur.cor}25, rgba(8,11,20,0.92))`,
+          borderColor: `${cur.cor}80`,
+          boxShadow: `0 16px 48px rgba(0,0,0,0.6), 0 0 24px ${cur.cor}40`,
+        }}
+      >
+        <button
+          onClick={onDismiss}
+          className="absolute top-2 right-2 w-6 h-6 rounded-lg hover:bg-white/10 flex items-center justify-center text-slate-400 transition text-xs"
+          title="Esconder"
+        >
+          ✕
+        </button>
+        <button onClick={onConnect} className="block w-full text-left p-4 pr-7">
+          <div className="flex items-start gap-3">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 gk-pulse"
+              style={{ background: `${cur.cor}25`, border: `1px solid ${cur.cor}50` }}
+            >
+              <Smartphone className="w-5 h-5" style={{ color: cur.cor }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-white">{cur.titulo}</p>
+              <p className="text-[11px] text-slate-300 mt-0.5">{cur.sub}</p>
+              <p className="text-[10px] mt-1.5 font-bold uppercase tracking-widest" style={{ color: cur.cor }}>
+                Conectar agora →
+              </p>
+            </div>
+          </div>
+        </button>
+      </div>
+    </>
+  );
+}
+
+// ─── Modal com o QR (não bloqueia o resto do app) ──────────────────────────────
+function ConnectionModal({
+  status, qrBase64, errorDetail, refreshing, onRefresh, onRetry, onClose,
+}: {
+  status: GkStatus;
+  qrBase64: string | null;
+  errorDetail: string | null;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onRetry: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative bg-[#080B14] border border-cyan-500/40 rounded-2xl max-w-md w-full overflow-hidden"
+        style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.7), 0 0 32px rgba(0,212,255,0.2)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 z-10 w-8 h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 flex items-center justify-center text-slate-300 transition"
+        >
+          ✕
+        </button>
+        {status === "qr_error" && (
+          <GkQRError
+            errorDetail={errorDetail}
+            onRetry={onRetry}
+            onBypass={onClose}
+            refreshing={refreshing}
+          />
+        )}
+        {status === "connecting" && <GkConnecting onBypass={onClose} />}
+        {status === "disconnected" && (
+          <GkQRCode
+            qrBase64={qrBase64}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            onBypass={onClose}
+          />
+        )}
+      </div>
+    </div>
+  );
 }
