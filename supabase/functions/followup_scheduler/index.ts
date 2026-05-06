@@ -165,7 +165,7 @@ serve(async (req) => {
 
     const { data: criticalLeads } = await supabase
       .from('leads')
-      .select('id, name, phone, tag, broker_id, welcome_responded_at, last_broker_whatsapp_at, broker:profiles!broker_id(first_name, bot_instance_id)')
+      .select('id, name, phone, tag, broker_id, welcome_responded_at, last_broker_whatsapp_at, broker:profiles!broker_id(first_name, bot_instance_id, automation_settings)')
       .not('welcome_responded_at', 'is', null)
       .lt('welcome_responded_at', twoHoursAgo)
       .neq('status', 'ABANDONED')
@@ -178,6 +178,12 @@ serve(async (req) => {
     let criticalProcessed = 0;
     for (const lead of cerebroEnabled ? [] : (criticalLeads || [])) {
       const broker = (lead as any).broker;
+
+      // Respeita config do corretor: follow-up desligado no Admin/Tropas ou no dashboard
+      if (broker?.automation_settings?.follow_up_enabled === false) {
+        console.log(`[B1] follow_up desligado para broker ${lead.broker_id} — skip ${lead.id}`);
+        continue;
+      }
 
       // Ignorar se o corretor já respondeu depois que o lead mandou mensagem
       if (
@@ -236,7 +242,7 @@ serve(async (req) => {
 
     const { data: coldLeads } = await supabase
       .from('leads')
-      .select('id, name, phone, tag, broker_id, broker:profiles!broker_id(first_name, bot_instance_id)')
+      .select('id, name, phone, tag, broker_id, broker:profiles!broker_id(first_name, bot_instance_id, automation_settings)')
       .is('welcome_responded_at', null)
       .not('last_broker_whatsapp_at', 'is', null)
       .lt('last_broker_whatsapp_at', fortyEightHoursAgo)
@@ -253,6 +259,12 @@ serve(async (req) => {
       const broker = (lead as any).broker;
       if (!broker?.bot_instance_id || !lead.phone) {
         console.log(`[B2] SKIP ${lead.id} — bot=${broker?.bot_instance_id}, phone=${lead.phone}`);
+        continue;
+      }
+
+      // Respeita config do corretor: follow-up desligado
+      if (broker?.automation_settings?.follow_up_enabled === false) {
+        console.log(`[B2] follow_up desligado para broker ${lead.broker_id} — skip ${lead.id}`);
         continue;
       }
 
@@ -344,6 +356,12 @@ serve(async (req) => {
           .eq('id', lead.broker_id)
           .maybeSingle();
         if (!broker || !broker.bot_instance_id) continue;
+
+        // Respeita config do corretor: follow-up desligado
+        if ((broker as any)?.automation_settings?.follow_up_enabled === false) {
+          console.log(`[B3] follow_up desligado para broker ${lead.broker_id} — skip cadência ${lead.id}`);
+          continue;
+        }
 
         const { data: bot } = await supabase
           .from('bot_instances')
@@ -447,7 +465,7 @@ serve(async (req) => {
     // Exclui leads sob qualificação de agente IA (ai_qualification_queue_id NOT NULL)
     const { data: staleWithInteraction } = await supabase
       .from('leads')
-      .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, welcome_responded_at, last_broker_whatsapp_at, last_lead_response_at, broker:profiles!broker_id(first_name, bot_instance_id)')
+      .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, welcome_responded_at, last_broker_whatsapp_at, last_lead_response_at, broker:profiles!broker_id(first_name, bot_instance_id, automation_settings)')
       .in('status', ['NEW', 'IN_PROGRESS'])
       .lt('last_interaction_at', thresholdAgo)
       .not('broker_id', 'is', null)
@@ -457,7 +475,7 @@ serve(async (req) => {
     // Busca leads sem last_interaction_at (nunca registrado) e criados há mais de X horas
     const { data: staleWithoutInteraction } = await supabase
       .from('leads')
-      .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, welcome_responded_at, last_broker_whatsapp_at, last_lead_response_at, broker:profiles!broker_id(first_name, bot_instance_id)')
+      .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, welcome_responded_at, last_broker_whatsapp_at, last_lead_response_at, broker:profiles!broker_id(first_name, bot_instance_id, automation_settings)')
       .in('status', ['NEW', 'IN_PROGRESS'])
       .is('last_interaction_at', null)
       .lt('created_at', thresholdAgo)
@@ -482,6 +500,12 @@ serve(async (req) => {
       const broker = (lead as any).broker;
       if (!broker?.bot_instance_id || !lead.phone) {
         console.log(`[B4] SKIP ${lead.id} — bot=${broker?.bot_instance_id}, phone=${lead.phone}`);
+        continue;
+      }
+
+      // Respeita config do corretor: follow-up desligado
+      if (broker?.automation_settings?.follow_up_enabled === false) {
+        console.log(`[B4] follow_up desligado para broker ${lead.broker_id} — skip ${lead.id}`);
         continue;
       }
 

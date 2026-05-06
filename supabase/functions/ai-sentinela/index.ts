@@ -275,7 +275,7 @@ serve(async (req) => {
 
     const { data: staleWithInteraction } = await supabase
       .from('leads')
-      .select('id, name, phone, status, tag, source, broker_id, last_interaction_at, last_broker_whatsapp_at, broker:profiles(first_name, bot_instance_id)')
+      .select('id, name, phone, status, tag, source, broker_id, last_interaction_at, last_broker_whatsapp_at, broker:profiles(first_name, bot_instance_id, automation_settings)')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .lt('last_interaction_at', thresholdAgo)
       .not('broker_id', 'is', null)
@@ -284,7 +284,7 @@ serve(async (req) => {
 
     const { data: staleWithoutInteraction } = await supabase
       .from('leads')
-      .select('id, name, phone, status, tag, source, broker_id, last_interaction_at, created_at, last_broker_whatsapp_at, broker:profiles(first_name, bot_instance_id)')
+      .select('id, name, phone, status, tag, source, broker_id, last_interaction_at, created_at, last_broker_whatsapp_at, broker:profiles(first_name, bot_instance_id, automation_settings)')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .is('last_interaction_at', null)
       .lt('created_at', thresholdAgo)
@@ -312,6 +312,12 @@ serve(async (req) => {
       try {
         const broker = (lead as any).broker;
         if (!broker?.bot_instance_id || !lead.phone) continue;
+
+        // Respeita config do corretor: IA conversa sozinha desligada
+        if (broker?.automation_settings?.ai_assist_enabled === false) {
+          console.log(`[ai-sentinela] ai_assist desligado para broker ${lead.broker_id} — skip ${lead.id}`);
+          continue;
+        }
 
         // Verificar orçamento restante antes de cada lead
         const remainingBudget = config.monthly_budget_usd - config.monthly_spent_usd;

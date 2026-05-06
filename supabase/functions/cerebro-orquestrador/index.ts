@@ -461,7 +461,7 @@ serve(async (req) => {
         // Load lead
         const { data: lead } = await supabase
           .from('leads')
-          .select('id, name, phone, status, tag, source, broker_id, created_at, last_lead_response_at, last_broker_whatsapp_at')
+          .select('id, name, phone, status, tag, source, broker_id, created_at, last_lead_response_at, last_broker_whatsapp_at, broker:profiles!broker_id(automation_settings)')
           .eq('id', item.lead_id)
           .maybeSingle();
 
@@ -503,6 +503,17 @@ serve(async (req) => {
         // Se modo=humano_ativo ou bloqueado=true: pula ações outbound ao lead
         const outboundToLead = ['toque_1','toque_2','sentinela','last_chance','broker_warmup','docs_reminder','auto_resposta'];
         if (outboundToLead.includes(item.action_type)) {
+          // Respeita config do corretor: IA conversa sozinha desligada
+          const brokerAutom = (lead as any).broker?.automation_settings;
+          if (brokerAutom?.ai_assist_enabled === false) {
+            await supabase.from('lead_activation_queue')
+              .update({ status: 'cancelled', cancel_reason: 'ai_assist_disabled_by_broker' })
+              .eq('id', item.id);
+            console.log(`[cerebro] 🤖 ${item.action_type} cancelado — broker desligou IA → ${lead.name}`);
+            cancelled++;
+            continue;
+          }
+
           if (leadState?.bloqueado === true || leadState?.modo === 'humano_ativo') {
             await supabase.from('lead_activation_queue')
               .update({ status: 'cancelled', cancel_reason: 'human_mode_active' })
