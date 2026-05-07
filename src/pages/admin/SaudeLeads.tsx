@@ -174,6 +174,7 @@ export default function SaudeLeads() {
   const [reassigning, setReassigning] = useState(false);
   const [filterBroker, setFilterBroker] = useState("all");
   const [deleteLeadId, setDeleteLeadId] = useState<string | null>(null);
+  const [deleteReason, setDeleteReason] = useState<string>("");
   const [deleteLeadName, setDeleteLeadName] = useState("");
   const [deleting, setDeleting] = useState(false);
 
@@ -266,18 +267,45 @@ export default function SaudeLeads() {
   };
 
   const handleDelete = async () => {
-    if (!deleteLeadId) return;
+    if (!deleteLeadId || !deleteReason) return;
     setDeleting(true);
+
+    // Snapshot status antes pra auditoria
+    const { data: before } = await supabase
+      .from("leads")
+      .select("status, broker_id")
+      .eq("id", deleteLeadId)
+      .maybeSingle();
+
     const { error } = await supabase
       .from("leads")
-      .update({ status: "EXCLUDED" })
+      .update({ status: "EXCLUDED", exclusion_reason: deleteReason as any })
       .eq("id", deleteLeadId);
+
+    if (!error) {
+      // Audit log fire-and-forget
+      const { data: { user } } = await supabase.auth.getUser();
+      supabase.from("system_audit_log").insert({
+        actor_id: user?.id || null,
+        action_type: "lead_excluded",
+        entity_type: "lead",
+        entity_id: deleteLeadId,
+        payload: {
+          name: deleteLeadName,
+          reason: deleteReason,
+          previous_status: before?.status,
+          previous_broker_id: before?.broker_id,
+        },
+      }).then(() => {}, () => {});
+    }
+
     setDeleting(false);
     if (error) { toast.error("Erro ao excluir lead"); return; }
     toast.success(`Lead "${deleteLeadName}" excluído.`);
     removeLead(deleteLeadId);
     setDeleteLeadId(null);
     setDeleteLeadName("");
+    setDeleteReason("");
   };
 
   const openDelete = (id: string, name: string) => {
@@ -519,31 +547,52 @@ export default function SaudeLeads() {
       </Dialog>
 
       {/* Dialog exclusão */}
-      <Dialog open={!!deleteLeadId} onOpenChange={open => { if (!open) { setDeleteLeadId(null); setDeleteLeadName(""); }}}>
+      <Dialog open={!!deleteLeadId} onOpenChange={open => { if (!open) { setDeleteLeadId(null); setDeleteLeadName(""); setDeleteReason(""); }}}>
         <DialogContent className="bg-slate-900 border border-gray-700 text-white">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-400">
               <Trash2 className="w-4 h-4" /> Excluir Lead
             </DialogTitle>
           </DialogHeader>
-          <div className="py-2">
-            <p className="text-gray-300 text-sm">
-              Tem certeza que deseja excluir <strong className="text-white">"{deleteLeadName}"</strong>?
-            </p>
-            <p className="text-gray-500 text-xs mt-2">
-              O lead será marcado como EXCLUDED e não aparecerá mais no sistema.
-            </p>
+          <div className="py-2 space-y-3">
+            <div>
+              <p className="text-gray-300 text-sm">
+                Você está prestes a excluir <strong className="text-white">"{deleteLeadName}"</strong>.
+              </p>
+              <p className="text-gray-500 text-xs mt-1">
+                O lead some do sistema (status EXCLUDED). Pra restaurar depois precisa abrir ticket com admin.
+              </p>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
+                Motivo da exclusão (obrigatório)
+              </label>
+              <Select value={deleteReason} onValueChange={setDeleteReason}>
+                <SelectTrigger className="h-10 rounded-lg bg-slate-800 border-gray-600 text-gray-200">
+                  <SelectValue placeholder="Selecione o motivo..." />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-gray-700 text-white">
+                  <SelectItem value="WRONG_NUMBER">Número errado / inválido</SelectItem>
+                  <SelectItem value="NO_INTEREST">Sem interesse</SelectItem>
+                  <SelectItem value="NO_PROFILE">Sem perfil pro produto</SelectItem>
+                  <SelectItem value="DUPLICATE">Lead duplicado</SelectItem>
+                  <SelectItem value="SPAM">SPAM / teste</SelectItem>
+                  <SelectItem value="OTHER">Outro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => { setDeleteLeadId(null); setDeleteLeadName(""); }} className="text-gray-400">
+            <Button variant="ghost" onClick={() => { setDeleteLeadId(null); setDeleteLeadName(""); setDeleteReason(""); }} className="text-gray-400">
               Cancelar
             </Button>
             <Button
               onClick={handleDelete}
-              disabled={deleting}
-              className="bg-red-700 hover:bg-red-600 text-white"
+              disabled={deleting || !deleteReason}
+              className="bg-red-700 hover:bg-red-600 text-white disabled:opacity-40"
             >
-              {deleting ? "Excluindo..." : "Excluir"}
+              {deleting ? "Excluindo..." : "Confirmar exclusão"}
             </Button>
           </DialogFooter>
         </DialogContent>
