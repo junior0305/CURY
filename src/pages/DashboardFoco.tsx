@@ -17,6 +17,7 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import LeadAttemptsLine from "@/components/broker/LeadAttemptsLine";
 import { supabase } from "@/integrations/supabase/client";
 import {
   fetchLeadsForDashboard, updateLeadStatus,
@@ -927,6 +928,12 @@ export default function DashboardFoco(){
                       )}
                       <h1 className="foco-disp text-3xl sm:text-[2.4rem] font-black text-white leading-none">{lead.name}</h1>
                       <p className="text-lg text-cyan-400 font-semibold mt-1">{lead.phone}</p>
+                      <LeadAttemptsLine
+                        leadId={lead.id}
+                        leadCreatedAt={lead.createdAt}
+                        welcomeTemplateId={(lead as any).welcomeTemplateId}
+                        lastBrokerWhatsappAt={lead.lastBrokerWhatsappAt}
+                      />
                     </div>
 
                     {/* ── MENSAGEM PRONTA ── */}
