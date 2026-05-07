@@ -46,15 +46,21 @@ const FOCO_STYLES = `
   .foco-disp{ font-family:'Orbitron',monospace; letter-spacing:.05em; }
 
   .hex-bg {
-    background-color:#080B14;
+    background-color: var(--crm-bg);
     background-image:
       radial-gradient(ellipse 80% 50% at 50% -20%,rgba(0,212,255,.07) 0%,transparent 60%),
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='48'%3E%3Cpolygon points='28,2 54,16 54,44 28,58 2,44 2,16' fill='none' stroke='%2300D4FF' stroke-width='0.4' opacity='0.09'/%3E%3C/svg%3E");
     background-size:auto,56px 48px;
   }
+  html[data-theme="light"] .hex-bg {
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%,rgba(0,102,255,.06) 0%,transparent 60%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='48'%3E%3Cpolygon points='28,2 54,16 54,44 28,58 2,44 2,16' fill='none' stroke='%230066FF' stroke-width='0.4' opacity='0.06'/%3E%3C/svg%3E");
+  }
   .scanlines::after{
     content:'';position:absolute;inset:0;pointer-events:none;
     background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,212,255,.015) 3px,rgba(0,212,255,.015) 4px);
+    opacity: var(--crm-scan, 1);
   }
 
   @keyframes neonBreathe{0%,100%{filter:drop-shadow(0 0 4px #00D4FF);}50%{filter:drop-shadow(0 0 14px #00D4FF);}}
@@ -655,7 +661,7 @@ export default function DashboardFoco(){
   };
 
   if(authLoading){
-    return <div className="min-h-screen flex items-center justify-center bg-[#080B14]"><Loader2 className="w-8 h-8 text-cyan-400 animate-spin"/></div>;
+    return <div className="crm-themed min-h-screen flex items-center justify-center" style={{background:"var(--crm-bg)"}}><Loader2 className="w-8 h-8 text-cyan-400 animate-spin"/></div>;
   }
 
   return(
@@ -678,11 +684,11 @@ export default function DashboardFoco(){
         )}
       </AnimatePresence>
 
-      <div className="foco-ui hex-bg scanlines relative flex flex-col h-screen overflow-hidden text-white">
+      <div className="crm-themed foco-ui hex-bg scanlines relative flex flex-col h-screen overflow-hidden" style={{color:"var(--crm-text)"}}>
 
         {/* ── HEADER ── */}
         <header className="shrink-0 flex items-center justify-between px-4 h-12 z-10"
-          style={{background:"rgba(8,11,20,.94)",borderBottom:"1px solid rgba(0,212,255,.15)",backdropFilter:"blur(12px)"}}>
+          style={{background:"var(--crm-surface)",borderBottom:"1px solid rgba(0,212,255,.15)",backdropFilter:"blur(12px)"}}>
           <div className="flex items-center gap-2.5">
             <Logo size={26}/>
             <div>
