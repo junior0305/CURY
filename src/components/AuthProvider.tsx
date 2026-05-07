@@ -252,7 +252,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (path === '/force-password-change') return;
       try {
         if (role === 'ADMIN' || role === 'SUPERINTENDENT') {
-          if (path !== '/admin' && path !== '/command-center' && path !== '/user-management') {
+          // Whitelist: rotas admin + telas de gestão (cold-pool, atribuir-chips, etc).
+          // Qualquer rota com prefixo /admin é permitida automaticamente; demais
+          // rotas de admin precisam estar listadas aqui.
+          const ADMIN_ALLOWED_PREFIXES = ['/admin'];
+          const ADMIN_ALLOWED_EXACT = [
+            '/command-center',
+            '/user-management',
+            '/atribuir-chips',
+            '/cold-pool',
+          ];
+          const isAllowed =
+            ADMIN_ALLOWED_PREFIXES.some((p) => path === p || path.startsWith(p + '/')) ||
+            ADMIN_ALLOWED_EXACT.includes(path);
+          if (!isAllowed) {
             navigate('/admin', { replace: true });
           }
         } else if (role === 'MANAGER') {

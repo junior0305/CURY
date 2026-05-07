@@ -31,6 +31,7 @@ import BootstrapAdmin from "@/pages/BootstrapAdmin";
 import ProfileDebug from "@/pages/ProfileDebug";
 import UserManagement from "@/pages/UserManagement";
 import AtribuirChips from "@/pages/admin/AtribuirChips";
+import ColdPool from "@/pages/admin/ColdPool";
 import Secretaria from "@/pages/Secretaria";
 import ForcePasswordChange from "@/pages/ForcePasswordChange";
 
@@ -128,6 +129,7 @@ const App = () => (
             <Route path="/command-center" element={<ProtectedAdminRoute><CommandCenter /></ProtectedAdminRoute>} />
             <Route path="/user-management" element={<ProtectedAdminRoute><UserManagement /></ProtectedAdminRoute>} />
             <Route path="/atribuir-chips" element={<ProtectedAdminRoute><AtribuirChips /></ProtectedAdminRoute>} />
+            <Route path="/cold-pool" element={<ProtectedAdminRoute><ColdPool /></ProtectedAdminRoute>} />
             <Route path="/secretaria" element={<ProtectedSecretaryRoute><Secretaria /></ProtectedSecretaryRoute>} />
             <Route path="/force-password-change" element={<ForcePasswordChange />} />
             <Route path="/bootstrap-admin" element={<BootstrapAdmin />} />
