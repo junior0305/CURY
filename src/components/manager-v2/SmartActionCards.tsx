@@ -4,9 +4,10 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Flame, Clock, UserX, MessageSquare, Eye, Bell, RotateCcw,
+  Clock, Eye, Bell, RotateCcw, Sparkles, Trash2, Zap, Undo2,
   ChevronDown, ChevronRight,
 } from "lucide-react";
+import LeadsNovosPanel from "@/components/manager-v2/LeadsNovosPanel";
 
 interface Lead {
   id: string;
@@ -20,6 +21,7 @@ interface Lead {
   last_broker_whatsapp_at?: string | null;
   contact_attempts?: number | null;
   tag?: string | null;
+  lost_reason?: string | null;
 }
 
 interface Broker {
@@ -36,6 +38,7 @@ interface Props {
   onMonitor: (lead: Lead) => void;
   onCharge: (lead: Lead) => void;
   onRedist: (leadId: string, newBrokerId: string) => void;
+  onRestore?: (leadId: string) => void;
 }
 
 function hoursSince(iso: string | null) {
@@ -50,7 +53,7 @@ function formatHours(h: number) {
   return `${Math.floor(h / 24)}d`;
 }
 
-export default function SmartActionCards({ leads, brokers, unassigned, onMonitor, onCharge, onRedist }: Props) {
+export default function SmartActionCards({ leads, brokers, onMonitor, onCharge, onRedist, onRestore }: Props) {
   const brokerMap = useMemo(() => {
     const m = new Map<string, string>();
     brokers.forEach((b) => m.set(b.id, b.first_name || "—"));
@@ -59,44 +62,46 @@ export default function SmartActionCards({ leads, brokers, unassigned, onMonitor
 
   // Categorias
   const categories = useMemo(() => {
-    const quentes = leads.filter((l) => {
-      if (!l.last_lead_response_at) return false;
-      const respH = hoursSince(l.last_lead_response_at);
-      const brokerH = l.last_broker_whatsapp_at ? hoursSince(l.last_broker_whatsapp_at) : Infinity;
-      return respH > 0 && respH < 48 && brokerH > respH;
-    });
-
     const parados = leads.filter((l) => {
       if (["CONCLUDED", "ABANDONED", "EXCLUDED"].includes(l.status)) return false;
       const lastH = hoursSince(l.last_interaction_at);
       return lastH > 24;
     });
 
-    const respostasNovas = leads.filter((l) => {
-      if (!l.last_lead_response_at) return false;
-      return hoursSince(l.last_lead_response_at) < 6;
+    const novosHoje = leads.filter((l) => hoursSince(l.created_at) < 24);
+
+    // SLA: lead com corretor mas SEM 1ª resposta do broker há +2h, ainda em status ativo
+    const semResposta = leads.filter((l) => {
+      if (!l.broker_id) return false;
+      if (l.last_broker_whatsapp_at) return false;
+      if (["CONCLUDED", "ABANDONED", "EXCLUDED"].includes(l.status)) return false;
+      const ageH = hoursSince(l.created_at);
+      return ageH >= 2;
     });
+
+    // Descartados pelos corretores (status=ABANDONED)
+    const descartados = leads.filter((l) => l.status === "ABANDONED");
 
     return [
       {
-        id: "quentes",
-        label: "Esperando você",
-        sub: "lead respondeu, broker não",
-        count: quentes.length,
-        leads: quentes,
-        color: "#EF4444",
-        icon: Flame,
-        urgent: quentes.length > 0,
+        id: "leads-novos",
+        label: "Leads novos",
+        sub: "hoje · click pra ver período",
+        count: novosHoje.length,
+        leads: novosHoje,
+        color: "#06B6D4",
+        icon: Sparkles,
+        urgent: false,
       },
       {
-        id: "respostas",
-        label: "Respostas novas",
-        sub: "última 6h",
-        count: respostasNovas.length,
-        leads: respostasNovas,
-        color: "#F472B6",
-        icon: MessageSquare,
-        urgent: respostasNovas.length > 0,
+        id: "sem-resposta-2h",
+        label: "Sem 1ª resposta",
+        sub: "+2h · SLA estourando",
+        count: semResposta.length,
+        leads: semResposta,
+        color: "#EF4444",
+        icon: Zap,
+        urgent: semResposta.length > 0,
       },
       {
         id: "parados",
@@ -109,17 +114,17 @@ export default function SmartActionCards({ leads, brokers, unassigned, onMonitor
         urgent: parados.length > 5,
       },
       {
-        id: "sem-corretor",
-        label: "Sem corretor",
-        sub: "fila órfã",
-        count: unassigned.length,
-        leads: unassigned,
-        color: "#A78BFA",
-        icon: UserX,
-        urgent: unassigned.length > 0,
+        id: "descarte",
+        label: "Descartados",
+        sub: "click pra restaurar",
+        count: descartados.length,
+        leads: descartados,
+        color: "#94A3B8",
+        icon: Trash2,
+        urgent: false,
       },
     ];
-  }, [leads, unassigned]);
+  }, [leads]);
 
   const [expanded, setExpanded] = useState<string | null>(
     categories.find((c) => c.urgent)?.id || null
@@ -202,14 +207,26 @@ export default function SmartActionCards({ leads, brokers, unassigned, onMonitor
             transition={{ duration: 0.25 }}
             className="overflow-hidden mt-2.5"
           >
-            <ExpandedList
-              category={categories.find((c) => c.id === expanded)!}
-              brokerMap={brokerMap}
-              brokers={brokers}
-              onMonitor={onMonitor}
-              onCharge={onCharge}
-              onRedist={onRedist}
-            />
+            {expanded === "leads-novos" ? (
+              <LeadsNovosPanel
+                allLeads={leads as any}
+                brokers={brokers}
+                brokerMap={brokerMap}
+                onMonitor={onMonitor}
+                onCharge={onCharge}
+                onRedist={onRedist}
+              />
+            ) : (
+              <ExpandedList
+                category={categories.find((c) => c.id === expanded)!}
+                brokerMap={brokerMap}
+                brokers={brokers}
+                onMonitor={onMonitor}
+                onCharge={onCharge}
+                onRedist={onRedist}
+                onRestore={onRestore}
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -224,6 +241,7 @@ function ExpandedList({
   onMonitor,
   onCharge,
   onRedist,
+  onRestore,
 }: {
   category: { id: string; label: string; color: string; leads: Lead[] };
   brokerMap: Map<string, string>;
@@ -231,6 +249,7 @@ function ExpandedList({
   onMonitor: (lead: Lead) => void;
   onCharge: (lead: Lead) => void;
   onRedist: (leadId: string, newBrokerId: string) => void;
+  onRestore?: (leadId: string) => void;
 }) {
   const list = category.leads.slice(0, 12);
   const [redistOpen, setRedistOpen] = useState<string | null>(null);
@@ -285,24 +304,40 @@ function ExpandedList({
                   )}
                   <span>·</span>
                   <span>📥 {formatHours(lastH)}</span>
-                  {category.id === "quentes" && respH < Infinity && (
+                  {category.id === "sem-resposta-2h" && (
                     <>
                       <span>·</span>
                       <span className="text-red-400 font-bold">
-                        respondeu há {formatHours(respH)}
+                        sem 1ª msg há {formatHours(hoursSince(lead.created_at))}
                       </span>
                     </>
                   )}
-                  <span>·</span>
-                  <span className="px-1.5 py-0.5 rounded bg-slate-800/80 text-[11px] uppercase tracking-wider">
-                    {lead.status.replace("_", " ").toLowerCase()}
-                  </span>
+                  {category.id === "descarte" && (lead as any).lost_reason && (
+                    <>
+                      <span>·</span>
+                      <span className="text-amber-400 font-medium" title="Motivo do descarte">
+                        ⚠️ {String((lead as any).lost_reason).replace(/_/g, " ")}
+                      </span>
+                    </>
+                  )}
+                  {category.id !== "sem-resposta-2h" && category.id !== "descarte" && (
+                    <>
+                      <span>·</span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-800/80 text-[11px] uppercase tracking-wider">
+                        {lead.status.replace("_", " ").toLowerCase()}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0 relative">
                 <ActionBtn icon={Eye} label="Ver" color="#06B6D4"
                   onClick={() => onMonitor(lead)} />
-                {broker && (
+                {category.id === "descarte" && onRestore && (
+                  <ActionBtn icon={Undo2} label="Restaurar" color="#10B981"
+                    onClick={() => onRestore(lead.id)} />
+                )}
+                {broker && category.id !== "descarte" && (
                   <ActionBtn icon={Bell} label="Cobrar" color="#EF4444"
                     onClick={() => onCharge(lead)} />
                 )}

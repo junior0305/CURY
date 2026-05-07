@@ -2,13 +2,13 @@
 // Layout: TopNav + Wall of Fame + Termômetro + Hoje você precisa
 //         + Smart Action Cards | Equipe + Saúde + CoachChat drawer + Campaigns
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Sparkles, Search } from "lucide-react";
 import { toast } from "sonner";
 import { LeadMonitorDrawer } from "@/components/manager/LeadMonitorDrawer";
 
@@ -20,6 +20,7 @@ import CampaignsActivity from "@/components/manager-v2/CampaignsActivity";
 import TopNav from "@/components/manager-v2/TopNav";
 import StatusBanner from "@/components/manager-v2/StatusBanner";
 import OperationHealth from "@/components/manager-v2/OperationHealth";
+import OperacoesSheet from "@/components/manager-v2/OperacoesSheet";
 import CoachChat, {
   CoachChatButton, getCoachTodayCount,
 } from "@/components/manager-v2/CoachChat";
@@ -51,7 +52,7 @@ function useTeamData(managerId: string | undefined) {
         const { data } = await supabase
           .from("leads")
           .select(
-            "id, name, phone, status, broker_id, manager_id, created_at, last_interaction_at, last_lead_response_at, last_broker_whatsapp_at, contact_attempts, no_redistribute, negotiating_since, tag"
+            "id, name, phone, status, broker_id, manager_id, created_at, last_interaction_at, last_lead_response_at, last_broker_whatsapp_at, contact_attempts, no_redistribute, negotiating_since, tag, welcome_template_id, welcome_responded_at, followup_started_at, ai_qualification_attempts, ai_qualified_at, lost_reason"
           )
           .in("broker_id", brokerIds)
           .order("created_at", { ascending: false })
@@ -123,6 +124,15 @@ export default function ManagerV2() {
   const [coachCount, setCoachCount] = useState(getCoachTodayCount());
   const [coachQuestion, setCoachQuestion] = useState<string | null>(null);
   const [monitorLead, setMonitorLead] = useState<any>(null);
+  const [opsOpen, setOpsOpen] = useState(false);
+
+  // Throttle de cobrança: protege chip do manager de virar "robô" + evita spam ao mesmo corretor
+  const chargeRef = useRef<{ globalAt: number; perBroker: Map<string, number> }>({
+    globalAt: 0,
+    perBroker: new Map(),
+  });
+  const GLOBAL_COOLDOWN_S = 30;   // 30s entre quaisquer 2 cobranças (proteção chip)
+  const BROKER_COOLDOWN_S = 120;  // 2min entre cobranças do MESMO corretor
 
   function askCoach(question: string) {
     setCoachQuestion(question);
@@ -152,6 +162,23 @@ export default function ManagerV2() {
   async function chargeBroker(rawLead: any, customMessage?: string) {
     const broker = (data?.brokers || []).find((b: any) => b.id === rawLead.broker_id);
     if (!broker) { toast.error("Lead sem corretor"); return; }
+
+    // ── Throttle ──────────────────────────────────────────────────────────
+    const now = Date.now();
+    const globalGap = (now - chargeRef.current.globalAt) / 1000;
+    if (globalGap < GLOBAL_COOLDOWN_S) {
+      const wait = Math.ceil(GLOBAL_COOLDOWN_S - globalGap);
+      toast.warning(`⏳ Aguarde ${wait}s antes da próxima cobrança (proteção do seu chip)`);
+      return;
+    }
+    const lastForBroker = chargeRef.current.perBroker.get(broker.id) || 0;
+    const brokerGap = (now - lastForBroker) / 1000;
+    if (brokerGap < BROKER_COOLDOWN_S) {
+      const wait = Math.ceil(BROKER_COOLDOWN_S - brokerGap);
+      toast.warning(`⏳ ${broker.first_name} foi cobrado há pouco. Espere ${wait}s.`);
+      return;
+    }
+
     const leadName = rawLead.name || rawLead.phone || "Lead";
 
     // 1. Insere notificação in-app
@@ -175,6 +202,11 @@ export default function ManagerV2() {
         });
       } catch { /* notif in-app já garante o aviso */ }
     }
+
+    // Atualiza timestamps após sucesso
+    chargeRef.current.globalAt = Date.now();
+    chargeRef.current.perBroker.set(broker.id, Date.now());
+
     toast.success(`✅ ${broker.first_name} foi cobrado`);
   }
 
@@ -196,6 +228,20 @@ export default function ManagerV2() {
     await chargeBroker(leads[0],
       `🚨 *${broker.first_name}*, você tem *${leads.length} lead${leads.length > 1 ? "s" : ""} quente${leads.length > 1 ? "s" : ""}* esperando resposta há mais de 2h. Atende AGORA — esses convertem 3x mais quando rápido.`
     );
+  }
+
+  async function restoreLead(leadId: string) {
+    const { error } = await supabase
+      .from("leads")
+      .update({
+        status: "NEW",
+        broker_id: null,
+        last_interaction_at: new Date().toISOString(),
+      })
+      .eq("id", leadId);
+    if (error) { toast.error(error.message); return; }
+    toast.success("✅ Lead restaurado pra fila");
+    queryClient.invalidateQueries({ queryKey: ["v2-team-data"] });
   }
 
   async function redistributeLead(leadId: string, newBrokerId: string) {
@@ -295,6 +341,13 @@ export default function ManagerV2() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setOpsOpen(true)}
+              title="Buscar lead ou adicionar lead manual"
+              className="p-2 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition"
+            >
+              <Search className="w-4 h-4" />
+            </button>
             <CoachChatButton onClick={() => setCoachOpen(true)} count={coachCount} />
             <span className="text-[11px] uppercase tracking-widest text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-full px-2.5 py-1 font-bold hidden sm:inline">
               BETA
@@ -323,23 +376,12 @@ export default function ManagerV2() {
           brokers={brokers}
           unassigned={unassigned}
           managerName={firstName}
-          onChargeBroker={chargeAllOfBroker}
-          onRedistributeBroker={(brokerId) => {
-            // Manager precisa redistribuir leads de um broker ausente
-            const ausenteLeads = leads.filter((l: any) =>
-              l.broker_id === brokerId && !["CONCLUDED", "ABANDONED", "EXCLUDED"].includes(l.status)
-            );
-            if (ausenteLeads.length === 0) {
-              toast.warning("Esse corretor não tem leads ativos pra redistribuir");
-              return;
-            }
-            toast.info(`💡 ${ausenteLeads.length} leads ativos. Abra a aba Urgentes ou click em um lead pra redistribuir individualmente.`);
-          }}
           onShowUnassigned={() => {
-            // Vai pra aba urgentes do v1 onde tem o cards "Sem corretor"
-            // Por enquanto: toast com instrução
             toast.info("💡 Os leads sem corretor aparecem no card 'Sem corretor' na 'Ação no time' abaixo. Click pra atribuir.");
           }}
+          onOpenLead={openMonitor}
+          onChargeLead={(lead) => chargeBroker(lead)}
+          onRedistributeLead={redistributeLead}
         />
       </section>
 
@@ -358,6 +400,7 @@ export default function ManagerV2() {
             onMonitor={openMonitor}
             onCharge={(l) => chargeBroker(l)}
             onRedist={redistributeLead}
+            onRestore={restoreLead}
           />
         </motion.div>
 
@@ -400,6 +443,18 @@ export default function ManagerV2() {
         daysInMonth={new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()}
         onAsk={askCoach}
       />
+
+      {/* ─── Operações: buscar / novo lead / descartados ───────────────── */}
+      {userId && (
+        <OperacoesSheet
+          open={opsOpen}
+          onClose={() => setOpsOpen(false)}
+          managerId={userId}
+          managerName={firstName}
+          brokers={brokers as any[]}
+          onSelectLead={(l: any) => openMonitor(l)}
+        />
+      )}
 
       {/* ─── Lead Monitor Drawer (👁️ ação) ─────────────────────────────── */}
       <AnimatePresence>
