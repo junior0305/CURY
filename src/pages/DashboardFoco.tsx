@@ -18,6 +18,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import LeadAttemptsLine from "@/components/broker/LeadAttemptsLine";
+import ProspeccaoMode from "@/components/broker/ProspeccaoMode";
 import { supabase } from "@/integrations/supabase/client";
 import {
   fetchLeadsForDashboard, updateLeadStatus,
@@ -339,6 +340,7 @@ export default function DashboardFoco(){
   const [visitDate,setVisitDate]=useState("");
   const [visitTime,setVisitTime]=useState("10:00");
   const [isLeadFormOpen,setIsLeadFormOpen]=useState(false);
+  const [prospeccaoMode,setProspeccaoMode]=useState(false);
   const [mobileTab,setMobileTab]=useState<"missao"|"painel">("missao");
   const [saleToast,setSaleToast]=useState<string|null>(null);
   const [activeQueueTab,setActiveQueueTab]=useState<string>("new");
@@ -724,6 +726,12 @@ export default function DashboardFoco(){
               style={{background:"rgba(124,58,237,.1)",border:"1px solid rgba(124,58,237,.25)"}}>
               <FileText className="w-3.5 h-3.5" style={{color:"#A78BFA"}}/>
             </button>
+            <button onClick={()=>setProspeccaoMode(p=>!p)} title={prospeccaoMode?"Voltar pra fila normal":"Modo Prospecção: trabalhar contatos frios"}
+              className="flex items-center gap-1 px-2.5 h-7 rounded-lg text-[10px] font-bold uppercase transition-all hover:brightness-125"
+              style={{background:prospeccaoMode?"rgba(56,189,248,.18)":"rgba(56,189,248,.08)",border:`1px solid rgba(56,189,248,${prospeccaoMode?".5":".25"})`,color:"#38BDF8"}}>
+              <span className="text-base leading-none">❄️</span>
+              <span className="hidden sm:inline foco-disp">{prospeccaoMode?"Sair":"Prospecção"}</span>
+            </button>
             <ThemeToggle compact/>
             {user?.id && <BrokerAutomationSettings userId={user.id}/>}
             <button onClick={()=>setIsMuted(m=>!m)} className="w-7 h-7 rounded-lg flex items-center justify-center" style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)"}}>{isMuted?<VolumeX className="w-3.5 h-3.5 text-slate-500"/>:<Volume2 className="w-3.5 h-3.5 text-cyan-400"/>}</button>
@@ -794,7 +802,18 @@ export default function DashboardFoco(){
           </div>
         )}
 
-        {/* ── MAIN ── */}
+        {/* ── MODO PROSPECÇÃO (alternativo) ── */}
+        {prospeccaoMode && user?.id && (
+          <ProspeccaoMode
+            brokerId={user.id}
+            managerId={myProfile?.managerId ?? null}
+            botInstanceId={(myProfile as any)?.botInstanceId ?? null}
+            onExit={() => setProspeccaoMode(false)}
+          />
+        )}
+
+        {/* ── MAIN (fila normal) ── */}
+        {!prospeccaoMode && (
         <main className="flex flex-1 overflow-hidden gap-3 p-3 pb-20 md:pb-3 min-h-0">
 
           {/* ─── LEFT: MISSÃO ─── */}
@@ -1530,6 +1549,7 @@ export default function DashboardFoco(){
           </AnimatePresence>
 
         </main>
+        )}
 
         {/* ── MOBILE BOTTOM NAV ── */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex h-14"

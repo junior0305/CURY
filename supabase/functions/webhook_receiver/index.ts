@@ -605,6 +605,32 @@ Responda APENAS em JSON válido, sem markdown:
 
           if (isHot) console.log(`[webhook_receiver] 🔥 Lead QUENTE — timers agressivos para ${lead.name}`);
           try { await supabase.from('lead_activation_queue').insert(queueItems); } catch {}
+        } else {
+          // ── Não achou em leads → checa cold_contacts (prospecção manual do broker) ──
+          const { data: cold } = await supabase
+            .from('cold_contacts')
+            .select('id, claimed_by, name')
+            .in('phone', phoneVariants)
+            .eq('status', 'claimed')
+            .not('claimed_by', 'is', null)
+            .limit(1)
+            .maybeSingle();
+
+          if (cold?.id) {
+            const { data: newLeadId } = await supabase.rpc('promote_cold_to_lead', { p_contact_id: cold.id });
+            if (newLeadId) {
+              console.log(`[webhook_receiver] ❄️→🔥 cold "${cold.name}" respondeu e virou lead ${newLeadId}`);
+              if (cold.claimed_by) {
+                await supabase.from('internal_notifications').insert({
+                  to_id: cold.claimed_by,
+                  type: 'COLD_PROMOTED',
+                  title: '🔥 Prospect respondeu — virou lead!',
+                  message: `${cold.name} respondeu sua mensagem de prospecção. Já está no seu dashboard como Em Atendimento.`,
+                  related_lead_id: newLeadId,
+                });
+              }
+            }
+          }
         }
         console.log(`[webhook_receiver] lead → corretor ${phoneNumber}`);
       }
