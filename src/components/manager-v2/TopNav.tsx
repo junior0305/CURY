@@ -37,8 +37,8 @@ export default function TopNav() {
                 className="flex items-center gap-2 px-3.5 py-2 rounded-xl border text-sm font-bold transition-all"
                 style={{
                   background: active
-                    ? `linear-gradient(135deg, ${it.color}22, rgba(24,24,27,0.6))`
-                    : "rgba(24,24,27,0.5)",
+                    ? `linear-gradient(135deg, ${it.color}22, var(--crm-card))`
+                    : "var(--crm-card-soft)",
                   borderColor: active ? `${it.color}80` : "rgba(63,63,70,0.5)",
                   color: active ? it.color : "rgb(161 161 170)",
                   boxShadow: active ? `0 0 16px ${it.color}30` : "none",

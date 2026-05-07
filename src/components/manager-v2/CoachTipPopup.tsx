@@ -117,7 +117,7 @@ export default function CoachTipPopup({
           <div
             className="rounded-2xl border p-4 shadow-2xl backdrop-blur-md"
             style={{
-              background: `linear-gradient(135deg, ${tip.color}25, rgba(24,24,27,0.95))`,
+              background: `linear-gradient(135deg, ${tip.color}25, var(--crm-overlay))`,
               borderColor: `${tip.color}80`,
               boxShadow: `0 16px 48px rgba(0,0,0,0.6), 0 0 24px ${tip.color}40`,
             }}

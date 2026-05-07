@@ -164,7 +164,7 @@ export default function MetaThermometer({ managerId, teamId }: Props) {
       }}
       className="rounded-2xl overflow-hidden border backdrop-blur-sm relative"
       style={{
-        background: `linear-gradient(135deg, ${monthStatus.color}15, rgba(15,23,42,0.6))`,
+        background: `linear-gradient(135deg, ${monthStatus.color}15, var(--crm-card))`,
         borderColor: `${monthStatus.color}60`,
         boxShadow: `0 0 32px ${monthStatus.color}20`,
       }}

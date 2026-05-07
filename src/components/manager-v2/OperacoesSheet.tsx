@@ -69,10 +69,11 @@ export default function OperacoesSheet({
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-md p-0 bg-slate-950 border-slate-800 text-slate-100"
+        className="crm-themed w-full sm:max-w-md p-0 border-slate-800 text-slate-100"
+        style={{ background: "var(--crm-bg)" }}
       >
         <SheetHeader className="px-5 py-4 border-b border-slate-800">
-          <SheetTitle className="text-base text-slate-100">Operações</SheetTitle>
+          <SheetTitle className="text-base text-slate-100" style={{ color: "var(--crm-text)" }}>Operações</SheetTitle>
         </SheetHeader>
 
         <div className="px-5 pt-3 flex gap-1.5 flex-wrap">
@@ -90,7 +91,7 @@ export default function OperacoesSheet({
                 onClick={() => setSection(t.v)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
                 style={{
-                  background: active ? "rgba(6,182,212,0.15)" : "rgba(30,41,59,0.6)",
+                  background: active ? "rgba(6,182,212,0.15)" : "var(--crm-glass)",
                   border: `1px solid ${active ? "rgba(6,182,212,0.5)" : "rgba(51,65,85,0.5)"}`,
                   color: active ? "#06B6D4" : "#94A3B8",
                 }}

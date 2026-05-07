@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Sparkles, Search } from "lucide-react";
+import { ArrowLeft, Sparkles, Search, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { LeadMonitorDrawer } from "@/components/manager/LeadMonitorDrawer";
 
@@ -25,6 +25,8 @@ import CoachChat, {
   CoachChatButton, getCoachTodayCount,
 } from "@/components/manager-v2/CoachChat";
 import CoachTipPopup from "@/components/manager-v2/CoachTipPopup";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { useTheme } from "@/contexts/ThemeContext";
 
 // ─── Hook: dados base do time ────────────────────────────────────────────────
 function useTeamData(managerId: string | undefined) {
@@ -118,6 +120,8 @@ export default function ManagerV2() {
   const { session } = useAuth();
   const userId = session?.user?.id;
   const { data, isLoading } = useTeamData(userId);
+  const { mode } = useTheme();
+  const isDark = mode === "dark";
 
   const queryClient = useQueryClient();
   const [coachOpen, setCoachOpen] = useState(false);
@@ -287,13 +291,14 @@ export default function ManagerV2() {
   if (!userId || isLoading || !data) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center"
+        className="crm-themed min-h-screen flex items-center justify-center"
         style={{
           fontFamily: "Inter, system-ui, sans-serif",
-          background: "radial-gradient(ellipse at center, #0F172A, #020617)",
+          background: "var(--crm-bg)",
+          color: "var(--crm-text-muted)",
         }}
       >
-        <div className="text-slate-400 text-sm flex items-center gap-2">
+        <div className="text-sm flex items-center gap-2">
           <Sparkles className="w-4 h-4 animate-pulse" />
           carregando seu painel…
         </div>
@@ -306,19 +311,28 @@ export default function ManagerV2() {
 
   return (
     <div
-      className="min-h-screen text-slate-100 antialiased relative"
+      className="crm-themed min-h-screen text-slate-100 antialiased relative"
       style={{
         fontFamily: "Inter, system-ui, sans-serif",
-        background: `
-          radial-gradient(ellipse 90% 60% at 50% -10%, rgba(56,189,248,0.10), transparent 70%),
-          radial-gradient(ellipse 60% 45% at 0% 100%, rgba(14,116,144,0.08), transparent 65%),
-          radial-gradient(ellipse 60% 45% at 100% 80%, rgba(59,130,246,0.06), transparent 65%),
-          linear-gradient(180deg, #020617 0%, #0F172A 50%, #0B1220 100%)
-        `,
+        color: "var(--crm-text)",
+        background: isDark
+          ? `radial-gradient(ellipse 90% 60% at 50% -10%, rgba(56,189,248,0.10), transparent 70%),
+             radial-gradient(ellipse 60% 45% at 0% 100%, rgba(14,116,144,0.08), transparent 65%),
+             radial-gradient(ellipse 60% 45% at 100% 80%, rgba(59,130,246,0.06), transparent 65%),
+             linear-gradient(180deg, #020617 0%, #0F172A 50%, #0B1220 100%)`
+          : `radial-gradient(ellipse 90% 60% at 50% -10%, rgba(56,189,248,0.10), transparent 70%),
+             radial-gradient(ellipse 60% 45% at 0% 100%, rgba(14,116,144,0.05), transparent 65%),
+             linear-gradient(180deg, #EEF2F7 0%, #F8FAFC 50%, #EEF2F7 100%)`,
       }}
     >
       {/* ─── Header ──────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 backdrop-blur-xl bg-slate-950/80 border-b border-slate-800/50">
+      <header
+        className="sticky top-0 z-30 backdrop-blur-xl"
+        style={{
+          background: "var(--crm-surface)",
+          borderBottom: "1px solid var(--crm-border)",
+        }}
+      >
         <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link
@@ -344,10 +358,15 @@ export default function ManagerV2() {
             <button
               onClick={() => setOpsOpen(true)}
               title="Buscar lead ou adicionar lead manual"
-              className="p-2 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition"
             >
-              <Search className="w-4 h-4" />
+              <Search className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-bold uppercase tracking-wider hidden sm:inline">Buscar</span>
+              <span className="w-px h-3 bg-cyan-500/30 hidden sm:block" />
+              <UserPlus className="w-3.5 h-3.5" />
+              <span className="text-[11px] font-bold uppercase tracking-wider hidden sm:inline">Lead</span>
             </button>
+            <ThemeToggle compact />
             <CoachChatButton onClick={() => setCoachOpen(true)} count={coachCount} />
             <span className="text-[11px] uppercase tracking-widest text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-full px-2.5 py-1 font-bold hidden sm:inline">
               BETA

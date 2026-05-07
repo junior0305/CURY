@@ -31,6 +31,12 @@ html[data-theme="dark"] {
   --crm-nav-border:   rgba(30,41,59,0.9);
   --crm-grid-line:    rgba(0,102,255,0.03);
   --crm-header-glow:  rgba(0,102,255,0.12);
+  --crm-card:         rgba(24,24,27,0.6);
+  --crm-card-soft:    rgba(24,24,27,0.5);
+  --crm-card-strong:  rgba(24,24,27,0.7);
+  --crm-overlay:      rgba(8,11,20,0.92);
+  --crm-popover:      #0F172A;
+  --crm-popover-border: rgba(255,255,255,0.10);
 }
 
 html[data-theme="light"] {
@@ -52,6 +58,12 @@ html[data-theme="light"] {
   --crm-nav-border:   rgba(15,23,42,0.10);
   --crm-grid-line:    rgba(0,102,255,0.04);
   --crm-header-glow:  rgba(0,102,255,0.07);
+  --crm-card:         rgba(255,255,255,0.85);
+  --crm-card-soft:    rgba(255,255,255,0.7);
+  --crm-card-strong:  rgba(255,255,255,0.95);
+  --crm-overlay:      rgba(255,255,255,0.96);
+  --crm-popover:      #FFFFFF;
+  --crm-popover-border: rgba(15,23,42,0.10);
 }
 
 /* ── Light theme: remap Tailwind slate utilities inside .wolf-ui & manager ── */
@@ -84,6 +96,43 @@ html[data-theme="light"] .wolf-ui .bg-slate-800,
 html[data-theme="light"] .crm-themed .bg-slate-800 { background: rgba(15,23,42,0.08) !important; }
 html[data-theme="light"] .wolf-ui .bg-slate-900,
 html[data-theme="light"] .crm-themed .bg-slate-900 { background: rgba(15,23,42,0.06) !important; }
+html[data-theme="light"] .crm-themed .bg-slate-950 { background: var(--crm-bg) !important; }
+html[data-theme="light"] .crm-themed .bg-slate-950\/80,
+html[data-theme="light"] .crm-themed .bg-slate-950\/60,
+html[data-theme="light"] .crm-themed .bg-slate-950\/50,
+html[data-theme="light"] .crm-themed .bg-slate-900\/80,
+html[data-theme="light"] .crm-themed .bg-slate-900\/60,
+html[data-theme="light"] .crm-themed .bg-slate-900\/50,
+html[data-theme="light"] .crm-themed .bg-slate-900\/40 { background: var(--crm-surface) !important; }
+html[data-theme="light"] .crm-themed .bg-slate-800\/60,
+html[data-theme="light"] .crm-themed .bg-slate-800\/50,
+html[data-theme="light"] .crm-themed .bg-slate-800\/40,
+html[data-theme="light"] .crm-themed .bg-slate-800\/30 { background: rgba(15,23,42,0.04) !important; }
+
+html[data-theme="light"] .crm-themed .border-slate-700 { border-color: rgba(15,23,42,0.12) !important; }
+html[data-theme="light"] .crm-themed .border-slate-800 { border-color: rgba(15,23,42,0.08) !important; }
+html[data-theme="light"] .crm-themed .border-slate-800\/60,
+html[data-theme="light"] .crm-themed .border-slate-800\/50,
+html[data-theme="light"] .crm-themed .border-slate-800\/40 { border-color: rgba(15,23,42,0.08) !important; }
+html[data-theme="light"] .crm-themed .divide-slate-800\/40 > :not([hidden]) ~ :not([hidden]),
+html[data-theme="light"] .crm-themed .divide-slate-800\/50 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(15,23,42,0.07) !important; }
+
+html[data-theme="light"] .crm-themed .text-slate-100 { color: #0F172A !important; }
+html[data-theme="light"] .crm-themed .text-slate-300 { color: #1E293B !important; }
+html[data-theme="light"] .crm-themed .hover\:text-slate-100:hover { color: #0F172A !important; }
+html[data-theme="light"] .crm-themed .hover\:text-slate-200:hover { color: #1E293B !important; }
+html[data-theme="light"] .crm-themed .hover\:bg-slate-800\/50:hover,
+html[data-theme="light"] .crm-themed .hover\:bg-slate-800\/60:hover,
+html[data-theme="light"] .crm-themed .hover\:bg-slate-700\/60:hover { background: rgba(15,23,42,0.06) !important; }
+
+html[data-theme="light"] .crm-themed input,
+html[data-theme="light"] .crm-themed textarea {
+  background: rgba(15,23,42,0.03) !important;
+  color: #0F172A !important;
+  border-color: rgba(15,23,42,0.12) !important;
+}
+html[data-theme="light"] .crm-themed input::placeholder,
+html[data-theme="light"] .crm-themed textarea::placeholder { color: #94A3B8 !important; }
 
 /* placeholder em input */
 html[data-theme="light"] .wolf-ui .placeholder-slate-600::placeholder { color: #94A3B8; }

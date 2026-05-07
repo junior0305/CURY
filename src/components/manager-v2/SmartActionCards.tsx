@@ -153,8 +153,8 @@ export default function SmartActionCards({ leads, brokers, onMonitor, onCharge, 
               className="rounded-xl p-3.5 text-left border transition-all relative overflow-hidden"
               style={{
                 background: isOpen
-                  ? `linear-gradient(135deg, ${cat.color}18, rgba(24,24,27,0.7))`
-                  : `linear-gradient(135deg, ${cat.color}08, rgba(24,24,27,0.5))`,
+                  ? `linear-gradient(135deg, ${cat.color}18, var(--crm-card-strong))`
+                  : `linear-gradient(135deg, ${cat.color}08, var(--crm-card-soft))`,
                 borderColor: isOpen ? `${cat.color}80` : `${cat.color}30`,
                 boxShadow: isOpen ? `0 0 24px ${cat.color}30` : "none",
               }}
@@ -258,7 +258,7 @@ function ExpandedList({
     return (
       <div
         className="rounded-xl border p-6 text-center"
-        style={{ background: "rgba(24,24,27,0.4)", borderColor: `${category.color}30` }}
+        style={{ background: "var(--crm-card-soft)", borderColor: `${category.color}30` }}
       >
         <p className="text-sm text-slate-400">Nada nesta categoria. ✨</p>
       </div>
@@ -269,7 +269,7 @@ function ExpandedList({
     <div
       className="rounded-xl border overflow-hidden"
       style={{
-        background: "rgba(24,24,27,0.6)",
+        background: "var(--crm-card)",
         borderColor: `${category.color}40`,
         boxShadow: `0 0 24px ${category.color}10`,
       }}

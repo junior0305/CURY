@@ -128,7 +128,7 @@ export default function LeadsNovosPanel({
     <div
       className="rounded-xl border overflow-hidden"
       style={{
-        background: "rgba(24,24,27,0.6)",
+        background: "var(--crm-card)",
         borderColor: "rgba(56,189,248,0.4)",
         boxShadow: "0 0 24px rgba(56,189,248,0.10)",
       }}
@@ -155,7 +155,7 @@ export default function LeadsNovosPanel({
                 onClick={() => setPeriod(p.v)}
                 className="px-2.5 py-1 rounded-md text-[11px] font-bold transition"
                 style={{
-                  background: active ? "rgba(6,182,212,0.18)" : "rgba(30,41,59,0.6)",
+                  background: active ? "rgba(6,182,212,0.18)" : "var(--crm-glass)",
                   border: `1px solid ${active ? "rgba(6,182,212,0.5)" : "rgba(51,65,85,0.5)"}`,
                   color: active ? "#06B6D4" : "#94A3B8",
                 }}

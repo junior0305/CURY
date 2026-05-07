@@ -270,8 +270,8 @@ export default function WhatYouNeedToDo({
               className="group rounded-xl p-3.5 text-left transition-all border cursor-pointer relative"
               style={{
                 background: isOpen
-                  ? `linear-gradient(135deg, ${a.color}25, rgba(24,24,27,0.7))`
-                  : `linear-gradient(135deg, ${a.color}10, rgba(24,24,27,0.6))`,
+                  ? `linear-gradient(135deg, ${a.color}25, var(--crm-card-strong))`
+                  : `linear-gradient(135deg, ${a.color}10, var(--crm-card))`,
                 borderColor: isOpen ? `${a.color}80` : `${a.color}40`,
                 boxShadow: isOpen ? `0 0 0 1px ${a.color}40 inset, 0 0 14px ${a.color}30` : "none",
               }}
