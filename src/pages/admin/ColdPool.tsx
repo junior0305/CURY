@@ -17,6 +17,7 @@ import {
   XCircle, Snowflake, Users, Tag, Hash, Trash2,
 } from "lucide-react";
 import ColdPoolMetrics from "@/components/admin/ColdPoolMetrics";
+import PendingProductsReview from "@/components/admin/PendingProductsReview";
 
 interface ParsedRow {
   raw: Record<string, string>;
@@ -415,6 +416,9 @@ export default function ColdPool() {
 
         {/* Indicadores */}
         <ColdPoolMetrics />
+
+        {/* Revisão de produtos pendentes */}
+        <PendingProductsReview />
 
         {/* Step 1: Upload + config */}
         {!parsed && !result && (
