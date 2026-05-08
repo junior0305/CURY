@@ -550,9 +550,11 @@ export function WhatsAppGatekeeper({ children }: { children: React.ReactNode }) 
   const [nagDismissed, setNagDismissed] = useState(false);
 
   // Sempre renderiza children (não-bloqueante).
-  // Estados que não exigem ação: loading, connected, success, no_instance.
-  // Estados que mostram nag flutuante: disconnected, connecting, qr_error.
-  if (authLoading || status === "loading") return <GkLoading />;
+  // Auth ainda bloqueia full-screen porque precisa da sessão antes de renderizar.
+  // Status do bot NÃO bloqueia mais — broker entra no dashboard direto e o nag
+  // aparece no canto quando souber. Evita "corretor preso na tela" se Evolution API
+  // estiver lenta.
+  if (authLoading) return <GkLoading />;
   if (status === "success") return <GkSuccess />;
 
   const needsConnection =
