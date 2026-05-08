@@ -27,6 +27,7 @@ import CoachChat, {
 import CoachTipPopup from "@/components/manager-v2/CoachTipPopup";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useTheme } from "@/contexts/ThemeContext";
+import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 
 // ─── Hook: dados base do time ────────────────────────────────────────────────
 function useTeamData(managerId: string | undefined) {
@@ -380,6 +381,9 @@ export default function ManagerV2() {
 
       {/* ─── Top Nav ─────────────────────────────────────────────────────── */}
       <TopNav />
+
+      {/* ─── Banner urgente: WhatsApp do manager desconectado ───────────── */}
+      <WhatsAppQRBanner />
 
       {/* ─── Status Banner (mensagem curta, link Liga) ──────────────────── */}
       <section className="px-4 sm:px-6 pt-4">

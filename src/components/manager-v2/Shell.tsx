@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import TopNav from "@/components/manager-v2/TopNav";
+import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 
 export function loadInter() {
   if (document.querySelector('link[data-v2-inter]')) return;
@@ -75,6 +76,7 @@ export default function Shell({ title, subtitle, icon: Icon, color, children, ac
         </div>
       </header>
       <TopNav />
+      <WhatsAppQRBanner />
       <main className="px-4 sm:px-6 mt-4 pb-16">{children}</main>
     </div>
   );

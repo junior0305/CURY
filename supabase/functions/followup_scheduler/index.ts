@@ -699,6 +699,18 @@ serve(async (req) => {
       console.error('[followup_scheduler] Bloco 8 error:', e.message);
     }
 
+    // ── BLOCO 8b: Notify Disconnected Managers ────────────────────────────────
+    let mgrAlertsSent = 0;
+    try {
+      const { data: mar } = await supabase.functions.invoke('notify-disconnected-managers', { body: {} });
+      mgrAlertsSent = mar?.alerted ?? 0;
+      if (mgrAlertsSent > 0 || mar?.failed) {
+        console.log(`[followup_scheduler] Bloco 8b — MgrOfflineAlerts: alerted=${mgrAlertsSent} cooldown=${mar?.onCooldown ?? 0} failed=${mar?.failed ?? 0}`);
+      }
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 8b error:', e.message);
+    }
+
     // ── BLOCO 9: Redistribuição Automática ───────────────────────────────────
     let redistribuicaoCount = 0;
     try {

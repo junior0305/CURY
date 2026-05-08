@@ -47,6 +47,12 @@ function motivationalMessage(hotCount: number, rank: number | null, pts: number)
   return `💪 Novo dia, novas oportunidades. Atender rápido é seu maior diferencial!`;
 }
 
+async function safeInsertLog(supabase: any, payload: any): Promise<void> {
+  try {
+    await supabase.from('automation_logs').insert(payload);
+  } catch (_e) {}
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -66,9 +72,11 @@ serve(async (req) => {
     });
   }
 
-  // ── Janela de tempo: 07:50-08:10 BRT ─────────────────────────────────────
+  // ── Janela de tempo: 07:45-08:15 BRT ─────────────────────────────────────
   const body = await req.json().catch(() => ({}));
   const forceRun = body.force === true;
+  const dryRun = body.dryRun === true;
+  const onlyBrokerId: string | null = body.onlyBrokerId ?? null;
 
   if (!forceRun && !isWithinWindow()) {
     return new Response(JSON.stringify({ skipped: 'outside_window' }), {
@@ -90,17 +98,46 @@ serve(async (req) => {
     const fallbackBotId: string | null = globalBotSetting?.value ?? anyBot?.id ?? null;
 
     // ── Busca todos os corretores ativos com telefone ─────────────────────
-    const { data: brokers } = await supabase
+    let brokersQuery = supabase
       .from('profiles')
-      .select('id, first_name, phone, bot_instance_id, lead_assignment_enabled')
+      .select('id, first_name, phone, bot_instance_id, manager_id, lead_assignment_enabled')
       .eq('role', 'BROKER')
       .not('phone', 'is', null)
-      .neq('phone', '');
+      .neq('phone', '')
+      .not('first_name', 'ilike', '%[INATIVO]%');
+    if (onlyBrokerId) brokersQuery = brokersQuery.eq('id', onlyBrokerId);
+    const { data: brokers } = await brokersQuery;
 
     if (!brokers?.length) {
       return new Response(JSON.stringify({ sent: 0, reason: 'no_brokers' }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // ── Mapeia bot do manager de cada corretor (apenas se conectado) ──────
+    const managerIds = Array.from(new Set((brokers || []).map((b: any) => b.manager_id).filter(Boolean)));
+    const managerBotByMgr = new Map<string, string>();
+    if (managerIds.length) {
+      const { data: managers } = await supabase
+        .from('profiles')
+        .select('id, bot_instance_id')
+        .in('id', managerIds);
+      const mgrBotIds = (managers || []).map((m: any) => m.bot_instance_id).filter(Boolean);
+      const onlineSet = new Set<string>();
+      if (mgrBotIds.length) {
+        const { data: bots } = await supabase
+          .from('bot_instances')
+          .select('id, status')
+          .in('id', mgrBotIds);
+        for (const b of bots || []) {
+          if (b.status === 'open' || b.status === 'connected') onlineSet.add(b.id);
+        }
+      }
+      for (const m of managers || []) {
+        if (m.bot_instance_id && onlineSet.has(m.bot_instance_id)) {
+          managerBotByMgr.set(m.id, m.bot_instance_id);
+        }
+      }
     }
 
     // ── Deduplica: corretores que já receberam hoje ───────────────────────
@@ -165,12 +202,17 @@ serve(async (req) => {
     const rankMap = new Map(rankOrder);
 
     let sent = 0;
+    let failed = 0;
+    let skippedNoBot = 0;
+    const samplePreview: any[] = [];
 
     for (const broker of brokers) {
       if (alreadySentSet.has(broker.id)) continue;
 
-      const botId = broker.bot_instance_id ?? fallbackBotId;
-      if (!botId || !broker.phone) continue;
+      // Bot do manager → fallback global → bot do próprio corretor
+      const managerBot = broker.manager_id ? managerBotByMgr.get(broker.manager_id) : null;
+      const botId = managerBot ?? fallbackBotId ?? broker.bot_instance_id;
+      if (!botId || !broker.phone) { skippedNoBot++; continue; }
 
       const myLeads = (allLeads || []).filter(l => l.broker_id === broker.id);
 
@@ -243,34 +285,53 @@ serve(async (req) => {
 
       const message = lines.join('\n');
 
+      if (dryRun) {
+        samplePreview.push({ broker: firstName, phone: broker.phone, botId, message });
+        sent++;
+        continue;
+      }
+
       // ── Envia via WhatsApp ──────────────────────────────────────────────
-      const { data: result } = await supabase.functions.invoke('send_whatsapp_message', {
-        body: { botId, phone: broker.phone, message },
-      }).catch(() => ({ data: null }));
+      let sendOk = false;
+      let sendErr: string | null = null;
+      try {
+        const { data: result, error } = await supabase.functions.invoke('send_whatsapp_message', {
+          body: { botId, phone: broker.phone, message },
+        });
+        if (error) {
+          sendErr = error.message || 'invoke_error';
+        } else {
+          sendOk = result?.success === true;
+          if (!sendOk) sendErr = result?.error || 'send_failed';
+        }
+      } catch (e: any) {
+        sendErr = e?.message || 'invoke_exception';
+      }
 
       // ── Registra para deduplicação ──────────────────────────────────────
-      await supabase.from('automation_logs').insert({
+      await safeInsertLog(supabase, {
         entity_type:    'briefing_corretor',
         entity_id:      broker.id,
-        status:         result?.success ? 'success' : 'failed',
+        status:         sendOk ? 'success' : 'failed',
         message_sent:   message,
         recipient_phone: broker.phone,
         executed_at:    now.toISOString(),
-        error_message:  result?.success ? null : 'send_failed',
-      }).catch(() => {});
+        error_message:  sendOk ? null : sendErr,
+      });
 
-      if (result?.success) {
+      if (sendOk) {
         sent++;
-        console.log(`[briefing-corretor] ✅ ${firstName} — ${hotPending.length} quentes, rank #${rank ?? '?'}`);
+        console.log(`[briefing-corretor] OK ${firstName} bot=${botId.substring(0,8)} hot=${hotPending.length} rank=#${rank ?? '?'}`);
       } else {
-        console.warn(`[briefing-corretor] ❌ ${firstName} (${broker.id}) — envio falhou`);
+        failed++;
+        console.warn(`[briefing-corretor] FAIL ${firstName} (${broker.id}) - ${sendErr}`);
       }
     }
 
-    console.log(`[briefing-corretor] done — sent=${sent}/${brokers.length}`);
+    console.log(`[briefing-corretor] done sent=${sent} failed=${failed} skippedNoBot=${skippedNoBot} total=${brokers.length}`);
 
     return new Response(
-      JSON.stringify({ sent, total: brokers.length }),
+      JSON.stringify({ sent, failed, skippedNoBot, total: brokers.length, dryRun, samplePreview: dryRun ? samplePreview.slice(0, 3) : undefined }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
