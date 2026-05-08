@@ -712,14 +712,11 @@ serve(async (req) => {
     }
 
     // ── BLOCO 9: Redistribuição Automática ───────────────────────────────────
-    let redistribuicaoCount = 0;
-    try {
-      const { data: rr } = await supabase.functions.invoke('agente-redistribuicao', { body: {} });
-      redistribuicaoCount = rr?.redistributed ?? 0;
-      console.log(`[followup_scheduler] Bloco 9 — Redistribuição: ${redistribuicaoCount}`);
-    } catch (e: any) {
-      console.error('[followup_scheduler] Bloco 9 error:', e.message);
-    }
+    // DESLIGADO em 2026-05-08: agente-redistribuicao removido do scheduler.
+    // Decisão de produto: leads ficam SEMPRE com seu corretor original.
+    // Pra religar: descomentar invoke + setar system_settings.agente_redistribuicao_enabled=true.
+    const redistribuicaoCount = 0;
+    console.log('[followup_scheduler] Bloco 9 — Redistribuição: DESLIGADO no scheduler');
 
     // ── BLOCO 10: Relatório Diário ────────────────────────────────────────────
     let relatorioSent = 0;
