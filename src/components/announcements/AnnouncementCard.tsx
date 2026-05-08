@@ -1,7 +1,7 @@
 // AnnouncementCard — comunicado intercalado na fila de leads.
 // Aparece como o "primeiro card" do broker até ele dar Entendi/Vou/Não posso.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Megaphone, CheckCircle2, X, AlertTriangle, Calendar, Clock } from "lucide-react";
 import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,7 @@ export interface Announcement {
   emoji?: string | null;
   requires_rsvp: boolean;
   rsvp_options?: string[] | null;
+  show_frequency?: "once" | "until_response" | "until_event" | null;
   starts_at?: string | null;
   expires_at?: string | null;
   created_at: string;
@@ -46,6 +47,12 @@ export default function AnnouncementCard({ ann, onDone }: Props) {
   const [busy, setBusy] = useState(false);
   const style = CATEGORY_STYLE[ann.category] || CATEGORY_STYLE.operacional;
   const Icon = style.icon;
+
+  // Registra que o aviso foi EXIBIDO (mesmo se broker não responder).
+  // Importante pra modos until_response e until_event não dispararem 2x no mesmo dia.
+  useEffect(() => {
+    supabase.rpc("mark_announcement_shown", { p_announcement_id: ann.id }).then(() => {}, () => {});
+  }, [ann.id]);
 
   async function ack(rsvp: string | null = null) {
     setBusy(true);
