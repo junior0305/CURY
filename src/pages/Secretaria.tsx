@@ -348,7 +348,7 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
       setSearching(true);
       const qDigits = q.replace(/\D/g, "");
       let query = supabase.from("leads")
-        .select("id, name, phone, status, broker_id, profiles:broker_id(first_name, last_name)")
+        .select("id, name, phone, status, broker_id, sale_value, pv_number, last_interaction_at, profiles:broker_id(first_name, last_name)")
         .order("created_at", { ascending: false })
         .limit(10);
       if (qDigits.length >= 3) query = query.or(`name.ilike.%${q}%,phone.ilike.%${qDigits}%`);
@@ -375,7 +375,7 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
       // Re-checa duplicidade pelo phone normalizado
       const { data: existing } = await supabase
         .from("leads")
-        .select("id, name, phone, status, broker_id, profiles:broker_id(first_name, last_name)")
+        .select("id, name, phone, status, broker_id, sale_value, pv_number, last_interaction_at, profiles:broker_id(first_name, last_name)")
         .eq("phone", phoneNormalized)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -396,7 +396,7 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
           source: "secretaria_manual",
           last_interaction_at: new Date().toISOString(),
         })
-        .select("id, name, phone, status, broker_id, profiles:broker_id(first_name, last_name)")
+        .select("id, name, phone, status, broker_id, sale_value, pv_number, last_interaction_at, profiles:broker_id(first_name, last_name)")
         .single();
       if (error) throw error;
       toast.success(`✅ Lead "${newLead.name}" cadastrado`);
@@ -449,8 +449,11 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
           )}
           {results.map(r => (
             <button key={r.id} onClick={() => { onChange(r); setQ(""); }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 border-b border-gray-800 last:border-0">
-              <div className="text-sm text-gray-100">{r.name}</div>
+              className={`w-full text-left px-3 py-2 hover:bg-slate-800 border-b border-gray-800 last:border-0 ${r.status === "CONCLUDED" ? "bg-red-950/20" : ""}`}>
+              <div className="text-sm text-gray-100 flex items-center gap-1.5">
+                {r.name}
+                {r.status === "CONCLUDED" && <span className="text-[10px] font-bold text-red-300 bg-red-900/40 px-1.5 py-0.5 rounded">JÁ VENDIDO</span>}
+              </div>
               <div className="text-[11px] text-gray-500">{r.phone} · {r.status} · {r.profiles?.first_name || "Sem corretor"}</div>
             </button>
           ))}
@@ -644,8 +647,20 @@ function VendaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   async function save() {
     if (!lead) return toast.error("Selecione o lead");
     if (!valor) return toast.error("Informe o valor da venda");
+    if (lead.status === "CONCLUDED") {
+      return toast.error("⚠️ Esta venda já existe. Não é possível registrar 2x.");
+    }
     setSaving(true);
     try {
+      // Re-checa no banco antes do UPDATE pra cobrir corrida (broker marca venda em paralelo)
+      const { data: fresh } = await supabase.from("leads")
+        .select("status, sale_value, pv_number")
+        .eq("id", lead.id).maybeSingle();
+      if (fresh?.status === "CONCLUDED") {
+        toast.error(`⚠️ Venda já registrada${fresh.pv_number ? ` (PV ${fresh.pv_number})` : ""}.`);
+        setSaving(false);
+        return;
+      }
       const updates: any = {
         status: "CONCLUDED",
         last_interaction_at: new Date(data + "T12:00:00").toISOString(),
@@ -673,7 +688,19 @@ function VendaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   return (
     <ModalShell title="💰 Registrar Venda" onClose={onClose}>
       <Field label="Lead"><LeadPicker value={lead} onChange={setLead} /></Field>
-      {lead && (
+      {lead && lead.status === "CONCLUDED" && (
+        <div className="rounded-lg border border-red-500/50 bg-red-950/40 px-3 py-2.5 space-y-1">
+          <div className="text-sm font-bold text-red-300">⚠️ Esta venda já foi registrada</div>
+          <div className="text-xs text-red-200/90 grid grid-cols-2 gap-1">
+            <div><span className="text-red-400/70">Corretor:</span> <strong>{corretor || "—"}</strong></div>
+            {lead.pv_number && <div><span className="text-red-400/70">PV:</span> <strong>{lead.pv_number}</strong></div>}
+            {lead.sale_value && <div><span className="text-red-400/70">Valor:</span> <strong>{fmtMoney(lead.sale_value)}</strong></div>}
+            {lead.last_interaction_at && <div><span className="text-red-400/70">Em:</span> <strong>{fmtDate(lead.last_interaction_at)}</strong></div>}
+          </div>
+          <div className="text-[11px] text-red-300/70 pt-1">Selecione outro lead pra evitar duplicar.</div>
+        </div>
+      )}
+      {lead && lead.status !== "CONCLUDED" && (
         <div className="grid grid-cols-2 gap-2 text-xs bg-slate-900/40 rounded p-2">
           <div><span className="text-gray-500">Corretor:</span> <strong className="text-gray-200">{corretor || "—"}</strong></div>
           <div><span className="text-gray-500">Status atual:</span> <strong className="text-gray-200">{lead.status}</strong></div>

@@ -315,6 +315,9 @@ function PipelineStrip({
 /* ─────────────────────────────────────────────
    MAIN
 ───────────────────────────────────────────── */
+// Set módulo-level pra dedup de SALE (handler local + realtime UPDATE)
+const playedSaleIds = new Set<string>();
+
 export default function DashboardFoco(){
   const {user,role,loading:authLoading,signOut}=useAuth();
   const {t}=useTheme();
@@ -454,11 +457,28 @@ export default function DashboardFoco(){
   /* realtime */
   useEffect(()=>{
     if(!user?.id)return;
-    const ch=supabase.channel("foco-rt").on("postgres_changes",{event:"INSERT",schema:"public",table:"leads",filter:`broker_id=eq.${user.id}`},payload=>{
-      qc.invalidateQueries({queryKey:["focoLeads"]});
-      if(!isMuted)playSound("NEW_LEAD");
-      toast.info(`⚡ Novo Lead: ${(payload.new as {name?:string}).name||""}`,{description:"Apareceu na sua fila!"});
-    }).subscribe();
+    const ch=supabase.channel("foco-rt")
+      .on("postgres_changes",{event:"INSERT",schema:"public",table:"leads",filter:`broker_id=eq.${user.id}`},payload=>{
+        qc.invalidateQueries({queryKey:["focoLeads"]});
+        if(!isMuted)playSound("NEW_LEAD");
+        toast.info(`⚡ Novo Lead: ${(payload.new as {name?:string}).name||""}`,{description:"Apareceu na sua fila!"});
+      })
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"leads",filter:`broker_id=eq.${user.id}`},payload=>{
+        const oldRow=payload.old as {status?:string};
+        const newRow=payload.new as {id?:string;name?:string;status?:string};
+        // Detecta transição NOVA pra CONCLUDED (venda registrada por outro: secretária, manager)
+        if(oldRow?.status!=="CONCLUDED" && newRow?.status==="CONCLUDED" && newRow.id){
+          if(playedSaleIds.has(newRow.id))return; // dedup: já tocou (handler local)
+          playedSaleIds.add(newRow.id);
+          qc.invalidateQueries({queryKey:["focoLeads"]});
+          setConfetti(true);
+          setSaleToast(newRow.name||"Lead");
+          if(!isMuted)playSound("SALE");
+          setTimeout(()=>setConfetti(false),3000);
+          setTimeout(()=>setSaleToast(null),4500);
+        }
+      })
+      .subscribe();
     return()=>{supabase.removeChannel(ch);};
   },[user?.id,isMuted]); // eslint-disable-line
 
@@ -519,6 +539,7 @@ export default function DashboardFoco(){
     const leadName=lead.name;
     try{
       if(status==="CONCLUDED"){
+        if(lead.id)playedSaleIds.add(lead.id); // dedup: evita realtime tocar 2x
         setConfetti(true);setSaleToast(leadName);if(!isMuted)playSound("SALE");
         setTimeout(()=>setConfetti(false),3000);setTimeout(()=>setSaleToast(null),4500);
       }
