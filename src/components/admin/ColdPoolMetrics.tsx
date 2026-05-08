@@ -40,20 +40,36 @@ export default function ColdPoolMetrics() {
   async function load() {
     setLoading(true);
 
-    // ── Pega tudo de cold_contacts (campos relevantes) ──
-    const { data: colds } = await supabase
-      .from("cold_contacts")
-      .select("id, status, first_msg_sent_at, claimed_by, tag, custom_fields, promoted_to_lead_id");
+    // ── Pagina cold_contacts (Supabase limita 1000/req por default) ──
+    const PAGE = 1000;
+    const allColds: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("cold_contacts")
+        .select("id, status, first_msg_sent_at, claimed_by, tag, custom_fields, promoted_to_lead_id")
+        .range(from, from + PAGE - 1);
+      if (error || !data) break;
+      allColds.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
 
-    // ── Pega leads vendidos vindos de cold ──
-    const { data: soldLeads } = await supabase
-      .from("leads")
-      .select("id, broker_id, tag, product")
-      .eq("source", "cold_pool")
-      .eq("status", "CONCLUDED");
-
-    const allColds = (colds as any[]) || [];
-    const allSold = (soldLeads as any[]) || [];
+    // ── Pega leads vendidos vindos de cold (em geral pequeno, 1 página basta — paginar pra garantir) ──
+    const allSold: any[] = [];
+    from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("id, broker_id, tag, product")
+        .eq("source", "cold_pool")
+        .eq("status", "CONCLUDED")
+        .range(from, from + PAGE - 1);
+      if (error || !data) break;
+      allSold.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
 
     // ── Funnel ──
     const pool         = allColds.filter((c) => c.status === "available").length;
