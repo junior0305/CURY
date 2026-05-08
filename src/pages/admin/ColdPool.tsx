@@ -173,7 +173,7 @@ export default function ColdPool() {
       const notes = pickField(row, "notes", "observações", "observacoes", "obs");
       const renda   = pickField(row, "renda", "renda_declarada");
       const tipo    = pickField(row, "tipo_trabalho", "trabalho", "ocupacao");
-      const product = pickField(row, "product", "produto", "empreendimento");
+      const product = pickField(row, "product", "produto", "produtos", "empreendimento", "empreendimentos");
 
       const norm = normalizePhone(phone);
       const custom: Record<string, any> = {};
@@ -183,15 +183,19 @@ export default function ColdPool() {
       // Inclui qualquer outro campo "extra" do CSV em custom_fields
       for (const [k, v] of Object.entries(row)) {
         if (!v) continue;
-        if (["name","nome","phone","telefone","celular","whatsapp","fone","tel","email","e-mail","tag","região","regiao","area","bairro","campanha","notes","observações","observacoes","obs","renda","renda_declarada","tipo_trabalho","trabalho","ocupacao","product","produto","empreendimento"].includes(k)) continue;
+        if (["name","nome","phone","telefone","celular","whatsapp","fone","tel","email","e-mail","tag","região","regiao","area","bairro","campanha","notes","observações","observacoes","obs","renda","renda_declarada","tipo_trabalho","trabalho","ocupacao","product","produto","produtos","empreendimento","empreendimentos"].includes(k)) continue;
         custom[k] = v;
       }
+      // Se admin não preencheu coluna `tag` mas mandou `produto`, usa o produto como tag
+      // (caso comum: 1 produto = 1 região, planilha só vem com coluna 'produtos')
+      const finalTag = tag || product || defaultTag || null;
+
       list.push({
         raw: row,
         name: name || "Sem nome",
         phone: norm.phone || phone,
         email: email || null,
-        tag: tag || defaultTag || null,
+        tag: finalTag,
         notes: notes || null,
         custom_fields: custom,
       });
