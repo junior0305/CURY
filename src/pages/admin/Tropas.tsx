@@ -94,7 +94,7 @@ export default function Tropas() {
     automation_settings: {
       welcome_enabled: false,
       follow_up_enabled: true,
-      ai_assist_enabled: true,
+      ai_assist_enabled: false,
     },
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -388,7 +388,7 @@ export default function Tropas() {
       email: "", password: "", first_name: "", full_name: "", phone: "", role: "broker", is_active: true,
       team_id: null, manager_id: null, lead_assignment_enabled: false, evolution_instance: "",
       qualification_ai_enabled: false, bot_instance_id: null,
-      automation_settings: { welcome_enabled: false, follow_up_enabled: true, ai_assist_enabled: true },
+      automation_settings: { welcome_enabled: false, follow_up_enabled: true, ai_assist_enabled: false },
     });
     setShowPassword(false);
     setEditUser(null);
@@ -405,7 +405,7 @@ export default function Tropas() {
       role: user.role, is_active: user.is_active, team_id: user.team_id, manager_id: user.manager_id,
       lead_assignment_enabled: user.lead_assignment_enabled, evolution_instance: user.evolution_instance || "",
       qualification_ai_enabled: user.qualification_ai_enabled, bot_instance_id: user.bot_instance_id,
-      automation_settings: user.automation_settings || { welcome_enabled: false, follow_up_enabled: true, ai_assist_enabled: true },
+      automation_settings: user.automation_settings || { welcome_enabled: false, follow_up_enabled: true, ai_assist_enabled: false },
     });
     setShowPassword(false);
     setModalOpen(true);

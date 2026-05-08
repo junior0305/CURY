@@ -711,8 +711,11 @@ Responda APENAS em JSON válido, sem markdown:
               sender_type: 'lead',
               created_at: new Date().toISOString(),
             });
+            const aiAssistOn = (broker as any)?.automation_settings?.ai_assist_enabled === true;
             if (pauseAutoMessages) {
               console.log('[webhook_receiver] ⏸️ pause_auto_messages=true — pulando ia_chat_engine (primeira msg)');
+            } else if (!aiAssistOn) {
+              console.log(`[webhook_receiver] ⏸️ ai_assist_enabled != true para broker ${broker.id} — pulando ia_chat_engine (primeira msg)`);
             } else {
               const { error: iaErr } = await supabase.functions.invoke('ia_chat_engine', {
                 body: { conversationId: newConv.id, incomingMessage: messageText }
@@ -760,9 +763,10 @@ Responda APENAS em JSON válido, sem markdown:
     // Leads normais: usa ia_chat_engine
     const { data: convLead } = await supabase
       .from('leads')
-      .select('ai_qualification_queue_id, ai_qualified_at')
+      .select('ai_qualification_queue_id, ai_qualified_at, broker:profiles!broker_id(automation_settings)')
       .eq('id', conversation.lead_id)
       .maybeSingle();
+    const convBrokerAiOn = (convLead as any)?.broker?.automation_settings?.ai_assist_enabled === true;
 
     if (convLead?.ai_qualification_queue_id && !convLead?.ai_qualified_at) {
       // Lead ainda em qualificação → aciona agente IA
@@ -814,6 +818,8 @@ Responda APENAS em JSON válido, sem markdown:
     } else {
       if (pauseAutoMessages) {
         console.log('[webhook_receiver] ⏸️ pause_auto_messages=true — pulando ia_chat_engine');
+      } else if (!convBrokerAiOn) {
+        console.log('[webhook_receiver] ⏸️ ai_assist_enabled != true — pulando ia_chat_engine');
       } else {
         const { error: iaError } = await supabase.functions.invoke('ia_chat_engine', {
           body: {

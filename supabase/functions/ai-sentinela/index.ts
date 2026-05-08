@@ -313,9 +313,10 @@ serve(async (req) => {
         const broker = (lead as any).broker;
         if (!broker?.bot_instance_id || !lead.phone) continue;
 
-        // Respeita config do corretor: IA conversa sozinha desligada
-        if (broker?.automation_settings?.ai_assist_enabled === false) {
-          console.log(`[ai-sentinela] ai_assist desligado para broker ${lead.broker_id} — skip ${lead.id}`);
+        // Respeita config do corretor: IA conversa sozinha é OFF por padrão.
+        // Só roda se ai_assist_enabled === true (estrito).
+        if (broker?.automation_settings?.ai_assist_enabled !== true) {
+          console.log(`[ai-sentinela] ai_assist OFF para broker ${lead.broker_id} (default) — skip ${lead.id}`);
           continue;
         }
 

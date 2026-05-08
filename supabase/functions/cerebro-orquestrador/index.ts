@@ -503,13 +503,14 @@ serve(async (req) => {
         // Se modo=humano_ativo ou bloqueado=true: pula ações outbound ao lead
         const outboundToLead = ['toque_1','toque_2','sentinela','last_chance','broker_warmup','docs_reminder','auto_resposta'];
         if (outboundToLead.includes(item.action_type)) {
-          // Respeita config do corretor: IA conversa sozinha desligada
+          // Respeita config do corretor: IA conversa sozinha é OFF por padrão.
+          // Só roda se ai_assist_enabled === true (estrito).
           const brokerAutom = (lead as any).broker?.automation_settings;
-          if (brokerAutom?.ai_assist_enabled === false) {
+          if (brokerAutom?.ai_assist_enabled !== true) {
             await supabase.from('lead_activation_queue')
-              .update({ status: 'cancelled', cancel_reason: 'ai_assist_disabled_by_broker' })
+              .update({ status: 'cancelled', cancel_reason: 'ai_assist_disabled_default_off' })
               .eq('id', item.id);
-            console.log(`[cerebro] 🤖 ${item.action_type} cancelado — broker desligou IA → ${lead.name}`);
+            console.log(`[cerebro] 🤖 ${item.action_type} cancelado — ai_assist OFF (default) → ${lead.name}`);
             cancelled++;
             continue;
           }

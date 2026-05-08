@@ -16,7 +16,7 @@ export function BrokerAutomationSettings({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState<AutomationSettings>({
     follow_up_enabled: true,
-    ai_assist_enabled: true,
+    ai_assist_enabled: false,
   });
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export function BrokerAutomationSettings({ userId }: { userId: string }) {
         setSettings({
           welcome_enabled: s.welcome_enabled ?? true,
           follow_up_enabled: s.follow_up_enabled ?? true,
-          ai_assist_enabled: s.ai_assist_enabled ?? true,
+          ai_assist_enabled: s.ai_assist_enabled === true,
         });
       });
   }, [open, userId]);
@@ -46,7 +46,7 @@ export function BrokerAutomationSettings({ userId }: { userId: string }) {
         automation_settings: {
           welcome_enabled: settings.welcome_enabled ?? true,
           follow_up_enabled: next.follow_up_enabled ?? true,
-          ai_assist_enabled: next.ai_assist_enabled ?? true,
+          ai_assist_enabled: next.ai_assist_enabled === true,
         },
       })
       .eq("id", userId);
