@@ -173,7 +173,18 @@ export default function ColdPool() {
       const notes = pickField(row, "notes", "observações", "observacoes", "obs");
       const renda   = pickField(row, "renda", "renda_declarada");
       const tipo    = pickField(row, "tipo_trabalho", "trabalho", "ocupacao");
-      const product = pickField(row, "product", "produto", "produtos", "empreendimento", "empreendimentos", "formulario", "formulário", "formulários");
+      // Aliases conhecidos + fuzzy match: qualquer chave começando com "formul" ou "produt"/"empreend"
+      // é considerada product (cobre encoding bugado tipo "formulìário", "produçāo", etc).
+      let product = pickField(row, "product", "produto", "produtos", "empreendimento", "empreendimentos", "formulario", "formulário", "formulários");
+      if (!product) {
+        for (const k of Object.keys(row)) {
+          const norm = k.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+          if (norm.startsWith("formul") || norm.startsWith("produt") || norm.startsWith("empreend")) {
+            const v = (row[k] || "").trim();
+            if (v) { product = v; break; }
+          }
+        }
+      }
 
       const norm = normalizePhone(phone);
       const custom: Record<string, any> = {};
