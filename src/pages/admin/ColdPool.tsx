@@ -241,26 +241,46 @@ export default function ColdPool() {
 
     const phones = candidates.map((c) => c.phone);
 
+    // Chunk pra não estourar URL do PostgREST quando phones é grande (>200)
+    const CHUNK = 200;
+    async function fetchAllChunks<T>(
+      runner: (chunk: string[]) => Promise<T[]>
+    ): Promise<T[]> {
+      const out: T[] = [];
+      for (let i = 0; i < phones.length; i += CHUNK) {
+        const slice = phones.slice(i, i + CHUNK);
+        const rows = await runner(slice);
+        out.push(...rows);
+      }
+      return out;
+    }
+
     // 3: já em cold_contacts (available/claimed/promoted)
     const phonesInPoolSet = new Set<string>();
     {
-      const { data } = await supabase
-        .from("cold_contacts")
-        .select("phone")
-        .in("phone", phones)
-        .in("status", ["available","claimed","promoted"]);
-      (data as any[] || []).forEach((row) => phonesInPoolSet.add(row.phone));
+      const rows = await fetchAllChunks(async (slice) => {
+        const { data } = await supabase
+          .from("cold_contacts")
+          .select("phone")
+          .in("phone", slice)
+          .in("status", ["available","claimed","promoted"]);
+        return (data as any[]) || [];
+      });
+      rows.forEach((row) => phonesInPoolSet.add(row.phone));
     }
 
     // 4+5: leads existentes
     const leadByPhone = new Map<string, { status: string; exclusion_reason: string | null; lost_reason: string | null; last_interaction_at: string | null }>();
     {
-      const { data } = await supabase
-        .from("leads")
-        .select("phone, status, exclusion_reason, lost_reason, last_interaction_at")
-        .in("phone", phones)
-        .order("created_at", { ascending: false });
-      (data as any[] || []).forEach((row) => {
+      const rows = await fetchAllChunks(async (slice) => {
+        const { data } = await supabase
+          .from("leads")
+          .select("phone, status, exclusion_reason, lost_reason, last_interaction_at")
+          .in("phone", slice)
+          .order("created_at", { ascending: false });
+        return (data as any[]) || [];
+      });
+      rows.forEach((row) => {
         if (!leadByPhone.has(row.phone)) leadByPhone.set(row.phone, row);
       });
     }
@@ -268,11 +288,14 @@ export default function ColdPool() {
     // 6: phone_blocklist
     const phonesBlocked = new Set<string>();
     {
-      const { data } = await supabase
-        .from("phone_blocklist")
-        .select("phone")
-        .in("phone", phones);
-      (data as any[] || []).forEach((row) => phonesBlocked.add(row.phone));
+      const rows = await fetchAllChunks(async (slice) => {
+        const { data } = await supabase
+          .from("phone_blocklist")
+          .select("phone")
+          .in("phone", slice);
+        return (data as any[]) || [];
+      });
+      rows.forEach((row) => phonesBlocked.add(row.phone));
     }
 
     const ACTIVE_STATUSES = ["NEW","IN_PROGRESS","NEGOTIATING","VISIT_SCHEDULED","VISITA_REALIZADA","DOCS_REQUESTED","REACTIVATED","FOLLOW_UP_AUTO"];
