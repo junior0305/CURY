@@ -22,6 +22,7 @@ interface Announcement {
   requires_rsvp: boolean;
   rsvp_options: string[] | null;
   show_frequency: "once" | "until_response" | "until_event" | null;
+  remind_window_days: number | null;
   starts_at: string | null;
   expires_at: string | null;
   target_role: string[] | null;
@@ -142,7 +143,7 @@ function AnnouncementRow({ a, onEdit, onArchive, onDelete }: { a: Announcement; 
               {meta.label}
               {a.requires_rsvp && <span className="text-[9px] bg-purple-900/40 text-purple-300 px-1.5 rounded">RSVP</span>}
               {a.show_frequency === "until_response" && <span className="text-[9px] bg-blue-900/40 text-blue-300 px-1.5 rounded" title="Lembra 1x/dia até broker responder">⏰ 1x/dia</span>}
-              {a.show_frequency === "until_event" && <span className="text-[9px] bg-amber-900/40 text-amber-300 px-1.5 rounded" title="Lembra 1x/dia até a data do evento">⏰ até evento</span>}
+              {a.show_frequency === "until_event" && <span className="text-[9px] bg-amber-900/40 text-amber-300 px-1.5 rounded" title={`Lembra 1x/dia nos últimos ${a.remind_window_days || 3} dias antes do evento`}>⏰ últ {a.remind_window_days || 3}d</span>}
               {isArchived && <span className="text-[9px] bg-gray-700/60 text-gray-400 px-1.5 rounded">ARQUIVADO</span>}
               {isExpired && !isArchived && <span className="text-[9px] bg-red-900/40 text-red-300 px-1.5 rounded">EXPIRADO</span>}
             </div>
@@ -204,6 +205,7 @@ function AnnouncementForm({ initial, onClose, onSaved }: { initial: Announcement
     emoji: initial?.emoji || "",
     rsvp_options_text: (initial?.rsvp_options || []).join("\n"),
     show_frequency: (initial?.show_frequency || "once") as "once" | "until_response" | "until_event",
+    remind_window_days: initial?.remind_window_days ?? 3,
     starts_at: initial?.starts_at ? new Date(initial.starts_at).toISOString().substring(0, 16) : "",
     expires_at: initial?.expires_at ? new Date(initial.expires_at).toISOString().substring(0, 16) : "",
     target_role: (initial?.target_role || ["BROKER"]) as string[],
@@ -223,6 +225,7 @@ function AnnouncementForm({ initial, onClose, onSaved }: { initial: Announcement
         requires_rsvp: opts.length > 0,
         rsvp_options: opts.length > 0 ? opts : null,
         show_frequency: form.show_frequency,
+        remind_window_days: form.show_frequency === "until_event" ? form.remind_window_days : null,
         starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : null,
         expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
         target_role: form.target_role.length > 0 ? form.target_role : null,
@@ -321,7 +324,7 @@ function AnnouncementForm({ initial, onClose, onSaved }: { initial: Announcement
               {([
                 { v: "once", t: "Uma vez", d: "Aparece até o broker confirmar. Após isso, some." },
                 { v: "until_response", t: "1x/dia até o broker responder", d: "Lembra todo dia até ele dar Entendi/RSVP." },
-                { v: "until_event", t: "1x/dia até a data do evento", d: "Lembra todo dia até starts_at, mesmo se já respondeu. (Requer 'Data do evento')" },
+                { v: "until_event", t: "1x/dia nos últimos N dias antes do evento", d: "Aparece 1x ao criar; volta a lembrar diariamente só perto da data. Evita spam de evento distante." },
               ] as const).map(opt => (
                 <label key={opt.v} className="flex items-start gap-2 p-2 rounded-lg border cursor-pointer transition"
                   style={{
@@ -336,6 +339,15 @@ function AnnouncementForm({ initial, onClose, onSaved }: { initial: Announcement
                   </div>
                 </label>
               ))}
+              {form.show_frequency === "until_event" && (
+                <div className="flex items-center gap-2 ml-7 mt-1 px-2 py-1.5 rounded bg-amber-950/20 border border-amber-500/30">
+                  <span className="text-xs text-amber-300/80">Lembrar diariamente nos últimos</span>
+                  <input type="number" min={1} max={30} value={form.remind_window_days ?? 3}
+                    onChange={e => setForm(f => ({...f, remind_window_days: Math.max(1, Math.min(30, Number(e.target.value)||3))}))}
+                    className="w-14 bg-slate-900 border border-amber-500/40 rounded px-2 py-1 text-sm text-amber-200 font-bold text-center" />
+                  <span className="text-xs text-amber-300/80">dia(s) antes</span>
+                </div>
+              )}
             </div>
           </div>
 
