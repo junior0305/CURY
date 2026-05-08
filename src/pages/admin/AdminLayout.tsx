@@ -72,6 +72,7 @@ import Agentes from "./Agentes";
 import LeadDistribution from "@/components/admin/LeadDistribution";
 import Inteligencia from "./Inteligencia";
 import CentralIA from "./CentralIA";
+import Comunicados from "./Comunicados";
 
 // ─── Grupos principais ────────────────────────────────────────────────────────
 
@@ -89,8 +90,9 @@ const GROUPS = [
     icon: Users,
     roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"],
     subtabs: [
-      { value: "tropas",  label: "Tropas",  roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
-      { value: "equipes", label: "Equipes", roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
+      { value: "tropas",      label: "Tropas",      roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
+      { value: "equipes",     label: "Equipes",     roles: ["ADMIN", "SUPERINTENDENT", "MANAGER"] },
+      { value: "comunicados", label: "Comunicados", roles: ["ADMIN", "SUPERINTENDENT"] },
     ],
   },
   {
@@ -403,11 +405,13 @@ function AdminLayoutInner() {
 
         {activeGroup === "equipe" && (
           <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
-            { v: "tropas",  l: "Tropas",  roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
-            { v: "equipes", l: "Equipes", roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
+            { v: "tropas",      l: "Tropas",      roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
+            { v: "equipes",     l: "Equipes",     roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
+            { v: "comunicados", l: "Comunicados", roles: ["ADMIN","SUPERINTENDENT"] },
           ]} role={normalizedRole}>
             <TabsContent value="tropas"><Tropas /></TabsContent>
             <TabsContent value="equipes"><Equipes /></TabsContent>
+            <TabsContent value="comunicados" className="p-6"><Comunicados /></TabsContent>
           </SubTabs>
         )}
 

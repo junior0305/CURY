@@ -33,6 +33,8 @@ import type { Task } from "@/types/task";
 import type { User } from "@/types/user";
 import { toast } from "sonner";
 import { useAudioArena } from "@/hooks/use-audio-arena";
+import AnnouncementCard from "@/components/announcements/AnnouncementCard";
+import { useNextAnnouncement } from "@/hooks/useNextAnnouncement";
 import { WallOfFameTicker } from "@/components/dashboard/WallOfFameTicker";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 import { BrokerAutomationSettings } from "@/components/broker/BrokerAutomationSettings";
@@ -355,6 +357,7 @@ export default function DashboardFoco(){
   const [coachLoading,setCoachLoading]=useState(false);
   const [fllwExpanded,setFllwExpanded]=useState(false);
   const [pausingLeadId,setPausingLeadId]=useState<string|null>(null);
+  const { announcement, refetch: refetchAnn } = useNextAnnouncement(user?.id);
   const [drawerOpen,setDrawerOpen]=useState<"ranking"|"meta"|"campaign"|null>(null);
   const [reportsOpen,setReportsOpen]=useState(false);
   const taRef=useRef<HTMLTextAreaElement>(null);
@@ -855,8 +858,15 @@ export default function DashboardFoco(){
               </div>
             )}
 
+            {/* ── COMUNICADO INTERCALADO ── (aparece no lugar do card até broker dar Entendi/RSVP) */}
+            {announcement && (
+              <div className="md:flex-1 md:overflow-y-auto p-1">
+                <AnnouncementCard ann={announcement} onDone={refetchAnn} />
+              </div>
+            )}
+
             {/* ── CARD DA MISSÃO ── */}
-            {!leadsLoading&&lead&&st&&(
+            {!announcement&&!leadsLoading&&lead&&st&&(
               <AnimatePresence mode="wait">
                 <motion.div key={lead.id}
                   initial={{opacity:0,x:24}} animate={{opacity:1,x:0}} exit={{opacity:0,x:-24}}

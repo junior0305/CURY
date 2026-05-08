@@ -711,6 +711,16 @@ serve(async (req) => {
       console.error('[followup_scheduler] Bloco 8b error:', e.message);
     }
 
+    // ── BLOCO 8c: Lembrete de eventos com RSVP (2h antes) ─────────────────────
+    try {
+      const { data: ar } = await supabase.functions.invoke('announcement-reminder', { body: {} });
+      if (ar?.processed > 0) {
+        console.log(`[followup_scheduler] Bloco 8c — AnnouncementReminder: processed=${ar.processed} sent=${ar.totalSent}`);
+      }
+    } catch (e: any) {
+      console.error('[followup_scheduler] Bloco 8c error:', e.message);
+    }
+
     // ── BLOCO 9: Redistribuição Automática ───────────────────────────────────
     // DESLIGADO em 2026-05-08: agente-redistribuicao removido do scheduler.
     // Decisão de produto: leads ficam SEMPRE com seu corretor original.

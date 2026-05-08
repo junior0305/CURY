@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import AnnouncementCard from "@/components/announcements/AnnouncementCard";
+import { useNextAnnouncement } from "@/hooks/useNextAnnouncement";
 
 interface ColdContact {
   id: string;
@@ -85,6 +87,8 @@ export default function ProspeccaoMode({ brokerId, managerId, botInstanceId, onE
     if (data) setPoolLimit(data as any);
   }
   useEffect(() => { reloadPoolLimit(); }, [brokerId]);
+
+  const { announcement, refetch: refetchAnn } = useNextAnnouncement(brokerId);
 
   // ── Carrega áreas (tags com count, excluindo skips dos últimos 7d)
   async function loadAreas() {
@@ -290,6 +294,26 @@ export default function ProspeccaoMode({ brokerId, managerId, botInstanceId, onE
   }
 
   // ──────────────────────────────────────────────────────────────────────────
+  // Comunicado intercalado: aparece ANTES do pool até o broker dar Entendi/RSVP
+  if (announcement) {
+    return (
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <button onClick={onExit} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition"
+            style={{ background: "var(--crm-glass)", border: "1px solid var(--crm-border)", color: "var(--crm-text-muted)" }}>
+            <ArrowLeft className="w-3 h-3" /> Sair
+          </button>
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+               style={{ background: "rgba(56,189,248,0.10)", border: "1px solid rgba(56,189,248,0.30)" }}>
+            <Snowflake className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-[11px] uppercase tracking-widest font-black text-cyan-300">Modo prospecção</span>
+          </div>
+        </div>
+        <AnnouncementCard ann={announcement} onDone={refetchAnn} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
       {/* Header sticky */}
