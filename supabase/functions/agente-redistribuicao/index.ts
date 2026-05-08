@@ -226,14 +226,18 @@ serve(async (req) => {
       // Anti-spam
       const { data: recentLog } = await supabase
         .from('automation_logs').select('id')
-        .eq('entity_id', lead.id).eq('entity_type', 'redistribuicao_cross_team')
+        .eq('entity_id', lead.id).eq('entity_type', 'redistribuicao_same_team_stage2')
         .gte('executed_at', stage2ThresholdAgo).maybeSingle();
       if (recentLog) continue;
 
-      // Cross-team: qualquer corretor ativo, exceto o atual e o original
+      // Stage 2 — Mantém SEMPRE dentro da equipe (manager_id do lead).
+      // Mesmo se o broker original está bloqueado/ausente, lead nunca cruza
+      // pra outra equipe. Manager dono dos leads continua dono.
+      const leadMgr = (lead as any).broker?.manager_id ?? lead.manager_id ?? null;
       const candidates = brokers.filter(b =>
         b.id !== lead.broker_id &&
-        b.id !== (lead as any).original_broker_id
+        b.id !== (lead as any).original_broker_id &&
+        (leadMgr ? b.manager_id === leadMgr : true)
       );
       if (!candidates.length) continue;
 
@@ -252,7 +256,7 @@ serve(async (req) => {
       }).eq('id', lead.id);
 
       await supabase.from('lead_activation_queue')
-        .update({ status: 'cancelled', cancel_reason: 'lead_redistributed_cross_team' })
+        .update({ status: 'cancelled', cancel_reason: 'lead_redistributed_stage2_same_team' })
         .eq('lead_id', lead.id).eq('status', 'pending');
 
       loadMap[oldBrokerId] = Math.max(0, (loadMap[oldBrokerId] || 1) - 1);
@@ -274,10 +278,10 @@ serve(async (req) => {
       });
 
       await supabase.from('automation_logs').insert({
-        entity_type: 'redistribuicao_cross_team',
+        entity_type: 'redistribuicao_same_team_stage2',
         entity_id: lead.id,
         status: 'success',
-        message_sent: `Cross-team: ${broker.first_name ?? '?'} → ${newBroker.first_name}`,
+        message_sent: `Stage 2 mesma equipe: ${broker.first_name ?? '?'} → ${newBroker.first_name}`,
         executed_at: now,
       });
 
