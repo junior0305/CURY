@@ -14,6 +14,7 @@ export interface Announcement {
   category: "operacional" | "evento" | "treinamento" | "critico";
   emoji?: string | null;
   requires_rsvp: boolean;
+  rsvp_options?: string[] | null;
   starts_at?: string | null;
   expires_at?: string | null;
   created_at: string;
@@ -46,7 +47,7 @@ export default function AnnouncementCard({ ann, onDone }: Props) {
   const style = CATEGORY_STYLE[ann.category] || CATEGORY_STYLE.operacional;
   const Icon = style.icon;
 
-  async function ack(rsvp: "yes" | "no" | null = null) {
+  async function ack(rsvp: string | null = null) {
     setBusy(true);
     const { error } = await supabase.rpc("mark_announcement_read", {
       p_announcement_id: ann.id,
@@ -57,12 +58,14 @@ export default function AnnouncementCard({ ann, onDone }: Props) {
       toast.error("Erro ao registrar: " + error.message);
       return;
     }
-    if (rsvp === "yes") toast.success("✅ Confirmado");
-    else if (rsvp === "no") toast.info("Anotado, não pode comparecer");
+    if (rsvp) toast.success(`✅ ${rsvp}`);
+    else toast.success("✅ Confirmado");
     onDone?.();
   }
 
   const isCritical = ann.category === "critico";
+  const options = (ann.rsvp_options && ann.rsvp_options.length > 0) ? ann.rsvp_options : null;
+  const hasRsvp = !!options || ann.requires_rsvp;
 
   return (
     <motion.div
@@ -109,40 +112,77 @@ export default function AnnouncementCard({ ann, onDone }: Props) {
         </div>
       )}
 
-      <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: style.border }}>
-        <div className="text-[10px]" style={{ color: "var(--crm-text-muted)" }}>
-          Aviso de {new Date(ann.created_at).toLocaleDateString("pt-BR")}
-        </div>
+      <div className="pt-3 border-t space-y-2" style={{ borderColor: style.border }}>
+        {/* Opções customizadas (se admin definiu) */}
+        {options && (
+          <div className="flex items-center justify-end flex-wrap gap-2">
+            {options.map((opt, i) => {
+              const isFirst = i === 0;
+              return (
+                <button
+                  key={opt}
+                  onClick={() => ack(opt)}
+                  disabled={busy}
+                  className="px-3 py-2 rounded-lg text-sm font-bold transition disabled:opacity-50"
+                  style={isFirst ? {
+                    background: style.text,
+                    color: "white",
+                    boxShadow: `0 0 12px ${style.border}`,
+                  } : {
+                    background: "rgba(100,100,100,0.20)",
+                    color: "var(--crm-text-muted)",
+                    border: "1px solid rgba(100,100,100,0.30)",
+                  }}
+                >
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-        {ann.requires_rsvp ? (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => ack("no")}
-              disabled={busy}
+        {/* Fallback default Vou/Não posso quando requires_rsvp=true mas sem rsvp_options */}
+        {!options && ann.requires_rsvp && (
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={() => ack("Não posso")} disabled={busy}
               className="px-3 py-2 rounded-lg text-sm font-bold transition disabled:opacity-50 flex items-center gap-1.5"
-              style={{ background: "rgba(100,100,100,0.20)", color: "var(--crm-text-muted)", border: "1px solid rgba(100,100,100,0.30)" }}
-            >
+              style={{ background: "rgba(100,100,100,0.20)", color: "var(--crm-text-muted)", border: "1px solid rgba(100,100,100,0.30)" }}>
               <X className="w-3.5 h-3.5" /> Não posso
             </button>
+            <button onClick={() => ack("Vou")} disabled={busy}
+              className="px-4 py-2 rounded-lg text-sm font-black uppercase tracking-wider transition disabled:opacity-50 flex items-center gap-1.5 text-white"
+              style={{ background: style.text, boxShadow: `0 0 12px ${style.border}` }}>
+              <CheckCircle2 className="w-4 h-4" /> Vou!
+            </button>
+          </div>
+        )}
+
+        {/* Linha inferior: data + botão OK sempre presente */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[10px]" style={{ color: "var(--crm-text-muted)" }}>
+            Aviso de {new Date(ann.created_at).toLocaleDateString("pt-BR")}
+          </div>
+          {!hasRsvp && (
             <button
-              onClick={() => ack("yes")}
+              onClick={() => ack(null)}
               disabled={busy}
               className="px-4 py-2 rounded-lg text-sm font-black uppercase tracking-wider transition disabled:opacity-50 flex items-center gap-1.5 text-white"
               style={{ background: style.text, boxShadow: `0 0 12px ${style.border}` }}
             >
-              <CheckCircle2 className="w-4 h-4" /> Vou!
+              <CheckCircle2 className="w-4 h-4" /> Entendi
             </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => ack(null)}
-            disabled={busy}
-            className="px-4 py-2 rounded-lg text-sm font-black uppercase tracking-wider transition disabled:opacity-50 flex items-center gap-1.5 text-white"
-            style={{ background: style.text, boxShadow: `0 0 12px ${style.border}` }}
-          >
-            <CheckCircle2 className="w-4 h-4" /> Entendi
-          </button>
-        )}
+          )}
+          {hasRsvp && (
+            <button
+              onClick={() => ack(null)}
+              disabled={busy}
+              className="text-[11px] underline disabled:opacity-50"
+              style={{ color: "var(--crm-text-muted)" }}
+            >
+              só confirmar leitura
+            </button>
+          )}
+        </div>
       </div>
     </motion.div>
   );

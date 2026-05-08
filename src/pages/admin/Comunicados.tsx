@@ -20,6 +20,7 @@ interface Announcement {
   emoji: string | null;
   pinned: boolean;
   requires_rsvp: boolean;
+  rsvp_options: string[] | null;
   starts_at: string | null;
   expires_at: string | null;
   target_role: string[] | null;
@@ -161,20 +162,29 @@ function AnnouncementRow({ a, onEdit, onArchive, onDelete }: { a: Announcement; 
       </div>
 
       {showStats && stats && (
-        <div className="mt-2 pt-2 border-t border-gray-700/40 text-xs">
-          <div className="grid grid-cols-4 gap-2 text-center">
+        <div className="mt-2 pt-2 border-t border-gray-700/40 text-xs space-y-2">
+          <div className="grid grid-cols-3 gap-2 text-center">
             <div><div className="font-bold text-blue-300">{stats.total_eligible}</div><div className="text-[10px] text-gray-500">Elegíveis</div></div>
             <div><div className="font-bold text-emerald-300">{stats.reads}</div><div className="text-[10px] text-gray-500">Lidos</div></div>
-            {a.requires_rsvp && (
-              <>
-                <div><div className="font-bold text-emerald-400">{stats.rsvp_yes}</div><div className="text-[10px] text-gray-500">Vou</div></div>
-                <div><div className="font-bold text-red-400">{stats.rsvp_no}</div><div className="text-[10px] text-gray-500">Não posso</div></div>
-              </>
-            )}
-            {!a.requires_rsvp && (
-              <div className="col-span-2"><div className="font-bold text-gray-400">{stats.total_eligible - stats.reads}</div><div className="text-[10px] text-gray-500">Pendentes</div></div>
-            )}
+            <div><div className="font-bold text-amber-300">{stats.pending}</div><div className="text-[10px] text-gray-500">Pendentes</div></div>
           </div>
+          {a.rsvp_options && a.rsvp_options.length > 0 && stats.by_option && (
+            <div className="pt-2 border-t border-gray-700/40">
+              <div className="text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1">Por opção:</div>
+              <div className="flex flex-wrap gap-1.5">
+                {a.rsvp_options.map(opt => (
+                  <span key={opt} className="text-[10px] px-2 py-0.5 rounded bg-slate-800 border border-gray-700 text-gray-300">
+                    <strong>{stats.by_option[opt] || 0}</strong> {opt}
+                  </span>
+                ))}
+                {stats.by_option["__no_response__"] && (
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-gray-700/40 text-gray-400">
+                    <strong>{stats.by_option["__no_response__"]}</strong> só leu
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -189,7 +199,7 @@ function AnnouncementForm({ initial, onClose, onSaved }: { initial: Announcement
     body: initial?.body || "",
     category: (initial?.category || "operacional") as Category,
     emoji: initial?.emoji || "",
-    requires_rsvp: initial?.requires_rsvp || false,
+    rsvp_options_text: (initial?.rsvp_options || []).join("\n"),
     starts_at: initial?.starts_at ? new Date(initial.starts_at).toISOString().substring(0, 16) : "",
     expires_at: initial?.expires_at ? new Date(initial.expires_at).toISOString().substring(0, 16) : "",
     target_role: (initial?.target_role || ["BROKER"]) as string[],
@@ -200,12 +210,14 @@ function AnnouncementForm({ initial, onClose, onSaved }: { initial: Announcement
     if (!form.title.trim()) return toast.error("Informe o título");
     setSaving(true);
     try {
+      const opts = form.rsvp_options_text.split("\n").map(s => s.trim()).filter(Boolean);
       const payload: any = {
         title: form.title.trim(),
         body: form.body || null,
         category: form.category,
         emoji: form.emoji || null,
-        requires_rsvp: form.requires_rsvp,
+        requires_rsvp: opts.length > 0,
+        rsvp_options: opts.length > 0 ? opts : null,
         starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : null,
         expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
         target_role: form.target_role.length > 0 ? form.target_role : null,
@@ -280,10 +292,21 @@ function AnnouncementForm({ initial, onClose, onSaved }: { initial: Announcement
               className="w-full bg-slate-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200" />
           </div>
 
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={form.requires_rsvp} onChange={e => setForm(f => ({...f, requires_rsvp: e.target.checked}))} />
-            <span className="text-sm text-gray-200">Pedir confirmação <strong>(Vou / Não posso)</strong></span>
-          </label>
+          <div>
+            <label className="text-[10px] uppercase tracking-widest font-black text-gray-400 mb-1.5 block">
+              Opções de resposta (uma por linha)
+            </label>
+            <textarea
+              value={form.rsvp_options_text}
+              onChange={e => setForm(f => ({...f, rsvp_options_text: e.target.value}))}
+              rows={3}
+              placeholder={"Vou\nNão posso\nTalvez"}
+              className="w-full bg-slate-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 font-mono"
+            />
+            <p className="text-[10px] text-gray-500 mt-1">
+              Vazio = só botão "Entendi" (confirmar leitura). Com opções = broker escolhe uma + tem link "só confirmar leitura".
+            </p>
+          </div>
 
           <div className="grid grid-cols-2 gap-2">
             <div>
