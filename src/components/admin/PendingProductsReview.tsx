@@ -115,71 +115,29 @@ export default function PendingProductsReview() {
     });
 
     try {
-      if (p.selected === "__new__") {
-        // Aprova como novo produto
-        const { error } = await supabase
-          .from("cold_approved_products")
-          .insert({ name: p.product });
-        if (error) throw error;
-        toast.success(`✅ "${p.product}" aprovado como produto novo`);
-      } else if (p.selected === "__exclude__") {
-        // Exclui todos os cold com esse produto (status=excluded)
-        const { error } = await supabase
-          .from("cold_contacts")
-          .update({ status: "excluded" })
-          .eq("custom_fields->>product", p.product);
-        if (error) {
-          // Workaround pq Postgres não permite UPDATE com filtro em jsonb path direto via PostgREST
-          // Faz manualmente: pega IDs e atualiza
-          const { data: ids } = await supabase
-            .from("cold_contacts")
-            .select("id, custom_fields")
-            .in("status", ["available","claimed","promoted"])
-            .limit(5000);
-          const targetIds = (ids as any[] || [])
-            .filter((r) => r.custom_fields?.product === p.product)
-            .map((r) => r.id);
-          if (targetIds.length > 0) {
-            await supabase
-              .from("cold_contacts")
-              .update({ status: "excluded" })
-              .in("id", targetIds);
-          }
-        }
-        toast.success(`🗑️ "${p.product}" excluído do pool (${p.qtd} cold)`);
-      } else {
-        // Junta com produto aprovado: UPDATE tag e custom_fields.product
-        const target = p.selected;
-        const { data: rows } = await supabase
-          .from("cold_contacts")
-          .select("id, custom_fields")
-          .in("status", ["available","claimed","promoted"])
-          .limit(5000);
-        const targetIds = (rows as any[] || [])
-          .filter((r) => r.custom_fields?.product === p.product)
-          .map((r) => r.id);
+      let action: "merge" | "approve_new" | "exclude";
+      let target = "";
+      if (p.selected === "__new__")        action = "approve_new";
+      else if (p.selected === "__exclude__") action = "exclude";
+      else                                   { action = "merge"; target = p.selected; }
 
-        // UPDATE em chunks de 200
-        for (let i = 0; i < targetIds.length; i += 200) {
-          const chunk = targetIds.slice(i, i + 200);
-          const { data: existing } = await supabase
-            .from("cold_contacts")
-            .select("id, custom_fields")
-            .in("id", chunk);
-          // Atualiza um a um pra preservar outras keys do custom_fields
-          await Promise.all(((existing as any[]) || []).map((r) =>
-            supabase.from("cold_contacts")
-              .update({
-                tag: target,
-                custom_fields: { ...(r.custom_fields || {}), product: target },
-              })
-              .eq("id", r.id)
-          ));
-        }
-        toast.success(`🔀 ${p.qtd} cold de "${p.product}" → "${target}"`);
+      const { data, error } = await supabase.rpc("consolidate_cold_product", {
+        p_from: p.product,
+        p_to: target,
+        p_action: action,
+      });
+      if (error) throw error;
+      const result = data as any;
+
+      if (action === "approve_new") {
+        toast.success(`✅ "${p.product}" aprovado como produto novo`);
+      } else if (action === "exclude") {
+        toast.success(`🗑️ "${p.product}" — ${result?.excluded ?? 0} cold excluídos`);
+      } else {
+        toast.success(`🔀 ${result?.updated ?? 0} cold de "${p.product}" → "${target}"`);
       }
 
-      // Remove do pendings
+      // Remove do pendings (UI)
       setPendings((prev) => prev.filter((_, i) => i !== idx));
       setShowDropdownIdx(null);
     } catch (e: any) {
