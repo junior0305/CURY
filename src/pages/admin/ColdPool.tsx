@@ -170,17 +170,19 @@ export default function ColdPool() {
       const email = pickField(row, "email", "e-mail");
       const tag   = pickField(row, "tag", "região", "regiao", "area", "bairro", "campanha");
       const notes = pickField(row, "notes", "observações", "observacoes", "obs");
-      const renda = pickField(row, "renda", "renda_declarada");
-      const tipo  = pickField(row, "tipo_trabalho", "trabalho", "ocupacao");
+      const renda   = pickField(row, "renda", "renda_declarada");
+      const tipo    = pickField(row, "tipo_trabalho", "trabalho", "ocupacao");
+      const product = pickField(row, "product", "produto", "empreendimento");
 
       const norm = normalizePhone(phone);
       const custom: Record<string, any> = {};
-      if (renda) custom.renda = renda;
-      if (tipo)  custom.tipo_trabalho = tipo;
+      if (renda)   custom.renda = renda;
+      if (tipo)    custom.tipo_trabalho = tipo;
+      if (product) custom.product = product;
       // Inclui qualquer outro campo "extra" do CSV em custom_fields
       for (const [k, v] of Object.entries(row)) {
         if (!v) continue;
-        if (["name","nome","phone","telefone","celular","whatsapp","fone","tel","email","e-mail","tag","região","regiao","area","bairro","campanha","notes","observações","observacoes","obs","renda","renda_declarada","tipo_trabalho","trabalho","ocupacao"].includes(k)) continue;
+        if (["name","nome","phone","telefone","celular","whatsapp","fone","tel","email","e-mail","tag","região","regiao","area","bairro","campanha","notes","observações","observacoes","obs","renda","renda_declarada","tipo_trabalho","trabalho","ocupacao","product","produto","empreendimento"].includes(k)) continue;
         custom[k] = v;
       }
       list.push({
