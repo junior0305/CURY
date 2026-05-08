@@ -767,6 +767,8 @@ Responda APENAS em JSON válido, sem markdown:
       .eq('id', conversation.lead_id)
       .maybeSingle();
     const convBrokerAiOn = (convLead as any)?.broker?.automation_settings?.ai_assist_enabled === true;
+    // Conversa de prospecção (campaign_id) usa IA da campanha, não do broker — sempre roda
+    const isProspeccao = !!conversation.campaign_id;
 
     if (convLead?.ai_qualification_queue_id && !convLead?.ai_qualified_at) {
       // Lead ainda em qualificação → aciona agente IA
@@ -818,8 +820,10 @@ Responda APENAS em JSON válido, sem markdown:
     } else {
       if (pauseAutoMessages) {
         console.log('[webhook_receiver] ⏸️ pause_auto_messages=true — pulando ia_chat_engine');
-      } else if (!convBrokerAiOn) {
-        console.log('[webhook_receiver] ⏸️ ai_assist_enabled != true — pulando ia_chat_engine');
+      } else if (!isProspeccao && !convBrokerAiOn) {
+        // CRM (sem campaign_id): respeita ai_assist_enabled do broker.
+        // Prospecção pula esse gate — IA da campanha sempre responde.
+        console.log('[webhook_receiver] ⏸️ ai_assist_enabled != true — pulando ia_chat_engine (CRM)');
       } else {
         const { error: iaError } = await supabase.functions.invoke('ia_chat_engine', {
           body: {
