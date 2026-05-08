@@ -16,6 +16,7 @@ import {
   Upload, FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle,
   XCircle, Snowflake, Users, Tag, Hash, Trash2,
 } from "lucide-react";
+import ColdPoolMetrics from "@/components/admin/ColdPoolMetrics";
 
 interface ParsedRow {
   raw: Record<string, string>;
@@ -373,6 +374,9 @@ export default function ColdPool() {
             </p>
           </div>
         </div>
+
+        {/* Indicadores */}
+        <ColdPoolMetrics />
 
         {/* Step 1: Upload + config */}
         {!parsed && !result && (
