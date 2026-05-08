@@ -322,11 +322,25 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`w-full bg-slate-900/60 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-200 ${props.className || ""}`} />;
 }
 
-// Lead picker — busca por nome/telefone, retorna lead selecionado
+// Normaliza phone BR → 55DDDNNNN (sem +). Retorna null se inválido.
+function normalizePhoneBR(raw: string): string | null {
+  const digits = String(raw || "").replace(/\D/g, "");
+  if (!digits) return null;
+  if (/^[1-9][1-9][0-9]{8,9}$/.test(digits)) return "55" + digits;
+  if (/^55[1-9][1-9][0-9]{8,9}$/.test(digits)) return digits;
+  if (/^[0-9]{12,15}$/.test(digits)) return digits;
+  return null;
+}
+
+// Lead picker — busca por nome/telefone, retorna lead selecionado.
+// Se nada encontrado e busca parece phone, oferece cadastrar novo.
 function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou telefone..." }: { value: any; onChange: (l: any) => void; placeholder?: string }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [creatingName, setCreatingName] = useState("");
+  const [creatingBusy, setCreatingBusy] = useState(false);
 
   useEffect(() => {
     if (!q || q.length < 2) { setResults([]); return; }
@@ -346,6 +360,57 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
     return () => clearTimeout(t);
   }, [q]);
 
+  // Detecta se a query parece um phone válido (>=10 dígitos)
+  const qDigits = q.replace(/\D/g, "");
+  const phoneNormalized = normalizePhoneBR(q);
+  const looksLikePhone = qDigits.length >= 10 && phoneNormalized;
+
+  async function handleCreate() {
+    if (!creatingName.trim() || !phoneNormalized) {
+      toast.error("Nome e telefone são obrigatórios");
+      return;
+    }
+    setCreatingBusy(true);
+    try {
+      // Re-checa duplicidade pelo phone normalizado
+      const { data: existing } = await supabase
+        .from("leads")
+        .select("id, name, phone, status, broker_id, profiles:broker_id(first_name, last_name)")
+        .eq("phone", phoneNormalized)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existing) {
+        toast.warning(`Já existe lead com esse telefone: ${existing.name}`);
+        onChange(existing);
+        setShowCreate(false);
+        setQ("");
+        return;
+      }
+      const { data: newLead, error } = await supabase
+        .from("leads")
+        .insert({
+          name: creatingName.trim(),
+          phone: phoneNormalized,
+          status: "NEW",
+          source: "secretaria_manual",
+          last_interaction_at: new Date().toISOString(),
+        })
+        .select("id, name, phone, status, broker_id, profiles:broker_id(first_name, last_name)")
+        .single();
+      if (error) throw error;
+      toast.success(`✅ Lead "${newLead.name}" cadastrado`);
+      onChange(newLead);
+      setShowCreate(false);
+      setCreatingName("");
+      setQ("");
+    } catch (e: any) {
+      toast.error(`Erro: ${e.message || e}`);
+    } finally {
+      setCreatingBusy(false);
+    }
+  }
+
   if (value) {
     return (
       <div className="bg-fuchsia-950/30 border border-fuchsia-500/40 rounded-lg p-2 flex items-center justify-between">
@@ -362,10 +427,26 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
     <div className="relative">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
       <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} className="pl-9" />
-      {q.length >= 2 && (
+      {q.length >= 2 && !showCreate && (
         <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-gray-700 rounded-lg max-h-60 overflow-y-auto shadow-xl">
           {searching && <div className="p-2 text-center text-xs text-gray-500"><Loader2 className="w-3 h-3 animate-spin inline mr-1" />Buscando...</div>}
-          {!searching && results.length === 0 && <div className="p-2 text-center text-xs text-gray-500">Nenhum lead</div>}
+          {!searching && results.length === 0 && (
+            <div className="p-2">
+              <div className="text-center text-xs text-gray-500 mb-2">Nenhum lead encontrado</div>
+              {looksLikePhone ? (
+                <button
+                  onClick={() => { setCreatingName(""); setShowCreate(true); }}
+                  className="w-full px-3 py-2 rounded-md text-xs font-bold bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 transition"
+                >
+                  ➕ Cadastrar novo lead com {phoneNormalized}
+                </button>
+              ) : (
+                <div className="text-[10px] text-gray-600 text-center">
+                  Digite o telefone completo (com DDD) pra cadastrar manualmente
+                </div>
+              )}
+            </div>
+          )}
           {results.map(r => (
             <button key={r.id} onClick={() => { onChange(r); setQ(""); }}
               className="w-full text-left px-3 py-2 hover:bg-slate-800 border-b border-gray-800 last:border-0">
@@ -373,6 +454,46 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
               <div className="text-[11px] text-gray-500">{r.phone} · {r.status} · {r.profiles?.first_name || "Sem corretor"}</div>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Form de cadastro inline */}
+      {showCreate && (
+        <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-emerald-500/40 rounded-lg shadow-xl p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider">Cadastrar lead</span>
+            <button
+              onClick={() => { setShowCreate(false); setCreatingName(""); }}
+              className="text-[11px] text-gray-400 hover:text-white"
+            >
+              cancelar
+            </button>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Telefone</label>
+            <div className="text-sm font-mono text-gray-200 px-2 py-1.5 rounded bg-slate-800 border border-gray-700">
+              {phoneNormalized || "—"}
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Nome do lead</label>
+            <Input
+              autoFocus
+              value={creatingName}
+              onChange={(e) => setCreatingName(e.target.value)}
+              placeholder="ex: Maria Silva"
+              className="mt-1"
+              onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
+            />
+          </div>
+          <button
+            onClick={handleCreate}
+            disabled={creatingBusy || !creatingName.trim() || !phoneNormalized}
+            className="w-full px-3 py-2 rounded-md text-xs font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-40"
+          >
+            {creatingBusy ? <Loader2 className="w-3 h-3 animate-spin inline mr-1" /> : null}
+            Cadastrar e selecionar
+          </button>
         </div>
       )}
     </div>
