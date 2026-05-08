@@ -195,11 +195,14 @@ export default function ManagerV2() {
 
     // 2. WhatsApp via chip do manager (se disponível)
     if (data?.manager?.bot_instance_id && broker.phone) {
+      // Normaliza phone: garante prefixo 55 (Brasil) caso profile esteja só com DDD
+      const rawDigits = String(broker.phone).replace(/\D/g, "");
+      const phoneNormalized = /^[1-9][1-9][0-9]{8,9}$/.test(rawDigits) ? `55${rawDigits}` : rawDigits;
       try {
         await supabase.functions.invoke("send_whatsapp_message", {
           body: {
             botId: data.manager.bot_instance_id,
-            phone: broker.phone,
+            phone: phoneNormalized,
             message: customMessage ||
               `🚨 *Cobrança do gerente*\n\nO lead *${leadName}* (${rawLead.phone}) precisa de você AGORA. Atende, por favor.`,
           },
