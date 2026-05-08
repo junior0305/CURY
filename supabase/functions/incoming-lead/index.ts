@@ -202,16 +202,38 @@ serve(async (req) => {
       }
     }
 
-    // Round-robin otimista (só executa se NÃO é fila de agente IA)
+    // Round-robin otimista — só sobre ELEGÍVEIS (filtra lead_assignment_enabled).
+    // Cluster de inativos no array não privilegia mais quem vem depois.
     if (!chosenQueue?.ai_agent_broker_id && chosenQueue && chosenQueue.broker_ids?.length > 0) {
       const isExclusive = chosenQueue.lock_after_assignment === true;
-      const maxAttempts = chosenQueue.broker_ids.length + 2; // tenta todos os corretores da fila
 
-      for (let i = 0; i < maxAttempts; i++) {
-        const { data: freshQ } = await supabase.from('distribution_queues').select('*').eq('id', chosenQueue.id).maybeSingle();
-        if (freshQ?.broker_ids?.length > 0) {
+      // Pega o estado atual de todos os brokers da fila uma única vez
+      const { data: queueBrokersAll } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('id', chosenQueue.broker_ids)
+        .eq('role', 'BROKER');
+
+      // Mantém a ORDEM original do broker_ids (pra round-robin determinístico)
+      const orderedBrokers = (chosenQueue.broker_ids || [])
+        .map((id: string) => (queueBrokersAll || []).find((b: any) => b.id === id))
+        .filter(Boolean);
+
+      // Elegíveis: ativos + (em fila exclusiva ignora lead_assignment_enabled)
+      const eligible = orderedBrokers.filter((b: any) =>
+        b.is_active !== false && (isExclusive || b.lead_assignment_enabled !== false)
+      );
+
+      if (eligible.length === 0) {
+        console.log(`[DISTRIBUTION] Nenhum broker elegível na fila ${chosenQueue.name} — caindo no fallback`);
+      } else {
+        // Round-robin com optimistic lock — pode falhar se concorrência. Tenta poucas vezes.
+        const maxAttempts = 5;
+        for (let i = 0; i < maxAttempts; i++) {
+          const { data: freshQ } = await supabase.from('distribution_queues').select('*').eq('id', chosenQueue.id).maybeSingle();
+          if (!freshQ) break;
           const oldIndex = freshQ.last_assigned_index || 0;
-          const idx = oldIndex % freshQ.broker_ids.length;
+          const idx = oldIndex % eligible.length;
 
           const { data: updated } = await supabase.from('distribution_queues')
             .update({ last_assigned_index: oldIndex + 1 })
@@ -221,19 +243,11 @@ serve(async (req) => {
             .maybeSingle();
 
           if (updated) {
-            const { data: broker } = await supabase.from('profiles').select('*').eq('id', freshQ.broker_ids[idx]).maybeSingle();
-
-            // Fila exclusiva (corretor pagou): sempre atribui, independente de presença
-            // Fila do gerente: respeita lead_assignment_enabled (presença marcada pelo gerente)
-            if (!isExclusive && broker?.lead_assignment_enabled === false) {
-              console.log(`[DISTRIBUTION] SKIP ${broker.first_name} — ausente (fila do gerente), tentando próximo`);
-              continue;
-            }
-
-            chosenBroker = broker;
-            console.log(`[DISTRIBUTION] Corretor escolhido via round-robin: ${broker?.first_name} (exclusiva=${isExclusive})`);
+            chosenBroker = eligible[idx];
+            console.log(`[DISTRIBUTION] Round-robin (${eligible.length} elegíveis): ${chosenBroker?.first_name} (exclusiva=${isExclusive})`);
             break;
           }
+          // Optimistic lock falhou — outro lead pegou esse índice. Tenta de novo.
         }
       }
     }
@@ -242,13 +256,15 @@ serve(async (req) => {
       // Fallback RESTRITO À FILA: todos os corretores da fila estavam ausentes.
       // Nunca busca corretores de outras filas/equipes — evita atribuição cruzada.
       if (chosenQueue && chosenQueue.broker_ids?.length > 0) {
-        console.log(`[DISTRIBUTION] Fallback (fila ${chosenQueue.name}): todos ausentes — atribuindo ao corretor com menos leads na fila`);
+        console.log(`[DISTRIBUTION] Fallback (fila ${chosenQueue.name}): todos ausentes — atribuindo ao corretor ATIVO com menos leads na fila`);
         const today = new Date().toISOString().split('T')[0];
         const { data: queueBrokers } = await supabase
           .from('profiles')
-          .select('id, first_name, last_name, phone, team_id, bot_instance_id, manager_id, automation_settings, evolution_instance')
+          .select('id, first_name, last_name, phone, team_id, bot_instance_id, manager_id, automation_settings, evolution_instance, lead_assignment_enabled, is_active')
           .in('id', chosenQueue.broker_ids)
-          .eq('role', 'BROKER');
+          .eq('role', 'BROKER')
+          .eq('is_active', true)
+          .eq('lead_assignment_enabled', true);
 
         if (queueBrokers && queueBrokers.length > 0) {
           const counts = await Promise.all(queueBrokers.map(async (b: any) => {
