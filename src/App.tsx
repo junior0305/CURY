@@ -25,6 +25,7 @@ import CampanhaNova from "./pages/manager-v2/CampanhaNova";
 import CampanhaDetalhe from "./pages/manager-v2/CampanhaDetalhe";
 import LigaPage from "./pages/manager-v2/LigaPage";
 import AnalisePage from "./pages/manager-v2/AnalisePage";
+import PoolPage from "./pages/manager/PoolPage";
 import { Loader2 } from "lucide-react";
 import CommandCenter from "./pages/CommandCenter";
 import BootstrapAdmin from "@/pages/BootstrapAdmin";
@@ -119,6 +120,7 @@ const App = () => (
             <Route path="/manager/campanha/:id" element={<ProtectedManagerRoute><CampanhaDetalhe /></ProtectedManagerRoute>} />
             <Route path="/manager/liga" element={<ProtectedManagerRoute><LigaPage /></ProtectedManagerRoute>} />
             <Route path="/manager/analise" element={<ProtectedManagerRoute><AnalisePage /></ProtectedManagerRoute>} />
+            <Route path="/manager/pool" element={<ProtectedManagerRoute><PoolPage /></ProtectedManagerRoute>} />
             {/* Aliases legados — redirecionam pra nova URL */}
             <Route path="/manager-v2" element={<Navigate to="/manager" replace />} />
             <Route path="/manager-v2/coach" element={<Navigate to="/manager/coach" replace />} />

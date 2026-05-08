@@ -4,10 +4,11 @@
 
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LayoutDashboard, Send, Trophy, GraduationCap, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Send, Trophy, GraduationCap, BarChart3, Snowflake } from "lucide-react";
 
 const ITEMS = [
   { to: "/manager",          label: "Cockpit",   icon: LayoutDashboard, color: "#06B6D4" },
+  { to: "/manager/pool",     label: "Pool",      icon: Snowflake,       color: "#38BDF8" },
   { to: "/manager/campanha", label: "Campanhas", icon: Send,            color: "#10B981" },
   { to: "/manager/coach",    label: "Coach",     icon: GraduationCap,   color: "#A78BFA" },
   { to: "/manager/liga",     label: "Liga",      icon: Trophy,          color: "#F59E0B" },

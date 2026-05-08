@@ -78,6 +78,13 @@ export default function ProspeccaoMode({ brokerId, managerId, botInstanceId, onE
   const [busy, setBusy] = useState(false);
   const [openMsg, setOpenMsg] = useState<string | null>(null);
   const [msgText, setMsgText] = useState("");
+  const [poolLimit, setPoolLimit] = useState<{limit:number;tier:string;current_claimed:number;available:number;promoted_30d:number;conversion_pct:number}|null>(null);
+
+  async function reloadPoolLimit() {
+    const { data } = await supabase.rpc("get_broker_pool_limit", { p_broker_id: brokerId });
+    if (data) setPoolLimit(data as any);
+  }
+  useEffect(() => { reloadPoolLimit(); }, [brokerId]);
 
   // ── Carrega áreas (tags com count, excluindo skips dos últimos 7d)
   async function loadAreas() {
@@ -206,6 +213,7 @@ export default function ProspeccaoMode({ brokerId, managerId, botInstanceId, onE
       toast.error(
         msg.includes("chip_offline") ? "Seu WhatsApp está desconectado. Reconecta antes de pegar leads." :
         msg.includes("no_chip") ? "Você não tem chip vinculado. Avise o gerente." :
+        msg.includes("limit_total_reached") ? `Você atingiu seu limite total no pool (${poolLimit?.limit ?? 50}). Promova ou skipe alguns antes de pegar mais.` :
         msg.includes("limit_active") ? "Você já tem 15 cold ativos sem 1ª msg." :
         msg.includes("already_claimed") ? "Outro broker pegou esse antes de você." :
         `Erro: ${msg}`
@@ -216,6 +224,7 @@ export default function ProspeccaoMode({ brokerId, managerId, botInstanceId, onE
     }
     toast.success(`✅ ${current.name.split(" ")[0]} é seu — manda a 1ª msg!`);
     if (data) setMine((m) => [data as any, ...m]);
+    reloadPoolLimit();
     // remove da pool e avança
     const next = pool.filter((c) => c.id !== current.id);
     setPool(next);
@@ -302,9 +311,15 @@ export default function ProspeccaoMode({ brokerId, managerId, botInstanceId, onE
 
         <div className="flex items-center gap-3 text-[11px]" style={{ color: "var(--crm-text-muted)" }}>
           <span>
-            <span className="font-bold" style={{ color: "var(--crm-text)" }}>{activeWithoutMsg}</span>/{limit1} ativos s/ 1ª msg
+            <span className="font-bold" style={{ color: "var(--crm-text)" }}>{activeWithoutMsg}</span>/{limit1} s/ 1ª msg
           </span>
-          <span className="text-amber-400 font-bold">({remaining} livre{remaining !== 1 ? "s" : ""})</span>
+          {poolLimit && (
+            <span className={poolLimit.available === 0 ? "text-red-400 font-bold" : "text-amber-400 font-bold"}>
+              · {poolLimit.current_claimed}/{poolLimit.limit} total
+              {poolLimit.tier === "pro" && <span title={`${poolLimit.promoted_30d} vendas em 30d, ${poolLimit.conversion_pct}%`}> 🥈</span>}
+              {poolLimit.tier === "elite" && <span title={`${poolLimit.promoted_30d} vendas em 30d, ${poolLimit.conversion_pct}%`}> 🏆</span>}
+            </span>
+          )}
         </div>
       </div>
 

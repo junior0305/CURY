@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bot, MessageSquare, BarChart3, Settings as SettingsIcon, Rocket, Activity, Megaphone, Inbox, Shield, FlaskConical } from "lucide-react";
+import { Bot, MessageSquare, BarChart3, Settings as SettingsIcon, Rocket, Activity, Megaphone, Inbox, Shield, FlaskConical, Snowflake } from "lucide-react";
 import Exercito from "./prospeccao/Exercito";
 import Campanhas from "./prospeccao/Campanhas";
 import Mensagens from "./prospeccao/Mensagens";
@@ -11,6 +11,7 @@ import Configuracoes from "./prospeccao/Configuracoes";
 import Monitor from "./prospeccao/Monitor";
 import SaudeChips from "./prospeccao/SaudeChips";
 import AbLab from "./prospeccao/AbLab";
+import PoolPage from "../manager/PoolPage";
 
 export function Prospeccao() {
   const [activeTab, setActiveTab] = useState("exercito");
@@ -37,7 +38,7 @@ export function Prospeccao() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="bg-slate-900/80 border border-gray-700/50 p-1 gap-1 rounded-xl backdrop-blur-sm grid grid-cols-10">
+        <TabsList className="bg-slate-900/80 border border-gray-700/50 p-1 gap-1 rounded-xl backdrop-blur-sm grid grid-cols-11">
           <TabsTrigger
             value="exercito"
             className="flex items-center gap-2 py-2.5 px-3 rounded-lg data-[state=active]:bg-green-900/60 data-[state=active]:text-green-200 data-[state=active]:border-green-500/50 border border-transparent"
@@ -117,6 +118,14 @@ export function Prospeccao() {
             <Activity className="w-4 h-4" />
             <span className="hidden md:inline font-semibold">Monitor</span>
           </TabsTrigger>
+
+          <TabsTrigger
+            value="pool"
+            className="flex items-center gap-2 py-2.5 px-3 rounded-lg data-[state=active]:bg-sky-900/60 data-[state=active]:text-sky-200 data-[state=active]:border-sky-500/50 border border-transparent"
+          >
+            <Snowflake className="w-4 h-4" />
+            <span className="hidden md:inline font-semibold">Pool</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="exercito" className="mt-6">
@@ -157,6 +166,10 @@ export function Prospeccao() {
 
         <TabsContent value="monitor" className="mt-6">
           <Monitor />
+        </TabsContent>
+
+        <TabsContent value="pool" className="mt-6">
+          <PoolPage globalView />
         </TabsContent>
       </Tabs>
     </div>
