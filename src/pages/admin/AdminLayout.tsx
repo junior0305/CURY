@@ -65,6 +65,7 @@ import Premios      from "./Premios";
 import IaBuilder    from "./IaBuilder";
 import SaudeLeads   from "./SaudeLeads";
 import { Prospeccao } from "./Prospeccao";
+import ColdPool from "./ColdPool";
 import AudioSettings from "@/components/admin/AudioSettings";
 import SistemaControl from "@/components/admin/SistemaControl";
 import Agentes from "./Agentes";
@@ -112,8 +113,9 @@ const GROUPS = [
     subtabs: [
       { value: "ia-builder", label: "IA Builder",  roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "agentes",    label: "Agentes",     roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "prospeccao", label: "Prospecção",  roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "central-ia", label: "Central IA",  roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "prospeccao",  label: "Prospecção",  roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "cold-pool",   label: "Pool Frio",   roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "central-ia",  label: "Central IA",  roles: ["ADMIN", "SUPERINTENDENT"] },
     ],
   },
   {
@@ -425,14 +427,16 @@ function AdminLayoutInner() {
 
         {activeGroup === "ia" && (
           <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
-            { v: "ia-builder", l: "IA Builder",  roles: ["ADMIN","SUPERINTENDENT"] },
-            { v: "agentes",    l: "Agentes",     roles: ["ADMIN","SUPERINTENDENT"] },
-            { v: "prospeccao", l: "Prospecção",  roles: ["ADMIN","SUPERINTENDENT"] },
-            { v: "central-ia", l: "Central IA",  roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "ia-builder",  l: "IA Builder",  roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "agentes",     l: "Agentes",     roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "prospeccao",  l: "Prospecção",  roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "cold-pool",   l: "Pool Frio",   roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "central-ia",  l: "Central IA",  roles: ["ADMIN","SUPERINTENDENT"] },
           ]} role={normalizedRole}>
             <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>
             <TabsContent value="agentes" className="p-6"><Agentes /></TabsContent>
             <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>
+            <TabsContent value="cold-pool" className="p-0"><ColdPool /></TabsContent>
             <TabsContent value="central-ia" className="p-6"><CentralIA /></TabsContent>
           </SubTabs>
         )}
