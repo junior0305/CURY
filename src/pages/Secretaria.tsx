@@ -540,6 +540,68 @@ function ManagerPicker({ value, onChange }: { value: string; onChange: (id: stri
   );
 }
 
+// ─── LeadHistoryBox ─ histórico recente do lead pra evitar duplicação ──────
+
+const KIND_TO_ACTIONS: Record<string, string[]> = {
+  visita: ["VISIT_SCHEDULED", "VISIT_REGISTERED", "VISITA_REALIZADA"],
+  pasta: ["DOCS_RECEIVED", "DOCS_REQUESTED"],
+  venda: ["SALE_RECORDED"],
+};
+
+function LeadHistoryBox({ leadId, kind }: { leadId: string | null; kind: "visita" | "pasta" | "venda" }) {
+  const [events, setEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!leadId) { setEvents([]); return; }
+    setLoading(true);
+    supabase.from("system_audit_log")
+      .select("id, action_type, notes, created_at, actor_id, profiles:actor_id(first_name, last_name)")
+      .eq("entity_type", "lead").eq("entity_id", leadId)
+      .order("created_at", { ascending: false }).limit(8)
+      .then(({ data }) => { setEvents(data || []); setLoading(false); });
+  }, [leadId]);
+
+  if (!leadId) return null;
+
+  const sameKindActions = KIND_TO_ACTIONS[kind] || [];
+  const recentSameKind = events.find(e => sameKindActions.includes(e.action_type));
+  const recentSameKindAge = recentSameKind ? (Date.now() - new Date(recentSameKind.created_at).getTime()) / 3600000 : null;
+  const isDuplicateRisk = recentSameKindAge !== null && recentSameKindAge < 24;
+
+  return (
+    <div className="rounded-lg border border-gray-700/50 bg-slate-900/40 p-2.5 space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400">🕒 Histórico recente</span>
+        {isDuplicateRisk && (
+          <span className="text-[10px] font-bold text-red-300 bg-red-900/40 px-1.5 py-0.5 rounded uppercase tracking-wider">
+            ⚠️ {kind} já registrada há {Math.round(recentSameKindAge!)}h
+          </span>
+        )}
+      </div>
+      {loading && <div className="text-[11px] text-gray-500">Carregando...</div>}
+      {!loading && events.length === 0 && <div className="text-[11px] text-gray-500">Sem histórico de ações.</div>}
+      {!loading && events.length > 0 && (
+        <ul className="space-y-1 max-h-32 overflow-y-auto">
+          {events.map(e => {
+            const isSameKind = sameKindActions.includes(e.action_type);
+            const ageHours = (Date.now() - new Date(e.created_at).getTime()) / 3600000;
+            const highlight = isSameKind && ageHours < 24;
+            const actorName = e.profiles ? `${e.profiles.first_name} ${e.profiles.last_name || ""}`.trim() : "—";
+            return (
+              <li key={e.id} className={`text-[11px] flex items-start gap-1.5 ${highlight ? "text-red-300" : "text-gray-400"}`}>
+                <span className="font-mono shrink-0">{fmtDateTime(e.created_at)}</span>
+                <span className={`font-bold ${highlight ? "text-red-300" : "text-gray-300"}`}>{e.action_type}</span>
+                <span className="text-gray-500 truncate">· {actorName} {e.notes ? "· " + e.notes : ""}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ─── Modal: Visita ──────────────────────────────────────────────────────────
 
 function VisitaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
@@ -573,6 +635,7 @@ function VisitaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   return (
     <ModalShell title="🏠 Registrar Visita" onClose={onClose}>
       <Field label="Lead"><LeadPicker value={lead} onChange={setLead} /></Field>
+      {lead && <LeadHistoryBox leadId={lead.id} kind="visita" />}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Data da visita"><Input type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
         <Field label="Produto"><Input value={produto} onChange={(e) => setProduto(e.target.value)} placeholder="ex: BACANA_ZS" /></Field>
@@ -615,6 +678,7 @@ function PastaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   return (
     <ModalShell title="📁 Registrar Pasta" onClose={onClose}>
       <Field label="Lead"><LeadPicker value={lead} onChange={setLead} /></Field>
+      {lead && <LeadHistoryBox leadId={lead.id} kind="pasta" />}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Data envio docs"><Input type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
         <Field label="Banco">
@@ -688,6 +752,7 @@ function VendaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   return (
     <ModalShell title="💰 Registrar Venda" onClose={onClose}>
       <Field label="Lead"><LeadPicker value={lead} onChange={setLead} /></Field>
+      {lead && <LeadHistoryBox leadId={lead.id} kind="venda" />}
       {lead && lead.status === "CONCLUDED" && (
         <div className="rounded-lg border border-red-500/50 bg-red-950/40 px-3 py-2.5 space-y-1">
           <div className="text-sm font-bold text-red-300">⚠️ Esta venda já foi registrada</div>
@@ -815,11 +880,33 @@ function PlantaoModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   const [checkOut, setCheckOut] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [recentPlantoes, setRecentPlantoes] = useState<any[]>([]);
+  const dupeOnSameDate = recentPlantoes.find(p => p.plantao_date === date);
+
+  useEffect(() => {
+    if (!broker?.id) { setRecentPlantoes([]); return; }
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().substring(0, 10);
+    supabase.from("plantao_checkins")
+      .select("id, plantao_date, location, notes, created_at")
+      .eq("broker_id", broker.id)
+      .gte("plantao_date", sevenDaysAgo)
+      .order("plantao_date", { ascending: false }).limit(10)
+      .then(({ data }) => setRecentPlantoes(data || []));
+  }, [broker?.id]);
 
   async function save() {
     if (!broker) return toast.error("Selecione o corretor");
+    if (dupeOnSameDate) return toast.error(`⚠️ Já existe plantão deste corretor em ${date}.`);
     setSaving(true);
     try {
+      // Re-checa antes do INSERT pra cobrir race
+      const { data: existing } = await supabase.from("plantao_checkins")
+        .select("id").eq("broker_id", broker.id).eq("plantao_date", date).maybeSingle();
+      if (existing) {
+        toast.error(`⚠️ Plantão já registrado para este corretor em ${date}.`);
+        setSaving(false);
+        return;
+      }
       const { data: row, error } = await supabase.from("plantao_checkins").insert({
         broker_id: broker.id, plantao_date: date, location: location || null,
         check_in_at: checkIn ? new Date(date + "T" + checkIn).toISOString() : null,
@@ -841,6 +928,25 @@ function PlantaoModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   return (
     <ModalShell title="📅 Check-in Plantão" onClose={onClose}>
       <Field label="Corretor"><BrokerPicker value={broker} onChange={setBroker} /></Field>
+      {broker && recentPlantoes.length > 0 && (
+        <div className="rounded-lg border border-gray-700/50 bg-slate-900/40 p-2.5 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400">🕒 Plantões recentes (7d)</span>
+            {dupeOnSameDate && (
+              <span className="text-[10px] font-bold text-red-300 bg-red-900/40 px-1.5 py-0.5 rounded uppercase">⚠️ já tem em {date}</span>
+            )}
+          </div>
+          <ul className="space-y-1 max-h-32 overflow-y-auto">
+            {recentPlantoes.map(p => (
+              <li key={p.id} className={`text-[11px] flex gap-1.5 ${p.plantao_date === date ? "text-red-300" : "text-gray-400"}`}>
+                <span className="font-mono shrink-0">{p.plantao_date}</span>
+                <span className="text-gray-300 truncate">{p.location || "—"}</span>
+                {p.notes && <span className="text-gray-500 truncate">· {p.notes}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Data"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
         <Field label="Local"><Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="ex: Stand BACANA_ZS" /></Field>
