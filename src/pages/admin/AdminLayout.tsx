@@ -73,6 +73,7 @@ import LeadDistribution from "@/components/admin/LeadDistribution";
 import Inteligencia from "./Inteligencia";
 import CentralIA from "./CentralIA";
 import Comunicados from "./Comunicados";
+import Lancamentos from "./Lancamentos";
 
 // ─── Grupos principais ────────────────────────────────────────────────────────
 
@@ -144,10 +145,11 @@ const GROUPS = [
     icon: DollarSign,
     roles: ["ADMIN", "SUPERINTENDENT"],
     subtabs: [
-      { value: "metas",    label: "Metas",    roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "economia", label: "Economia", roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "premios",  label: "Prêmios",  roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "regras",   label: "Regras",   roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "metas",        label: "Metas",        roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "lancamentos",  label: "Lançamentos",  roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "economia",     label: "Economia",     roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "premios",      label: "Prêmios",      roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "regras",       label: "Regras",       roles: ["ADMIN", "SUPERINTENDENT"] },
     ],
   },
 ] as const;
@@ -461,12 +463,14 @@ function AdminLayoutInner() {
 
         {activeGroup === "financeiro" && (
           <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
-            { v: "metas",    l: "Metas",    roles: ["ADMIN","SUPERINTENDENT"] },
-            { v: "economia", l: "Economia", roles: ["ADMIN","SUPERINTENDENT"] },
-            { v: "premios",  l: "Prêmios",  roles: ["ADMIN","SUPERINTENDENT"] },
-            { v: "regras",   l: "Regras",   roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "metas",        l: "Metas",        roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "lancamentos",  l: "Lançamentos",  roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "economia",     l: "Economia",     roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "premios",      l: "Prêmios",      roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "regras",       l: "Regras",       roles: ["ADMIN","SUPERINTENDENT"] },
           ]} role={normalizedRole}>
             <TabsContent value="metas" className="p-0"><Metas /></TabsContent>
+            <TabsContent value="lancamentos" className="p-6"><Lancamentos /></TabsContent>
             <TabsContent value="economia"><Economia /></TabsContent>
             <TabsContent value="premios"><Premios /></TabsContent>
             <TabsContent value="regras"><Regras /></TabsContent>

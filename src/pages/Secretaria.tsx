@@ -6,8 +6,9 @@ import {
   Home, FileText, DollarSign, UserPlus, Calendar, Clock,
   Plus, RefreshCw, LogOut, ChevronLeft, ChevronRight,
   Loader2, X, Search, Building2, Briefcase, Phone, Mail, IdCard,
-  TrendingUp, Activity, History,
+  TrendingUp, Activity, History, Trophy,
 } from "lucide-react";
+import { PendingClaims } from "./admin/Lancamentos";
 
 type Period = "week" | "month";
 
@@ -163,6 +164,16 @@ export default function Secretaria() {
           <ShortcutButton label="+ Venda" icon={DollarSign}  color="emerald" onClick={() => setModal("venda")} />
           <ShortcutButton label="+ Contratação" icon={UserPlus} color="cyan" onClick={() => setModal("contratacao")} />
           <ShortcutButton label="+ Plantão" icon={Calendar}  color="fuchsia" onClick={() => setModal("plantao")} />
+        </div>
+      </div>
+
+      {/* Validações de Lançamentos */}
+      <div className="px-4 pt-2">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
+          <Trophy className="w-3 h-3 text-amber-400" /> Validações de lançamento
+        </h2>
+        <div className="bg-slate-900/40 border border-amber-500/20 rounded-xl p-4">
+          <PendingClaims />
         </div>
       </div>
 

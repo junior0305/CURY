@@ -35,6 +35,10 @@ import { toast } from "sonner";
 import { useAudioArena } from "@/hooks/use-audio-arena";
 import AnnouncementCard from "@/components/announcements/AnnouncementCard";
 import { useNextAnnouncement } from "@/hooks/useNextAnnouncement";
+import LaunchHeroCard from "@/components/launches/LaunchHeroCard";
+import LaunchStrip from "@/components/launches/LaunchStrip";
+import LaunchProductPrompt from "@/components/launches/LaunchProductPrompt";
+import { useActiveLaunches, registerLaunchClaim } from "@/components/launches/useActiveLaunches";
 import { WallOfFameTicker } from "@/components/dashboard/WallOfFameTicker";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 import { BrokerAutomationSettings } from "@/components/broker/BrokerAutomationSettings";
@@ -358,6 +362,12 @@ export default function DashboardFoco(){
   const [fllwExpanded,setFllwExpanded]=useState(false);
   const [pausingLeadId,setPausingLeadId]=useState<string|null>(null);
   const { announcement, refetch: refetchAnn } = useNextAnnouncement(user?.id);
+  const { data: activeLaunches = [] } = useActiveLaunches(user?.id);
+  const [pendingLaunchAction, setPendingLaunchAction] = useState<{ leadId: string; action: "visita"|"documento"|"venda"; cb: () => void } | null>(null);
+  function maybePromptLaunch(leadId: string | undefined, action: "visita"|"documento"|"venda", continueAction: () => void) {
+    if (!leadId || activeLaunches.length === 0) { continueAction(); return; }
+    setPendingLaunchAction({ leadId, action, cb: continueAction });
+  }
   const [drawerOpen,setDrawerOpen]=useState<"ranking"|"meta"|"campaign"|null>(null);
   const [reportsOpen,setReportsOpen]=useState(false);
   const taRef=useRef<HTMLTextAreaElement>(null);
@@ -539,6 +549,7 @@ export default function DashboardFoco(){
   const advance=async(status:LeadStatus,lostReason?:LostReason)=>{
     if(!lead||mutating)return;
     setMutating(true);
+    const leadId=lead.id;
     const leadName=lead.name;
     try{
       if(status==="CONCLUDED"){
@@ -549,7 +560,13 @@ export default function DashboardFoco(){
       await updateLeadStatus(lead.id,status,null,lostReason||null);
       qc.invalidateQueries({queryKey:["focoLeads"]});
       qc.invalidateQueries({queryKey:["focoRanking"]});
-      showResult(status==="ABANDONED"?"ABANDONED":status, leadName);
+      // Prompt de lançamento após ação confirmada
+      const launchAction = status==="CONCLUDED" ? "venda" : status==="DOCS_REQUESTED" ? "documento" : null;
+      if (launchAction) {
+        maybePromptLaunch(leadId, launchAction, () => showResult(status==="ABANDONED"?"ABANDONED":status, leadName));
+      } else {
+        showResult(status==="ABANDONED"?"ABANDONED":status, leadName);
+      }
     }catch{toast.error("Erro ao atualizar. Tente novamente.");}
     finally{setMutating(false);}
   };
@@ -589,12 +606,14 @@ export default function DashboardFoco(){
   const handleAgendarVisita=async()=>{
     if(!lead||!visitDate)return;
     const dt=new Date(`${visitDate}T${visitTime||"10:00"}`);
+    const leadId=lead.id;
     setVisitSheet(false);setMutating(true);
     try{
       await Promise.all([
         updateLeadStatus(lead.id,"VISIT_SCHEDULED"),
         createTask({userId:user!.id,leadId:lead.id,type:"FOLLOW_UP",title:`Visita — ${dt.toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"short"})} às ${visitTime}`,dueAt:dt.toISOString()}),
       ]);
+      maybePromptLaunch(leadId, "visita", () => {});
       qc.invalidateQueries({queryKey:["focoLeads"]});
       toast.success(`📅 Visita confirmada`);
       goNext();
@@ -766,6 +785,13 @@ export default function DashboardFoco(){
         <WallOfFameTicker/>
         <WhatsAppQRBanner/>
 
+        {/* ── HERO CARD do lançamento (substitui visualmente quando ativo) ── */}
+        {isBroker && activeLaunches.length > 0 && (
+          <div className="px-3 pt-2 shrink-0 space-y-2">
+            {activeLaunches.map(l => <LaunchHeroCard key={l.id} launch={l} />)}
+          </div>
+        )}
+
         {/* ── STRIP CLICÁVEL: Ranking · Meta · Campanha (desktop + mobile) ── */}
         {isBroker&&(
           <div className="grid grid-cols-3 gap-2 px-3 pt-2 shrink-0">
@@ -837,7 +863,13 @@ export default function DashboardFoco(){
         )}
 
         {/* ── MAIN (fila normal) ── */}
-        {!prospeccaoMode && (
+        {!prospeccaoMode && (<>
+        {isBroker && activeLaunches.length > 0 && (
+          <div className="px-3 pt-1 shrink-0 space-y-1">
+            {activeLaunches.map(l => <LaunchStrip key={l.id} launch={l} />)}
+          </div>
+        )}
+
         <main className="flex flex-1 overflow-hidden gap-3 p-3 pb-20 md:pb-3 min-h-0">
 
           {/* ─── LEFT: MISSÃO ─── */}
@@ -1580,7 +1612,7 @@ export default function DashboardFoco(){
           </AnimatePresence>
 
         </main>
-        )}
+        </>)}
 
         {/* ── MOBILE BOTTOM NAV ── */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex h-14"
@@ -1927,6 +1959,27 @@ export default function DashboardFoco(){
             </div>
           </SheetContent>
         </Sheet>
+
+        {pendingLaunchAction && (
+          <LaunchProductPrompt
+            launches={activeLaunches}
+            actionLabel={pendingLaunchAction.action === "venda" ? "venda" : pendingLaunchAction.action === "documento" ? "pasta" : "visita"}
+            onConfirm={async (launchId) => {
+              if (launchId && pendingLaunchAction.leadId) {
+                await registerLaunchClaim(launchId, pendingLaunchAction.leadId, pendingLaunchAction.action);
+                toast.success(`🏆 ${pendingLaunchAction.action} registrada no lançamento!`);
+              }
+              const cb = pendingLaunchAction.cb;
+              setPendingLaunchAction(null);
+              cb();
+            }}
+            onCancel={() => {
+              const cb = pendingLaunchAction.cb;
+              setPendingLaunchAction(null);
+              cb();
+            }}
+          />
+        )}
 
       </div>
     </>
