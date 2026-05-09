@@ -189,8 +189,25 @@ export function WhatsAppQRBanner() {
   // Determina cor do countdown
   const countdownColor = countdown <= 8 ? "text-red-400" : countdown <= 15 ? "text-amber-400" : "text-slate-500";
 
-  // Não exibe: sem chip configurado, ainda carregando, ou já conectado
-  if (!botInstanceId || isConnected === null || isConnected === true) return null;
+  // Não exibe: ainda carregando ou já conectado
+  if (isConnected === true) return null;
+
+  // Caso especial: broker sem bot vinculado pelo admin
+  if (!botInstanceId) {
+    return (
+      <div className="mx-4 mt-3 rounded-xl border border-amber-500/40 bg-amber-950/40 px-4 py-3 flex items-center gap-2.5">
+        <WifiOff className="w-4 h-4 text-amber-400 shrink-0" />
+        <div>
+          <p className="text-sm font-semibold text-amber-300">Sem chip do WhatsApp configurado</p>
+          <p className="text-xs text-amber-400/80">
+            Você ainda não tem um chip vinculado. Peça pro seu gerente atribuir um chip pra você no Admin.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isConnected === null) return null; // ainda carregando status
 
   return (
     <>

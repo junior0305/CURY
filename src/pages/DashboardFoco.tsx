@@ -41,6 +41,7 @@ import LaunchProductPrompt from "@/components/launches/LaunchProductPrompt";
 import { useActiveLaunches, registerLaunchClaim } from "@/components/launches/useActiveLaunches";
 import { WallOfFameTicker } from "@/components/dashboard/WallOfFameTicker";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
+import { WhatsAppQuickButton } from "@/components/broker/WhatsAppQuickButton";
 import { BrokerAutomationSettings } from "@/components/broker/BrokerAutomationSettings";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import LeadForm from "@/components/broker/LeadForm";
@@ -777,6 +778,7 @@ export default function DashboardFoco(){
             </button>
             <ThemeToggle compact/>
             {user?.id && <BrokerAutomationSettings userId={user.id}/>}
+            <WhatsAppQuickButton/>
             <button onClick={()=>setIsMuted(m=>!m)} className="w-7 h-7 rounded-lg flex items-center justify-center" style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)"}}>{isMuted?<VolumeX className="w-3.5 h-3.5 text-slate-500"/>:<Volume2 className="w-3.5 h-3.5 text-cyan-400"/>}</button>
             <button onClick={signOut} className="w-7 h-7 rounded-lg flex items-center justify-center" style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)"}}><LogOut className="w-3.5 h-3.5 text-slate-500"/></button>
           </div>
