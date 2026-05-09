@@ -28,6 +28,9 @@ export type LostReason =
   | 'DESISTIU'            // Desistiu / mudou de plano
   | 'SEM_RETORNO'         // Sem retorno após múltiplos contatos
   | 'NUMERO_ERRADO'       // Número de telefone inválido / não pertence ao lead
+  | 'SEM_PERFIL'          // Lead não tem perfil pra MCMV (não atende critérios)
+  | 'LOCALIZACAO'         // Não interessado pela localização do produto
+  | 'CLIENTE_BLOQUEOU'    // Cliente bloqueou o WhatsApp do corretor
   | null;
 
 // Mantido para retrocompatibilidade com campos antigos de exclusão
@@ -101,15 +104,18 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
 
 export const LOST_REASON_LABEL: Record<NonNullable<LostReason>, string> = {
   RENDA_FORA_FAIXA:   'Renda fora da faixa',
+  SEM_PERFIL:         'Sem perfil',
   JA_TEM_IMOVEL:      'Já tem imóvel no nome',
   JA_USOU_PROGRAMA:   'Já usou o programa antes',
   FGTS_INSUFICIENTE:  'FGTS insuficiente',
   REPROVADO_CREDITO:  'Reprovado na análise de crédito',
+  LOCALIZACAO:        'Localização',
   NAO_COMPARECEU:     'Não compareceu à visita',
   FOI_CONCORRENTE:    'Foi para concorrente',
   DESISTIU:           'Desistiu / mudou de plano',
   SEM_RETORNO:        'Sem retorno após contatos',
   NUMERO_ERRADO:      'Número errado / não é do lead',
+  CLIENTE_BLOQUEOU:   'Cliente bloqueou o WhatsApp',
 };
 
 export const TIPO_TRABALHO_LABEL: Record<NonNullable<TipoTrabalho>, string> = {
