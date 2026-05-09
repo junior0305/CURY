@@ -135,7 +135,11 @@ export function WhatsAppQuickButton() {
 
   function handleOpen() {
     setOpen(true);
-    if (status !== "no_chip" && botInstanceId) fetchQR();
+    // Auto-puxa QR só se status indica problema. Se 'open', deixa o broker
+    // decidir — mostra opção "Gerar novo QR" e ele clica se precisar.
+    if (botInstanceId && (status === "offline" || status === "connecting")) {
+      fetchQR();
+    }
   }
   function handleClose() {
     if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
@@ -234,21 +238,31 @@ export function WhatsAppQuickButton() {
               {!loading && !justConnected && !connecting && error && (
                 <div className="flex flex-col items-center gap-3 py-4">
                   <p className="text-sm text-red-400 text-center">{error}</p>
-                  <Button size="sm" onClick={() => fetchQR()} variant="outline" className="border-slate-600 text-slate-300 gap-1.5">
-                    <RefreshCw className="w-3.5 h-3.5" /> Tentar novamente
-                  </Button>
                 </div>
               )}
 
-              {/* Status open: oferece forçar QR mesmo conectado */}
+              {/* Idle (status open sem QR ainda) */}
               {!loading && !justConnected && !connecting && !qrBase64 && !error && status === "open" && (
                 <div className="flex flex-col items-center gap-3 py-6">
                   <CheckCircle2 className="w-12 h-12 text-emerald-400" />
                   <p className="text-sm text-emerald-300 text-center font-bold">Conectado</p>
-                  <Button size="sm" onClick={() => fetchQR(true)} variant="outline" className="border-amber-500/40 text-amber-300 gap-1.5">
-                    <RefreshCw className="w-3.5 h-3.5" /> Forçar reconexão (gerar novo QR)
-                  </Button>
+                  <p className="text-xs text-slate-400 text-center">
+                    Tudo certo. Se quiser trocar de aparelho ou desconfia que algo está errado,
+                    gere um novo QR Code abaixo.
+                  </p>
                 </div>
+              )}
+
+              {/* Botão "Gerar QR" SEMPRE visível enquanto Dialog aberto e tem chip */}
+              {!loading && !justConnected && !connecting && botInstanceId && (
+                <Button
+                  onClick={() => fetchQR(true)}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-wider gap-2"
+                  size="lg"
+                >
+                  <Smartphone className="w-4 h-4" />
+                  {qrBase64 ? "Gerar novo QR" : error ? "Tentar de novo" : "Gerar QR Code"}
+                </Button>
               )}
             </div>
           )}
