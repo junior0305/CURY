@@ -211,27 +211,37 @@ export function WhatsAppQRBanner() {
 
   return (
     <>
-      {/* Banner de alerta */}
-      <div className="mx-4 mt-3 rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <WifiOff className="w-4 h-4 text-red-400 shrink-0" />
+      {/* Banner de alerta — clique abre QR direto */}
+      <button
+        onClick={handleOpen}
+        className="w-[calc(100%-2rem)] mx-4 mt-3 rounded-xl border-2 border-red-500/60 bg-red-950/50 px-4 py-3 flex items-center justify-between gap-3 hover:bg-red-900/60 transition group cursor-pointer"
+        style={{ boxShadow: "0 0 18px rgba(239,68,68,0.25)" }}
+      >
+        <div className="flex items-center gap-3 text-left">
+          <div className="w-10 h-10 rounded-xl bg-red-500/30 border border-red-400/50 flex items-center justify-center shrink-0">
+            <WifiOff className="w-5 h-5 text-red-300" />
+          </div>
           <div>
-            <p className="text-sm font-semibold text-red-300">WhatsApp desconectado</p>
-            <p className="text-xs text-red-400/80">
-              {instanceName ? `Instância "${instanceName}" offline.` : "Seu chip não está conectado."}{" "}
-              Escaneie o QR para reconectar.
+            <p className="text-sm font-black text-red-200 uppercase tracking-wider">
+              WhatsApp desconectado
+            </p>
+            <p className="text-xs text-red-300/90 mt-0.5">
+              {instanceName ? `Chip "${instanceName}" offline · ` : ""}
+              <span className="font-bold underline">Clique aqui pra ler o QR Code</span>
             </p>
           </div>
         </div>
         <Button
-          size="sm"
-          onClick={handleOpen}
-          className="shrink-0 bg-red-600 hover:bg-red-500 text-white text-xs gap-1.5"
+          size="lg"
+          asChild
+          className="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-wider gap-2 pointer-events-none"
         >
-          <Smartphone className="w-3.5 h-3.5" />
-          Conectar
+          <span>
+            <Smartphone className="w-4 h-4" />
+            Ler QR
+          </span>
         </Button>
-      </div>
+      </button>
 
       {/* Modal com QR */}
       <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>

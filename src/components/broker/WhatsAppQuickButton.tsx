@@ -135,11 +135,9 @@ export function WhatsAppQuickButton() {
 
   function handleOpen() {
     setOpen(true);
-    // Auto-puxa QR só se status indica problema. Se 'open', deixa o broker
-    // decidir — mostra opção "Gerar novo QR" e ele clica se precisar.
-    if (botInstanceId && (status === "offline" || status === "connecting")) {
-      fetchQR();
-    }
+    // SEMPRE puxa o QR ao abrir (com forceQR pra também funcionar em 'open').
+    // Broker que abre o modal QUER ver o QR — não faz sentido esconder.
+    if (botInstanceId) fetchQR(true);
   }
   function handleClose() {
     if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
@@ -241,15 +239,12 @@ export function WhatsAppQuickButton() {
                 </div>
               )}
 
-              {/* Idle (status open sem QR ainda) */}
-              {!loading && !justConnected && !connecting && !qrBase64 && !error && status === "open" && (
-                <div className="flex flex-col items-center gap-3 py-6">
-                  <CheckCircle2 className="w-12 h-12 text-emerald-400" />
-                  <p className="text-sm text-emerald-300 text-center font-bold">Conectado</p>
-                  <p className="text-xs text-slate-400 text-center">
-                    Tudo certo. Se quiser trocar de aparelho ou desconfia que algo está errado,
-                    gere um novo QR Code abaixo.
-                  </p>
+              {/* Status atual em pílula no topo (informativo) */}
+              {!loading && (
+                <div className="text-[10px] uppercase tracking-widest font-black flex items-center gap-1.5"
+                     style={{ color: s.color }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.color }} />
+                  {s.label}
                 </div>
               )}
 
@@ -261,7 +256,7 @@ export function WhatsAppQuickButton() {
                   size="lg"
                 >
                   <Smartphone className="w-4 h-4" />
-                  {qrBase64 ? "Gerar novo QR" : error ? "Tentar de novo" : "Gerar QR Code"}
+                  {qrBase64 ? "Gerar novo QR Code" : error ? "Tentar de novo" : "Gerar QR Code"}
                 </Button>
               )}
             </div>
