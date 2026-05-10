@@ -658,7 +658,10 @@ function LeadHistoryBox({ leadId, kind }: { leadId: string | null; kind: "visita
 // ─── Modal: Visita ──────────────────────────────────────────────────────────
 
 function VisitaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [quickMode, setQuickMode] = useState(false);
   const [lead, setLead] = useState<any>(null);
+  const [broker, setBroker] = useState<any>(null);
+  const [quantity, setQuantity] = useState<number>(1);
   const [data, setData] = useState<string>(new Date().toISOString().substring(0, 10));
   const [produto, setProduto] = useState<string>("");
   const [obs, setObs] = useState<string>("");
@@ -667,9 +670,21 @@ function VisitaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   useEffect(() => { if (lead?.product) setProduto(lead.product || ""); }, [lead]);
 
   async function save() {
-    if (!lead) return toast.error("Selecione o lead");
     setSaving(true);
     try {
+      if (quickMode) {
+        if (!broker) { toast.error("Selecione o corretor"); setSaving(false); return; }
+        if (!quantity || quantity < 1) { toast.error("Informe a quantidade"); setSaving(false); return; }
+        const { error } = await supabase.from("secretary_quick_entries").insert({
+          entry_type: "visita", broker_id: broker.id, entry_date: data,
+          quantity, produto: produto || null, notes: obs || null,
+        });
+        if (error) throw error;
+        toast.success(`✅ ${quantity} visita${quantity>1?"s":""} lançada${quantity>1?"s":""} para ${broker.first_name}`);
+        onSaved();
+        return;
+      }
+      if (!lead) return toast.error("Selecione o lead");
       const updates: any = { status: "VISIT_SCHEDULED", last_interaction_at: new Date(data + "T12:00:00").toISOString() };
       if (produto) updates.product = produto;
       const { error } = await supabase.from("leads").update(updates).eq("id", lead.id);
@@ -687,13 +702,35 @@ function VisitaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 
   return (
     <ModalShell title="🏠 Registrar Visita" onClose={onClose}>
-      <Field label="Lead"><LeadPicker value={lead} onChange={setLead} /></Field>
-      {lead && <LeadHistoryBox leadId={lead.id} kind="visita" />}
+      <label className="flex items-center gap-2 cursor-pointer text-sm bg-amber-950/20 border border-amber-500/30 rounded-lg px-3 py-2">
+        <input type="checkbox" checked={quickMode} onChange={(e) => setQuickMode(e.target.checked)} />
+        <span className="text-amber-200 font-bold">⚡ Lançamento rápido (sem lead específico)</span>
+      </label>
+
+      {!quickMode && (
+        <>
+          <Field label="Lead"><LeadPicker value={lead} onChange={setLead} /></Field>
+          {lead && <LeadHistoryBox leadId={lead.id} kind="visita" />}
+        </>
+      )}
+      {quickMode && (
+        <Field label="Corretor *"><BrokerPicker value={broker} onChange={setBroker} /></Field>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <Field label="Data da visita"><Input type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
-        <Field label="Produto"><Input value={produto} onChange={(e) => setProduto(e.target.value)} placeholder="ex: BACANA_ZS" /></Field>
+        {quickMode ? (
+          <Field label="Quantidade *">
+            <Input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)||1))} />
+          </Field>
+        ) : (
+          <Field label="Produto"><Input value={produto} onChange={(e) => setProduto(e.target.value)} placeholder="ex: BACANA_ZS" /></Field>
+        )}
       </div>
-      <Field label="Observação (opcional)"><Input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Detalhes da visita..." /></Field>
+      {quickMode && (
+        <Field label="Produto (opcional)"><Input value={produto} onChange={(e) => setProduto(e.target.value)} placeholder="ex: BACANA_ZS" /></Field>
+      )}
+      <Field label="Observação (opcional)"><Input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Detalhes..." /></Field>
       <SaveButton saving={saving} onClick={save} />
     </ModalShell>
   );
@@ -702,16 +739,31 @@ function VisitaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 // ─── Modal: Pasta ────────────────────────────────────────────────────────────
 
 function PastaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [quickMode, setQuickMode] = useState(false);
   const [lead, setLead] = useState<any>(null);
+  const [broker, setBroker] = useState<any>(null);
+  const [quantity, setQuantity] = useState<number>(1);
   const [data, setData] = useState<string>(new Date().toISOString().substring(0, 10));
   const [banco, setBanco] = useState<string>("Caixa");
   const [obs, setObs] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
   async function save() {
-    if (!lead) return toast.error("Selecione o lead");
     setSaving(true);
     try {
+      if (quickMode) {
+        if (!broker) { toast.error("Selecione o corretor"); setSaving(false); return; }
+        if (!quantity || quantity < 1) { toast.error("Informe a quantidade"); setSaving(false); return; }
+        const { error } = await supabase.from("secretary_quick_entries").insert({
+          entry_type: "pasta", broker_id: broker.id, entry_date: data,
+          quantity, banco: banco || null, notes: obs || null,
+        });
+        if (error) throw error;
+        toast.success(`✅ ${quantity} pasta${quantity>1?"s":""} lançada${quantity>1?"s":""} para ${broker.first_name}`);
+        onSaved();
+        return;
+      }
+      if (!lead) return toast.error("Selecione o lead");
       const { error } = await supabase.from("leads").update({
         status: "DOCS_REQUESTED",
         last_interaction_at: new Date(data + "T12:00:00").toISOString(),
@@ -730,9 +782,22 @@ function PastaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
 
   return (
     <ModalShell title="📁 Registrar Pasta" onClose={onClose}>
-      <Field label="Lead"><LeadPicker value={lead} onChange={setLead} /></Field>
-      {lead && <LeadHistoryBox leadId={lead.id} kind="pasta" />}
-      <div className="grid grid-cols-2 gap-3">
+      <label className="flex items-center gap-2 cursor-pointer text-sm bg-amber-950/20 border border-amber-500/30 rounded-lg px-3 py-2">
+        <input type="checkbox" checked={quickMode} onChange={(e) => setQuickMode(e.target.checked)} />
+        <span className="text-amber-200 font-bold">⚡ Lançamento rápido (sem lead específico)</span>
+      </label>
+
+      {!quickMode && (
+        <>
+          <Field label="Lead"><LeadPicker value={lead} onChange={setLead} /></Field>
+          {lead && <LeadHistoryBox leadId={lead.id} kind="pasta" />}
+        </>
+      )}
+      {quickMode && (
+        <Field label="Corretor *"><BrokerPicker value={broker} onChange={setBroker} /></Field>
+      )}
+
+      <div className="grid grid-cols-3 gap-3">
         <Field label="Data envio docs"><Input type="date" value={data} onChange={(e) => setData(e.target.value)} /></Field>
         <Field label="Banco">
           <select value={banco} onChange={(e) => setBanco(e.target.value)}
@@ -740,6 +805,11 @@ function PastaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
             <option>Caixa</option><option>BB</option><option>Itaú</option><option>Bradesco</option><option>Santander</option><option>Outro</option>
           </select>
         </Field>
+        {quickMode && (
+          <Field label="Quantidade *">
+            <Input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)||1))} />
+          </Field>
+        )}
       </div>
       <Field label="Observação"><Input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Pendências, etc." /></Field>
       <SaveButton saving={saving} onClick={save} />
