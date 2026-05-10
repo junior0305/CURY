@@ -351,7 +351,22 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
   const [searching, setSearching] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [creatingName, setCreatingName] = useState("");
+  const [creatingBrokerId, setCreatingBrokerId] = useState<string>("");
   const [creatingBusy, setCreatingBusy] = useState(false);
+  const [brokers, setBrokers] = useState<any[]>([]);
+
+  // Carrega brokers ativos quando abre o form de criar
+  useEffect(() => {
+    if (!showCreate || brokers.length > 0) return;
+    supabase.from("profiles")
+      .select("id, first_name, last_name, manager:profiles!manager_id(first_name)")
+      .eq("role", "BROKER")
+      .eq("is_active", true)
+      .eq("lead_assignment_enabled", true)
+      .not("first_name", "ilike", "%[INATIVO]%")
+      .order("first_name")
+      .then(({ data }) => setBrokers(data || []));
+  }, [showCreate, brokers.length]);
 
   useEffect(() => {
     if (!q || q.length < 2) { setResults([]); return; }
@@ -381,6 +396,10 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
       toast.error("Nome e telefone são obrigatórios");
       return;
     }
+    if (!creatingBrokerId) {
+      toast.error("Selecione um corretor para atribuir o lead");
+      return;
+    }
     setCreatingBusy(true);
     try {
       // Re-checa duplicidade pelo phone normalizado
@@ -398,6 +417,11 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
         setQ("");
         return;
       }
+      // Pega o manager do broker selecionado pra preencher manager_id
+      const broker = brokers.find(b => b.id === creatingBrokerId);
+      const { data: brokerWithMgr } = await supabase.from("profiles")
+        .select("manager_id").eq("id", creatingBrokerId).maybeSingle();
+
       const { data: newLead, error } = await supabase
         .from("leads")
         .insert({
@@ -405,15 +429,18 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
           phone: phoneNormalized,
           status: "NEW",
           source: "secretaria_manual",
+          broker_id: creatingBrokerId,
+          manager_id: brokerWithMgr?.manager_id || null,
           last_interaction_at: new Date().toISOString(),
         })
         .select("id, name, phone, status, broker_id, sale_value, pv_number, last_interaction_at, profiles:broker_id(first_name, last_name)")
         .single();
       if (error) throw error;
-      toast.success(`✅ Lead "${newLead.name}" cadastrado`);
+      toast.success(`✅ Lead "${newLead.name}" cadastrado e atribuído a ${broker?.first_name || "corretor"}`);
       onChange(newLead);
       setShowCreate(false);
       setCreatingName("");
+      setCreatingBrokerId("");
       setQ("");
     } catch (e: any) {
       toast.error(`Erro: ${e.message || e}`);
@@ -497,12 +524,26 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
               onChange={(e) => setCreatingName(e.target.value)}
               placeholder="ex: Maria Silva"
               className="mt-1"
-              onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
             />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Atribuir a corretor *</label>
+            <select
+              value={creatingBrokerId}
+              onChange={(e) => setCreatingBrokerId(e.target.value)}
+              className="w-full mt-1 bg-slate-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200"
+            >
+              <option value="">— Selecione o corretor —</option>
+              {brokers.map(b => (
+                <option key={b.id} value={b.id}>
+                  {b.first_name} {b.last_name || ""} {b.manager?.first_name ? `· ${b.manager.first_name}` : ""}
+                </option>
+              ))}
+            </select>
           </div>
           <button
             onClick={handleCreate}
-            disabled={creatingBusy || !creatingName.trim() || !phoneNormalized}
+            disabled={creatingBusy || !creatingName.trim() || !phoneNormalized || !creatingBrokerId}
             className="w-full px-3 py-2 rounded-md text-xs font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 text-white transition disabled:opacity-40"
           >
             {creatingBusy ? <Loader2 className="w-3 h-3 animate-spin inline mr-1" /> : null}
