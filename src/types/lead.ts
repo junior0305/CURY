@@ -21,8 +21,10 @@ export type LostReason =
   | 'RENDA_FORA_FAIXA'    // Renda acima ou abaixo da faixa MCMV
   | 'JA_TEM_IMOVEL'       // Já possui imóvel no nome
   | 'JA_USOU_PROGRAMA'    // Já utilizou benefício MCMV anteriormente
-  | 'FGTS_INSUFICIENTE'   // FGTS insuficiente para entrada
-  | 'REPROVADO_CREDITO'   // Reprovado na análise de crédito da Caixa
+  | 'BACEN'               // Restrição BACEN
+  | 'SERASA'              // Restrição SERASA
+  | 'RESTRICAO_CPF'       // Restrição no CPF
+  | 'CADIN'               // CADIN (Cadastro Informativo de Créditos)
   | 'NAO_COMPARECEU'      // Agendou visita e não compareceu, sem retorno
   | 'FOI_CONCORRENTE'     // Foi para concorrente
   | 'DESISTIU'            // Desistiu / mudou de plano
@@ -107,8 +109,10 @@ export const LOST_REASON_LABEL: Record<NonNullable<LostReason>, string> = {
   SEM_PERFIL:         'Sem perfil',
   JA_TEM_IMOVEL:      'Já tem imóvel no nome',
   JA_USOU_PROGRAMA:   'Já usou o programa antes',
-  FGTS_INSUFICIENTE:  'FGTS insuficiente',
-  REPROVADO_CREDITO:  'Reprovado na análise de crédito',
+  BACEN:              'BACEN',
+  SERASA:             'SERASA',
+  RESTRICAO_CPF:      'Restrição CPF',
+  CADIN:              'CADIN',
   LOCALIZACAO:        'Localização',
   NAO_COMPARECEU:     'Não compareceu à visita',
   FOI_CONCORRENTE:    'Foi para concorrente',
