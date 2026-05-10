@@ -355,14 +355,15 @@ function LeadPicker({ value, onChange, placeholder = "Buscar lead por nome ou te
   const [creatingBusy, setCreatingBusy] = useState(false);
   const [brokers, setBrokers] = useState<any[]>([]);
 
-  // Carrega brokers ativos quando abre o form de criar
+  // Carrega brokers ativos quando abre o form de criar.
+  // Não filtra lead_assignment_enabled — esse flag é só pra round-robin
+  // automático. Pra atribuição manual da Secretaria, qualquer broker ativo serve.
   useEffect(() => {
     if (!showCreate || brokers.length > 0) return;
     supabase.from("profiles")
       .select("id, first_name, last_name, manager:profiles!manager_id(first_name)")
       .eq("role", "BROKER")
       .eq("is_active", true)
-      .eq("lead_assignment_enabled", true)
       .not("first_name", "ilike", "%[INATIVO]%")
       .order("first_name")
       .then(({ data }) => setBrokers(data || []));
