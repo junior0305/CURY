@@ -204,18 +204,85 @@ export default function Secretaria() {
                 {!loading && summary && summary.per_broker.length === 0 && (
                   <tr><td colSpan={8} className="text-center text-gray-500 py-6">Sem atividade neste período</td></tr>
                 )}
-                {summary?.per_broker.map(b => (
-                  <tr key={b.broker_id} className="border-t border-gray-700/40 hover:bg-slate-900/40">
-                    <td className="px-3 py-2 text-gray-100 font-medium">{b.broker_name}</td>
-                    <td className="px-3 py-2 text-gray-400 text-xs">{b.manager_name || "—"}</td>
-                    <td className="px-3 py-2 text-right text-amber-300">{b.visitas || "—"}</td>
-                    <td className="px-3 py-2 text-right text-blue-300">{b.pastas || "—"}</td>
-                    <td className="px-3 py-2 text-right text-emerald-300 font-bold">{b.vendas || "—"}</td>
-                    <td className="px-3 py-2 text-right text-gray-300 font-mono text-xs">{fmtMoney(b.vendas_valor)}</td>
-                    <td className="px-3 py-2 text-right text-gray-400 font-mono text-xs">{fmtMoney(b.comissao)}</td>
-                    <td className="px-3 py-2 text-right text-fuchsia-300">{b.plantoes || "—"}</td>
-                  </tr>
-                ))}
+                {(() => {
+                  if (!summary?.per_broker?.length) return null;
+                  // Agrupa por manager_name e calcula subtotais
+                  const grouped = new Map<string, typeof summary.per_broker>();
+                  for (const b of summary.per_broker) {
+                    const k = b.manager_name || "Sem gerente";
+                    if (!grouped.has(k)) grouped.set(k, []);
+                    grouped.get(k)!.push(b);
+                  }
+                  // Ordena equipes por total de vendas DESC
+                  const sortedTeams = Array.from(grouped.entries()).sort((a, b) => {
+                    const vA = a[1].reduce((s, x) => s + (x.vendas || 0), 0);
+                    const vB = b[1].reduce((s, x) => s + (x.vendas || 0), 0);
+                    return vB - vA;
+                  });
+                  const out: JSX.Element[] = [];
+                  for (const [team, brokers] of sortedTeams) {
+                    const tot = brokers.reduce((acc, b) => ({
+                      visitas: acc.visitas + (b.visitas||0),
+                      pastas: acc.pastas + (b.pastas||0),
+                      vendas: acc.vendas + (b.vendas||0),
+                      vendas_valor: acc.vendas_valor + (b.vendas_valor||0),
+                      comissao: acc.comissao + (b.comissao||0),
+                      plantoes: acc.plantoes + (b.plantoes||0),
+                    }), {visitas:0,pastas:0,vendas:0,vendas_valor:0,comissao:0,plantoes:0});
+                    // Header da equipe
+                    out.push(
+                      <tr key={`hdr-${team}`} className="bg-slate-900/80 border-t-2 border-fuchsia-500/30">
+                        <td colSpan={2} className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-fuchsia-300">
+                          🏢 Equipe {team}
+                        </td>
+                        <td className="px-3 py-1.5 text-right text-amber-300 font-bold">{tot.visitas || "—"}</td>
+                        <td className="px-3 py-1.5 text-right text-blue-300 font-bold">{tot.pastas || "—"}</td>
+                        <td className="px-3 py-1.5 text-right text-emerald-300 font-black">{tot.vendas || "—"}</td>
+                        <td className="px-3 py-1.5 text-right text-emerald-200 font-mono text-xs">{fmtMoney(tot.vendas_valor)}</td>
+                        <td className="px-3 py-1.5 text-right text-gray-300 font-mono text-xs">{fmtMoney(tot.comissao)}</td>
+                        <td className="px-3 py-1.5 text-right text-fuchsia-300 font-bold">{tot.plantoes || "—"}</td>
+                      </tr>
+                    );
+                    // Linhas do broker
+                    for (const b of brokers) {
+                      out.push(
+                        <tr key={b.broker_id} className="border-t border-gray-700/40 hover:bg-slate-900/40">
+                          <td className="px-3 py-2 text-gray-100 font-medium pl-6">{b.broker_name}</td>
+                          <td className="px-3 py-2 text-gray-500 text-xs italic">{b.manager_name || "—"}</td>
+                          <td className="px-3 py-2 text-right text-amber-300">{b.visitas || "—"}</td>
+                          <td className="px-3 py-2 text-right text-blue-300">{b.pastas || "—"}</td>
+                          <td className="px-3 py-2 text-right text-emerald-300 font-bold">{b.vendas || "—"}</td>
+                          <td className="px-3 py-2 text-right text-gray-300 font-mono text-xs">{fmtMoney(b.vendas_valor)}</td>
+                          <td className="px-3 py-2 text-right text-gray-400 font-mono text-xs">{fmtMoney(b.comissao)}</td>
+                          <td className="px-3 py-2 text-right text-fuchsia-300">{b.plantoes || "—"}</td>
+                        </tr>
+                      );
+                    }
+                  }
+                  // Total geral no rodapé
+                  const grandTot = summary.per_broker.reduce((acc, b) => ({
+                    visitas: acc.visitas + (b.visitas||0),
+                    pastas: acc.pastas + (b.pastas||0),
+                    vendas: acc.vendas + (b.vendas||0),
+                    vendas_valor: acc.vendas_valor + (b.vendas_valor||0),
+                    comissao: acc.comissao + (b.comissao||0),
+                    plantoes: acc.plantoes + (b.plantoes||0),
+                  }), {visitas:0,pastas:0,vendas:0,vendas_valor:0,comissao:0,plantoes:0});
+                  out.push(
+                    <tr key="grand-total" className="bg-gradient-to-r from-fuchsia-900/30 to-fuchsia-700/20 border-t-2 border-fuchsia-400/50">
+                      <td colSpan={2} className="px-3 py-2 text-xs font-black uppercase tracking-widest text-fuchsia-200">
+                        🏆 TOTAL GERAL
+                      </td>
+                      <td className="px-3 py-2 text-right text-amber-200 font-black">{grandTot.visitas || "—"}</td>
+                      <td className="px-3 py-2 text-right text-blue-200 font-black">{grandTot.pastas || "—"}</td>
+                      <td className="px-3 py-2 text-right text-emerald-200 font-black">{grandTot.vendas || "—"}</td>
+                      <td className="px-3 py-2 text-right text-emerald-100 font-mono text-xs font-bold">{fmtMoney(grandTot.vendas_valor)}</td>
+                      <td className="px-3 py-2 text-right text-gray-200 font-mono text-xs font-bold">{fmtMoney(grandTot.comissao)}</td>
+                      <td className="px-3 py-2 text-right text-fuchsia-200 font-black">{grandTot.plantoes || "—"}</td>
+                    </tr>
+                  );
+                  return out;
+                })()}
               </tbody>
             </table>
           </div>
@@ -561,16 +628,19 @@ function BrokerPicker({ value, onChange }: { value: any; onChange: (b: any) => v
   const [list, setList] = useState<any[]>([]);
   useEffect(() => {
     supabase.from("profiles").select("id, first_name, last_name, manager_id, manager:profiles!manager_id(first_name)")
-      .eq("role", "BROKER").order("first_name").limit(200)
+      .eq("role", "BROKER")
+      .eq("is_active", true)
+      .not("first_name", "ilike", "%[INATIVO]%")
+      .order("first_name").limit(200)
       .then(({ data }) => setList(data || []));
   }, []);
   return (
     <select value={value?.id || ""} onChange={(e) => onChange(list.find(b => b.id === e.target.value) || null)}
       className="w-full bg-slate-900/60 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-gray-200">
-      <option value="">Selecione...</option>
+      <option value="">— Selecione o corretor —</option>
       {list.map(b => (
         <option key={b.id} value={b.id}>
-          {b.first_name} {b.last_name || ""} {b.manager ? `(${b.manager.first_name})` : ""}
+          {b.first_name} {b.last_name || ""} {b.manager ? `· ${b.manager.first_name}` : ""}
         </option>
       ))}
     </select>
