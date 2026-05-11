@@ -406,7 +406,7 @@ export function LeadMonitorDrawer({ lead, broker, onClose }: Props) {
             </p>
             {broker && (
               <p className="text-[10px] mt-0.5" style={{ color: "#334155" }}>
-                Corretor: <span style={{ color: "#94A3B8" }}>{broker.name.split(" ")[0]}</span>
+                Corretor: <span style={{ color: "#94A3B8" }}>{(broker.name || "—").split(" ")[0]}</span>
               </p>
             )}
           </div>

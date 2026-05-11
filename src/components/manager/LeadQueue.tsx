@@ -53,7 +53,7 @@ export default function LeadQueue({ brokers, leads }: Props) {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-semibold text-sm truncate">{broker.name.split(" ")[0]}</p>
+                  <p className="text-white font-semibold text-sm truncate">{(broker.name || "—").split(" ")[0]}</p>
                   <p className="text-xs text-gray-500">{activeLeads} leads ativos</p>
                 </div>
                 <div className={cn(
@@ -88,7 +88,7 @@ export default function LeadQueue({ brokers, leads }: Props) {
                     {initials(broker.name)}
                   </AvatarFallback>
                 </Avatar>
-                <p className="text-gray-500 font-medium text-sm">{broker.name.split(" ")[0]}</p>
+                <p className="text-gray-500 font-medium text-sm">{(broker.name || "—").split(" ")[0]}</p>
                 <span className="ml-auto text-xs text-gray-600 bg-gray-700/40 px-2 py-0.5 rounded-full">ausente</span>
               </div>
             ))}

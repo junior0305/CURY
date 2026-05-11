@@ -85,7 +85,7 @@ export default function Mensagens() {
     let list = templates;
     if (search) {
       const q = search.toLowerCase();
-      list = list.filter(t => t.name.toLowerCase().includes(q) || t.message.toLowerCase().includes(q));
+      list = list.filter(t => (t.name || "").toLowerCase().includes(q) || (t.message || "").toLowerCase().includes(q));
     }
     if (filterCategory !== "all") {
       list = filterCategory === "__none__" ? list.filter(t => !t.category) : list.filter(t => t.category === filterCategory);

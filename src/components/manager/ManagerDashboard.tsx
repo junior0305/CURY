@@ -398,7 +398,7 @@ function MetaCorrida({ teamId, brokers, teamLeads }: {
                             {initials(broker.name)}
                           </div>
                           <span className="font-semibold truncate" style={{ color: "#CBD5E1" }}>
-                            {broker.name.split(" ")[0]}
+                            {(broker.name || "—").split(" ")[0]}
                           </span>
                         </div>
 
@@ -579,11 +579,11 @@ function AlertModal({ broker, fromId, lead, onClose }: {
 
     setSending(false);
     if (whatsappSent) {
-      toast.success(`✅ Alerta enviado para ${broker.name.split(" ")[0]} — Dashboard + WhatsApp`);
+      toast.success(`✅ Alerta enviado para ${(broker.name || "—").split(" ")[0]} — Dashboard + WhatsApp`);
     } else if (whatsappError) {
       toast.warning(`🔔 Alerta salvo no Dashboard. WhatsApp falhou: ${whatsappError}`);
     } else {
-      toast.success(`🔔 Alerta salvo para ${broker.name.split(" ")[0]} no Dashboard`);
+      toast.success(`🔔 Alerta salvo para ${(broker.name || "—").split(" ")[0]} no Dashboard`);
     }
     onClose();
   };
@@ -628,7 +628,7 @@ function AlertModal({ broker, fromId, lead, onClose }: {
               {initials(broker.name)}
             </div>
             <div>
-              <p className="text-sm font-black text-white">{broker.name.split(" ")[0]}</p>
+              <p className="text-sm font-black text-white">{(broker.name || "—").split(" ")[0]}</p>
               {lead ? (
                 <p className="text-[10px]" style={{ color: "#00D4FF" }}>Lead: {lead.name}</p>
               ) : (
@@ -1268,7 +1268,7 @@ export default function ManagerDashboard() {
                                           </SelectTrigger>
                                           <SelectContent>
                                             {brokers.filter(b => b.id !== broker.id).map(b => (
-                                              <SelectItem key={b.id} value={b.id} className="text-xs">{b.name.split(" ")[0]}</SelectItem>
+                                              <SelectItem key={b.id} value={b.id} className="text-xs">{(b.name || "—").split(" ")[0]}</SelectItem>
                                             ))}
                                           </SelectContent>
                                         </Select>
@@ -1337,7 +1337,7 @@ export default function ManagerDashboard() {
                                     </SelectTrigger>
                                     <SelectContent>
                                       {presentBrokers.map(b => (
-                                        <SelectItem key={b.id} value={b.id} className="text-xs">{b.name.split(" ")[0]}</SelectItem>
+                                        <SelectItem key={b.id} value={b.id} className="text-xs">{(b.name || "—").split(" ")[0]}</SelectItem>
                                       ))}
                                     </SelectContent>
                                   </Select>
@@ -1417,7 +1417,7 @@ export default function ManagerDashboard() {
                                           </SelectTrigger>
                                           <SelectContent>
                                             {brokers.filter(b => b.id !== broker.id).map(b => (
-                                              <SelectItem key={b.id} value={b.id} className="text-xs">{b.name.split(" ")[0]}</SelectItem>
+                                              <SelectItem key={b.id} value={b.id} className="text-xs">{(b.name || "—").split(" ")[0]}</SelectItem>
                                             ))}
                                           </SelectContent>
                                         </Select>
@@ -1454,7 +1454,7 @@ export default function ManagerDashboard() {
                       >
                         <option value="todos">Todos os corretores</option>
                         {brokers.map(b => (
-                          <option key={b.id} value={b.id}>{b.name.split(" ")[0]}</option>
+                          <option key={b.id} value={b.id}>{(b.name || "—").split(" ")[0]}</option>
                         ))}
                       </select>
                     </div>
@@ -1506,7 +1506,7 @@ export default function ManagerDashboard() {
                               </SelectTrigger>
                               <SelectContent>
                                 {brokers.map(b => (
-                                  <SelectItem key={b.id} value={b.id} className="text-xs">{b.name.split(" ")[0]}</SelectItem>
+                                  <SelectItem key={b.id} value={b.id} className="text-xs">{(b.name || "—").split(" ")[0]}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -1735,7 +1735,7 @@ export default function ManagerDashboard() {
                                         {initials(broker.name)}
                                       </div>
                                       <span className="text-[11px]" style={{ color: "var(--crm-text-muted)" }}>
-                                        {highlightMatch(broker.name.split(" ")[0], searchQuery)}
+                                        {highlightMatch((broker.name || "—").split(" ")[0], searchQuery)}
                                       </span>
                                     </div>
                                   )}
@@ -1914,7 +1914,7 @@ export default function ManagerDashboard() {
                                       style={{ background: `${color}10`, border: `1px solid ${color}30` }}
                                       title={`Ver ${broker.name} no painel da equipe`}>
                                       <UserCheck className="w-3 h-3" style={{ color }} />
-                                      <span className="text-[10px] font-black uppercase tracking-wide" style={{ color }}>{broker.name.split(" ")[0]}</span>
+                                      <span className="text-[10px] font-black uppercase tracking-wide" style={{ color }}>{(broker.name || "—").split(" ")[0]}</span>
                                     </button>
                                   ) : (
                                     <span className="flex items-center gap-1 px-2 py-1 rounded-lg"
@@ -1964,7 +1964,7 @@ export default function ManagerDashboard() {
                                       disabled={assignMutation.isPending}
                                       className="px-2 py-1 rounded-md text-[10px] font-bold transition-all hover:opacity-80 disabled:opacity-50"
                                       style={{ background: "var(--crm-glass)", border: "1px solid var(--crm-border-mid)", color: "var(--crm-text)" }}>
-                                      {b.name.split(" ")[0]}
+                                      {(b.name || "—").split(" ")[0]}
                                     </button>
                                   ))}
                                   {brokers.filter(b => b.leadAssignmentEnabled && b.id !== lead.brokerId).length === 0 && (
@@ -2075,7 +2075,7 @@ export default function ManagerDashboard() {
 
                             {/* Info */}
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold text-white truncate leading-tight">{broker.name.split(" ")[0]}</p>
+                              <p className="text-sm font-bold text-white truncate leading-tight">{(broker.name || "—").split(" ")[0]}</p>
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="text-[9px] font-bold" style={{ color: c.neon }}>{c.label}</span>
                                 <span style={{ color: "#1E293B" }}>·</span>
@@ -2179,7 +2179,7 @@ export default function ManagerDashboard() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between">
-                                <p className="text-sm font-bold text-white truncate">{broker.name.split(" ")[0]}</p>
+                                <p className="text-sm font-bold text-white truncate">{(broker.name || "—").split(" ")[0]}</p>
                                 <div className="flex items-center gap-2 shrink-0">
                                   <span className="text-xs font-black" style={{ color: concluded > 0 ? "#34D399" : "#334155" }}>{concluded} vendas</span>
                                   <span className="text-[10px]" style={{ color: "#334155" }}>{active} ativos</span>
@@ -2363,7 +2363,7 @@ export default function ManagerDashboard() {
                             {initials(broker.name)}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold truncate" style={{ color: isPresent ? "#fff" : "#475569" }}>{broker.name.split(" ")[0]}</p>
+                            <p className="text-sm font-bold truncate" style={{ color: isPresent ? "#fff" : "#475569" }}>{(broker.name || "—").split(" ")[0]}</p>
                             <p className="text-[10px]" style={{ color: "#334155" }}>{isPresent ? "Recebendo leads" : "Fora da fila"}</p>
                           </div>
                           <Switch
@@ -2413,7 +2413,7 @@ export default function ManagerDashboard() {
                               {initials(broker.name)}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold text-white truncate">{broker.name.split(" ")[0]}</p>
+                              <p className="text-sm font-bold text-white truncate">{(broker.name || "—").split(" ")[0]}</p>
                               <p className="text-[10px]" style={{ color: "#475569" }}>{activeCount} leads ativos</p>
                             </div>
                             <span className="text-[10px] font-black px-2 py-0.5 rounded-full shrink-0"
@@ -2434,7 +2434,7 @@ export default function ManagerDashboard() {
                             style={{ background: "rgba(51,65,85,0.5)", color: "#475569" }}>
                             {initials(b.name)}
                           </div>
-                          <p className="text-xs" style={{ color: "#475569" }}>{b.name.split(" ")[0]}</p>
+                          <p className="text-xs" style={{ color: "#475569" }}>{(b.name || "—").split(" ")[0]}</p>
                           <span className="text-[9px] ml-auto" style={{ color: "#334155" }}>ausente</span>
                         </div>
                       ))}
@@ -2522,7 +2522,7 @@ export default function ManagerDashboard() {
                               {initials(broker.name)}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-white truncate">{broker.name.split(" ")[0]}</p>
+                              <p className="text-xs font-bold text-white truncate">{(broker.name || "—").split(" ")[0]}</p>
                               <div className="h-1 rounded-full overflow-hidden mt-1" style={{ background: "rgba(255,255,255,0.05)", width: "80%" }}>
                                 {hasData && (
                                   <motion.div

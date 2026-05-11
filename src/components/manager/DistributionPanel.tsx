@@ -54,7 +54,7 @@ function LeadRow({
           )}
           {presentBrokers.map(b => (
             <SelectItem key={b.id} value={b.id} className="text-xs">
-              {b.name.split(" ")[0]}
+              {(b.name || "—").split(" ")[0]}
             </SelectItem>
           ))}
         </SelectContent>
@@ -182,7 +182,7 @@ export default function DistributionPanel({ brokers, teamLeads, onAssigned }: Pr
                     <SelectContent className="rounded-xl border-none shadow-2xl">
                       {brokers.filter(b => b.leadAssignmentEnabled).map(b => (
                         <SelectItem key={b.id} value={b.id} className="text-xs">
-                          {b.name.split(" ")[0]}
+                          {(b.name || "—").split(" ")[0]}
                         </SelectItem>
                       ))}
                     </SelectContent>
