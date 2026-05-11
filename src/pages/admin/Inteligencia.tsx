@@ -288,8 +288,8 @@ function CoachList({ analyses }: { analyses: CoachAnalysis[] }) {
                     <div className="space-y-1.5">
                       {a.errors.map((e, i) => (
                         <div key={i} className="bg-red-950/20 border border-red-500/20 rounded-lg px-3 py-2">
-                          <p className="text-[10px] font-bold text-red-300 mb-0.5">{e.type.replace(/_/g, " ").toUpperCase()}</p>
-                          <p className="text-[11px] text-slate-300 leading-snug">{e.description}</p>
+                          <p className="text-[10px] font-bold text-red-300 mb-0.5">{(e.type || "erro").replace(/_/g, " ").toUpperCase()}</p>
+                          <p className="text-[11px] text-slate-300 leading-snug">{e.description || ""}</p>
                         </div>
                       ))}
                     </div>
@@ -938,8 +938,9 @@ export default function Inteligencia() {
             </p>
             <div className="space-y-1">
               {d.cerebroLeadsTravados.map((item, i) => {
-                const isFailedFinal = item.status === "failed";
-                const retryNum = item.status.startsWith("retry_") ? item.status.replace("retry_", "") : null;
+                const status = item.status || "";
+                const isFailedFinal = status === "failed";
+                const retryNum = status.startsWith("retry_") ? status.replace("retry_", "") : null;
                 return (
                   <div key={i} className="flex items-center gap-3 py-1 border-b border-slate-800 last:border-0">
                     <span className="text-xs text-slate-300 flex-1 truncate">{item.lead}</span>
