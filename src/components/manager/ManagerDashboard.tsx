@@ -2044,6 +2044,9 @@ export default function ManagerDashboard() {
                       const c           = SEMAPHORE_COLORS[sem];
                       const bl          = teamLeads.filter(l => l.brokerId === broker.id);
                       const activeCount  = bl.filter(l => !["CONCLUDED","ABANDONED","EXCLUDED"].includes(l.status)).length;
+                      const qQuente     = bl.filter(l => l.leadTemperature === "quente").length;
+                      const qMorno      = bl.filter(l => l.leadTemperature === "morno").length;
+                      const qFrio       = bl.filter(l => l.leadTemperature === "frio").length;
                       const lastTs       = bl.map(l => l.lastBrokerWhatsappAt).filter(Boolean)
                         .map(d => new Date(d!).getTime()).sort((a, b) => b - a)[0];
                       const lastH        = lastTs ? Math.floor((Date.now() - lastTs) / 3600000) : null;
@@ -2084,6 +2087,19 @@ export default function ManagerDashboard() {
                                   </>
                                 )}
                               </div>
+                              {(qQuente > 0 || qMorno > 0 || qFrio > 0) && (
+                                <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                                  {qQuente > 0 && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/30">🔥 {qQuente}</span>
+                                  )}
+                                  {qMorno > 0 && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">🌤️ {qMorno}</span>
+                                  )}
+                                  {qFrio > 0 && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">❄️ {qFrio}</span>
+                                  )}
+                                </div>
+                              )}
                             </div>
 
                             {/* Carga */}

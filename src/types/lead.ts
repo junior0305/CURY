@@ -33,6 +33,7 @@ export type LostReason =
   | 'SEM_PERFIL'          // Lead não tem perfil pra MCMV (não atende critérios)
   | 'LOCALIZACAO'         // Não interessado pela localização do produto
   | 'CLIENTE_BLOQUEOU'    // Cliente bloqueou o WhatsApp do corretor
+  | 'SEM_RETORNO_LONGO'   // Lead esfriou por 14+ dias em Conversando — voltou ao pool de prospecção
   | null;
 
 // Mantido para retrocompatibilidade com campos antigos de exclusão
@@ -41,6 +42,12 @@ export type ExclusionReason = 'WRONG_NUMBER' | 'NO_INTEREST' | 'NO_PROFILE' | 'N
 export type TipoTrabalho = 'CLT' | 'AUTONOMO' | 'FUNCIONARIO_PUBLICO' | null;
 
 export type FaixaMCMV = 'FAIXA_1' | 'FAIXA_2' | 'FAIXA_3' | 'FORA' | null;
+
+// Temperatura comportamental (só populada em IN_PROGRESS — "Conversando")
+// quente: respondeu <2h OU 5+ msgs em 7d
+// morno:  respondeu 2-72h OU 1-4 msgs em 7d
+// frio:   >72h sem resposta e <1 msg em 7d
+export type LeadTemperature = 'quente' | 'morno' | 'frio' | null;
 
 export interface MCMVQualification {
   id: string;
@@ -87,6 +94,8 @@ export interface Lead {
   redistributionCount: number;         // Quantas vezes foi redistribuído
   reactivatedAt: string | null;        // Quando o lead respondeu ao bot e foi reativado
   pauseAutoMessages: boolean;          // Corretor pausou envios automáticos — está em conversa ativa
+  leadTemperature: LeadTemperature;    // Calculado pelo banco — só populado em IN_PROGRESS
+  temperatureUpdatedAt: string | null; // Última atualização da temperatura
 }
 
 // Labels para exibição na UI
@@ -120,6 +129,7 @@ export const LOST_REASON_LABEL: Record<NonNullable<LostReason>, string> = {
   SEM_RETORNO:        'Sem retorno após contatos',
   NUMERO_ERRADO:      'Número errado / não é do lead',
   CLIENTE_BLOQUEOU:   'Cliente bloqueou o WhatsApp',
+  SEM_RETORNO_LONGO:  '14+ dias frio — voltou pra prospecção',
 };
 
 export const TIPO_TRABALHO_LABEL: Record<NonNullable<TipoTrabalho>, string> = {

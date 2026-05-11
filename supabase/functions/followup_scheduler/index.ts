@@ -463,6 +463,7 @@ serve(async (req) => {
 
     // Busca leads com last_interaction_at antigo (excluindo DOCS_REQUESTED — lead em fase de documentação)
     // Exclui leads sob qualificação de agente IA (ai_qualification_queue_id NOT NULL)
+    // Exclui leads com conversa ativa (quente/morno) — só follow-up automático em Frio ou sem temperatura (NEW)
     const { data: staleWithInteraction } = await supabase
       .from('leads')
       .select('id, name, phone, status, tag, broker_id, last_interaction_at, created_at, welcome_responded_at, last_broker_whatsapp_at, last_lead_response_at, broker:profiles!broker_id(first_name, bot_instance_id, automation_settings)')
@@ -470,6 +471,7 @@ serve(async (req) => {
       .lt('last_interaction_at', thresholdAgo)
       .not('broker_id', 'is', null)
       .is('ai_qualification_queue_id', null)
+      .or('lead_temperature.is.null,lead_temperature.eq.frio')
       .limit(30);
 
     // Busca leads sem last_interaction_at (nunca registrado) e criados há mais de X horas
@@ -481,6 +483,7 @@ serve(async (req) => {
       .lt('created_at', thresholdAgo)
       .not('broker_id', 'is', null)
       .is('ai_qualification_queue_id', null)
+      .or('lead_temperature.is.null,lead_temperature.eq.frio')
       .limit(20);
 
     // Unifica e deduplica

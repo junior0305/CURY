@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchLeadsForDashboard, updateLeadStatus, touchLeadInteraction, registerBrokerContact, togglePauseAutoMessages } from "@/integrations/supabase/leads";
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
 import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin, Brain, BrainCircuit, ChevronLeft, ChevronRight, Home, Handshake, UserCheck, BellOff, Bell } from "lucide-react";
+import { getTemperatureConfig } from "@/utils/leadTemperature";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -310,12 +311,27 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-black text-white truncate max-w-[160px] sm:max-w-sm leading-none">{lead.name}</h2>
-                <Badge className={cn(
-                  "text-[9px] font-black uppercase border-none",
-                  isHot ? "bg-rose-500/20 text-rose-300" : isVisit ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-600/40 text-gray-400"
-                )}>
-                  {isHot ? "🔥 Quente" : isVisit ? "🏠 Visita" : "❄️ Frio"}
-                </Badge>
+                {(() => {
+                  // Em IN_PROGRESS, usa a temperatura real (comportamental).
+                  // Em outros status, mantém o badge contextual do funil.
+                  const t = getTemperatureConfig(lead.leadTemperature);
+                  if (t) {
+                    return (
+                      <Badge className={cn("text-[9px] font-black uppercase border", t.badgeClass,
+                        lead.leadTemperature === "quente" && "animate-pulse")}>
+                        {t.shortLabel}
+                      </Badge>
+                    );
+                  }
+                  return (
+                    <Badge className={cn(
+                      "text-[9px] font-black uppercase border-none",
+                      isHot ? "bg-rose-500/20 text-rose-300" : isVisit ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-600/40 text-gray-400"
+                    )}>
+                      {isHot ? "🔥 Quente" : isVisit ? "🏠 Visita" : "❄️ Frio"}
+                    </Badge>
+                  );
+                })()}
                 {lead.tag && (
                   <Badge className="bg-slate-700/60 text-gray-400 border-gray-600/40 text-[9px] font-black uppercase flex items-center gap-0.5">
                     <MapPin className="w-2.5 h-2.5" /> {lead.tag}

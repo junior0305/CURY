@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/AuthProvider";
+import { getTemperatureConfig } from "@/utils/leadTemperature";
 
 interface LeadListProps {
   selectedLeadId: string | null;
@@ -262,6 +263,18 @@ const LeadList = ({
                       <MapPin className="w-2 h-2" /> {lead.tag}
                     </Badge>
                   )}
+                  {(() => {
+                    const t = getTemperatureConfig(lead.leadTemperature);
+                    return t ? (
+                      <Badge className={cn(
+                        "text-[9px] font-black uppercase px-1.5 h-4 flex items-center gap-0.5",
+                        t.badgeClass,
+                        lead.leadTemperature === "quente" && "animate-pulse"
+                      )}>
+                        {t.shortLabel}
+                      </Badge>
+                    ) : null;
+                  })()}
                   {lead.urgencyTag === "docs" && (
                     <Badge className="bg-rose-500/20 text-rose-300 border-rose-500/30 text-[9px] font-black uppercase animate-pulse px-1.5 h-4 flex items-center gap-0.5">
                       🔥 Quente

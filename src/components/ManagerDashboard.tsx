@@ -137,7 +137,9 @@ export default function ManagerDashboard() {
       const brokerLeads = leads.filter(l => l.brokerId === broker.id);
       const stalledLeads = brokerLeads.filter(l =>
         l.status !== "CONCLUDED" && l.status !== "ABANDONED" && l.status !== "EXCLUDED" &&
-        hoursAgo(l.lastInteractionAt) > ALERT_THRESHOLDS.STALLED_HOURS
+        hoursAgo(l.lastInteractionAt) > ALERT_THRESHOLDS.STALLED_HOURS &&
+        // Não conta como "parado" se está conversando ativamente (quente/morno)
+        l.leadTemperature !== 'quente' && l.leadTemperature !== 'morno'
       );
       const concluded = brokerLeads.filter(l => l.status === "CONCLUDED").length;
       const activeLeads = brokerLeads.filter(l => l.status !== "EXCLUDED" && l.status !== "ABANDONED").length;

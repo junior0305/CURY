@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { getTemperatureConfig } from "@/utils/leadTemperature";
 
 // ─── Prioridade ───────────────────────────────────────────────────────────────
 
@@ -99,8 +100,14 @@ function getPriority(lead: Lead, tasks: Task[], now: number, botIds: Set<string>
     };
   }
 
-  // 7. Em atendimento parado > 24h
-  if (lead.status === "IN_PROGRESS" && hoursSince >= 24) {
+  // 7. Em atendimento parado > 24h — só cobra se realmente esfriou.
+  // Lead quente/morno tem conversa em andamento, mesmo sem mudança de status: não é "parado".
+  if (
+    lead.status === "IN_PROGRESS" &&
+    hoursSince >= 24 &&
+    lead.leadTemperature !== 'quente' &&
+    lead.leadTemperature !== 'morno'
+  ) {
     if (!tasks.some(t => t.leadId === lead.id)) {
       return {
         lead, priority: "importante", icon: Clock,
@@ -275,6 +282,18 @@ export function FocusModeCard({ onSelectLead, botActiveLeadIds = new Set() }: Fo
               <span className={cn("text-[9px] font-black px-1.5 py-0.5 rounded border", style.badge)}>
                 {current.label}
               </span>
+              {(() => {
+                const t = getTemperatureConfig(current.lead.leadTemperature);
+                return t ? (
+                  <span className={cn(
+                    "text-[9px] font-black px-1.5 py-0.5 rounded border uppercase",
+                    t.badgeClass,
+                    current.lead.leadTemperature === "quente" && "animate-pulse"
+                  )}>
+                    {t.shortLabel}
+                  </span>
+                ) : null;
+              })()}
             </div>
             <p className="text-xs text-gray-400 leading-snug">{current.action}</p>
             {current.stateCtx && (
