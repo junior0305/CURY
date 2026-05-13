@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { Lead, ExclusionReason, LeadStatus, LostReason, TipoTrabalho, LeadTemperature } from "@/types/lead";
+import { Lead, ExclusionReason, LeadStatus, LostReason, TipoTrabalho, LeadTemperature, LeadSource } from "@/types/lead";
 
 const mapLeadFromDB = (l: any): Lead => ({
   id: l.id,
@@ -32,6 +32,7 @@ const mapLeadFromDB = (l: any): Lead => ({
   pauseAutoMessages:  l.pause_auto_messages ?? false,
   leadTemperature:    (l.lead_temperature ?? null) as LeadTemperature,
   temperatureUpdatedAt: l.temperature_updated_at ?? null,
+  source:             (l.source ?? null) as LeadSource,
 });
 
 // ─── XP por transição de status ───────────────────────────────────────────────

@@ -85,6 +85,7 @@ export function NewLeadModal({ managerId, managerName, brokers, onClose }: Props
         contact_attempts: 0,
         created_at: nowIso,
         no_redistribute: true, // lead manual não deve ser redistribuído automaticamente
+        source: "manager_manual",
       };
       if (product.trim()) insertPayload.product = product.trim();
       if (renda.trim())   insertPayload.renda_declarada = renda.trim();

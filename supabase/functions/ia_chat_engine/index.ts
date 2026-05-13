@@ -85,6 +85,32 @@ serve(async (req) => {
     const { conversationId, incomingMessage } = await req.json();
     console.log(`[ia_chat_engine] conversa=${conversationId}`);
 
+    // ── GUARDA: só processa se houver ia_message incoming REAL recém-inserida ──
+    // Evita invocações fora do fluxo do webhook_receiver (anti-abuso).
+    // O webhook_receiver insere a ia_message ANTES de invocar esta função,
+    // então a mensagem deve estar lá nos últimos 60s.
+    if (!conversationId || !incomingMessage) {
+      return new Response(JSON.stringify({ error: 'Missing conversationId or incomingMessage' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const guardSince = new Date(Date.now() - 60_000).toISOString();
+    const { data: recentIncoming } = await supabase
+      .from('ia_messages')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .eq('direction', 'incoming')
+      .eq('message_text', incomingMessage)
+      .gte('created_at', guardSince)
+      .limit(1)
+      .maybeSingle();
+    if (!recentIncoming) {
+      console.warn(`[ia_chat_engine] 🚫 BLOQUEADO — conversa=${conversationId} sem ia_message incoming correspondente nos últimos 60s. Provável invocação fora do webhook.`);
+      return new Response(JSON.stringify({ skipped: 'no_recent_incoming_message', reason: 'guard' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { data: conversation } = await supabase
       .from('ia_conversations')
       .select('*, ia_campaigns(*, ai_profiles(*)), bot_instances(*)')

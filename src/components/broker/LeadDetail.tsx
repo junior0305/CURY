@@ -5,6 +5,7 @@ import { fetchLeadsForDashboard, updateLeadStatus, touchLeadInteraction, registe
 import { Lead, LeadStatus, ExclusionReason } from "@/types/lead";
 import { Loader2, Zap, Phone, MessageSquare, Calendar, FileText, Trophy, XCircle, ArrowLeft, Send, Flame, MapPin, Brain, BrainCircuit, ChevronLeft, ChevronRight, Home, Handshake, UserCheck, BellOff, Bell } from "lucide-react";
 import { getTemperatureConfig } from "@/utils/leadTemperature";
+import { getSourceConfig } from "@/utils/leadSource";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -337,6 +338,15 @@ const LeadDetail = ({ leadId, onLeadUpdated, onBack, leadQueue, onNavigateLead }
                     <MapPin className="w-2.5 h-2.5" /> {lead.tag}
                   </Badge>
                 )}
+                {(() => {
+                  const s = getSourceConfig(lead.source);
+                  return s ? (
+                    <Badge className={cn("text-[9px] font-black uppercase border flex items-center gap-0.5", s.badgeClass)}
+                           title={s.tooltip}>
+                      {s.shortLabel}
+                    </Badge>
+                  ) : null;
+                })()}
               </div>
               <p className="text-xs font-medium text-gray-500 mt-1">{lead.phone}</p>
             </div>

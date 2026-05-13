@@ -66,6 +66,7 @@ const LeadForm = ({ onOpenChange, brokerId, managerId }: LeadFormProps) => {
         last_interaction_at: nowIso,
         notes: `Criado manualmente pelo corretor`,
         contact_attempts: 1,
+        source: "broker_manual",
       }).select("id").single();
 
       if (error) {

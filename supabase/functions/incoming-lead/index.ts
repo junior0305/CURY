@@ -287,6 +287,7 @@ serve(async (req) => {
       name, phone, email,
       tag: tag || message || origin,
       status: 'NEW',
+      source: 'facebook_make',
       last_interaction_at: nowIso,
       created_at: nowIso,
       received_at: nowIso,

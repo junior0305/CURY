@@ -49,6 +49,18 @@ export type FaixaMCMV = 'FAIXA_1' | 'FAIXA_2' | 'FAIXA_3' | 'FORA' | null;
 // frio:   >72h sem resposta e <1 msg em 7d
 export type LeadTemperature = 'quente' | 'morno' | 'frio' | null;
 
+// Origem do lead — diferencia funil pago vs prospecção vs cadastros manuais.
+// Resolve confusão do manager: 9 leads novos no painel não são todos do funil.
+export type LeadSource =
+  | 'facebook_make'      // Veio do funil pago (Facebook → Make → incoming-lead)
+  | 'cold_pool'          // Prospecção ativa (cold_contact claimed → promovido)
+  | 'broker_manual'      // Corretor cadastrou (LeadForm — indicação própria)
+  | 'manager_manual'     // Manager atribuiu manualmente (NewLeadModal)
+  | 'secretaria_manual'  // Secretaria cadastrou
+  | 'bulk_import'        // Admin importou planilha
+  | string               // Valores legados em SJC (TAUBAE, whatsapp, etc)
+  | null;
+
 export interface MCMVQualification {
   id: string;
   leadId: string;
@@ -96,6 +108,7 @@ export interface Lead {
   pauseAutoMessages: boolean;          // Corretor pausou envios automáticos — está em conversa ativa
   leadTemperature: LeadTemperature;    // Calculado pelo banco — só populado em IN_PROGRESS
   temperatureUpdatedAt: string | null; // Última atualização da temperatura
+  source: LeadSource;                  // Origem: funil, prospecção, manual etc.
 }
 
 // Labels para exibição na UI

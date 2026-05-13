@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/AuthProvider";
 import { getTemperatureConfig } from "@/utils/leadTemperature";
+import { getSourceConfig } from "@/utils/leadSource";
 
 interface LeadListProps {
   selectedLeadId: string | null;
@@ -272,6 +273,15 @@ const LeadList = ({
                         lead.leadTemperature === "quente" && "animate-pulse"
                       )}>
                         {t.shortLabel}
+                      </Badge>
+                    ) : null;
+                  })()}
+                  {(() => {
+                    const s = getSourceConfig(lead.source);
+                    return s ? (
+                      <Badge className={cn("text-[9px] font-black uppercase px-1.5 h-4 flex items-center gap-0.5", s.badgeClass)}
+                             title={s.tooltip}>
+                        {s.shortLabel}
                       </Badge>
                     ) : null;
                   })()}
