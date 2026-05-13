@@ -219,9 +219,13 @@ serve(async (req) => {
         .map((id: string) => (queueBrokersAll || []).find((b: any) => b.id === id))
         .filter(Boolean);
 
-      // Elegíveis: ativos + (em fila exclusiva ignora lead_assignment_enabled)
+      // Elegíveis: ativos + lead_assignment_enabled=true (sempre respeita decisão do manager).
+      // Antes ignorávamos lead_assignment_enabled em fila exclusiva — isso causava
+      // atribuição a brokers desligados pelo manager. Agora trigger SQL impede esse caso
+      // de qualquer forma. Se queue exclusiva tem broker único OFF, lead cai no fallback
+      // ou fica órfão com alerta admin.
       const eligible = orderedBrokers.filter((b: any) =>
-        b.is_active !== false && (isExclusive || b.lead_assignment_enabled !== false)
+        b.is_active !== false && b.lead_assignment_enabled !== false
       );
 
       if (eligible.length === 0) {
