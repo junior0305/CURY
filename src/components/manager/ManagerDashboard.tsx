@@ -29,6 +29,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -728,6 +729,13 @@ export default function ManagerDashboard() {
   const [leftPanel, setLeftPanel]       = useState<LeftPanel>("urgente");
   const [alertBroker, setAlertBroker]   = useState<{ broker: User; lead?: { id: string; name: string } } | null>(null);
   const [monitorLead, setMonitorLead]   = useState<Lead | null>(null);
+  // Drawer pra listar leads por broker filtrados por status (clica em "🏠 5 visitas")
+  const [brokerLeadsView, setBrokerLeadsView] = useState<{
+    broker: User;
+    statuses: string[];
+    label: string;
+    icon: string;
+  } | null>(null);
   const [teamId, setTeamId]             = useState<string | null>(null);
   const [redistFilter, setRedistFilter] = useState<string>("todos");
   const [searchQuery, setSearchQuery]   = useState<string>("");
@@ -2152,16 +2160,19 @@ export default function ManagerDashboard() {
                               {(qVisita > 0 || qDocs > 0 || qNego > 0) && (
                                 <div className="flex items-center gap-1 flex-wrap mt-0.5">
                                   {qVisita > 0 && (
-                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-                                          title="Visitas agendadas + realizadas">🏠 {qVisita} visita{qVisita > 1 ? 's' : ''}</span>
+                                    <button onClick={(e) => { e.stopPropagation(); setBrokerLeadsView({ broker, statuses: ["VISIT_SCHEDULED","VISITA_REALIZADA"], label: "Visitas", icon: "🏠" }); }}
+                                            className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition cursor-pointer"
+                                            title="Clique pra ver os leads">🏠 {qVisita} visita{qVisita > 1 ? 's' : ''}</button>
                                   )}
                                   {qDocs > 0 && (
-                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-300 border border-orange-500/30"
-                                          title="Documentos solicitados/em análise">📄 {qDocs} doc{qDocs > 1 ? 's' : ''}</span>
+                                    <button onClick={(e) => { e.stopPropagation(); setBrokerLeadsView({ broker, statuses: ["DOCS_REQUESTED"], label: "Documentos", icon: "📄" }); }}
+                                            className="text-[9px] font-black px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-300 border border-orange-500/30 hover:bg-orange-500/25 transition cursor-pointer"
+                                            title="Clique pra ver os leads">📄 {qDocs} doc{qDocs > 1 ? 's' : ''}</button>
                                   )}
                                   {qNego > 0 && (
-                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/30"
-                                          title="Em negociação">💼 {qNego} negoc.</span>
+                                    <button onClick={(e) => { e.stopPropagation(); setBrokerLeadsView({ broker, statuses: ["NEGOTIATING"], label: "Negociação", icon: "💼" }); }}
+                                            className="text-[9px] font-black px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25 transition cursor-pointer"
+                                            title="Clique pra ver os leads">💼 {qNego} negoc.</button>
                                   )}
                                 </div>
                               )}
@@ -2689,6 +2700,58 @@ export default function ManagerDashboard() {
           />
         )}
       </AnimatePresence>
+
+      {/* ── DRAWER: Lista de leads por broker/status (clica em 🏠/📄/💼) ──────── */}
+      <Sheet open={!!brokerLeadsView} onOpenChange={(v) => !v && setBrokerLeadsView(null)}>
+        <SheetContent side="right" className="sm:max-w-md bg-slate-900 border-gray-700 p-0 overflow-y-auto">
+          {brokerLeadsView && (() => {
+            const blv = brokerLeadsView;
+            const leadsDoBroker = teamLeads.filter(l =>
+              l.brokerId === blv.broker.id && blv.statuses.includes(l.status)
+            ).sort((a,b) => new Date(b.lastInteractionAt || b.createdAt).getTime()
+                          - new Date(a.lastInteractionAt || a.createdAt).getTime());
+            return (
+              <>
+                <SheetHeader className="px-5 pt-5 pb-3 border-b border-gray-800">
+                  <SheetTitle className="text-xl font-bold text-white flex items-center gap-2">
+                    <span className="text-2xl">{blv.icon}</span>
+                    {blv.label} de {(blv.broker.name || "—").split(" ")[0]}
+                  </SheetTitle>
+                  <SheetDescription className="text-gray-500 text-xs">
+                    {leadsDoBroker.length} lead{leadsDoBroker.length !== 1 ? "s" : ""} em {blv.statuses.map(s => s.replace("_"," ")).join(" + ")}
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="px-3 py-3 space-y-1.5">
+                  {leadsDoBroker.length === 0 ? (
+                    <p className="text-gray-500 text-sm text-center py-8">Nenhum lead nessa fase</p>
+                  ) : leadsDoBroker.map(lead => {
+                    const hours = hoursAgo(lead.lastInteractionAt || lead.createdAt);
+                    const hoursLabel = hours < 1 ? `${Math.round(hours*60)}min` : hours < 24 ? `${Math.floor(hours)}h` : `${Math.floor(hours/24)}d`;
+                    return (
+                      <button key={lead.id}
+                        onClick={() => { setMonitorLead(lead); setBrokerLeadsView(null); }}
+                        className="w-full text-left rounded-lg border border-gray-800 bg-slate-800/40 hover:bg-slate-800 hover:border-gray-700 px-3 py-2.5 transition">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <p className="text-sm font-bold text-white truncate">{lead.name}</p>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-700/60 text-gray-400 shrink-0">
+                            {lead.status.replace("_"," ")}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                          <span>{lead.phone}</span>
+                          {lead.tag && <><span>·</span><span>{lead.tag}</span></>}
+                          <span>·</span>
+                          <span>há {hoursLabel}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
 
     </div>
   );

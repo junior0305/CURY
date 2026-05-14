@@ -9,6 +9,7 @@ import type { User } from "@/types/user";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import {
   Shield, LogOut, AlertTriangle, Clock, TrendingUp,
   Users, Target, Zap, Trophy, CheckCircle2,
@@ -63,6 +64,9 @@ export default function ManagerDashboard() {
   const [xpData, setXpData] = useState<Record<string, { xp: number; level: number; levelName: string }>>({});
   const [missionsData, setMissionsData] = useState<Record<string, { completed: number; total: number }>>({});
   const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [brokerLeadsView, setBrokerLeadsView] = useState<{
+    broker: User; statuses: string[]; label: string; icon: string;
+  } | null>(null);
 
   const { data: leads = [] } = useQuery<Lead[]>({
     queryKey: ["managerLeads"],
@@ -288,7 +292,9 @@ export default function ManagerDashboard() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {brokerCards.map((card, rank) => (
-                <BrokerStatusCard key={card.broker.id} card={card} rank={rank + 1} />
+                <BrokerStatusCard key={card.broker.id} card={card} rank={rank + 1}
+                  onLeadsClick={(statuses, label, icon) =>
+                    setBrokerLeadsView({ broker: card.broker, statuses, label, icon })} />
               ))}
             </div>
           )}
@@ -382,12 +388,62 @@ export default function ManagerDashboard() {
         </div>
 
       </div>
+
+      {/* ── DRAWER: Lista de leads por broker/status (clica em 🏠/📄/💼) ──────── */}
+      <Sheet open={!!brokerLeadsView} onOpenChange={(v) => !v && setBrokerLeadsView(null)}>
+        <SheetContent side="right" className="sm:max-w-md bg-slate-900 border-gray-700 p-0 overflow-y-auto">
+          {brokerLeadsView && (() => {
+            const blv = brokerLeadsView;
+            const leadsDoBroker = leads
+              .filter(l => l.brokerId === blv.broker.id && blv.statuses.includes(l.status))
+              .sort((a, b) => new Date(b.lastInteractionAt || b.createdAt).getTime()
+                            - new Date(a.lastInteractionAt || a.createdAt).getTime());
+            return (
+              <>
+                <SheetHeader className="px-5 pt-5 pb-3 border-b border-gray-800">
+                  <SheetTitle className="text-xl font-bold text-white flex items-center gap-2">
+                    <span className="text-2xl">{blv.icon}</span>
+                    {blv.label} de {(blv.broker.name || "—").split(" ")[0]}
+                  </SheetTitle>
+                  <SheetDescription className="text-gray-500 text-xs">
+                    {leadsDoBroker.length} lead{leadsDoBroker.length !== 1 ? "s" : ""} em {blv.statuses.join(" + ")}
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="px-3 py-3 space-y-1.5">
+                  {leadsDoBroker.length === 0 ? (
+                    <p className="text-gray-500 text-sm text-center py-8">Nenhum lead nessa fase</p>
+                  ) : leadsDoBroker.map(lead => {
+                    const h = hoursAgo(lead.lastInteractionAt || lead.createdAt);
+                    const hoursLabel = h < 1 ? `${Math.round(h*60)}min` : h < 24 ? `${Math.floor(h)}h` : `${Math.floor(h/24)}d`;
+                    return (
+                      <div key={lead.id} className="rounded-lg border border-gray-800 bg-slate-800/40 px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <p className="text-sm font-bold text-white truncate">{lead.name}</p>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-700/60 text-gray-400 shrink-0">
+                            {lead.status.replace("_"," ")}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-gray-500 flex-wrap">
+                          <span>{lead.phone}</span>
+                          {lead.tag && <><span>·</span><span>{lead.tag}</span></>}
+                          <span>·</span>
+                          <span>há {hoursLabel}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
 
 // ─── Card individual do corretor ──────────────────────────────────────────────
-function BrokerStatusCard({ card, rank }: { card: BrokerCard; rank: number }) {
+function BrokerStatusCard({ card, rank, onLeadsClick }: { card: BrokerCard; rank: number; onLeadsClick?: (statuses: string[], label: string, icon: string) => void }) {
   const { broker, leads, newLeads, inProgress, visits, docs, negotiating, concluded, stalledLeads, avgResponseHours, level, levelName, missionsCompleted, missionsTotal } = card;
   const convRate = leads.length > 0 ? ((concluded / leads.length) * 100).toFixed(1) : "0.0";
   const hasAlerts = stalledLeads.length > 0;
@@ -438,21 +494,30 @@ function BrokerStatusCard({ card, rank }: { card: BrokerCard; rank: number }) {
         ))}
       </div>
 
-      {/* Pipeline avançado: visitas / docs / negociação */}
+      {/* Pipeline avançado: visitas / docs / negociação — clique abre lista */}
       {(visits > 0 || docs > 0 || negotiating > 0) && (
         <div className="grid grid-cols-3 gap-2">
-          <div className="bg-emerald-900/15 border border-emerald-500/20 rounded-lg p-2 text-center" title="Visitas agendadas + realizadas">
+          <button onClick={() => visits > 0 && onLeadsClick?.(["VISIT_SCHEDULED","VISITA_REALIZADA"], "Visitas", "🏠")}
+                  disabled={visits === 0}
+                  className={cn("bg-emerald-900/15 border border-emerald-500/20 rounded-lg p-2 text-center transition", visits > 0 && "hover:bg-emerald-900/25 hover:border-emerald-500/40 cursor-pointer", visits === 0 && "opacity-60 cursor-default")}
+                  title={visits > 0 ? "Clique pra ver os leads" : ""}>
             <p className={cn("font-black text-lg leading-none", visits > 0 ? "text-emerald-400" : "text-gray-600")}>🏠 {visits}</p>
             <p className="text-xs text-gray-600 mt-0.5">Visitas</p>
-          </div>
-          <div className="bg-orange-900/15 border border-orange-500/20 rounded-lg p-2 text-center" title="Documentos solicitados">
+          </button>
+          <button onClick={() => docs > 0 && onLeadsClick?.(["DOCS_REQUESTED"], "Documentos", "📄")}
+                  disabled={docs === 0}
+                  className={cn("bg-orange-900/15 border border-orange-500/20 rounded-lg p-2 text-center transition", docs > 0 && "hover:bg-orange-900/25 hover:border-orange-500/40 cursor-pointer", docs === 0 && "opacity-60 cursor-default")}
+                  title={docs > 0 ? "Clique pra ver os leads" : ""}>
             <p className={cn("font-black text-lg leading-none", docs > 0 ? "text-orange-400" : "text-gray-600")}>📄 {docs}</p>
             <p className="text-xs text-gray-600 mt-0.5">Docs</p>
-          </div>
-          <div className="bg-violet-900/15 border border-violet-500/20 rounded-lg p-2 text-center" title="Em negociação ativa">
+          </button>
+          <button onClick={() => negotiating > 0 && onLeadsClick?.(["NEGOTIATING"], "Negociação", "💼")}
+                  disabled={negotiating === 0}
+                  className={cn("bg-violet-900/15 border border-violet-500/20 rounded-lg p-2 text-center transition", negotiating > 0 && "hover:bg-violet-900/25 hover:border-violet-500/40 cursor-pointer", negotiating === 0 && "opacity-60 cursor-default")}
+                  title={negotiating > 0 ? "Clique pra ver os leads" : ""}>
             <p className={cn("font-black text-lg leading-none", negotiating > 0 ? "text-violet-400" : "text-gray-600")}>💼 {negotiating}</p>
             <p className="text-xs text-gray-600 mt-0.5">Negoc.</p>
-          </div>
+          </button>
         </div>
       )}
 
