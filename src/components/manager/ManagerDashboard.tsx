@@ -859,12 +859,20 @@ export default function ManagerDashboard() {
     const sales7d     = teamLeads.filter(l =>
       l.status === "CONCLUDED" && new Date(l.lastInteractionAt).getTime() > weekAgo
     ).length;
-    const newToday    = teamLeads.filter(l => new Date(l.createdAt).toDateString() === today).length;
+    const todayLeads  = teamLeads.filter(l => new Date(l.createdAt).toDateString() === today);
+    const newToday    = todayLeads.length;
+    // Breakdown por origem — resolve confusão do manager (ex: caso Iracema)
+    const sourceFunnel = todayLeads.filter(l => l.source === "facebook_make").length;
+    const sourceCold   = todayLeads.filter(l => l.source === "cold_pool").length;
+    const sourceBroker = todayLeads.filter(l => l.source === "broker_manual").length;
+    const sourceManager = todayLeads.filter(l => l.source === "manager_manual").length;
+    const sourceOther  = newToday - sourceFunnel - sourceCold - sourceBroker - sourceManager;
     const present     = brokers.filter(b => b.leadAssignmentEnabled).length;
     const discarded   = teamLeads.filter(l => l.status === "ABANDONED").length;
     return {
       present, total: brokers.length, active: activeLeads.length,
       stalled: stalled.length, sales7d, newToday,
+      sourceFunnel, sourceCold, sourceBroker, sourceManager, sourceOther,
       unassigned: unassigned.length, discarded,
     };
   }, [brokers, teamLeads, unassigned]);
@@ -1156,6 +1164,44 @@ export default function ManagerDashboard() {
         <KpiCard delay={0.20} label="Descartados"  value={stats.discarded}                   icon={Trash2}        neon={stats.discarded > 0 ? "#F59E0B" : "#334155"} />
         <KpiCard delay={0.24} label="Vendas 7d"    value={stats.sales7d}                     icon={Trophy}        neon="#F59E0B" />
       </div>
+
+      {/* ── Breakdown de origem dos leads de hoje — resolve confusão tipo Iracema ── */}
+      {stats.newToday > 0 && (
+        <div className="shrink-0 px-3 sm:px-4 pt-1.5">
+          <div className="flex items-center gap-2 flex-wrap text-[10px] sm:text-[11px]" style={{ color: "#94A3B8" }}>
+            <span style={{ color: "#64748B" }}>Origem dos {stats.newToday} novos hoje:</span>
+            {stats.sourceFunnel > 0 && (
+              <span className="px-1.5 py-0.5 rounded-md font-bold" style={{ background: "rgba(16,185,129,0.10)", color: "#6EE7B7", border: "1px solid rgba(16,185,129,0.25)" }}
+                    title="Vieram do funil Facebook/Make">
+                🎯 {stats.sourceFunnel} funil
+              </span>
+            )}
+            {stats.sourceCold > 0 && (
+              <span className="px-1.5 py-0.5 rounded-md font-bold" style={{ background: "rgba(245,158,11,0.10)", color: "#FBBF24", border: "1px solid rgba(245,158,11,0.25)" }}
+                    title="Recuperados via prospecção ativa do corretor">
+                🎣 {stats.sourceCold} prospecção
+              </span>
+            )}
+            {stats.sourceBroker > 0 && (
+              <span className="px-1.5 py-0.5 rounded-md font-bold" style={{ background: "rgba(14,165,233,0.10)", color: "#7DD3FC", border: "1px solid rgba(14,165,233,0.25)" }}
+                    title="Indicações cadastradas pelos corretores">
+                ✋ {stats.sourceBroker} indicação
+              </span>
+            )}
+            {stats.sourceManager > 0 && (
+              <span className="px-1.5 py-0.5 rounded-md font-bold" style={{ background: "rgba(139,92,246,0.10)", color: "#C4B5FD", border: "1px solid rgba(139,92,246,0.25)" }}
+                    title="Cadastrados manualmente por você">
+                👔 {stats.sourceManager} manager
+              </span>
+            )}
+            {stats.sourceOther > 0 && (
+              <span className="px-1.5 py-0.5 rounded-md font-bold" style={{ background: "rgba(100,116,139,0.10)", color: "#94A3B8", border: "1px solid rgba(100,116,139,0.25)" }}>
+                · {stats.sourceOther} outros
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── MAIN SPLIT ──────────────────────────────────────────────────────── */}
       <main className="flex flex-1 overflow-hidden gap-3 p-3 min-h-0 pb-16 md:pb-3">

@@ -171,15 +171,26 @@ export default function ManagerDashboard() {
   );
 
   // Métricas da equipe
-  const teamStats = useMemo(() => ({
-    totalLeads: leads.filter(l => myBrokers.some(b => b.id === l.brokerId)).length,
-    totalSales: brokerCards.reduce((s, c) => s + c.concluded, 0),
-    totalStalled: brokerCards.reduce((s, c) => s + c.stalledLeads.length, 0),
-    totalNew: brokerCards.reduce((s, c) => s + c.newLeads, 0),
-    avgConversion: brokerCards.length > 0
-      ? brokerCards.reduce((s, c) => s + (c.leads.length > 0 ? c.concluded / c.leads.length : 0), 0) / brokerCards.length
-      : 0,
-  }), [brokerCards, leads, myBrokers]);
+  const teamStats = useMemo(() => {
+    const today = new Date().toDateString();
+    const teamLeads = leads.filter(l => myBrokers.some(b => b.id === l.brokerId));
+    const todayLeads = teamLeads.filter(l => new Date(l.createdAt).toDateString() === today);
+    return {
+      totalLeads: teamLeads.length,
+      totalSales: brokerCards.reduce((s, c) => s + c.concluded, 0),
+      totalStalled: brokerCards.reduce((s, c) => s + c.stalledLeads.length, 0),
+      totalNew: brokerCards.reduce((s, c) => s + c.newLeads, 0),
+      avgConversion: brokerCards.length > 0
+        ? brokerCards.reduce((s, c) => s + (c.leads.length > 0 ? c.concluded / c.leads.length : 0), 0) / brokerCards.length
+        : 0,
+      // Breakdown de origem dos novos de hoje — resolve confusão tipo Iracema
+      newTodayTotal: todayLeads.length,
+      newTodayFunnel: todayLeads.filter(l => l.source === "facebook_make").length,
+      newTodayCold:   todayLeads.filter(l => l.source === "cold_pool").length,
+      newTodayBroker: todayLeads.filter(l => l.source === "broker_manual").length,
+      newTodayManager: todayLeads.filter(l => l.source === "manager_manual").length,
+    };
+  }, [brokerCards, leads, myBrokers]);
 
   if (profiles.length === 0) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-900"><Loader2 className="w-8 h-8 animate-spin text-blue-400" /></div>;
@@ -232,6 +243,29 @@ export default function ManagerDashboard() {
             </div>
           ))}
         </div>
+
+        {/* ─── Breakdown de origem dos novos hoje — resolve confusão tipo Iracema ── */}
+        {teamStats.newTodayTotal > 0 && (
+          <div className="flex items-center gap-2 flex-wrap text-xs text-gray-400">
+            <span className="text-gray-500">Origem dos {teamStats.newTodayTotal} novos hoje:</span>
+            {teamStats.newTodayFunnel > 0 && (
+              <span className="px-2 py-0.5 rounded-md font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/25"
+                    title="Vieram do funil Facebook/Make">🎯 {teamStats.newTodayFunnel} funil</span>
+            )}
+            {teamStats.newTodayCold > 0 && (
+              <span className="px-2 py-0.5 rounded-md font-bold bg-amber-500/10 text-amber-300 border border-amber-500/25"
+                    title="Recuperados via prospecção ativa dos corretores">🎣 {teamStats.newTodayCold} prospecção</span>
+            )}
+            {teamStats.newTodayBroker > 0 && (
+              <span className="px-2 py-0.5 rounded-md font-bold bg-sky-500/10 text-sky-300 border border-sky-500/25"
+                    title="Indicações cadastradas pelos corretores">✋ {teamStats.newTodayBroker} indicação</span>
+            )}
+            {teamStats.newTodayManager > 0 && (
+              <span className="px-2 py-0.5 rounded-md font-bold bg-violet-500/10 text-violet-300 border border-violet-500/25"
+                    title="Cadastrados manualmente por você">👔 {teamStats.newTodayManager} manager</span>
+            )}
+          </div>
+        )}
 
         {/* ─── Cards dos Corretores ─────────────────────────────────────────── */}
         <div>
