@@ -2093,6 +2093,9 @@ export default function ManagerDashboard() {
                       const qQuente     = bl.filter(l => l.leadTemperature === "quente").length;
                       const qMorno      = bl.filter(l => l.leadTemperature === "morno").length;
                       const qFrio       = bl.filter(l => l.leadTemperature === "frio").length;
+                      const qVisita     = bl.filter(l => l.status === "VISIT_SCHEDULED" || l.status === "VISITA_REALIZADA").length;
+                      const qDocs       = bl.filter(l => l.status === "DOCS_REQUESTED").length;
+                      const qNego       = bl.filter(l => l.status === "NEGOTIATING").length;
                       const lastTs       = bl.map(l => l.lastBrokerWhatsappAt).filter(Boolean)
                         .map(d => new Date(d!).getTime()).sort((a, b) => b - a)[0];
                       const lastH        = lastTs ? Math.floor((Date.now() - lastTs) / 3600000) : null;
@@ -2143,6 +2146,22 @@ export default function ManagerDashboard() {
                                   )}
                                   {qFrio > 0 && (
                                     <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">❄️ {qFrio}</span>
+                                  )}
+                                </div>
+                              )}
+                              {(qVisita > 0 || qDocs > 0 || qNego > 0) && (
+                                <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                                  {qVisita > 0 && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                                          title="Visitas agendadas + realizadas">🏠 {qVisita} visita{qVisita > 1 ? 's' : ''}</span>
+                                  )}
+                                  {qDocs > 0 && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-300 border border-orange-500/30"
+                                          title="Documentos solicitados/em análise">📄 {qDocs} doc{qDocs > 1 ? 's' : ''}</span>
+                                  )}
+                                  {qNego > 0 && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/30"
+                                          title="Em negociação">💼 {qNego} negoc.</span>
                                   )}
                                 </div>
                               )}

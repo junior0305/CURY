@@ -24,6 +24,9 @@ interface BrokerCard {
   leads: Lead[];
   newLeads: number;
   inProgress: number;
+  visits: number;       // VISIT_SCHEDULED + VISITA_REALIZADA
+  docs: number;         // DOCS_REQUESTED
+  negotiating: number;  // NEGOTIATING
   concluded: number;
   abandoned: number;
   stalledLeads: Lead[];      // leads sem interação > 24h
@@ -156,6 +159,9 @@ export default function ManagerDashboard() {
         leads: brokerLeads,
         newLeads: brokerLeads.filter(l => l.status === "NEW").length,
         inProgress: brokerLeads.filter(l => l.status === "IN_PROGRESS").length,
+        visits: brokerLeads.filter(l => l.status === "VISIT_SCHEDULED" || l.status === "VISITA_REALIZADA").length,
+        docs: brokerLeads.filter(l => l.status === "DOCS_REQUESTED").length,
+        negotiating: brokerLeads.filter(l => l.status === "NEGOTIATING").length,
         concluded,
         abandoned: brokerLeads.filter(l => l.status === "ABANDONED").length,
         stalledLeads,
@@ -382,7 +388,7 @@ export default function ManagerDashboard() {
 
 // ─── Card individual do corretor ──────────────────────────────────────────────
 function BrokerStatusCard({ card, rank }: { card: BrokerCard; rank: number }) {
-  const { broker, leads, newLeads, inProgress, concluded, stalledLeads, avgResponseHours, level, levelName, missionsCompleted, missionsTotal } = card;
+  const { broker, leads, newLeads, inProgress, visits, docs, negotiating, concluded, stalledLeads, avgResponseHours, level, levelName, missionsCompleted, missionsTotal } = card;
   const convRate = leads.length > 0 ? ((concluded / leads.length) * 100).toFixed(1) : "0.0";
   const hasAlerts = stalledLeads.length > 0;
   const isOnFire = concluded >= 2 || (leads.length > 0 && concluded / leads.length > 0.2);
@@ -431,6 +437,24 @@ function BrokerStatusCard({ card, rank }: { card: BrokerCard; rank: number }) {
           </div>
         ))}
       </div>
+
+      {/* Pipeline avançado: visitas / docs / negociação */}
+      {(visits > 0 || docs > 0 || negotiating > 0) && (
+        <div className="grid grid-cols-3 gap-2">
+          <div className="bg-emerald-900/15 border border-emerald-500/20 rounded-lg p-2 text-center" title="Visitas agendadas + realizadas">
+            <p className={cn("font-black text-lg leading-none", visits > 0 ? "text-emerald-400" : "text-gray-600")}>🏠 {visits}</p>
+            <p className="text-xs text-gray-600 mt-0.5">Visitas</p>
+          </div>
+          <div className="bg-orange-900/15 border border-orange-500/20 rounded-lg p-2 text-center" title="Documentos solicitados">
+            <p className={cn("font-black text-lg leading-none", docs > 0 ? "text-orange-400" : "text-gray-600")}>📄 {docs}</p>
+            <p className="text-xs text-gray-600 mt-0.5">Docs</p>
+          </div>
+          <div className="bg-violet-900/15 border border-violet-500/20 rounded-lg p-2 text-center" title="Em negociação ativa">
+            <p className={cn("font-black text-lg leading-none", negotiating > 0 ? "text-violet-400" : "text-gray-600")}>💼 {negotiating}</p>
+            <p className="text-xs text-gray-600 mt-0.5">Negoc.</p>
+          </div>
+        </div>
+      )}
 
       {/* Missões */}
       {missionsTotal > 0 && (
