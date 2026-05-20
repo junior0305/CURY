@@ -506,13 +506,15 @@ Responda APENAS em JSON válido, sem markdown, sem explicação:
                 ? 'Bot do superintendente (backup) também falhou.'
                 : 'Corretor sem gerente configurado e sem bot backup disponível.';
             console.warn(`[incoming-lead] WhatsApp falhou para ${chosenBroker.first_name}: ${motivo}`);
-            await supabase.from('internal_notifications').insert({
-              to_id: chosenBroker.id,
-              type: 'NEW_LEAD',
-              title: '🎯 Novo Lead atribuído',
-              message: `${name} (${phone}) chegou para você. ${motivo}`,
-              related_lead_id: newLead.id,
-            }).catch(() => {});
+            try {
+              await supabase.from('internal_notifications').insert({
+                to_id: chosenBroker.id,
+                type: 'NEW_LEAD',
+                title: '🎯 Novo Lead atribuído',
+                message: `${name} (${phone}) chegou para você. ${motivo}`,
+                related_lead_id: newLead.id,
+              });
+            } catch (_) { /* swallow — não quebra o webhook do Make */ }
           }
         }
       }
@@ -607,18 +609,20 @@ Responda APENAS em JSON válido, sem markdown, sem explicação:
     // Log do webhook recebido (visível em Admin/Pipeline/Logs/Webhooks)
     // Inclui payload completo do Make pra debug — útil pra ver qual fluxo manda
     // 'produto' explicitamente e qual não.
-    await supabase.from('webhook_logs').insert({
-      integration_key: 'make',
-      payload: {
-        name, phone, email, tag, origin,
-        product_from_make: productFromMake,
-        product_inferred: productInferred,
-        raw_keys: Object.keys(sourceData || {}),
-        raw_payload: sourceData,  // payload completo pra debug
-      },
-      status_code: 200,
-      response_body: JSON.stringify({ lead_id: newLead.id, broker: chosenBroker?.first_name || null, queue: chosenQueue?.name || 'FALLBACK' }),
-    }).then(() => {}).catch(() => {}); // fire-and-forget, nunca bloqueia
+    try {
+      await supabase.from('webhook_logs').insert({
+        integration_key: 'make',
+        payload: {
+          name, phone, email, tag, origin,
+          product_from_make: productFromMake,
+          product_inferred: productInferred,
+          raw_keys: Object.keys(sourceData || {}),
+          raw_payload: sourceData,
+        },
+        status_code: 200,
+        response_body: JSON.stringify({ lead_id: newLead.id, broker: chosenBroker?.first_name || null, queue: chosenQueue?.name || 'FALLBACK' }),
+      });
+    } catch (_) { /* fire-and-forget — log é best-effort */ }
 
     return new Response(JSON.stringify({
       success: true,
