@@ -150,18 +150,14 @@ function useGoals(dateStr: string, type: "weekly" | "monthly") {
 }
 
 function useConversions(startDate: string, endDate: string) {
+  // leads não tem team_id direto; a equipe vem do broker. A secretária marca venda
+  // atualizando status=CONCLUDED + last_interaction_at. RPC agrega no banco.
   const [counts, setCounts] = useState<LeadCount[]>([]);
   useEffect(() => {
     supabase
-      .from("leads")
-      .select("team_id")
-      .eq("status", "CONCLUDED")
-      .gte("updated_at", startDate)
-      .lt("updated_at", endDate)
+      .rpc("goals_team_sales_count", { p_start: startDate, p_end: endDate })
       .then(({ data }) => {
-        const map: Record<string, number> = {};
-        (data ?? []).forEach(r => { if (r.team_id) map[r.team_id] = (map[r.team_id] ?? 0) + 1; });
-        setCounts(Object.entries(map).map(([team_id, count]) => ({ team_id, count })));
+        setCounts((data ?? []).map((r: any) => ({ team_id: r.team_id, count: Number(r.count) })));
       });
   }, [startDate, endDate]);
   return counts;
@@ -457,11 +453,9 @@ function TabHistorico({ teams }: { teams: Team[] }) {
       months.map(async m => {
         const start = toDateStr(m);
         const end   = toDateStr(addMonths(m, 1));
-        const { data } = await supabase.from("leads").select("team_id")
-          .eq("status", "CONCLUDED").gte("updated_at", start).lt("updated_at", end);
-        const map: Record<string, number> = {};
-        (data ?? []).forEach(r => { if (r.team_id) map[r.team_id] = (map[r.team_id] ?? 0) + 1; });
-        return { key: start, counts: Object.entries(map).map(([team_id, count]) => ({ team_id, count })) };
+        const { data } = await supabase.rpc("goals_team_sales_count", { p_start: start, p_end: end });
+        const counts = (data ?? []).map((r: any) => ({ team_id: r.team_id, count: Number(r.count) }));
+        return { key: start, counts };
       })
     ).then(results => {
       const conv: Record<string, LeadCount[]> = {};
@@ -584,17 +578,14 @@ function TabInvestimentos({ teams, role }: { teams: Team[]; role: string }) {
     refresh();
   };
 
-  // Calcular leads gerados e conversões por equipe no período
+  // Leads gerados e conversões por equipe — vem do broker.team_id via RPC
   const [leadCounts, setLeadCounts] = useState<Record<string, { total: number; converted: number }>>({});
   useEffect(() => {
-    supabase.from("leads").select("team_id, status").gte("created_at", startDate).lt("created_at", endDate)
+    supabase.rpc("goals_team_leads_count", { p_start: startDate, p_end: endDate })
       .then(({ data }) => {
         const map: Record<string, { total: number; converted: number }> = {};
-        (data ?? []).forEach(r => {
-          if (!r.team_id) return;
-          if (!map[r.team_id]) map[r.team_id] = { total: 0, converted: 0 };
-          map[r.team_id].total++;
-          if (r.status === "CONCLUDED") map[r.team_id].converted++;
+        (data ?? []).forEach((r: any) => {
+          map[r.team_id] = { total: Number(r.total), converted: Number(r.converted) };
         });
         setLeadCounts(map);
       });
