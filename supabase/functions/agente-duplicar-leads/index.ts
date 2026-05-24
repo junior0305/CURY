@@ -73,11 +73,18 @@ serve(async (req) => {
 
     for (const c of candidates) {
       try {
-        // 2) Escolher broker tentante (mais leve, com chip OPEN, fora Luciene, não tentou esse phone)
-        const { data: broker } = await supabase.rpc('pick_broker_for_duplication',
-          { p_phone: c.phone, p_excluded_brokers: LUCIENE_TEAM_IDS });
+        // 2) Descobre managers que já tentaram esse root (não repetir equipe)
+        const { data: excludedMgrs } = await supabase.rpc('get_replication_excluded_managers',
+          { p_lead_id: c.id });
+
+        // 3) Escolher broker tentante numa equipe ainda não usada (rotação Dudu/Datti/Dudalina/Liliane)
+        const { data: broker } = await supabase.rpc('pick_broker_for_duplication', {
+          p_phone: c.phone,
+          p_excluded_brokers: LUCIENE_TEAM_IDS,
+          p_excluded_managers: excludedMgrs || [],
+        });
         if (!broker || broker.length === 0) {
-          report.skipped.push({ lead: c.id, reason: 'sem broker disponivel' });
+          report.skipped.push({ lead: c.id, reason: 'sem broker disponivel em equipe nova' });
           continue;
         }
         const b = broker[0];
@@ -106,7 +113,9 @@ serve(async (req) => {
         const insertPayload: any = {
           name: c.name, phone: c.phone, email: c.email,
           tag: cleanTag, product: cleanProduct,
-          source: 'duplicated',
+          // Manter aparência de "novo lead": source igual aos leads reais do Make
+          // (duplicated_from continua marcado pra rastreio interno e painel admin)
+          source: 'facebook_make',
           status: 'NEW',
           broker_id: b.broker_id,
           duplicated_from: rootId,
@@ -147,20 +156,25 @@ serve(async (req) => {
           broker_id: b.broker_id,
         }).then(() => {}, () => {});
 
-        // 8) Notifica manager do tentante via WhatsApp (formato "novo lead")
+        // 8) Notifica corretor via WhatsApp do manager dele — formato idêntico ao incoming-lead
+        // (NÃO menciona broker, "reativação" ou "cópia" — pra manager vê como lead novo entrando)
         let notified = false;
         if (b.manager_bot_id) {
           const appUrl = Deno.env.get('APP_URL') || 'https://comandra.com.br/dashboard';
-          const localTag = cleanTag || cleanProduct || 'Geral';
+          const localTag = cleanTag || cleanProduct || 'Sem origem';
+          const mcmvLine = [
+            c.renda_declarada ? `💰 Renda: *${c.renda_declarada}*` : '',
+            c.tipo_trabalho ? `💼 ${c.tipo_trabalho}` : '',
+          ].filter(Boolean).join(' · ');
           const notifMsg = [
-            `🎯 *Novo lead para ${brokerName}!*`, ``,
+            `🎯 *Novo lead para você!*`, ``,
             `👤 *${c.name}*`,
             `🏷️ ${localTag}`,
-            ``,
-            `📲 *Entre no sistema para ver o contato:*`, appUrl,
+            mcmvLine, ``,
+            `📲 *Entre no sistema para ver o contato e enviar mensagem:*`, appUrl,
             ``,
             `⏰ Atenda rápido — leads que esperam mais de 5 min convertem muito menos.`,
-          ].join('\n');
+          ].filter(l => l !== '').join('\n');
           const { data: notifResult } = await supabase.functions.invoke('send_whatsapp_message', {
             body: { botId: b.manager_bot_id, phone: b.broker_phone, message: notifMsg,
                     send_source: 'broker_manual' }
