@@ -24,7 +24,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 5;
 const PARADO_HOURS = 100;
 const MIN_HOURS_BETWEEN_DUPS = 72;          // 3 dias entre cópias
 const MAX_DUPLICATIONS = 4;
