@@ -42,6 +42,7 @@ import { useActiveLaunches, registerLaunchClaim } from "@/components/launches/us
 import { WallOfFameTicker } from "@/components/dashboard/WallOfFameTicker";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 import { WhatsAppQuickButton } from "@/components/broker/WhatsAppQuickButton";
+import { MyMessagesSheet } from "@/components/broker/MyMessagesSheet";
 import { BrokerAutomationSettings } from "@/components/broker/BrokerAutomationSettings";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import LeadForm from "@/components/broker/LeadForm";
@@ -371,6 +372,7 @@ export default function DashboardFoco(){
   }
   const [drawerOpen,setDrawerOpen]=useState<"ranking"|"meta"|"campaign"|null>(null);
   const [reportsOpen,setReportsOpen]=useState(false);
+  const [myMessagesOpen,setMyMessagesOpen]=useState(false);
   const taRef=useRef<HTMLTextAreaElement>(null);
   const coachEndRef=useRef<HTMLDivElement>(null);
 
@@ -769,6 +771,11 @@ export default function DashboardFoco(){
               className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:brightness-125"
               style={{background:"rgba(124,58,237,.1)",border:"1px solid rgba(124,58,237,.25)"}}>
               <FileText className="w-3.5 h-3.5" style={{color:"#A78BFA"}}/>
+            </button>
+            <button onClick={()=>setMyMessagesOpen(true)} title="Minhas mensagens"
+              className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:brightness-125"
+              style={{background:"rgba(0,212,255,.1)",border:"1px solid rgba(0,212,255,.25)"}}>
+              <MessageSquare className="w-3.5 h-3.5" style={{color:"#00D4FF"}}/>
             </button>
             <button onClick={()=>setProspeccaoMode(p=>!p)} title={prospeccaoMode?"Voltar pra fila normal":"Modo Prospecção: trabalhar contatos frios"}
               className="flex items-center gap-1 px-2.5 h-7 rounded-lg text-[10px] font-bold uppercase transition-all hover:brightness-125"
@@ -1983,6 +1990,7 @@ export default function DashboardFoco(){
           />
         )}
 
+        <MyMessagesSheet open={myMessagesOpen} onOpenChange={setMyMessagesOpen} aiMode="general" />
       </div>
     </>
   );
