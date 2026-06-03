@@ -39,6 +39,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  // Marca o "último acesso" real do usuário (abertura do app / login / refresh).
+  // Fire-and-forget: nunca bloqueia nem quebra o fluxo de auth se a RPC falhar.
+  const touchLastSeen = () => {
+    try {
+      supabase.rpc('touch_last_seen').then(() => {}, () => {});
+    } catch (e) {
+      // ignore
+    }
+  };
+
   const fetchUserRole = async (userId: string, email?: string) => {
     try {
       console.log("[AuthProvider] fetchUserRole start", { userId, email });
@@ -151,6 +161,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Ensure we explicitly mark loading true while resolving role
         setLoading(true);
         fetchUserRole(session.user.id, session.user.email ?? undefined);
+        touchLastSeen(); // registra atividade real ao abrir o app
       } else {
         setLoading(false);
       }
@@ -166,6 +177,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (session) {
           setLoading(true);
           fetchUserRole(session.user.id, session.user.email ?? undefined);
+          touchLastSeen(); // registra atividade real no login e no refresh de sessão
         }
       } else if (event === 'USER_UPDATED') {
         // Atualização de dados do usuário (ex: troca de senha) — não mostra loading screen.
