@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { showSuccess, showError } from "@/utils/toast";
 import { cn } from "@/lib/utils";
 import { RefreshCw, Loader2 } from "lucide-react";
 
@@ -691,13 +692,16 @@ export function BriefingOps() {
                     <Td>
                       {l.broker_phone
                         ? (
-                          <a
-                            href={`https://wa.me/${l.broker_phone}?text=${msg}`}
-                            target="_blank" rel="noopener noreferrer"
+                          <button
+                            onClick={async () => {
+                              const { data, error } = await supabase.functions.invoke('notify-waiting-lead', { body: { lead_id: l.id } });
+                              if (!error && (data as any)?.success) showSuccess(`Cutucão enviado pro ${(data as any).broker || l.broker_name} no WhatsApp do Junior 📲`);
+                              else showError((data as any)?.detail || error?.message || 'Não consegui enviar agora');
+                            }}
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold hover:bg-emerald-500/30 transition-colors"
                           >
                             📲 Notificar
-                          </a>
+                          </button>
                         )
                         : <span className="text-slate-600 text-[10px]">sem tel.</span>
                       }
