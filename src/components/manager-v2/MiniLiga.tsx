@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
+import { getSecretaryCounts } from "@/integrations/supabase/secretaryMetrics";
 import { Trophy, ArrowRight, Loader2 } from "lucide-react";
 
 interface Row {
@@ -51,6 +52,8 @@ export default function MiniLiga({ managerId }: Props) {
               .eq("status", "CONCLUDED")
               .gte("last_interaction_at", weekAgo);
             vendas = count || 0;
+            const sec = await getSecretaryCounts(ids, weekAgo, new Date().toISOString());
+            vendas += sec.vendas;
           }
           return {
             manager_id: m.id,

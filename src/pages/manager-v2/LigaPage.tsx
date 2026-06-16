@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
+import { getSecretaryCounts } from "@/integrations/supabase/secretaryMetrics";
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
 import {
@@ -103,9 +104,10 @@ export default function LigaPage() {
               .in("broker_id", ids).eq("status", "CONCLUDED")
               .gte("last_interaction_at", prevWindow.start.toISOString()).lt("last_interaction_at", prevWindow.end.toISOString()),
           ]);
+          const sec = await getSecretaryCounts(ids, start.toISOString(), end.toISOString());
           return {
             manager_id: m.id, first_name: m.first_name || "—",
-            vendas: vRes.count || 0, pastas: pRes.count || 0, visitas: vsRes.count || 0,
+            vendas: (vRes.count || 0) + sec.vendas, pastas: pRes.count || 0, visitas: (vsRes.count || 0) + sec.visitas,
             vendas_anterior: vAntRes.count || 0,
             is_me: m.id === userId, brokers: ids.length,
           };

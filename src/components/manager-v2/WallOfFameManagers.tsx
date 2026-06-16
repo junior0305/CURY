@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
+import { getSecretaryCounts } from "@/integrations/supabase/secretaryMetrics";
 import {
   Trophy, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Loader2,
 } from "lucide-react";
@@ -116,12 +117,13 @@ export default function WallOfFameManagers({ managerId }: Props) {
               .lt("last_interaction_at", prevWindow.end.toISOString()),
           ]);
 
+          const sec = await getSecretaryCounts(ids, start.toISOString(), end.toISOString());
           return {
             manager_id: m.id,
             first_name: m.first_name || "—",
             pastas: pastasRes.count || 0,
-            visitas: visitasRes.count || 0,
-            vendas: vendasRes.count || 0,
+            visitas: (visitasRes.count || 0) + sec.visitas,
+            vendas: (vendasRes.count || 0) + sec.vendas,
             vendas_anterior: vendasAntRes.count || 0,
             is_me: m.id === managerId,
           };
