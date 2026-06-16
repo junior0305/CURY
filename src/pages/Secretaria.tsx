@@ -6,7 +6,7 @@ import {
   Home, FileText, DollarSign, UserPlus, Calendar, Clock,
   Plus, RefreshCw, LogOut, ChevronLeft, ChevronRight,
   Loader2, X, Search, Building2, Briefcase, Phone, Mail, IdCard,
-  TrendingUp, Activity, History, Trophy,
+  TrendingUp, Activity, History, Trophy, Trash2, Settings2,
 } from "lucide-react";
 import { PendingClaims } from "./admin/Lancamentos";
 
@@ -90,6 +90,36 @@ export default function Secretaria() {
   }, [period, anchor]);
 
   useEffect(() => { loadSummary(); }, [loadSummary]);
+
+  // ── Gerenciar / apagar lançamentos ──────────────────────────────────────────
+  type Entry = { id: string; entry_type: string; quantity: number; entry_date: string; notes: string | null; broker_name: string | null; manager_name: string | null };
+  const [manageOpen, setManageOpen] = useState(false);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [entriesLoading, setEntriesLoading] = useState(false);
+  const [entryFilter, setEntryFilter] = useState<string>("venda");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const loadEntries = useCallback(async () => {
+    setEntriesLoading(true);
+    const { data, error } = await supabase.rpc("secretary_recent_entries", { p_limit: 60, p_type: entryFilter || null });
+    if (error) toast.error("Erro ao listar: " + error.message);
+    else setEntries((data as Entry[]) || []);
+    setEntriesLoading(false);
+  }, [entryFilter]);
+
+  useEffect(() => { if (manageOpen) loadEntries(); }, [manageOpen, loadEntries]);
+
+  const deleteEntry = useCallback(async (e: Entry) => {
+    const label = `${e.entry_type} (${e.quantity}) de ${e.broker_name || "—"} em ${new Date(e.entry_date + "T00:00:00").toLocaleDateString("pt-BR")}`;
+    if (!window.confirm(`Apagar este lançamento?\n\n${label}\n\nEssa ação não pode ser desfeita.`)) return;
+    setDeletingId(e.id);
+    const { data, error } = await supabase.rpc("secretary_delete_entry", { p_id: e.id });
+    setDeletingId(null);
+    if (error || !(data as any)?.ok) { toast.error("Não apagou: " + (error?.message || (data as any)?.error || "erro")); return; }
+    toast.success("Lançamento apagado");
+    setEntries(prev => prev.filter(x => x.id !== e.id));
+    loadSummary();
+  }, [loadSummary]);
 
   function shiftPeriod(direction: -1 | 1) {
     const d = new Date(anchor);
@@ -287,6 +317,67 @@ export default function Secretaria() {
             </table>
           </div>
         </div>
+      </div>
+
+      {/* Gerenciar / apagar lançamentos */}
+      <div className="px-4 pt-2">
+        <button onClick={() => setManageOpen(o => !o)}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-900/50 border border-gray-700/50 hover:border-fuchsia-600/40 transition">
+          <span className="text-xs font-bold uppercase tracking-wider text-gray-300 inline-flex items-center gap-1.5">
+            <Settings2 className="w-3.5 h-3.5 text-fuchsia-400" /> Corrigir / apagar lançamentos
+          </span>
+          <ChevronRight className={`w-4 h-4 text-gray-500 transition-transform ${manageOpen ? "rotate-90" : ""}`} />
+        </button>
+
+        {manageOpen && (
+          <div className="mt-2 bg-slate-900/40 border border-gray-700/50 rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-800 flex-wrap">
+              {[
+                { v: "venda", l: "Vendas" }, { v: "visita", l: "Visitas" },
+                { v: "pasta", l: "Pastas" }, { v: "plantao", l: "Plantões" },
+                { v: "contratacao", l: "Contratações" }, { v: "", l: "Todos" },
+              ].map(f => (
+                <button key={f.v || "all"} onClick={() => setEntryFilter(f.v)}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded ${entryFilter === f.v ? "bg-fuchsia-700 text-white" : "bg-slate-800 text-gray-400 hover:text-gray-200"}`}>
+                  {f.l}
+                </button>
+              ))}
+              <button onClick={loadEntries} disabled={entriesLoading} className="ml-auto p-1.5 rounded text-gray-400 hover:text-gray-200">
+                <RefreshCw className={`w-3.5 h-3.5 ${entriesLoading ? "animate-spin" : ""}`} />
+              </button>
+            </div>
+            {entriesLoading ? (
+              <p className="text-center text-gray-500 py-6 text-sm flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> carregando…</p>
+            ) : entries.length === 0 ? (
+              <p className="text-center text-gray-500 py-6 text-sm">Nenhum lançamento</p>
+            ) : (
+              <ul className="divide-y divide-gray-800 max-h-[420px] overflow-y-auto">
+                {entries.map(e => (
+                  <li key={e.id} className="px-3 py-2 flex items-center gap-3 text-xs">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wide bg-slate-800 text-fuchsia-300">{e.entry_type}</span>
+                    {e.quantity > 1 && <span className="text-emerald-300 font-black">×{e.quantity}</span>}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-gray-200 font-bold truncate">{e.broker_name || "—"}
+                        <span className="text-gray-600 font-normal"> · {e.manager_name || "sem gerência"}</span>
+                      </div>
+                      <div className="text-[10px] text-gray-600">
+                        {new Date(e.entry_date + "T00:00:00").toLocaleDateString("pt-BR")}
+                        {e.notes && <span className="text-gray-700"> · {e.notes}</span>}
+                      </div>
+                    </div>
+                    <button onClick={() => deleteEntry(e)} disabled={deletingId === e.id}
+                      className="p-1.5 rounded-lg text-gray-500 hover:text-red-300 hover:bg-red-900/30 disabled:opacity-40" title="Apagar">
+                      {deletingId === e.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-[10px] text-gray-600 px-3 py-2 border-t border-gray-800">
+              Apagou errado? Reabra o atalho (+ Venda, + Visita…) e lance de novo. Só ADMIN/Superintendente pode apagar.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Histórico de ações */}
