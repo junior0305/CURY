@@ -233,6 +233,18 @@ function AdminLayoutInner() {
     }
   }, [normalizedRole]);
 
+  // Ponte de navegação interna (ex.: Cockpit → Financeiro/Metas)
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      const d = (ev as CustomEvent).detail as { group?: string; sub?: string } | undefined;
+      if (!d?.group) return;
+      setActiveGroup(d.group);
+      setActiveSub(d.sub ?? defaultSub(d.group));
+    };
+    window.addEventListener("cockpit-goto-tab", handler);
+    return () => window.removeEventListener("cockpit-goto-tab", handler);
+  }, []);
+
   const roleInfo = ROLE_LABELS[normalizedRole];
 
   return (

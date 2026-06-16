@@ -3,9 +3,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import {
-  Activity, RefreshCw, TrendingUp, TrendingDown, Clock, UserX, PhoneOff, Target,
+  Activity, RefreshCw, TrendingUp, TrendingDown, UserX, PhoneOff, Target,
   Timer, Shield, Cpu, Users, MapPin, Wifi, WifiOff, Bot, ChevronRight,
-  LogIn, UserCheck, Zap, Trophy, RotateCcw,
+  LogIn, UserCheck, Zap, Trophy, RotateCcw, Flag, Lightbulb, Loader2, ExternalLink,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -26,8 +26,18 @@ interface ManagerRow {
   ignorados: number; visitas: number; vendas: number;
   brokers: BrokerRow[];
 }
+interface GoalsData {
+  has_goals: boolean;
+  month_label: string;
+  days_in_month: number; days_elapsed: number; days_left: number;
+  geral: { target: number; realized: number; pct: number; gap: number };
+  teams: { manager_name: string; team_name: string; target: number; realized: number; pct: number; gap: number }[];
+}
+
 interface CockpitData {
-  period_days: number;
+  mode: string;
+  period_start: string;
+  period_end: string;
   generated_at: string;
   entrada: {
     hoje: number; periodo: number; periodo_prev: number;
@@ -47,7 +57,14 @@ interface CockpitData {
   tendencia: { date: string; received: number; concluded: number }[];
 }
 
-type Period = "7d" | "30d";
+type Mode = "today" | "7d" | "month" | "custom";
+const MODE_LABEL: Record<Mode, string> = { today: "Hoje", "7d": "7 dias", month: "Mês vigente", custom: "Personalizado" };
+const MONTHS_PT = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+function monthLabelPt(iso: string): string {
+  const m = /^(\d{4})-(\d{2})/.exec(iso || "");
+  if (!m) return iso;
+  return `${MONTHS_PT[parseInt(m[2], 10) - 1]}/${m[1]}`;
+}
 
 // ─── Animated Counter ────────────────────────────────────────────────────────
 
@@ -139,26 +156,49 @@ function sinceDays(iso: string | null): string {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function Cockpit() {
-  const [period, setPeriod] = useState<Period>("7d");
+  const [mode, setMode] = useState<Mode>("7d");
+  const [customStart, setCustomStart] = useState<string>("");
+  const [customEnd, setCustomEnd] = useState<string>("");
   const [data, setData] = useState<CockpitData | null>(null);
+  const [goals, setGoals] = useState<GoalsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showSumidos, setShowSumidos] = useState(false);
+  // dica: por escopo ('geral' ou manager_id) → texto; e loading por escopo
+  const [dicas, setDicas] = useState<Record<string, string>>({});
+  const [dicaLoading, setDicaLoading] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: rpc, error } = await supabase.rpc("cockpit_v2", { p_days: period === "7d" ? 7 : 30 });
+    const params: { p_mode: Mode; p_start?: string; p_end?: string } = { p_mode: mode };
+    if (mode === "custom") {
+      if (!customStart || !customEnd) { setLoading(false); return; }
+      params.p_start = customStart; params.p_end = customEnd;
+    }
+    const [{ data: rpc, error }, { data: g }] = await Promise.all([
+      supabase.rpc("cockpit_v2", params),
+      supabase.rpc("cockpit_goals"),
+    ]);
     if (!error && rpc) setData(rpc as CockpitData);
+    if (g) setGoals(g as GoalsData);
     setLastRefresh(new Date());
     setLoading(false);
-  }, [period]);
+  }, [mode, customStart, customEnd]);
 
   useEffect(() => {
     load();
     const t = setInterval(load, 5 * 60 * 1000);
     return () => clearInterval(t);
   }, [load]);
+
+  const gerarDica = useCallback(async (scope: string, force = false) => {
+    setDicaLoading(scope);
+    const { data: res, error } = await supabase.functions.invoke("cockpit-meta-dica", { body: { scope, force } });
+    if (!error && res?.dica) setDicas(d => ({ ...d, [scope]: res.dica }));
+    else setDicas(d => ({ ...d, [scope]: "Não consegui gerar a dica agora. Tente de novo." }));
+    setDicaLoading(null);
+  }, []);
 
   const e = data?.entrada;
   const a = data?.adocao;
@@ -175,6 +215,13 @@ export default function Cockpit() {
   const maxRegiao = Math.max(...(e?.regioes.map(r => r.n) ?? [1]), 1);
   const maxTrend = Math.max(...(data?.tendencia.map(d => d.received) ?? [1]), 1);
   const tocaramPct = a && a.total_ops > 0 ? Math.round((a.tocaram_hoje / a.total_ops) * 100) : 0;
+  // Metas — ritmo
+  const gg = goals?.geral;
+  const perDayNeeded = goals && gg && goals.days_left > 0 ? gg.gap / goals.days_left : null;
+  const expectedByNow = gg && goals && goals.days_in_month > 0 ? gg.target * (goals.days_elapsed / goals.days_in_month) : 0;
+  const onPace = gg ? gg.realized >= expectedByNow : false;
+  const teamMgrId = (name: string) => data?.gerencias.find(g => g.manager_name === name)?.manager_id ?? name;
+  const gotoMetas = () => window.dispatchEvent(new CustomEvent("cockpit-goto-tab", { detail: { group: "financeiro", sub: "metas" } }));
 
   return (
     <div className="p-4 md:p-6 space-y-9">
@@ -192,16 +239,25 @@ export default function Cockpit() {
             Entrada → Adoção → Execução → Saída · atualizado {formatDistanceToNow(lastRefresh, { locale: ptBR, addSuffix: true })}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="flex p-1 gap-1 rounded-xl" style={{ background: "rgba(8,11,20,0.8)", border: "1px solid #1E293B" }}>
-            {(["7d", "30d"] as Period[]).map(p => (
-              <button key={p} onClick={() => setPeriod(p)}
-                className="px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all"
-                style={period === p ? { background: "linear-gradient(135deg, #0066FF, #00D4FF)", color: "#fff", boxShadow: "0 0 12px rgba(0,212,255,0.35)" } : { color: "#475569" }}>
-                {p === "7d" ? "7 dias" : "30 dias"}
+            {(["today", "7d", "month", "custom"] as Mode[]).map(m => (
+              <button key={m} onClick={() => setMode(m)}
+                className="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all"
+                style={mode === m ? { background: "linear-gradient(135deg, #0066FF, #00D4FF)", color: "#fff", boxShadow: "0 0 12px rgba(0,212,255,0.35)" } : { color: "#475569" }}>
+                {MODE_LABEL[m]}
               </button>
             ))}
           </div>
+          {mode === "custom" && (
+            <div className="flex items-center gap-1.5">
+              <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
+                className="px-2 py-1.5 rounded-lg text-xs bg-slate-900 border border-slate-700 text-slate-200" />
+              <span className="text-slate-600 text-xs">→</span>
+              <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
+                className="px-2 py-1.5 rounded-lg text-xs bg-slate-900 border border-slate-700 text-slate-200" />
+            </div>
+          )}
           <button onClick={load} disabled={loading}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-30"
             style={{ background: "rgba(0,212,255,0.06)", border: "1px solid rgba(0,212,255,0.2)", color: "#00D4FF" }}>
@@ -211,13 +267,133 @@ export default function Cockpit() {
         </div>
       </motion.div>
 
+      {/* ── 0. METAS (placar do mês) ────────────────────────────────────────── */}
+      <div>
+        <SectionTitle icon={Flag} color="#10B981"
+          right={
+            <button onClick={() => gerarDica("geral")} disabled={dicaLoading === "geral"}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-40"
+              style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.35)", color: "#FCD34D" }}>
+              {dicaLoading === "geral" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Lightbulb className="w-3 h-3" />}
+              Dica da IA
+            </button>
+          }>
+          Metas — {goals ? monthLabelPt(goals.month_label) : "mês vigente"}
+        </SectionTitle>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Placar geral */}
+          <div className="lg:col-span-2 rounded-2xl p-5" style={{ background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.25)" }}>
+            {goals?.has_goals ? (
+              <>
+                <div className="flex items-end justify-between flex-wrap gap-3 mb-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#475569" }}>Vendas no mês · meta geral</p>
+                    <p className="text-4xl font-black" style={{ color: "#34D399", textShadow: "0 0 20px rgba(16,185,129,0.4)" }}>
+                      <AnimatedNumber value={gg!.realized} /> <span className="text-slate-600 text-2xl">/ {gg!.target}</span>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="px-2.5 py-1 rounded-lg text-[11px] font-black uppercase tracking-wider"
+                      style={onPace ? { background: "rgba(16,185,129,0.15)", color: "#34D399" } : { background: "rgba(239,68,68,0.12)", color: "#F87171" }}>
+                      {onPace ? "No ritmo" : "Atrás do ritmo"}
+                    </span>
+                    <p className="text-[11px] mt-1.5" style={{ color: "#64748B" }}>
+                      faltam <b style={{ color: "#FCD34D" }}>{gg!.gap}</b> em {goals.days_left}d
+                      {perDayNeeded !== null && perDayNeeded > 0 && <> · <b style={{ color: "#FCD34D" }}>{perDayNeeded.toFixed(1)}/dia</b></>}
+                    </p>
+                  </div>
+                </div>
+                <div className="h-3 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+                  <motion.div className="h-full rounded-full" initial={{ width: 0 }} animate={{ width: `${Math.min(100, gg!.pct)}%` }}
+                    transition={{ duration: 0.9 }} style={{ background: "linear-gradient(90deg, #059669, #34D399)" }} />
+                </div>
+                <p className="text-[10px] mt-1.5" style={{ color: "#475569" }}>{gg!.pct}% da meta · dia {goals.days_elapsed} de {goals.days_in_month}</p>
+              </>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#475569" }}>Vendas no mês (sem meta definida)</p>
+                  <p className="text-4xl font-black" style={{ color: "#34D399" }}><AnimatedNumber value={gg?.realized ?? 0} /></p>
+                </div>
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl flex-wrap"
+                  style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)" }}>
+                  <span className="text-xs font-bold" style={{ color: "#FCD34D" }}>
+                    ⚠ Metas de {goals ? monthLabelPt(goals.month_label) : "junho"} não definidas — sem meta não dá pra medir "perto/longe".
+                  </span>
+                  <button onClick={gotoMetas}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider ml-auto"
+                    style={{ background: "rgba(245,158,11,0.18)", color: "#FCD34D" }}>
+                    Definir em Financeiro › Metas <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Dica da IA */}
+          <div className="rounded-2xl p-4 flex flex-col" style={{ background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.25)" }}>
+            <div className="flex items-center gap-2 mb-2">
+              <Lightbulb className="w-3.5 h-3.5" style={{ color: "#FCD34D" }} />
+              <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#FCD34D" }}>Dica da IA — o que fazer</span>
+            </div>
+            {dicas["geral"] ? (
+              <>
+                <p className="text-sm leading-relaxed flex-1" style={{ color: "#E2E8F0" }}>{dicas["geral"]}</p>
+                <button onClick={() => gerarDica("geral", true)} disabled={dicaLoading === "geral"}
+                  className="mt-2 self-start flex items-center gap-1 text-[10px] uppercase tracking-widest font-bold disabled:opacity-40" style={{ color: "#64748B" }}>
+                  <RefreshCw className={cn("w-2.5 h-2.5", dicaLoading === "geral" && "animate-spin")} /> Atualizar dica
+                </button>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                {dicaLoading === "geral"
+                  ? <span className="flex items-center gap-2 text-xs" style={{ color: "#64748B" }}><Loader2 className="w-3.5 h-3.5 animate-spin" /> pensando…</span>
+                  : <button onClick={() => gerarDica("geral")} className="text-xs font-bold px-3 py-2 rounded-lg" style={{ background: "rgba(245,158,11,0.12)", color: "#FCD34D" }}>💡 Gerar dica pra bater a meta</button>}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Metas por equipe */}
+        {goals?.has_goals && goals.teams.length > 0 && (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {goals.teams.map((tm, i) => {
+              const scope = teamMgrId(tm.manager_name);
+              return (
+                <motion.div key={tm.manager_name + i} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                  className="rounded-2xl p-4" style={{ background: "rgba(8,11,20,0.6)", border: "1px solid #1E293B" }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-black text-white">{tm.manager_name}</span>
+                    <button onClick={() => gerarDica(scope)} disabled={dicaLoading === scope}
+                      className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider disabled:opacity-40" style={{ color: "#FCD34D" }}>
+                      {dicaLoading === scope ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Lightbulb className="w-2.5 h-2.5" />} dica
+                    </button>
+                  </div>
+                  <p className="text-2xl font-black mb-2" style={{ color: tm.pct >= 100 ? "#34D399" : "#E2E8F0" }}>
+                    {tm.realized}<span className="text-slate-600 text-lg"> / {tm.target}</span>
+                  </p>
+                  <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+                    <motion.div className="h-full rounded-full" initial={{ width: 0 }} animate={{ width: `${Math.min(100, tm.pct)}%` }}
+                      transition={{ duration: 0.8, delay: i * 0.05 }}
+                      style={{ background: tm.pct >= 100 ? "#34D399" : tm.pct >= 60 ? "linear-gradient(90deg,#059669,#34D399)" : "linear-gradient(90deg,#B45309,#F59E0B)" }} />
+                  </div>
+                  <p className="text-[10px] mt-1.5" style={{ color: "#475569" }}>{tm.pct}% · faltam {tm.gap}</p>
+                  {dicas[scope] && <p className="text-[11px] leading-snug mt-2 pt-2 border-t border-slate-800" style={{ color: "#CBD5E1" }}>💡 {dicas[scope]}</p>}
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* ── 1. ENTRADA ──────────────────────────────────────────────────────── */}
       <div>
         <SectionTitle icon={Zap} color="#00D4FF">Entrada — o combustível</SectionTitle>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="grid grid-cols-2 gap-3 lg:col-span-2">
             <StatCard delay={0}    label="Leads hoje"     value={e?.hoje ?? 0}    icon={Activity} theme="cyan" />
-            <StatCard delay={0.05} label={`Leads (${period})`} value={e?.periodo ?? 0} icon={TrendingUp} theme="cyan"
+            <StatCard delay={0.05} label={`Leads (${MODE_LABEL[mode]})`} value={e?.periodo ?? 0} icon={TrendingUp} theme="cyan"
               sub={entradaDelta !== null ? (
                 <span className="flex items-center gap-1" style={{ color: entradaDelta >= 0 ? "#34D399" : "#F87171" }}>
                   {entradaDelta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
