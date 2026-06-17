@@ -6,7 +6,9 @@ import {
   Activity, RefreshCw, TrendingUp, TrendingDown, UserX, PhoneOff, Target,
   Timer, Shield, Cpu, Users, MapPin, Wifi, WifiOff, Bot, ChevronRight,
   LogIn, UserCheck, Zap, Trophy, RotateCcw, Flag, Lightbulb, Loader2, ExternalLink,
+  Megaphone, AlertTriangle, Check,
 } from "lucide-react";
+import { showSuccess, showError } from "@/utils/toast";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -191,6 +193,31 @@ export default function Cockpit() {
     const t = setInterval(load, 5 * 60 * 1000);
     return () => clearInterval(t);
   }, [load]);
+
+  // ── Devedores (chicote acionável) ───────────────────────────────────────────
+  type DevBroker = { broker_id: string; name: string | null; gerencia: string; count: number; worst_days: number; avg_days: number; has_phone: boolean; is_active: boolean; leads: { name: string; days: number }[] };
+  const [showDev, setShowDev] = useState(false);
+  const [dev, setDev] = useState<{ total: number; brokers_count: number; brokers: DevBroker[] } | null>(null);
+  const [devLoading, setDevLoading] = useState(false);
+  const [cobrando, setCobrando] = useState<string | null>(null);
+  const [cobrado, setCobrado] = useState<Record<string, boolean>>({});
+
+  const loadDev = useCallback(async () => {
+    setDevLoading(true);
+    const { data, error } = await supabase.rpc("cockpit_devedores", { p_limit: 50 });
+    if (!error && data) setDev(data as any);
+    setDevLoading(false);
+  }, []);
+
+  const cobrar = useCallback(async (b: DevBroker) => {
+    setCobrando(b.broker_id);
+    const { data, error } = await supabase.functions.invoke("cockpit-cobrar", { body: { broker_id: b.broker_id } });
+    setCobrando(null);
+    if (error || !data?.success) { showError("Não cobrou: " + (error?.message || data?.error || "erro")); return; }
+    if (data.nothing) { showSuccess(`${b.name} já está em dia 🎉`); setCobrado(c => ({ ...c, [b.broker_id]: true })); return; }
+    showSuccess(`Cobrado ${data.broker}: corretor ${data.broker_sent ? "✓" : "✗"} · gerente ${data.manager_sent ? "✓" : "—"}`);
+    setCobrado(c => ({ ...c, [b.broker_id]: true }));
+  }, []);
 
   const gerarDica = useCallback(async (scope: string, force = false) => {
     setDicaLoading(scope);
@@ -586,8 +613,64 @@ export default function Cockpit() {
           <StatCard delay={0}    label="Visitas"   value={data?.saida.visitas ?? 0} icon={Users}      theme="purple"  sub="CRM + secretária" />
           <StatCard delay={0.05} label="Vendas"    value={data?.saida.vendas ?? 0}  icon={Trophy}     theme="emerald" sub="CRM + secretária" />
           <StatCard delay={0.1}  label="Conversão" value={`${data?.saida.conversao ?? 0}%`} icon={Target} theme={(data?.saida.conversao ?? 0) >= 3 ? "emerald" : "amber"} sub="leads → venda" />
-          <StatCard delay={0.15} label="Ignorados (chicote)" value={data?.saida.ignorados ?? 0} icon={PhoneOff} theme={(data?.saida.ignorados ?? 0) > 0 ? "red" : "emerald"} sub="responderam s/ retorno" />
+          <StatCard delay={0.15} label="Ignorados (chicote)" value={data?.saida.ignorados ?? 0} icon={PhoneOff} theme={(data?.saida.ignorados ?? 0) > 0 ? "red" : "emerald"} sub="clique p/ cobrar quem deve" onClick={() => { setShowDev(s => !s); if (!dev) loadDev(); }} />
         </div>
+
+        {/* Painel: quem está devendo (chicote acionável) */}
+        <AnimatePresence>
+          {showDev && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+              className="mb-4 rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.03)" }}>
+              <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ borderColor: "rgba(239,68,68,0.2)" }}>
+                <span className="text-[11px] font-black uppercase tracking-widest flex items-center gap-2" style={{ color: "#F87171" }}>
+                  <AlertTriangle className="w-3.5 h-3.5" /> Quem está devendo
+                  {dev && <span className="text-slate-500 font-bold normal-case tracking-normal">· {dev.total} leads · {dev.brokers_count} corretores</span>}
+                </span>
+                <button onClick={loadDev} disabled={devLoading} className="p-1 rounded text-slate-500 hover:text-slate-300">
+                  <RefreshCw className={cn("w-3.5 h-3.5", devLoading && "animate-spin")} />
+                </button>
+              </div>
+              {devLoading && !dev ? (
+                <p className="py-8 text-center text-sm flex items-center justify-center gap-2" style={{ color: "#64748B" }}><Loader2 className="w-4 h-4 animate-spin" /> puxando devedores…</p>
+              ) : (
+                <div className="max-h-[460px] overflow-y-auto divide-y" style={{ borderColor: "#1E293B" }}>
+                  {(dev?.brokers ?? []).map((b, i) => {
+                    const done = cobrado[b.broker_id];
+                    return (
+                      <div key={b.broker_id} className="flex items-center gap-3 px-4 py-2.5" style={{ borderColor: "#0F172A" }}>
+                        <span className="text-xs font-mono w-5 text-center" style={{ color: "#475569" }}>{i + 1}</span>
+                        <div className="text-2xl font-black tabular-nums w-9 text-center" style={{ color: b.count >= 6 ? "#F87171" : b.count >= 3 ? "#FCD34D" : "#94A3B8" }}>{b.count}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-white truncate">{b.name || "—"}</span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "rgba(124,58,237,0.15)", color: "#A78BFA" }}>{b.gerencia}</span>
+                            {!b.is_active && <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "rgba(239,68,68,0.12)", color: "#F87171" }}>inativo</span>}
+                          </div>
+                          <p className="text-[10px] truncate" style={{ color: "#475569" }}>
+                            pior {Math.round(b.worst_days)}d · média {Math.round(b.avg_days)}d
+                            {b.leads?.length ? ` · ${b.leads.slice(0, 3).map(l => l.name).join(", ")}` : ""}
+                          </p>
+                        </div>
+                        <button onClick={() => cobrar(b)} disabled={cobrando === b.broker_id || done || !b.has_phone}
+                          title={!b.has_phone ? "corretor sem telefone" : "cobra corretor + avisa gerente"}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition disabled:opacity-40"
+                          style={done ? { background: "rgba(16,185,129,0.15)", color: "#34D399" } : { background: "rgba(239,68,68,0.12)", color: "#F87171" }}>
+                          {cobrando === b.broker_id ? <Loader2 className="w-3 h-3 animate-spin" /> : done ? <Check className="w-3 h-3" /> : <Megaphone className="w-3 h-3" />}
+                          {done ? "cobrado" : "cobrar"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {dev && dev.brokers.length === 0 && <p className="py-8 text-center text-sm" style={{ color: "#334155" }}>Ninguém devendo 🎉</p>}
+                </div>
+              )}
+              <p className="text-[10px] px-4 py-2 border-t" style={{ borderColor: "#1E293B", color: "#475569" }}>
+                "Cobrar" dispara no WhatsApp do corretor (os leads esperando) e avisa o gerente dele. Do chip de notificação.
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Tendência */}
         <div className="rounded-2xl p-5" style={{ background: "rgba(8,11,20,0.6)", border: "1px solid #1E293B" }}>
           <div className="flex items-center gap-2 mb-4">
