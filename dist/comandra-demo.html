@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Comandra — Demonstração</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#0a0e14;color:#e9edef;display:flex;flex-direction:column;align-items:center;min-height:100vh}
+  .phone{width:100%;max-width:420px;height:86vh;margin:12px;background:#0b141a;border-radius:24px;overflow:hidden;display:flex;flex-direction:column;border:1px solid #222e35;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  .hd{background:#202c33;padding:12px 14px;display:flex;align-items:center;gap:10px}
+  .av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#0066ff,#00d4ff);display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff}
+  .hd .n{font-weight:700}.hd .s{font-size:11px;color:#8696a0}
+  .chat{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px;background:#0b141a}
+  .b{max-width:82%;padding:8px 11px;border-radius:10px;font-size:14px;line-height:1.42;white-space:pre-wrap;animation:pop .25s ease}
+  .c{align-self:flex-start;background:#202c33;border-top-left-radius:2px}
+  .me{align-self:flex-end;background:#005c4b;border-top-right-radius:2px}
+  @keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .typing{align-self:flex-start;background:#202c33;padding:10px 14px;border-radius:10px;display:flex;gap:4px}
+  .typing i{width:7px;height:7px;border-radius:50%;background:#8696a0;animation:bl 1s infinite}
+  .typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+  @keyframes bl{0%,60%,100%{opacity:.3}30%{opacity:1}}
+  .foot{padding:10px;background:#111b21;display:flex;gap:8px;align-items:center}
+  .btn{flex:1;background:#00a884;color:#06231d;border:0;border-radius:10px;padding:12px;font-weight:800;cursor:pointer;font-size:15px}
+  .btn:disabled{opacity:.4}
+  .mini{background:#222e35;color:#e9edef;border:0;border-radius:10px;padding:12px 10px;cursor:pointer;font-size:13px}
+  .note{max-width:420px;margin:0 12px 16px;background:#0f1720;border:1px solid #1d3a52;border-left:4px solid #00d4ff;border-radius:10px;padding:12px 14px;font-size:13px;color:#cbd5e1}
+  .note b{color:#7dd3fc}.hidden{display:none}
+  .close{align-self:center;text-align:center;background:linear-gradient(135deg,#0066ff,#00d4ff);color:#fff;padding:14px;border-radius:12px;font-weight:700;font-size:14px;margin:4px 0}
+  h4{margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#64748b}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="hd"><div class="av">C</div><div><div class="n">Comandra</div><div class="s" id="sub">online</div></div></div>
+  <div class="chat" id="chat"></div>
+  <div class="foot">
+    <button class="btn" id="next" onclick="adv()">Próximo ▶</button>
+    <button class="mini" onclick="toggleNotes()" title="Notas do apresentador">📝</button>
+    <button class="mini" onclick="reset()" title="Reiniciar">🔁</button>
+  </div>
+</div>
+<div class="note" id="note"><h4>Nota do apresentador</h4><span id="notetxt">Clique “Próximo” para começar a demonstração. Use 📝 para esconder as notas quando estiver apresentando ao cliente.</span></div>
+<script>
+const STEPS=[
+ {who:'c',text:'☀️ *Bom dia, Rafael!*\n🔥 4 dias seguidos no jogo — não quebra a sequência hoje!\n\n📊 *Seu jogo hoje:*\n• 🔥 Esperando você: 2\n• 🆕 Novos: 3\n• 📅 Visitas: 1\n\n🎯 *Primeiro movimento:* responder *Maria* — lead que respondeu esfria rápido.',note:'A Comandra começa o dia SOZINHA. O corretor não abre nenhum sistema — ela já chega no WhatsApp dele com o jogo montado e a próxima jogada. Adesão de esforço zero.'},
+ {who:'b',text:'como eu fecho a visita da Maria?'},
+ {who:'c',text:'Pra *Maria*, montei isso:\n\n_“Oi Maria! Consegui segurar 2 horários pra você conhecer o decorado: *sábado 10h* ou *terça 19h*. Ao vivo você vê a planta, o acabamento, e a gente já resolve renda e FGTS na hora. As unidades nessa faixa tão saindo rápido — qual fica melhor? 🏠”_\n\n➡️ Mando agora? *manda* / ajuste / *cancela*',note:'O OURO: a Comandra ESCREVE a jogada de venda pronta — ancorada no MCMV (FGTS, renda, escassez real), no tom do corretor, sempre empurrando pra VISITA. O corretor não pensa, só aprova. É um diretor de vendas no ouvido dele.'},
+ {who:'b',text:'manda'},
+ {who:'c',text:'✅ Enviado pra *Maria*! Te aviso na hora que ela responder. 👊'},
+ {who:'c',text:'🎣 *Fisgou!* A *Maria* respondeu agora:\n\n_“pode ser sábado às 10 sim!”_\n\nLead quente AGORA — responde já e trava a visita! ⚡',note:'No SEGUNDO em que a Maria responde, a Comandra cutuca o corretor. Velocidade de resposta é o que mais converte em MCMV — e nenhum lead fica mais no vácuo.'},
+ {who:'b',text:'agendei a visita da Maria sábado 10h'},
+ {who:'c',text:'✅ Visita da *Maria* marcada pra *sáb 10h*!\n\nRelaxa que eu te lembro na *véspera* e no *dia* pra confirmar com ela — no-show é o que mais mata visita. 💪',note:'A Comandra captura a visita e assume o anti-no-show — o maior vazamento de vendas em MCMV. O corretor não precisa lembrar de nada.'},
+ {who:'c',text:'📅 *Rafael*, amanhã 10h tem a visita da *Maria*!\n\nConfirma hoje: _“Oi Maria, tudo certo pra amanhã às 10h? Te mando como chegar 👍”_',note:'Véspera, 18h: lembrete automático + mensagem pronta de confirmação. Comparecimento sobe sem esforço do corretor.'},
+ {who:'c',text:'🏆 *Boa, Rafael!* Visita da Maria realizada ✅\n\nVocê tá em *2º no ranking* hoje — tá voando! 🚀',note:'Reconhecimento na hora = dopamina = corretor ligado todo dia. É o combustível da adesão: ele volta amanhã porque o jogo é gostoso.'}
+];
+const CLOSE='A Comandra vive no WhatsApp do corretor. Organiza o dia, escreve a jogada, fisga o lead quente, mata o no-show e celebra a vitória. O corretor vende mais — e o dado de gestão cai sozinho.';
+let i=0;const chat=document.getElementById('chat');
+function fmt(t){return t.replace(/\*(.+?)\*/g,'<b>$1</b>').replace(/_(.+?)_/g,'<i>$1</i>');}
+function scroll(){chat.scrollTop=chat.scrollHeight;}
+function note(t){document.getElementById('notetxt').innerHTML=t||'—';}
+function toggleNotes(){document.getElementById('note').classList.toggle('hidden');}
+function reset(){chat.innerHTML='';i=0;document.getElementById('next').disabled=false;note('Clique “Próximo” para começar.');}
+function addBubble(s){const d=document.createElement('div');d.className='b '+(s.who==='c'?'c':'me');d.innerHTML=fmt(s.text);chat.appendChild(d);scroll();}
+function adv(){
+ if(i>=STEPS.length){const d=document.createElement('div');d.className='close';d.innerHTML=fmt(CLOSE);chat.appendChild(d);document.getElementById('next').disabled=true;note('Fechamento: é o copiloto que faz o corretor vender mais — e o dado de gestão cai sozinho.');scroll();i++;return;}
+ const s=STEPS[i];
+ if(s.who==='c'){document.getElementById('sub').textContent='digitando…';const t=document.createElement('div');t.className='typing';t.innerHTML='<i></i><i></i><i></i>';chat.appendChild(t);scroll();document.getElementById('next').disabled=true;setTimeout(()=>{t.remove();document.getElementById('sub').textContent='online';addBubble(s);note(s.note);document.getElementById('next').disabled=false;},900);}
+ else{addBubble(s);note(s.note||'O corretor responde em linguagem natural — sem formulário, sem app, só conversa.');}
+ i++;
+}
+</script>
+</body>
+</html>
