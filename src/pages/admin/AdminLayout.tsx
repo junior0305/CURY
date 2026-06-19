@@ -42,7 +42,7 @@ class AdminErrorBoundary extends Component<
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Users, DollarSign, LogOut, Crown,
-  Gauge, Activity, BrainCircuit, Plug, ChevronRight,
+  Gauge, Activity, BrainCircuit, Plug, ChevronRight, Megaphone,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -75,6 +75,7 @@ import Inteligencia from "./Inteligencia";
 import CentralIA from "./CentralIA";
 import Comunicados from "./Comunicados";
 import Lancamentos from "./Lancamentos";
+import Anuncios from "./Anuncios";
 
 // ─── Grupos principais ────────────────────────────────────────────────────────
 
@@ -127,6 +128,13 @@ const GROUPS = [
     value: "inteligencia",
     label: "Diagnóstico",
     icon: BrainCircuit,
+    roles: ["ADMIN", "SUPERINTENDENT"],
+    single: true,
+  },
+  {
+    value: "anuncios",
+    label: "Anúncios",
+    icon: Megaphone,
     roles: ["ADMIN", "SUPERINTENDENT"],
     single: true,
   },
@@ -418,6 +426,8 @@ function AdminLayoutInner() {
             transition={{ duration: 0.2 }}
           >
         {activeGroup === "cockpit" && <Cockpit />}
+
+        {activeGroup === "anuncios" && <Anuncios />}
 
         {activeGroup === "equipe" && (
           <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
