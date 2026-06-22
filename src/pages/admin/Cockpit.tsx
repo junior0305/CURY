@@ -11,6 +11,7 @@ import {
 import { showSuccess, showError } from "@/utils/toast";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import CockpitReuniao from "./CockpitReuniao";
 
 // ─── Types (espelham o RPC cockpit_v2) ───────────────────────────────────────
 
@@ -167,6 +168,7 @@ export default function Cockpit() {
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showSumidos, setShowSumidos] = useState(false);
+  const [view, setView] = useState<"operacao" | "reuniao">("operacao");
   // dica: por escopo ('geral' ou manager_id) → texto; e loading por escopo
   const [dicas, setDicas] = useState<Record<string, string>>({});
   const [dicaLoading, setDicaLoading] = useState<string | null>(null);
@@ -267,6 +269,17 @@ export default function Cockpit() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* seletor Operação | Reunião */}
+          <div className="flex p-1 gap-1 rounded-xl" style={{ background: "rgba(8,11,20,0.8)", border: "1px solid #1E293B" }}>
+            {(["operacao", "reuniao"] as const).map(v => (
+              <button key={v} onClick={() => setView(v)}
+                className="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all"
+                style={view === v ? { background: "linear-gradient(135deg, #0066FF, #00D4FF)", color: "#fff", boxShadow: "0 0 12px rgba(0,212,255,0.35)" } : { color: "#475569" }}>
+                {v === "operacao" ? "Operação" : "Reunião"}
+              </button>
+            ))}
+          </div>
+          {view === "operacao" && (<>
           <div className="flex p-1 gap-1 rounded-xl" style={{ background: "rgba(8,11,20,0.8)", border: "1px solid #1E293B" }}>
             {(["today", "7d", "month", "custom"] as Mode[]).map(m => (
               <button key={m} onClick={() => setMode(m)}
@@ -291,8 +304,12 @@ export default function Cockpit() {
             <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
             {loading ? "Carregando" : "Atualizar"}
           </button>
+          </>)}
         </div>
       </motion.div>
+
+      {view === "reuniao" && <CockpitReuniao />}
+      {view === "operacao" && (<Fragment>
 
       {/* ── 0. METAS (placar do mês) ────────────────────────────────────────── */}
       <div>
@@ -701,6 +718,7 @@ export default function Cockpit() {
         </div>
       </div>
 
+      </Fragment>)}
     </div>
   );
 }
