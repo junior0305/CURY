@@ -228,7 +228,36 @@ serve(async (req) => {
         b.is_active !== false && b.lead_assignment_enabled !== false
       );
 
-      if (eligible.length === 0) {
+      // ── GATE DE CHIP: não distribui pra corretor com WhatsApp morto ──────────
+      // Prefere quem tem chip realmente vivo (status/real_state = open). É SOFT:
+      // se NINGUÉM na fila tem chip vivo, mantém a lista original (nunca orfana —
+      // melhor um lead num chip que vai religar do que lead sem dono).
+      let eligibleForRR = eligible;
+      if (eligible.length > 0) {
+        const botIds = eligible.map((b: any) => b.bot_instance_id).filter(Boolean);
+        if (botIds.length > 0) {
+          const { data: chips } = await supabase
+            .from('bot_instances')
+            .select('id, status, real_state')
+            .in('id', botIds);
+          const alive = new Set(
+            (chips || [])
+              .filter((c: any) => c.status === 'open' || c.real_state === 'open')
+              .map((c: any) => c.id)
+          );
+          const filtered = eligible.filter((b: any) => b.bot_instance_id && alive.has(b.bot_instance_id));
+          if (filtered.length > 0) {
+            eligibleForRR = filtered;
+            if (filtered.length < eligible.length) {
+              console.log(`[DISTRIBUTION] Gate de chip: ${eligible.length}→${filtered.length} com chip vivo na fila ${chosenQueue.name}`);
+            }
+          } else {
+            console.log(`[DISTRIBUTION] Gate de chip: NINGUÉM com chip vivo na fila ${chosenQueue.name} — mantém lista original (não orfana)`);
+          }
+        }
+      }
+
+      if (eligibleForRR.length === 0) {
         console.log(`[DISTRIBUTION] Nenhum broker elegível na fila ${chosenQueue.name} — caindo no fallback`);
       } else {
         // Round-robin com optimistic lock — pode falhar se concorrência. Tenta poucas vezes.
@@ -237,7 +266,7 @@ serve(async (req) => {
           const { data: freshQ } = await supabase.from('distribution_queues').select('*').eq('id', chosenQueue.id).maybeSingle();
           if (!freshQ) break;
           const oldIndex = freshQ.last_assigned_index || 0;
-          const idx = oldIndex % eligible.length;
+          const idx = oldIndex % eligibleForRR.length;
 
           const { data: updated } = await supabase.from('distribution_queues')
             .update({ last_assigned_index: oldIndex + 1 })
@@ -247,8 +276,8 @@ serve(async (req) => {
             .maybeSingle();
 
           if (updated) {
-            chosenBroker = eligible[idx];
-            console.log(`[DISTRIBUTION] Round-robin (${eligible.length} elegíveis): ${chosenBroker?.first_name} (exclusiva=${isExclusive})`);
+            chosenBroker = eligibleForRR[idx];
+            console.log(`[DISTRIBUTION] Round-robin (${eligibleForRR.length} c/ chip vivo): ${chosenBroker?.first_name} (exclusiva=${isExclusive})`);
             break;
           }
           // Optimistic lock falhou — outro lead pegou esse índice. Tenta de novo.
