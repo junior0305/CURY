@@ -228,45 +228,17 @@ serve(async (req) => {
         b.is_active !== false && b.lead_assignment_enabled !== false
       );
 
-      // ── GATE DE CHIP: não distribui pra corretor com WhatsApp morto ──────────
-      // Prefere quem tem chip realmente vivo (status/real_state = open). É SOFT:
-      // se NINGUÉM na fila tem chip vivo, mantém a lista original (nunca orfana —
-      // melhor um lead num chip que vai religar do que lead sem dono).
-      let eligibleForRR = eligible;
-      if (eligible.length > 0) {
-        const botIds = eligible.map((b: any) => b.bot_instance_id).filter(Boolean);
-        if (botIds.length > 0) {
-          const { data: chips } = await supabase
-            .from('bot_instances')
-            .select('id, status, real_state')
-            .in('id', botIds);
-          const alive = new Set(
-            (chips || [])
-              .filter((c: any) => c.status === 'open' || c.real_state === 'open')
-              .map((c: any) => c.id)
-          );
-          const filtered = eligible.filter((b: any) => b.bot_instance_id && alive.has(b.bot_instance_id));
-          if (filtered.length > 0) {
-            eligibleForRR = filtered;
-            if (filtered.length < eligible.length) {
-              console.log(`[DISTRIBUTION] Gate de chip: ${eligible.length}→${filtered.length} com chip vivo na fila ${chosenQueue.name}`);
-            }
-          } else {
-            console.log(`[DISTRIBUTION] Gate de chip: NINGUÉM com chip vivo na fila ${chosenQueue.name} — mantém lista original (não orfana)`);
-          }
-        }
-      }
-
-      if (eligibleForRR.length === 0) {
+      if (eligible.length === 0) {
         console.log(`[DISTRIBUTION] Nenhum broker elegível na fila ${chosenQueue.name} — caindo no fallback`);
       } else {
-        // Round-robin com optimistic lock — pode falhar se concorrência. Tenta poucas vezes.
+        // Round-robin com optimistic lock — escolhe o corretor NATURAL, respeitando
+        // a equipe/investimento de quem comprou o lead. O gate de chip vem DEPOIS.
         const maxAttempts = 5;
         for (let i = 0; i < maxAttempts; i++) {
           const { data: freshQ } = await supabase.from('distribution_queues').select('*').eq('id', chosenQueue.id).maybeSingle();
           if (!freshQ) break;
           const oldIndex = freshQ.last_assigned_index || 0;
-          const idx = oldIndex % eligibleForRR.length;
+          const idx = oldIndex % eligible.length;
 
           const { data: updated } = await supabase.from('distribution_queues')
             .update({ last_assigned_index: oldIndex + 1 })
@@ -276,11 +248,45 @@ serve(async (req) => {
             .maybeSingle();
 
           if (updated) {
-            chosenBroker = eligibleForRR[idx];
-            console.log(`[DISTRIBUTION] Round-robin (${eligibleForRR.length} c/ chip vivo): ${chosenBroker?.first_name} (exclusiva=${isExclusive})`);
+            chosenBroker = eligible[idx];
+            console.log(`[DISTRIBUTION] Round-robin (${eligible.length} elegíveis): ${chosenBroker?.first_name} (exclusiva=${isExclusive})`);
             break;
           }
           // Optimistic lock falhou — outro lead pegou esse índice. Tenta de novo.
+        }
+
+        // ── GATE DE CHIP (TEAM-SAFE): NUNCA muda a equipe do lead ───────────────
+        // O corretor natural já foi escolhido (respeita o investimento da equipe).
+        // Só se o chip DELE estiver morto, realoca pra um COLEGA DA MESMA EQUIPE com
+        // chip vivo. Se nenhum colega de equipe tem chip vivo, MANTÉM o natural — o
+        // lead espera o chip religar. NUNCA pula pra outra equipe.
+        if (chosenBroker?.bot_instance_id) {
+          const { data: ownChip } = await supabase
+            .from('bot_instances').select('status, real_state')
+            .eq('id', chosenBroker.bot_instance_id).maybeSingle();
+          const ownAlive = ownChip && (ownChip.status === 'open' || ownChip.real_state === 'open');
+          if (!ownAlive) {
+            const sameTeam = eligible.filter((b: any) =>
+              b.id !== chosenBroker.id && b.bot_instance_id &&
+              ((chosenBroker.manager_id && b.manager_id === chosenBroker.manager_id) ||
+               (chosenBroker.team_id && b.team_id === chosenBroker.team_id))
+            );
+            if (sameTeam.length > 0) {
+              const ids = sameTeam.map((b: any) => b.bot_instance_id);
+              const { data: chips } = await supabase
+                .from('bot_instances').select('id, status, real_state').in('id', ids);
+              const alive = new Set((chips || [])
+                .filter((c: any) => c.status === 'open' || c.real_state === 'open')
+                .map((c: any) => c.id));
+              const liveColleague = sameTeam.find((b: any) => alive.has(b.bot_instance_id));
+              if (liveColleague) {
+                console.log(`[DISTRIBUTION] Gate team-safe: chip de ${chosenBroker.first_name} morto → colega ${liveColleague.first_name} (MESMA equipe)`);
+                chosenBroker = liveColleague;
+              } else {
+                console.log(`[DISTRIBUTION] Gate team-safe: chip de ${chosenBroker.first_name} morto e nenhum colega de equipe vivo — mantém (não pula equipe)`);
+              }
+            }
+          }
         }
       }
     }
