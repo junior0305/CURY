@@ -229,7 +229,13 @@ serve(async (req) => {
       );
 
       if (eligible.length === 0) {
-        console.log(`[DISTRIBUTION] Nenhum broker elegível na fila ${chosenQueue.name} — caindo no fallback`);
+        // Fila exclusiva de DONO ÚNICO: o lead é dele mesmo "ausente" — mantém com ele (não orfana/trava)
+        if (isExclusive && (chosenQueue.broker_ids?.length === 1) && orderedBrokers[0]) {
+          chosenBroker = orderedBrokers[0];
+          console.log(`[DISTRIBUTION] Fila exclusiva de dono único — mantém com ${chosenBroker?.first_name} mesmo ausente`);
+        } else {
+          console.log(`[DISTRIBUTION] Nenhum broker elegível na fila ${chosenQueue.name} — caindo no fallback`);
+        }
       } else {
         // Round-robin com optimistic lock — escolhe o corretor NATURAL, respeitando
         // a equipe/investimento de quem comprou o lead. O gate de chip vem DEPOIS.
