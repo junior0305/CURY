@@ -100,8 +100,12 @@ export default function TeamRankingPanel({ brokers, leads }: Props) {
   async function togglePresence(broker: Broker, e: React.MouseEvent) {
     e.stopPropagation();
     if (busyId) return;
-    setBusyId(broker.id);
     const newState = !(broker.lead_assignment_enabled ?? true);
+    // Footgun guard: desligar recebimento tem consequência — confirma antes de marcar ausente
+    if (!newState && !window.confirm(`Marcar ${broker.first_name} como AUSENTE?\n\nEle PARA de receber leads novos automaticamente até ser reativado.`)) {
+      return;
+    }
+    setBusyId(broker.id);
     const { error } = await supabase
       .from("profiles")
       .update({ lead_assignment_enabled: newState })

@@ -317,6 +317,9 @@ export default function CoachBroker() {
   async function togglePresence() {
     if (!broker) return;
     const newState = !(broker.lead_assignment_enabled ?? true);
+    if (!newState && !window.confirm(`Marcar ${broker.first_name} como AUSENTE?\n\nEle PARA de receber leads novos automaticamente até ser reativado.`)) {
+      return;
+    }
     const { error } = await supabase
       .from("profiles")
       .update({ lead_assignment_enabled: newState })
