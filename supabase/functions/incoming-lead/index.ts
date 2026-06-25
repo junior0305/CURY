@@ -337,6 +337,10 @@ serve(async (req) => {
       ...(tipoTrabalho    ? { tipo_trabalho:    tipoTrabalho    } : {}),
       // Produto vem do Make/Facebook (alias 'produto' ou 'product')
       ...(leadValues.product ? { product: leadValues.product } : {}),
+      // CAPI: grava campanha/page no PRÓPRIO lead (durável) — webhook_logs morre em 3d
+      // e o comandra-capi precisa resolver o pixel dias depois (qualificação/visita/venda)
+      ...(leadValues.campaign ? { fb_campaign: leadValues.campaign } : {}),
+      ...((sourceData.page_id || sourceData.pageId || sourceData.page) ? { fb_page_id: String(sourceData.page_id || sourceData.pageId || sourceData.page) } : {}),
       // Agente IA: marca o lead para qualificação automática
       ...(chosenQueue?.ai_agent_broker_id ? { ai_qualification_queue_id: chosenQueue.id } : {}),
     };
