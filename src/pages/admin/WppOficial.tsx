@@ -163,14 +163,14 @@ function Disparos() {
             <label className="text-xs text-slate-400">Template aprovado</label>
             <Select value={form.template_id} onValueChange={(v) => setForm({ ...form, template_id: v })}>
               <SelectTrigger><SelectValue placeholder={tplApproved.length ? "Escolha o template" : "Nenhum aprovado ainda (aba Templates)"} /></SelectTrigger>
-              <SelectContent>{tplApproved.map((t) => <SelectItem key={t.id} value={t.id}>{t.name} · {t.category}</SelectItem>)}</SelectContent>
+              <SelectContent style={WA_DARK}>{tplApproved.map((t) => <SelectItem key={t.id} value={t.id}>{t.name} · {t.category}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
             <label className="text-xs text-slate-400">Público</label>
             <Select value={form.audience_source} onValueChange={(v) => setForm({ ...form, audience_source: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{AUDIENCE.map((a) => <SelectItem key={a.v} value={a.v}>{a.label}</SelectItem>)}</SelectContent>
+              <SelectContent style={WA_DARK}>{AUDIENCE.map((a) => <SelectItem key={a.v} value={a.v}>{a.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           {["novos", "parados", "esfriando"].includes(form.audience_source) && (
@@ -186,7 +186,7 @@ function Disparos() {
             <label className="text-xs text-slate-400">Fila que recebe os interessados</label>
             <Select value={form.target_queue_id} onValueChange={(v) => setForm({ ...form, target_queue_id: v })}>
               <SelectTrigger><SelectValue placeholder="Escolha a fila" /></SelectTrigger>
-              <SelectContent>{queues.map((q) => <SelectItem key={q.id} value={q.id}>{q.name}</SelectItem>)}</SelectContent>
+              <SelectContent style={WA_DARK}>{queues.map((q) => <SelectItem key={q.id} value={q.id}>{q.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
@@ -326,8 +326,17 @@ function Conversas() {
 // ─────────────────────────────── TEMPLATES ───────────────────────────────
 function Templates() {
   const [list, setList] = useState<any[]>([]);
-  const [form, setForm] = useState<any>({ name: "", category: "UTILITY", body_text: "", footer_text: "" });
+  const [form, setForm] = useState<any>({ name: "", category: "UTILITY", body_text: "", footer_text: "", header_image_url: "" });
+  const [brief, setBrief] = useState("");
   const [busy, setBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+
+  async function iaEscrever() {
+    setAiBusy(true);
+    const { data, error } = await supabase.functions.invoke("wa-template", { body: { action: "suggest", category: form.category, brief } });
+    if (error || !data?.ok) { toast.error(data?.error?.message || "IA não respondeu"); setAiBusy(false); return; }
+    setForm((f: any) => ({ ...f, body_text: data.text })); toast.success("IA escreveu — revise e envie"); setAiBusy(false);
+  }
 
   async function load() {
     const { data } = await supabase.from("whatsapp_templates").select("*").order("created_at", { ascending: false });
@@ -342,7 +351,7 @@ function Templates() {
     setBusy(true);
     const { data, error } = await supabase.functions.invoke("wa-template", { body: { action: "create", ...form } });
     if (error || data?.error) { toast.error(data?.error?.error_user_msg || data?.error?.message || "Falha ao criar"); setBusy(false); return; }
-    toast.success("Template enviado pra Meta — status PENDING"); setForm({ name: "", category: "UTILITY", body_text: "", footer_text: "" });
+    toast.success("Template enviado pra Meta — status PENDING"); setForm({ name: "", category: "UTILITY", body_text: "", footer_text: "", header_image_url: "" }); setBrief("");
     setBusy(false); load();
   }
   useEffect(() => { load(); }, []);
@@ -355,19 +364,35 @@ function Templates() {
           <b className="text-slate-200">Template</b> é a mensagem que a Meta precisa <b>aprovar</b> antes de você mandar pra quem <b>ainda não te respondeu</b>. Escreva algo <b>curto e educado</b>. Coloque <code className="text-green-400 bg-slate-800 px-1 rounded">{"{{1}}"}</code> onde entra o <b>nome</b> da pessoa.
         </p>
         <div className="space-y-3">
-          <button type="button" onClick={() => setForm({ name: "primeiro_contato", category: "UTILITY", body_text: "Ola {{1}}! Tudo bem? Vi que voce tem interesse em imoveis Minha Casa Minha Vida. Posso te enviar as opcoes disponiveis na sua regiao?", footer_text: "" })}
-            className="text-xs text-green-400 hover:underline">✨ preencher com um exemplo pronto</button>
+          {/* IA escreve o texto */}
+          <div className="bg-purple-950/30 border border-purple-800/40 rounded-lg p-2.5 space-y-2">
+            <div className="text-xs text-purple-300 font-semibold flex items-center gap-1"><Bot className="w-3.5 h-3.5" /> Deixa a IA escrever (texto de fácil aprovação)</div>
+            <Textarea rows={2} placeholder="Diga o objetivo em 1 linha. Ex: retomar contato com quem parou de responder e chamar pra visita" value={brief} onChange={(e) => setBrief(e.target.value)} />
+            <Button size="sm" onClick={iaEscrever} disabled={aiBusy} className="w-full bg-purple-600 hover:bg-purple-500">
+              {aiBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : "🤖 IA escrever pra mim"}
+            </Button>
+          </div>
+          <button type="button" onClick={() => setForm({ name: "primeiro_contato", category: "UTILITY", body_text: "Ola {{1}}! Tudo bem? Vi que voce tem interesse em imoveis Minha Casa Minha Vida. Posso te enviar as opcoes disponiveis na sua regiao?", footer_text: "", header_image_url: "" })}
+            className="text-xs text-green-400 hover:underline">✨ ou preencher com um exemplo pronto</button>
           <Input placeholder="nome_do_template (só minúsculo e _, ex: primeiro_contato)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="UTILITY">Utility (barato — transacional)</SelectItem>
-              <SelectItem value="MARKETING">Marketing (promoção)</SelectItem>
-            </SelectContent>
-          </Select>
-          <Textarea rows={4} placeholder="Texto. Use {{1}} pra variável (ex: Olá {{1}}!)" value={form.body_text} onChange={(e) => setForm({ ...form, body_text: e.target.value })} />
+          <div>
+            <label className="text-xs text-slate-400">Tipo de mensagem</label>
+            <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent style={WA_DARK}>
+                <SelectItem value="UTILITY">Utility — barato (aviso/retomada, sem oferta)</SelectItem>
+                <SelectItem value="MARKETING">Marketing — oferta/promoção (mais caro)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Textarea rows={4} placeholder="Texto da mensagem. Use {{1}} pro nome (ex: Olá {{1}}!)" value={form.body_text} onChange={(e) => setForm({ ...form, body_text: e.target.value })} />
+          <div>
+            <label className="text-xs text-slate-400">Imagem do cabeçalho (opcional) — cole a URL de uma imagem</label>
+            <Input placeholder="https://.../imagem.jpg" value={form.header_image_url} onChange={(e) => setForm({ ...form, header_image_url: e.target.value })} />
+            {form.header_image_url ? <img src={form.header_image_url} alt="" className="mt-2 rounded-lg max-h-32 border border-slate-700" onError={(e: any) => { e.currentTarget.style.display = "none"; }} /> : null}
+          </div>
           <Input placeholder="Rodapé (opcional)" value={form.footer_text} onChange={(e) => setForm({ ...form, footer_text: e.target.value })} />
-          <p className="text-[11px] text-slate-500">A Meta analisa e decide a categoria/aprovação (minutos–48h). Imagem no cabeçalho: próxima fase.</p>
+          <p className="text-[11px] text-slate-500">A Meta analisa e decide categoria/aprovação (minutos–48h). Com imagem pode demorar um pouco mais.</p>
           <Button onClick={criar} disabled={busy} className="w-full bg-green-600 hover:bg-green-500">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Enviar pra aprovação"}
           </Button>
