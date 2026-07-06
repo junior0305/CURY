@@ -120,7 +120,6 @@ const GROUPS = [
       { value: "ia-builder", label: "IA Builder",  roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "agentes",    label: "Agentes",     roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "prospeccao",  label: "Prospecção",  roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "wpp-oficial", label: "WPP Oficial", roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "cold-pool",   label: "Pool Frio",   roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "replicacao",  label: "Replicação",  roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "central-ia",  label: "Central IA",  roles: ["ADMIN", "SUPERINTENDENT"] },
@@ -138,7 +137,10 @@ const GROUPS = [
     label: "Anúncios",
     icon: Megaphone,
     roles: ["ADMIN", "SUPERINTENDENT"],
-    single: true,
+    subtabs: [
+      { value: "anuncios-fb", label: "Anúncios",    roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "wpp-oficial", label: "WPP Oficial", roles: ["ADMIN", "SUPERINTENDENT"] },
+    ],
   },
   {
     value: "integracoes",
@@ -429,7 +431,15 @@ function AdminLayoutInner() {
           >
         {activeGroup === "cockpit" && <Cockpit />}
 
-        {activeGroup === "anuncios" && <Anuncios />}
+        {activeGroup === "anuncios" && (
+          <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
+            { v: "anuncios-fb", l: "Anúncios",    roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "wpp-oficial", l: "WPP Oficial", roles: ["ADMIN","SUPERINTENDENT"] },
+          ]} role={normalizedRole}>
+            <TabsContent value="anuncios-fb" className="p-0"><Anuncios /></TabsContent>
+            <TabsContent value="wpp-oficial" className="p-0"><WppOficial /></TabsContent>
+          </SubTabs>
+        )}
 
         {activeGroup === "equipe" && (
           <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
@@ -462,7 +472,6 @@ function AdminLayoutInner() {
             { v: "ia-builder",  l: "IA Builder",  roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "agentes",     l: "Agentes",     roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "prospeccao",  l: "Prospecção",  roles: ["ADMIN","SUPERINTENDENT"] },
-            { v: "wpp-oficial", l: "WPP Oficial", roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "cold-pool",   l: "Pool Frio",   roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "replicacao",  l: "Replicação",  roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "central-ia",  l: "Central IA",  roles: ["ADMIN","SUPERINTENDENT"] },
@@ -470,7 +479,6 @@ function AdminLayoutInner() {
             <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>
             <TabsContent value="agentes" className="p-6"><Agentes /></TabsContent>
             <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>
-            <TabsContent value="wpp-oficial" className="p-0"><WppOficial /></TabsContent>
             <TabsContent value="cold-pool" className="p-0"><ColdPool /></TabsContent>
             <TabsContent value="replicacao" className="p-0"><Replicacao /></TabsContent>
             <TabsContent value="central-ia" className="p-6"><CentralIA /></TabsContent>
