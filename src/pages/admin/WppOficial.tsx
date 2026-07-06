@@ -35,13 +35,25 @@ const statusColor: Record<string, string> = {
   REJECTED: "bg-red-600", DRAFT: "bg-slate-600",
 };
 
+// O admin usa tema custom (data-theme), não a classe .dark do shadcn — então forço
+// as variáveis de tema pro ESCURO só dentro desta tela, senão os campos ficam ilegíveis.
+const WA_DARK = {
+  "--background": "222 47% 11%", "--foreground": "0 0% 100%",
+  "--input": "215 20% 32%", "--border": "215 20% 32%", "--ring": "142 70% 45%",
+  "--muted": "215 25% 27%", "--muted-foreground": "215 16% 72%",
+  "--popover": "222 47% 14%", "--popover-foreground": "0 0% 100%",
+  "--accent": "215 25% 27%", "--accent-foreground": "0 0% 100%",
+  "--card": "222 47% 13%", "--card-foreground": "0 0% 100%",
+  "--primary": "142 70% 45%", "--primary-foreground": "0 0% 100%",
+} as any;
+
 export default function WppOficial() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("disparos");
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-slate-950 text-white" style={WA_DARK}>
       <div className="max-w-6xl mx-auto p-4 sm:p-6">
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-4">
           <button onClick={() => navigate("/admin")} className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700">
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -50,6 +62,13 @@ export default function WppOficial() {
               <Rocket className="w-6 h-6 text-green-400" /> WPP Oficial
             </h1>
             <p className="text-xs text-slate-400">Disparador WhatsApp API oficial · número +55 11 91339-0468</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-900/70 border border-slate-700 rounded-xl p-3 mb-5 text-sm text-slate-300 leading-relaxed">
+          <b className="text-white">Pra que serve:</b> mandar mensagem pelo WhatsApp <b>oficial da empresa</b> e conversar com quem responde — sem depender do chip de ninguém.
+          <div className="mt-1 text-slate-400">
+            <b className="text-slate-200">Passo a passo:</b> 1️⃣ crie um <b>Template</b> (a mensagem) e espere a Meta aprovar → 2️⃣ monte um <b>Disparo</b> (escolhe o template, o público e a equipe que atende) → 3️⃣ quem responder aparece em <b>Conversas</b> pra fechar a venda.
           </div>
         </div>
 
@@ -136,9 +155,10 @@ function Disparos() {
     <div className="grid md:grid-cols-2 gap-6">
       {/* Compositor / novo disparo */}
       <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
-        <h3 className="font-bold mb-3 flex items-center gap-2"><Plus className="w-4 h-4" /> Novo disparo</h3>
+        <h3 className="font-bold mb-1 flex items-center gap-2"><Plus className="w-4 h-4" /> Novo disparo</h3>
+        <p className="text-xs text-slate-400 mb-3">Escolha um <b>template aprovado</b>, o <b>público</b> (quem recebe) e a <b>fila</b> (equipe que atende quem responder). Cria como rascunho — só sai depois que você clicar <b>Aprovar &amp; disparar</b>.</p>
         <div className="space-y-3">
-          <Input placeholder="Nome do disparo" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input placeholder="Nome do disparo (só pra você se organizar)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <div>
             <label className="text-xs text-slate-400">Template aprovado</label>
             <Select value={form.template_id} onValueChange={(v) => setForm({ ...form, template_id: v })}>
@@ -330,9 +350,14 @@ function Templates() {
   return (
     <div className="grid md:grid-cols-2 gap-6">
       <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
-        <h3 className="font-bold mb-3 flex items-center gap-2"><Plus className="w-4 h-4" /> Novo template</h3>
+        <h3 className="font-bold mb-1 flex items-center gap-2"><Plus className="w-4 h-4" /> Novo template</h3>
+        <p className="text-xs text-slate-400 mb-3">
+          <b className="text-slate-200">Template</b> é a mensagem que a Meta precisa <b>aprovar</b> antes de você mandar pra quem <b>ainda não te respondeu</b>. Escreva algo <b>curto e educado</b>. Coloque <code className="text-green-400 bg-slate-800 px-1 rounded">{"{{1}}"}</code> onde entra o <b>nome</b> da pessoa.
+        </p>
         <div className="space-y-3">
-          <Input placeholder="nome_do_template (minúsculo, _)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <button type="button" onClick={() => setForm({ name: "primeiro_contato", category: "UTILITY", body_text: "Ola {{1}}! Tudo bem? Vi que voce tem interesse em imoveis Minha Casa Minha Vida. Posso te enviar as opcoes disponiveis na sua regiao?", footer_text: "" })}
+            className="text-xs text-green-400 hover:underline">✨ preencher com um exemplo pronto</button>
+          <Input placeholder="nome_do_template (só minúsculo e _, ex: primeiro_contato)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
