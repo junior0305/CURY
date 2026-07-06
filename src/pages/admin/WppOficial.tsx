@@ -1,0 +1,427 @@
+// WPP Oficial — disparador WhatsApp Cloud API (API oficial da Meta).
+// Motor (backend) já existe: edges wa-sender / wa-webhook / wa-campaign-runner / wa-template
+// + tabelas whatsapp_* (config, templates, campaigns, campaign_targets, threads, messages).
+// 4 abas: Disparos · Conversas (inbox) · Templates · Gastos.
+import { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeft, Send, MessageSquare, FileText, DollarSign, Plus, RefreshCw,
+  Loader2, CheckCircle2, Rocket, Bot, Users,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+
+type Tab = "disparos" | "conversas" | "templates" | "gastos";
+
+const AUDIENCE = [
+  { v: "novos", label: "Leads novos (entraram há X dias)" },
+  { v: "parados", label: "Leads parados há X dias" },
+  { v: "esfriando", label: "Leads esfriando há X dias" },
+  { v: "prospeccao", label: "Pool de prospecção" },
+  { v: "csv", label: "Lista de números (colar)" },
+];
+
+const statusColor: Record<string, string> = {
+  draft: "bg-slate-600", sending: "bg-blue-600", done: "bg-emerald-600",
+  paused: "bg-amber-600", APPROVED: "bg-emerald-600", PENDING: "bg-amber-600",
+  REJECTED: "bg-red-600", DRAFT: "bg-slate-600",
+};
+
+export default function WppOficial() {
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>("disparos");
+  return (
+    <div className="min-h-screen bg-slate-950 text-white">
+      <div className="max-w-6xl mx-auto p-4 sm:p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => navigate("/admin")} className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black flex items-center gap-2">
+              <Rocket className="w-6 h-6 text-green-400" /> WPP Oficial
+            </h1>
+            <p className="text-xs text-slate-400">Disparador WhatsApp API oficial · número +55 11 91339-0468</p>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mb-6 flex-wrap">
+          {([
+            ["disparos", "Disparos", Send],
+            ["conversas", "Conversas", MessageSquare],
+            ["templates", "Templates", FileText],
+            ["gastos", "Gastos", DollarSign],
+          ] as [Tab, string, any][]).map(([k, label, Icon]) => (
+            <button key={k} onClick={() => setTab(k)}
+              className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition ${tab === k ? "bg-green-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
+              <Icon className="w-4 h-4" /> {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "disparos" && <Disparos />}
+        {tab === "conversas" && <Conversas />}
+        {tab === "templates" && <Templates />}
+        {tab === "gastos" && <Gastos />}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────── DISPAROS ───────────────────────────────
+function Disparos() {
+  const [camps, setCamps] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [queues, setQueues] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState<any>({ name: "", template_id: "", audience_source: "novos", dias: 7, tag: "", target_queue_id: "", ai_autoreply: false, throttle_per_min: 10, csv: "" });
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    const [c, t, q] = await Promise.all([
+      supabase.from("whatsapp_campaigns").select("*").order("created_at", { ascending: false }).limit(50),
+      supabase.from("whatsapp_templates").select("id,name,category,meta_status").order("created_at", { ascending: false }),
+      supabase.from("distribution_queues").select("id,name").eq("is_active", true),
+    ]);
+    setCamps(c.data || []); setTemplates(t.data || []); setQueues(q.data || []);
+    setLoading(false);
+  }
+  useEffect(() => { load(); }, []);
+
+  async function criar() {
+    if (!form.name || !form.template_id) { toast.error("Nome e template são obrigatórios"); return; }
+    setBusy(true);
+    const { data: u } = await supabase.auth.getUser();
+    const filter: any = {};
+    if (["novos", "parados", "esfriando"].includes(form.audience_source)) filter.dias = Number(form.dias) || 7;
+    if (form.audience_source === "prospeccao" && form.tag) filter.tag = form.tag;
+    const { data: camp, error } = await supabase.from("whatsapp_campaigns").insert({
+      name: form.name, template_id: form.template_id, audience_source: form.audience_source,
+      audience_filter: filter, target_queue_id: form.target_queue_id || null,
+      ai_autoreply: form.ai_autoreply, throttle_per_min: Number(form.throttle_per_min) || 10,
+      status: "draft", created_by: u?.user?.id || null,
+    }).select("id").single();
+    if (error) { toast.error("Falha: " + error.message); setBusy(false); return; }
+    // CSV: insere os números como alvos
+    if (form.audience_source === "csv" && form.csv.trim()) {
+      const rows = form.csv.split(/[\n,;]/).map((s: string) => s.replace(/\D/g, "")).filter((p: string) => p.length >= 10)
+        .map((p: string) => ({ campaign_id: camp.id, phone: p.startsWith("55") ? p : "55" + p, status: "pending" }));
+      if (rows.length) { await supabase.from("whatsapp_campaign_targets").insert(rows); await supabase.from("whatsapp_campaigns").update({ audience_count: rows.length }).eq("id", camp.id); }
+    }
+    toast.success("Disparo criado (rascunho)");
+    setForm({ ...form, name: "", csv: "" });
+    setBusy(false); load();
+  }
+
+  async function disparar(camp: any) {
+    if (!confirm(`Aprovar e DISPARAR "${camp.name}"? O sistema vai enviar o template pra todo o público, com throttle.`)) return;
+    const { data: u } = await supabase.auth.getUser();
+    await supabase.from("whatsapp_campaigns").update({ status: "sending", approved_by: u?.user?.id || null, approved_at: new Date().toISOString() }).eq("id", camp.id);
+    toast.success("Disparo aprovado — começa a sair nos próximos minutos");
+    load();
+  }
+
+  const tplApproved = templates.filter((t) => t.meta_status === "APPROVED");
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6">
+      {/* Compositor / novo disparo */}
+      <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
+        <h3 className="font-bold mb-3 flex items-center gap-2"><Plus className="w-4 h-4" /> Novo disparo</h3>
+        <div className="space-y-3">
+          <Input placeholder="Nome do disparo" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <div>
+            <label className="text-xs text-slate-400">Template aprovado</label>
+            <Select value={form.template_id} onValueChange={(v) => setForm({ ...form, template_id: v })}>
+              <SelectTrigger><SelectValue placeholder={tplApproved.length ? "Escolha o template" : "Nenhum aprovado ainda (aba Templates)"} /></SelectTrigger>
+              <SelectContent>{tplApproved.map((t) => <SelectItem key={t.id} value={t.id}>{t.name} · {t.category}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400">Público</label>
+            <Select value={form.audience_source} onValueChange={(v) => setForm({ ...form, audience_source: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{AUDIENCE.map((a) => <SelectItem key={a.v} value={a.v}>{a.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          {["novos", "parados", "esfriando"].includes(form.audience_source) && (
+            <Input type="number" placeholder="Quantos dias" value={form.dias} onChange={(e) => setForm({ ...form, dias: e.target.value })} />
+          )}
+          {form.audience_source === "prospeccao" && (
+            <Input placeholder="Tag/região (opcional)" value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value })} />
+          )}
+          {form.audience_source === "csv" && (
+            <Textarea placeholder="Cole os números, 1 por linha" rows={4} value={form.csv} onChange={(e) => setForm({ ...form, csv: e.target.value })} />
+          )}
+          <div>
+            <label className="text-xs text-slate-400">Fila que recebe os interessados</label>
+            <Select value={form.target_queue_id} onValueChange={(v) => setForm({ ...form, target_queue_id: v })}>
+              <SelectTrigger><SelectValue placeholder="Escolha a fila" /></SelectTrigger>
+              <SelectContent>{queues.map((q) => <SelectItem key={q.id} value={q.id}>{q.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
+            <span className="text-sm flex items-center gap-2"><Bot className="w-4 h-4 text-purple-400" /> IA responde sozinha</span>
+            <Switch checked={form.ai_autoreply} onCheckedChange={(v) => setForm({ ...form, ai_autoreply: v })} />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">Ritmo:</span>
+            <Input type="number" className="w-20" value={form.throttle_per_min} onChange={(e) => setForm({ ...form, throttle_per_min: e.target.value })} />
+            <span className="text-xs text-slate-400">msgs/min</span>
+          </div>
+          <Button onClick={criar} disabled={busy} className="w-full bg-green-600 hover:bg-green-500">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar disparo (rascunho)"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Lista de disparos */}
+      <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold">Disparos</h3>
+          <button onClick={load}><RefreshCw className="w-4 h-4 text-slate-400" /></button>
+        </div>
+        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+          <div className="space-y-2 max-h-[70vh] overflow-auto">
+            {camps.length === 0 && <p className="text-sm text-slate-500">Nenhum disparo ainda.</p>}
+            {camps.map((c) => (
+              <div key={c.id} className="bg-slate-800/60 rounded-xl p-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-sm">{c.name}</span>
+                  <Badge className={statusColor[c.status] || "bg-slate-600"}>{c.status}</Badge>
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                  público: {c.audience_source} · {c.audience_count || 0} contatos {c.ai_autoreply && "· 🤖 IA"}
+                </div>
+                <div className="text-xs text-slate-300 mt-1 flex flex-wrap gap-x-3">
+                  <span>✅ {c.sent_count}</span><span>📬 {c.delivered_count}</span><span>👁️ {c.read_count}</span>
+                  <span>💬 {c.reply_count}</span><span>⚠️ {c.failed_count}</span>
+                </div>
+                {c.status === "draft" && (
+                  <Button size="sm" onClick={() => disparar(c)} className="mt-2 bg-blue-600 hover:bg-blue-500 h-7 text-xs">
+                    <Rocket className="w-3 h-3 mr-1" /> Aprovar & disparar
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────── CONVERSAS (inbox) ───────────────────────────────
+function Conversas() {
+  const [threads, setThreads] = useState<any[]>([]);
+  const [sel, setSel] = useState<any>(null);
+  const [msgs, setMsgs] = useState<any[]>([]);
+  const [reply, setReply] = useState("");
+  const [busy, setBusy] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  async function loadThreads() {
+    const { data } = await supabase.from("whatsapp_threads").select("*").order("last_inbound_at", { ascending: false, nullsFirst: false }).limit(100);
+    setThreads(data || []);
+  }
+  async function openThread(t: any) {
+    setSel(t);
+    const { data } = await supabase.from("whatsapp_messages").select("*").eq("thread_id", t.id).order("created_at", { ascending: true }).limit(200);
+    setMsgs(data || []);
+    if ((t.unread || 0) > 0) { await supabase.from("whatsapp_threads").update({ unread: 0 }).eq("id", t.id); loadThreads(); }
+    setTimeout(() => endRef.current?.scrollIntoView(), 100);
+  }
+  async function enviar() {
+    if (!reply.trim() || !sel) return;
+    setBusy(true);
+    const { data, error } = await supabase.functions.invoke("wa-sender", { body: { to: sel.phone, kind: "text", text: reply } });
+    if (error || data?.error) { toast.error(data?.error?.hint || data?.error?.message || "Falha (janela 24h fechada?)"); setBusy(false); return; }
+    setReply(""); await openThread(sel); setBusy(false);
+  }
+  useEffect(() => { loadThreads(); }, []);
+  const windowOpen = sel?.window_open_until && new Date(sel.window_open_until) > new Date();
+
+  return (
+    <div className="grid md:grid-cols-3 gap-4">
+      <div className="bg-slate-900 rounded-2xl p-3 border border-slate-800 max-h-[75vh] overflow-auto">
+        <div className="flex items-center justify-between mb-2 px-1">
+          <span className="font-bold text-sm">Conversas</span>
+          <button onClick={loadThreads}><RefreshCw className="w-4 h-4 text-slate-400" /></button>
+        </div>
+        {threads.length === 0 && <p className="text-xs text-slate-500 p-2">Nenhuma conversa ainda.</p>}
+        {threads.map((t) => (
+          <button key={t.id} onClick={() => openThread(t)}
+            className={`w-full text-left px-3 py-2 rounded-lg mb-1 ${sel?.id === t.id ? "bg-slate-700" : "hover:bg-slate-800"}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold truncate">{t.contact_name || t.phone}</span>
+              {(t.unread || 0) > 0 && <span className="bg-green-500 text-black text-[10px] rounded-full px-1.5">{t.unread}</span>}
+            </div>
+            <span className="text-[11px] text-slate-400">{t.phone}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="md:col-span-2 bg-slate-900 rounded-2xl border border-slate-800 flex flex-col max-h-[75vh]">
+        {!sel ? <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">Escolha uma conversa</div> : (
+          <>
+            <div className="p-3 border-b border-slate-800">
+              <span className="font-bold">{sel.contact_name || sel.phone}</span>
+              <span className="text-xs text-slate-400 ml-2">{windowOpen ? "🟢 janela 24h aberta" : "🔴 fora das 24h (só template)"}</span>
+            </div>
+            <div className="flex-1 overflow-auto p-3 space-y-2">
+              {msgs.map((m) => (
+                <div key={m.id} className={`flex ${m.direction === "outbound" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${m.direction === "outbound" ? "bg-green-700" : "bg-slate-700"}`}>
+                    {m.body || `[${m.msg_type}]`}
+                    <div className="text-[10px] text-slate-300/70 mt-0.5">{m.status || ""}</div>
+                  </div>
+                </div>
+              ))}
+              <div ref={endRef} />
+            </div>
+            <div className="p-3 border-t border-slate-800 flex gap-2">
+              <Input placeholder={windowOpen ? "Responder…" : "Fora das 24h — só template"} value={reply}
+                onChange={(e) => setReply(e.target.value)} disabled={!windowOpen}
+                onKeyDown={(e) => e.key === "Enter" && enviar()} />
+              <Button onClick={enviar} disabled={busy || !windowOpen || !reply.trim()} className="bg-green-600">
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────── TEMPLATES ───────────────────────────────
+function Templates() {
+  const [list, setList] = useState<any[]>([]);
+  const [form, setForm] = useState<any>({ name: "", category: "UTILITY", body_text: "", footer_text: "" });
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    const { data } = await supabase.from("whatsapp_templates").select("*").order("created_at", { ascending: false });
+    setList(data || []);
+  }
+  async function refresh() {
+    await supabase.functions.invoke("wa-template", { body: { action: "refresh" } });
+    toast.success("Status atualizado da Meta"); load();
+  }
+  async function criar() {
+    if (!form.name || !form.body_text) { toast.error("Nome e texto obrigatórios"); return; }
+    setBusy(true);
+    const { data, error } = await supabase.functions.invoke("wa-template", { body: { action: "create", ...form } });
+    if (error || data?.error) { toast.error(data?.error?.error_user_msg || data?.error?.message || "Falha ao criar"); setBusy(false); return; }
+    toast.success("Template enviado pra Meta — status PENDING"); setForm({ name: "", category: "UTILITY", body_text: "", footer_text: "" });
+    setBusy(false); load();
+  }
+  useEffect(() => { load(); }, []);
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6">
+      <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
+        <h3 className="font-bold mb-3 flex items-center gap-2"><Plus className="w-4 h-4" /> Novo template</h3>
+        <div className="space-y-3">
+          <Input placeholder="nome_do_template (minúsculo, _)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="UTILITY">Utility (barato — transacional)</SelectItem>
+              <SelectItem value="MARKETING">Marketing (promoção)</SelectItem>
+            </SelectContent>
+          </Select>
+          <Textarea rows={4} placeholder="Texto. Use {{1}} pra variável (ex: Olá {{1}}!)" value={form.body_text} onChange={(e) => setForm({ ...form, body_text: e.target.value })} />
+          <Input placeholder="Rodapé (opcional)" value={form.footer_text} onChange={(e) => setForm({ ...form, footer_text: e.target.value })} />
+          <p className="text-[11px] text-slate-500">A Meta analisa e decide a categoria/aprovação (minutos–48h). Imagem no cabeçalho: próxima fase.</p>
+          <Button onClick={criar} disabled={busy} className="w-full bg-green-600 hover:bg-green-500">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Enviar pra aprovação"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold">Templates</h3>
+          <Button size="sm" variant="ghost" onClick={refresh}><RefreshCw className="w-4 h-4 mr-1" /> Atualizar</Button>
+        </div>
+        <div className="space-y-2 max-h-[70vh] overflow-auto">
+          {list.map((t) => (
+            <div key={t.id} className="bg-slate-800/60 rounded-xl p-3">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-sm">{t.name}</span>
+                <Badge className={statusColor[t.meta_status] || "bg-slate-600"}>{t.meta_status}</Badge>
+              </div>
+              <div className="text-xs text-slate-400 mt-1">{t.category}</div>
+              <div className="text-xs text-slate-300 mt-1 line-clamp-2">{t.body_text}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────── GASTOS ───────────────────────────────
+function Gastos() {
+  const [camps, setCamps] = useState<any[]>([]);
+  const [byCat, setByCat] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const [c, m] = await Promise.all([
+        supabase.from("whatsapp_campaigns").select("name,sent_count,delivered_count,read_count,reply_count,failed_count").order("created_at", { ascending: false }).limit(50),
+        supabase.from("whatsapp_messages").select("pricing_category").eq("direction", "outbound").not("pricing_category", "is", null),
+      ]);
+      setCamps(c.data || []);
+      const agg: Record<string, number> = {};
+      (m.data || []).forEach((x: any) => { agg[x.pricing_category] = (agg[x.pricing_category] || 0) + 1; });
+      setByCat(agg); setLoading(false);
+    })();
+  }, []);
+
+  const totalSent = camps.reduce((s, c) => s + (c.sent_count || 0), 0);
+  const totalReply = camps.reduce((s, c) => s + (c.reply_count || 0), 0);
+
+  if (loading) return <Loader2 className="w-5 h-5 animate-spin" />;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[["Enviadas", totalSent, "text-blue-400"], ["Respostas", totalReply, "text-green-400"],
+          ["Categorias", Object.keys(byCat).length, "text-purple-400"],
+          ["Msgs cobradas", Object.values(byCat).reduce((a, b) => a + b, 0), "text-amber-400"]].map(([l, v, c]: any) => (
+          <div key={l} className="bg-slate-900 rounded-2xl p-4 border border-slate-800">
+            <div className={`text-2xl font-black ${c}`}>{v}</div>
+            <div className="text-xs text-slate-400">{l}</div>
+          </div>
+        ))}
+      </div>
+      <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
+        <h3 className="font-bold mb-2">Por categoria (custo real da Meta)</h3>
+        {Object.keys(byCat).length === 0 ? <p className="text-sm text-slate-500">Sem dados ainda — aparece quando os disparos entregarem.</p> : (
+          <div className="space-y-1">{Object.entries(byCat).map(([k, v]) => (
+            <div key={k} className="flex justify-between text-sm"><span>{k}</span><span className="text-slate-300">{v} msgs</span></div>
+          ))}</div>
+        )}
+        <p className="text-[11px] text-slate-500 mt-3">Utility ≈ centavos · Marketing ≈ mais caro · Service (dentro de 24h) = grátis. O valor por msg vem do webhook da Meta.</p>
+      </div>
+      <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
+        <h3 className="font-bold mb-2">Por disparo</h3>
+        <div className="space-y-1">{camps.map((c, i) => (
+          <div key={i} className="flex justify-between text-sm"><span>{c.name}</span>
+            <span className="text-slate-300">{c.sent_count} env · {c.reply_count} resp</span></div>
+        ))}</div>
+      </div>
+    </div>
+  );
+}
