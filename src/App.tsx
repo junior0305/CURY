@@ -16,6 +16,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard"; // mantido como backup
 import DashboardWolf from "./pages/DashboardWolf";
 import DashboardFoco from "./pages/DashboardFoco";
+import Atender from "./pages/Atender";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import ManagerV2 from "./pages/ManagerV2";
 import CoachIndex from "./pages/manager-v2/CoachIndex";
@@ -110,6 +111,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<ProtectedBrokerRoute><DashboardFoco /></ProtectedBrokerRoute>} />
+            <Route path="/atender" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-wolf" element={<ProtectedBrokerRoute><DashboardWolf /></ProtectedBrokerRoute>} />
             {/* /manager = novo cockpit (v2). /manager-v1 = backup do antigo. */}
             <Route path="/manager" element={<ProtectedManagerRoute><ManagerV2 /></ProtectedManagerRoute>} />

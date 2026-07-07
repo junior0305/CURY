@@ -19,6 +19,7 @@ export type LeadStatus =
 
 export type LostReason =
   | 'RENDA_FORA_FAIXA'    // Renda acima ou abaixo da faixa MCMV
+  | 'JA_COMPROU'          // Já comprou / fechou (com concorrente ou por fora)
   | 'JA_TEM_IMOVEL'       // Já possui imóvel no nome
   | 'JA_USOU_PROGRAMA'    // Já utilizou benefício MCMV anteriormente
   | 'BACEN'               // Restrição BACEN
@@ -128,6 +129,7 @@ export const STATUS_LABEL: Record<LeadStatus, string> = {
 
 export const LOST_REASON_LABEL: Record<NonNullable<LostReason>, string> = {
   RENDA_FORA_FAIXA:   'Renda fora da faixa',
+  JA_COMPROU:         'Já comprou',
   SEM_PERFIL:         'Sem perfil',
   JA_TEM_IMOVEL:      'Já tem imóvel no nome',
   JA_USOU_PROGRAMA:   'Já usou o programa antes',
