@@ -110,8 +110,9 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/dashboard" element={<ProtectedBrokerRoute><DashboardFoco /></ProtectedBrokerRoute>} />
+            <Route path="/dashboard" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
             <Route path="/atender" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
+            <Route path="/dashboard-classico" element={<ProtectedBrokerRoute><DashboardFoco /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-wolf" element={<ProtectedBrokerRoute><DashboardWolf /></ProtectedBrokerRoute>} />
             {/* /manager = novo cockpit (v2). /manager-v1 = backup do antigo. */}
             <Route path="/manager" element={<ProtectedManagerRoute><ManagerV2 /></ProtectedManagerRoute>} />
