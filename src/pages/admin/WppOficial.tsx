@@ -31,7 +31,7 @@ const AUDIENCE = [
 
 const statusColor: Record<string, string> = {
   draft: "bg-slate-600", sending: "bg-blue-600", done: "bg-emerald-600",
-  paused: "bg-amber-600", APPROVED: "bg-emerald-600", PENDING: "bg-amber-600",
+  paused: "bg-amber-600", canceled: "bg-red-700", APPROVED: "bg-emerald-600", PENDING: "bg-amber-600",
   REJECTED: "bg-red-600", DRAFT: "bg-slate-600",
 };
 
@@ -46,6 +46,28 @@ const WA_DARK = {
   "--card": "222 47% 13%", "--card-foreground": "0 0% 100%",
   "--primary": "142 70% 45%", "--primary-foreground": "0 0% 100%",
 } as any;
+
+// custo aproximado por mensagem de marketing (Brasil), em USD
+const WA_RATE_USD = 0.0625;
+const USD_BRL = 5.5;
+
+// parseia texto colado ou CSV: "Nome,Telefone" | "Nome<tab>Telefone" | só telefone -> [{phone,name}]
+function parseLeads(text: string): { phone: string; name: string | null }[] {
+  return (text || "").split(/\r?\n/).map((line) => {
+    line = line.trim(); if (!line) return null as any;
+    const parts = line.split(/[,;\t]/).map((s) => s.trim()).filter(Boolean);
+    let phone = "", name = "";
+    if (parts.length >= 2) {
+      const counts = parts.map((p) => p.replace(/\D/g, "").length);
+      const pi = counts.indexOf(Math.max(...counts));
+      phone = parts[pi].replace(/\D/g, "");
+      name = parts.filter((_, i) => i !== pi).join(" ").trim();
+    } else { phone = parts[0].replace(/\D/g, ""); }
+    if (phone.length < 10) return null as any;
+    if (!phone.startsWith("55") && phone.length <= 11) phone = "55" + phone;
+    return { phone, name: name || null };
+  }).filter(Boolean) as { phone: string; name: string | null }[];
+}
 
 export default function WppOficial() {
   const navigate = useNavigate();
@@ -108,7 +130,7 @@ function Disparos() {
     setLoading(true);
     const [c, t, q] = await Promise.all([
       supabase.from("whatsapp_campaigns").select("*").order("created_at", { ascending: false }).limit(50),
-      supabase.from("whatsapp_templates").select("id,name,category,meta_status").order("created_at", { ascending: false }),
+      supabase.from("whatsapp_templates").select("id,name,category,meta_status,body_text,variables").order("created_at", { ascending: false }),
       supabase.from("distribution_queues").select("id,name").eq("is_active", true),
     ]);
     setCamps(c.data || []); setTemplates(t.data || []); setQueues(q.data || []);
@@ -131,15 +153,27 @@ function Disparos() {
       status: "draft", created_by: u?.user?.id || null,
     }).select("id").single();
     if (error) { toast.error("Falha: " + error.message); setBusy(false); return; }
-    // CSV: insere os números como alvos
+    // CSV/lista: insere os números (com nome) como alvos
     if (form.audience_source === "csv" && form.csv.trim()) {
-      const rows = form.csv.split(/[\n,;]/).map((s: string) => s.replace(/\D/g, "")).filter((p: string) => p.length >= 10)
-        .map((p: string) => ({ campaign_id: camp.id, phone: p.startsWith("55") ? p : "55" + p, status: "pending" }));
+      const rows = parseLeads(form.csv).map((r) => ({ campaign_id: camp.id, phone: r.phone, name: r.name, status: "pending" }));
       if (rows.length) { await supabase.from("whatsapp_campaign_targets").insert(rows); await supabase.from("whatsapp_campaigns").update({ audience_count: rows.length }).eq("id", camp.id); }
     }
     toast.success("Disparo criado (rascunho)");
     setForm({ ...form, name: "", csv: "" });
     setBusy(false); load();
+  }
+
+  async function cancelar(c: any) {
+    if (!confirm(`Cancelar o disparo "${c.name}"? Ele NÃO vai sair.`)) return;
+    await supabase.from("whatsapp_campaigns").update({ status: "canceled" }).eq("id", c.id);
+    toast.success("Disparo cancelado"); load();
+  }
+
+  function handleFile(e: any) {
+    const f = e.target.files?.[0]; if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => setForm((prev: any) => ({ ...prev, csv: String(reader.result || "") }));
+    reader.readAsText(f);
   }
 
   async function disparar(camp: any) {
@@ -183,7 +217,14 @@ function Disparos() {
             <Input placeholder="Tag/região (opcional)" value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value })} />
           )}
           {form.audience_source === "csv" && (
-            <Textarea placeholder="Cole os números, 1 por linha" rows={4} value={form.csv} onChange={(e) => setForm({ ...form, csv: e.target.value })} />
+            <div className="space-y-2 bg-slate-800/40 rounded-lg p-2">
+              <label className="text-xs text-slate-300 font-semibold">Lista de números</label>
+              <input type="file" accept=".csv,.txt" onChange={handleFile}
+                className="block text-xs text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-slate-700 file:px-2 file:py-1 file:text-white" />
+              <p className="text-[11px] text-slate-500">Modelo: 1 linha por lead — <code className="bg-slate-700 px-1 rounded">Nome,Telefone</code> (ou só o telefone). Ex: <code className="bg-slate-700 px-1 rounded">João,11999998888</code>. Sem 55/DDD a gente completa o que dá.</p>
+              <Textarea placeholder="…ou cole aqui (Nome,Telefone ou só o número — 1 por linha)" rows={4} value={form.csv} onChange={(e) => setForm({ ...form, csv: e.target.value })} />
+              {form.csv.trim() && <p className="text-[11px] text-green-400">{parseLeads(form.csv).length} contatos válidos detectados</p>}
+            </div>
           )}
           <div>
             <label className="text-xs text-slate-400">Fila que recebe os interessados</label>
@@ -205,6 +246,25 @@ function Disparos() {
             <label className="text-xs text-slate-400">Agendar para (opcional) — vazio = dispara na hora que aprovar</label>
             <Input type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} />
           </div>
+          {(() => {
+            const selTpl = templates.find((t) => t.id === form.template_id);
+            const count = form.audience_source === "csv" ? parseLeads(form.csv).length : null;
+            const usd = count != null ? count * WA_RATE_USD : null;
+            return (
+              <div className="bg-slate-800/40 rounded-lg p-3 space-y-2">
+                <div className="text-xs text-slate-400 font-semibold">Prévia da mensagem</div>
+                {selTpl ? (
+                  <div className="text-sm bg-slate-900 rounded-lg p-2 border border-slate-700 whitespace-pre-wrap">{String(selTpl.body_text || "").replace(/\{\{1\}\}/g, "[nome]")}</div>
+                ) : <div className="text-xs text-slate-500">Escolha um template pra ver a prévia.</div>}
+                <div className="text-xs text-slate-300">
+                  💰 Custo estimado: {count != null
+                    ? <span><b>{count}</b> × ~US$ {WA_RATE_USD.toFixed(3)} = <b>~US$ {usd!.toFixed(2)}</b> (~R$ {(usd! * USD_BRL).toFixed(0)})</span>
+                    : <span>depende do público (~US$ {WA_RATE_USD.toFixed(3)}/contato)</span>}
+                </div>
+                <div className="text-[10px] text-slate-500">Marketing é pago; respostas dentro de 24h são grátis. Cobrança em USD.</div>
+              </div>
+            );
+          })()}
           <Button onClick={criar} disabled={busy} className="w-full bg-green-600 hover:bg-green-500">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar disparo (rascunho)"}
           </Button>
@@ -236,11 +296,18 @@ function Disparos() {
                   <span>✅ {c.sent_count}</span><span>📬 {c.delivered_count}</span><span>👁️ {c.read_count}</span>
                   <span>💬 {c.reply_count}</span><span>⚠️ {c.failed_count}</span>
                 </div>
-                {c.status === "draft" && (
-                  <Button size="sm" onClick={() => disparar(c)} className="mt-2 bg-blue-600 hover:bg-blue-500 h-7 text-xs">
-                    <Rocket className="w-3 h-3 mr-1" /> {form.scheduled_at || c.scheduled_at ? "Aprovar & agendar" : "Aprovar & disparar"}
-                  </Button>
-                )}
+                <div className="flex gap-2 mt-2">
+                  {c.status === "draft" && (
+                    <Button size="sm" onClick={() => disparar(c)} className="bg-blue-600 hover:bg-blue-500 h-7 text-xs">
+                      <Rocket className="w-3 h-3 mr-1" /> {c.scheduled_at ? "Aprovar & agendar" : "Aprovar & disparar"}
+                    </Button>
+                  )}
+                  {(c.status === "draft" || (c.status === "sending" && (c.sent_count || 0) === 0 && c.scheduled_at && new Date(c.scheduled_at) > new Date())) && (
+                    <Button size="sm" variant="ghost" onClick={() => cancelar(c)} className="h-7 text-xs text-red-400 hover:text-red-300">
+                      Cancelar
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
