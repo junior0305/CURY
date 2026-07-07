@@ -101,7 +101,7 @@ function Disparos() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [queues, setQueues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState<any>({ name: "", template_id: "", audience_source: "novos", dias: 7, tag: "", target_queue_id: "", ai_autoreply: false, throttle_per_min: 10, csv: "" });
+  const [form, setForm] = useState<any>({ name: "", template_id: "", audience_source: "novos", dias: 7, tag: "", target_queue_id: "", ai_autoreply: false, throttle_per_min: 10, csv: "", scheduled_at: "" });
   const [busy, setBusy] = useState(false);
 
   async function load() {
@@ -127,6 +127,7 @@ function Disparos() {
       name: form.name, template_id: form.template_id, audience_source: form.audience_source,
       audience_filter: filter, target_queue_id: form.target_queue_id || null,
       ai_autoreply: form.ai_autoreply, throttle_per_min: Number(form.throttle_per_min) || 10,
+      scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null,
       status: "draft", created_by: u?.user?.id || null,
     }).select("id").single();
     if (error) { toast.error("Falha: " + error.message); setBusy(false); return; }
@@ -142,10 +143,12 @@ function Disparos() {
   }
 
   async function disparar(camp: any) {
-    if (!confirm(`Aprovar e DISPARAR "${camp.name}"? O sistema vai enviar o template pra todo o público, com throttle.`)) return;
+    const agendado = camp.scheduled_at && new Date(camp.scheduled_at) > new Date();
+    const quando = agendado ? `agendado para ${new Date(camp.scheduled_at).toLocaleString("pt-BR")}` : "sai agora";
+    if (!confirm(`Aprovar "${camp.name}"? (${quando}). O sistema envia o template pra todo o público, com throttle.`)) return;
     const { data: u } = await supabase.auth.getUser();
     await supabase.from("whatsapp_campaigns").update({ status: "sending", approved_by: u?.user?.id || null, approved_at: new Date().toISOString() }).eq("id", camp.id);
-    toast.success("Disparo aprovado — começa a sair nos próximos minutos");
+    toast.success(agendado ? "Aprovado e AGENDADO ✅" : "Disparo aprovado — começa a sair nos próximos minutos");
     load();
   }
 
@@ -198,6 +201,10 @@ function Disparos() {
             <Input type="number" className="w-20" value={form.throttle_per_min} onChange={(e) => setForm({ ...form, throttle_per_min: e.target.value })} />
             <span className="text-xs text-slate-400">msgs/min</span>
           </div>
+          <div>
+            <label className="text-xs text-slate-400">Agendar para (opcional) — vazio = dispara na hora que aprovar</label>
+            <Input type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} />
+          </div>
           <Button onClick={criar} disabled={busy} className="w-full bg-green-600 hover:bg-green-500">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Criar disparo (rascunho)"}
           </Button>
@@ -222,13 +229,16 @@ function Disparos() {
                 <div className="text-xs text-slate-400 mt-1">
                   público: {c.audience_source} · {c.audience_count || 0} contatos {c.ai_autoreply && "· 🤖 IA"}
                 </div>
+                {c.scheduled_at && new Date(c.scheduled_at) > new Date() && (
+                  <div className="text-xs text-amber-400 mt-1">🕒 agendado: {new Date(c.scheduled_at).toLocaleString("pt-BR")}</div>
+                )}
                 <div className="text-xs text-slate-300 mt-1 flex flex-wrap gap-x-3">
                   <span>✅ {c.sent_count}</span><span>📬 {c.delivered_count}</span><span>👁️ {c.read_count}</span>
                   <span>💬 {c.reply_count}</span><span>⚠️ {c.failed_count}</span>
                 </div>
                 {c.status === "draft" && (
                   <Button size="sm" onClick={() => disparar(c)} className="mt-2 bg-blue-600 hover:bg-blue-500 h-7 text-xs">
-                    <Rocket className="w-3 h-3 mr-1" /> Aprovar & disparar
+                    <Rocket className="w-3 h-3 mr-1" /> {form.scheduled_at || c.scheduled_at ? "Aprovar & agendar" : "Aprovar & disparar"}
                   </Button>
                 )}
               </div>
