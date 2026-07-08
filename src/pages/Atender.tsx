@@ -214,6 +214,10 @@ export default function Atender() {
   const [prospMode, setProspMode] = useState(false);
   const [managerId, setManagerId] = useState<string | null>(null);
   const [comSeen, setComSeen] = useState(false);
+  const [reativarOpen, setReativarOpen] = useState(false);
+  const [reativarTpl, setReativarTpl] = useState("Oi {nome}, tudo bem? 😊 Passando pra retomar nossa conversa — ainda tem interesse em avançar? Consigo te atualizar as condições dessa semana.");
+  const [reativando, setReativando] = useState(false);
+  const [reativados, setReativados] = useState<Set<string>>(new Set());
   const [selId, setSelId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>("prio");
   const [infoOpen, setInfoOpen] = useState(true);
@@ -333,6 +337,34 @@ export default function Atender() {
     return myLeads.filter((l) => l.status === "CONCLUDED" && l.lastInteractionAt && new Date(l.lastInteractionAt) >= d0).length;
   }, [myLeads]);
 
+  /* Comandra SUGERE reativar: esfriaram (parados +1d), SEM papo ativo (não atravessa conversa andando) */
+  const reativaveis = useMemo(() => {
+    const now = Date.now();
+    const hs = (t?: string | null) => (t ? (now - new Date(t).getTime()) / 3.6e6 : 9999);
+    return myLeads
+      .filter((l) =>
+        ["IN_PROGRESS", "NEGOTIATING", "FOLLOW_UP_AUTO", "REACTIVATED"].includes(l.status) &&
+        l.lastLeadResponseAt && hs(l.lastLeadResponseAt) > 24 && hs(l.lastLeadResponseAt) < 24 * 30 &&
+        hs(l.lastInteractionAt) > 18)
+      .sort((a, b) => hs(a.lastLeadResponseAt) - hs(b.lastLeadResponseAt))
+      .slice(0, 20);
+  }, [myLeads]);
+  async function reativarUm(l: Lead) {
+    if (!botId) { toast.error("Conecte seu WhatsApp pra reativar."); return; }
+    const first = (l.name || "").split(" ")[0] || l.name;
+    const msg = reativarTpl.replace(/\{\s*nome\s*\}/gi, first);
+    const r = await sendLeadMessage(botId, l.phone, msg);
+    if (r?.success) { setReativados((s) => new Set(s).add(l.id)); toast.success(`Reativado: ${first}`); qc.invalidateQueries({ queryKey: ["atenderLeads"] }); }
+    else toast.error(`Falhou com ${first}: ${r?.error || "chip?"}`);
+  }
+  async function reativarTodos() {
+    if (!botId) { toast.error("Conecte seu WhatsApp pra reativar."); return; }
+    if (!confirm(`Enviar a reativação para ${reativaveis.length} leads pelo SEU chip?`)) return;
+    setReativando(true);
+    for (const l of reativaveis) { if (!reativados.has(l.id)) { await reativarUm(l); await new Promise((res) => setTimeout(res, 1500)); } }
+    setReativando(false);
+  }
+
   /* Comunicado que explode e congela a tela (reaparece por 3 dias até confirmar) */
   const comId = (announcement as any)?.id as string | undefined;
   const comToday = new Date().toISOString().slice(0, 10);
@@ -427,7 +459,10 @@ export default function Atender() {
         .atd .trow b{color:var(--ink);}
         .atd .nextpill{display:inline-block;margin-left:20px;font-size:11px;font-weight:800;padding:4px 11px;border-radius:7px;background:rgba(11,125,111,.12);color:var(--teal-ink);}
         /* Prospecção botão */
-        .atd .prospbtn{width:calc(100% - 24px);margin:8px 12px;background:var(--teal);color:#fff;border:none;border-radius:11px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--af);}
+        .atd .prospbtn{width:calc(100% - 24px);margin:8px 12px 4px;background:var(--teal);color:#fff;border:none;border-radius:11px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--af);}
+        .atd .reativarbtn{width:calc(100% - 24px);margin:0 12px 8px;background:#b8860b;color:#fff;border:none;border-radius:11px;padding:10px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:var(--af);}
+        .atd .btn2go{width:100%;background:var(--teal);color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--af);}
+        .atd .btn2go:disabled{opacity:.6;cursor:default;}
         .atd .stripcards{display:flex;gap:8px;padding:8px 14px;background:var(--bg);border-bottom:1px solid var(--line);flex:0 0 auto;}
         .atd .scard2{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 12px;display:flex;align-items:center;gap:9px;cursor:pointer;}
         .atd .scard2:hover{border-color:var(--teal);}
@@ -507,6 +542,7 @@ export default function Atender() {
           </div>
           <div className="volhint">📊 {rows.length} na tela · <b>{myLeads.length}</b> no total — filtre pra achar</div>
           <button className="prospbtn" onClick={() => setProspMode(true)}>🧲 Prospecção — pool por região</button>
+          {reativaveis.length > 0 && <button className="reativarbtn" onClick={() => setReativarOpen(true)}>🔄 Comandra sugere reativar {reativaveis.length}</button>}
           <div className="rows">
             {rows.map((l) => {
               const last = conv.length && l.id === selId ? conv[conv.length - 1] : null;
@@ -678,6 +714,35 @@ export default function Atender() {
       {prospMode && user?.id && (
         <div style={{ position: "absolute", inset: 0, zIndex: 200, background: "var(--bg)", overflowY: "auto" }}>
           <ProspeccaoMode brokerId={user.id} managerId={managerId} botInstanceId={botId} onExit={() => setProspMode(false)} />
+        </div>
+      )}
+
+      {/* COMANDRA SUGERE REATIVAR — sugere, você aprova, envia pelo seu chip (não atravessa papo ativo) */}
+      {reativarOpen && (
+        <div className="ov2" onClick={(e) => { if (e.target === e.currentTarget) setReativarOpen(false); }}>
+          <div className="md2">
+            <div className="mh2"><h3>🔄 Comandra sugere reativar</h3><button className="x" onClick={() => setReativarOpen(false)}>✕</button></div>
+            <div className="mb2">
+              <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8, lineHeight: 1.5 }}>
+                <b style={{ color: "var(--ink)" }}>{reativaveis.length} leads</b> esfriaram (parados +1 dia) e estão <b>sem papo ativo</b> — a Comandra não atravessa conversa andando. Revise a mensagem, aprove e envia <b>pelo seu chip</b>.
+              </div>
+              <textarea value={reativarTpl} onChange={(e) => setReativarTpl(e.target.value)} style={{ width: "100%", minHeight: 62, border: "1px solid var(--line)", borderRadius: 10, padding: 10, background: "var(--rail)", color: "var(--ink)", fontSize: 13, fontFamily: "var(--af)", outline: "none" }} />
+              <div style={{ fontSize: 10.5, color: "var(--faint)", margin: "4px 0 10px" }}>{"{nome}"} vira o primeiro nome de cada lead.</div>
+              <button className="btn2go" disabled={reativando} onClick={reativarTodos}>{reativando ? "Enviando…" : `Enviar para todos (${reativaveis.length}) ›`}</button>
+              <div style={{ marginTop: 12 }}>
+                {reativaveis.map((l) => {
+                  const dias = l.lastLeadResponseAt ? Math.round((Date.now() - new Date(l.lastLeadResponseAt).getTime()) / 864e5) : "?";
+                  return (
+                    <div className="coldrow" key={l.id}>
+                      <div className="cav2">{initials(l.name)}</div>
+                      <div className="cmid2"><div className="cn2">{l.name}</div><div className="cw2">sem resposta há {dias}d</div></div>
+                      {reativados.has(l.id) ? <span style={{ color: "var(--teal)", fontSize: 12, fontWeight: 700 }}>✓ enviado</span> : <button className="pegarbtn" onClick={() => reativarUm(l)}>Enviar</button>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
