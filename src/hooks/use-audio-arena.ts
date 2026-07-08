@@ -216,7 +216,9 @@ const SESSION_SYNC_KEY = 'crm_audio_synced_v3';
  * Roda uma vez por sessão. Exportada para ser chamada no App.tsx.
  */
 export async function syncAudioSettings(supabase: any): Promise<void> {
-  if (sessionStorage.getItem(SESSION_SYNC_KEY)) return;
+  // Sincroniza SEMPRE no load do app. (Antes rodava 1x por sessão via sessionStorage,
+  // mas sessionStorage sobrevive ao reload — então um novo upload de som no admin
+  // NÃO chegava no corretor até ele FECHAR e reabrir a aba. Agora todo reload respeita o upload.)
   try {
     const keys = ALL_SOUND_KEYS.map(k => `${SETTING_PREFIX}${k}`);
     const { data } = await supabase
@@ -229,7 +231,6 @@ export async function syncAudioSettings(supabase: any): Promise<void> {
       const soundKey = row.key.replace(SETTING_PREFIX, '') as SoundKey;
       if (row.value) localStorage.setItem(CUSTOM_SOUND_KEY(soundKey), row.value);
     });
-    sessionStorage.setItem(SESSION_SYNC_KEY, '1');
   } catch {
     // Falha silenciosa — usa localStorage existente ou sons sintetizados
   }

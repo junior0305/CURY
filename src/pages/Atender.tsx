@@ -250,7 +250,7 @@ export default function Atender() {
     const ch = supabase.channel(`atd_sound_${user.id}`)
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "leads", filter: `broker_id=eq.${user.id}` },
-        () => { playSound("NEW_LEAD"); qc.invalidateQueries({ queryKey: ["atenderLeads"] }); })
+        (p: any) => { playSound("NEW_LEAD"); qc.invalidateQueries({ queryKey: ["atenderLeads"] }); toast.info(`⚡ Novo lead: ${p.new?.name || ""}`, { description: "Apareceu na sua fila!" }); })
       .on("postgres_changes",
         { event: "UPDATE", schema: "public", table: "leads", filter: `broker_id=eq.${user.id}` },
         (p: any) => { if (p.new?.status === "CONCLUDED" && p.old?.status !== "CONCLUDED") playSound("SALE"); })
