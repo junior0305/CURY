@@ -386,13 +386,11 @@ export default function Atender() {
     <div className={`atd${mchat ? " mchat" : ""}`}>
       <style>{STYLES}</style>
       <style>{`
-        .atd .agora{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid #a9e5d6;background:linear-gradient(100deg,#d5f4ec,#eef8f4);position:relative;}
-        .atd .agora::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--teal);}
-        .atd .agora.ag-risco::before{background:#d9334a;} .atd .agora.ag-oport::before{background:#027eb5;} .atd .agora.ag-ritmo::before{background:#b8860b;}
-        .atd .agbadge{flex:0 0 auto;font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--teal);background:rgba(0,128,105,.12);border-radius:999px;padding:5px 11px;animation:agp 2.2s ease-in-out infinite;}
-        .atd .agora.ag-risco .agbadge{color:#d9334a;background:rgba(217,51,74,.12);} .atd .agora.ag-oport .agbadge{color:#027eb5;background:rgba(2,126,181,.12);} .atd .agora.ag-ritmo .agbadge{color:#b8860b;background:rgba(184,134,11,.14);}
-        .atd .agtxt{flex:1;min-width:0;font-size:13px;color:#12332b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .2s;}
-        .atd .agbtn{flex:0 0 auto;border:none;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;background:var(--teal);color:#fff;cursor:pointer;}
+        .atd .agorabar{flex:1;display:flex;align-items:center;gap:10px;min-width:0;padding-left:10px;border-left:1px solid var(--line);}
+        .atd .agbadge{flex:0 0 auto;font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--teal);background:rgba(0,128,105,.12);border-radius:999px;padding:5px 11px;animation:agp 2.2s ease-in-out infinite;white-space:nowrap;}
+        .atd .agorabar.ag-risco .agbadge{color:#d9334a;background:rgba(217,51,74,.12);} .atd .agorabar.ag-oport .agbadge{color:#027eb5;background:rgba(2,126,181,.12);} .atd .agorabar.ag-ritmo .agbadge{color:#b8860b;background:rgba(184,134,11,.14);}
+        .atd .agtxt{flex:1;min-width:0;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .atd .agbtn{flex:0 0 auto;border:none;border-radius:8px;padding:6px 13px;font-size:12.5px;font-weight:700;background:var(--teal);color:#fff;cursor:pointer;}
         @keyframes agp{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
       `}</style>
 
@@ -400,7 +398,13 @@ export default function Atender() {
 
       <div className="topbar">
         <div className="brand"><span className="dot">C</span>Comandra <small>Atender</small></div>
-        <div className="spring" />
+        {ag ? (
+          <div className={`agorabar ag-${ag.cls}`}>
+            <span className="agbadge">{ag.badge}</span>
+            <span className="agtxt">{ag.txt}</span>
+            {ag.leadId && <button className="agbtn" onClick={() => pick(ag.leadId!)}>{ag.btn} ›</button>}
+          </div>
+        ) : <div className="spring" />}
         <div className="chip" onClick={() => setDrawer("rank")}>
           <span className="k">Ranking</span> {myRank ? <><b>{myRank.pos}º</b> · <b>{myRank.pts}</b></> : "—"}
         </div>
@@ -408,14 +412,6 @@ export default function Atender() {
         <WhatsAppQuickButton />
         <div className="me">{initials(user?.email?.split("@")[0] || "EU")}</div>
       </div>
-
-      {ag && (
-        <div className={`agora ag-${ag.cls}`}>
-          <span className="agbadge">{ag.badge}</span>
-          <span className="agtxt">{ag.txt}</span>
-          {ag.leadId && <button className="agbtn" onClick={() => pick(ag.leadId!)}>{ag.btn} ›</button>}
-        </div>
-      )}
 
       {connected === false && <div style={{ flex: "0 0 auto" }}><WhatsAppQRBanner /></div>}
 
