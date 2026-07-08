@@ -291,6 +291,35 @@ export default function Atender() {
     [myLeads, filter, q]);
 
   const sel = useMemo(() => myLeads.find((l) => l.id === selId) || null, [myLeads, selId]);
+
+  /* ── AGORA: rosto do Jarvis (feed computado dos leads reais) ── */
+  const [agIdx, setAgIdx] = useState(0);
+  const agFeed = useMemo(() => {
+    const now = Date.now();
+    const hs = (t?: string | null) => (t ? (now - new Date(t).getTime()) / 3.6e6 : 9999);
+    const fst = (n: string) => (n || "Lead").trim().split(/\s+/)[0];
+    const parados = myLeads
+      .filter((l) => (l.leadTemperature === "quente" || l.status === "NEGOTIATING" || l.status === "IN_PROGRESS") && l.lastLeadResponseAt)
+      .sort((a, b) => hs(b.lastLeadResponseAt) - hs(a.lastLeadResponseAt));
+    const jogada = parados.find((l) => hs(l.lastLeadResponseAt) > 1 && hs(l.lastLeadResponseAt) < 72) || null;
+    const risco = myLeads.filter((l) => l.leadTemperature === "quente" && hs(l.lastLeadResponseAt) > 2 && hs(l.lastLeadResponseAt) < 72).length;
+    const novo = myLeads.filter((l) => l.status === "NEW").sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    const novoRec = novo && hs(novo.createdAt) < 0.5 ? novo : null;
+    const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+    const hoje = myLeads.filter((l) => l.lastInteractionAt && new Date(l.lastInteractionAt) >= d0).length;
+    const items: { badge: string; cls: string; txt: string; leadId?: string; btn?: string }[] = [];
+    if (jogada) items.push({ badge: "⚡ AGORA", cls: "jogada", txt: `${fst(jogada.name)} está quente e parada há ${Math.round(hs(jogada.lastLeadResponseAt))}h — seu lead mais quente sem resposta.`, leadId: jogada.id, btn: "Atender" });
+    if (risco >= 2) items.push({ badge: "⏳ RISCO", cls: "risco", txt: `${risco} leads quentes vão esfriar hoje se você não tocar.` });
+    if (novoRec) items.push({ badge: "🆕 OPORTUNIDADE", cls: "oport", txt: `${fst(novoRec.name)} chegou agora — responder já dobra a chance de visita.`, leadId: novoRec.id, btn: "Atender" });
+    items.push({ badge: "🎯 SEU RITMO", cls: "ritmo", txt: hoje > 0 ? `Você já mexeu em ${hoje} leads hoje — mantém o ritmo.` : `Bora começar: seu primeiro lead do dia te espera.` });
+    return items;
+  }, [myLeads]);
+  useEffect(() => {
+    if (agFeed.length <= 1) return;
+    const t = setInterval(() => setAgIdx((i) => (i + 1) % agFeed.length), 5000);
+    return () => clearInterval(t);
+  }, [agFeed.length]);
+  const ag = agFeed[Math.min(agIdx, agFeed.length - 1)] || null;
   useEffect(() => { if (!selId && rows.length) setSelId(rows[0].id); }, [rows, selId]);
 
   const { data: conv = [] } = useQuery({ queryKey: ["atenderConv", selId, connected], queryFn: () => fetchLeadConversation(selId!), enabled: !!selId && connected !== false, refetchInterval: 20000 });
@@ -356,6 +385,16 @@ export default function Atender() {
   return (
     <div className={`atd${mchat ? " mchat" : ""}`}>
       <style>{STYLES}</style>
+      <style>{`
+        .atd .agora{flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid #a9e5d6;background:linear-gradient(100deg,#d5f4ec,#eef8f4);position:relative;}
+        .atd .agora::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--teal);}
+        .atd .agora.ag-risco::before{background:#d9334a;} .atd .agora.ag-oport::before{background:#027eb5;} .atd .agora.ag-ritmo::before{background:#b8860b;}
+        .atd .agbadge{flex:0 0 auto;font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--teal);background:rgba(0,128,105,.12);border-radius:999px;padding:5px 11px;animation:agp 2.2s ease-in-out infinite;}
+        .atd .agora.ag-risco .agbadge{color:#d9334a;background:rgba(217,51,74,.12);} .atd .agora.ag-oport .agbadge{color:#027eb5;background:rgba(2,126,181,.12);} .atd .agora.ag-ritmo .agbadge{color:#b8860b;background:rgba(184,134,11,.14);}
+        .atd .agtxt{flex:1;min-width:0;font-size:13px;color:#12332b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .2s;}
+        .atd .agbtn{flex:0 0 auto;border:none;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;background:var(--teal);color:#fff;cursor:pointer;}
+        @keyframes agp{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+      `}</style>
 
       <div className="ticker"><WallOfFameTicker /></div>
 
@@ -369,6 +408,14 @@ export default function Atender() {
         <WhatsAppQuickButton />
         <div className="me">{initials(user?.email?.split("@")[0] || "EU")}</div>
       </div>
+
+      {ag && (
+        <div className={`agora ag-${ag.cls}`}>
+          <span className="agbadge">{ag.badge}</span>
+          <span className="agtxt">{ag.txt}</span>
+          {ag.leadId && <button className="agbtn" onClick={() => pick(ag.leadId!)}>{ag.btn} ›</button>}
+        </div>
+      )}
 
       {connected === false && <div style={{ flex: "0 0 auto" }}><WhatsAppQRBanner /></div>}
 
