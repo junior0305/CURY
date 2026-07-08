@@ -21,6 +21,7 @@ import { useActiveLaunches, registerLaunchClaim } from "@/components/launches/us
 import { useNextAnnouncement } from "@/hooks/useNextAnnouncement";
 import AnnouncementCard from "@/components/announcements/AnnouncementCard";
 import { toast } from "sonner";
+import { useAudioArena, syncAudioSettings } from "@/hooks/use-audio-arena";
 
 /* ── styles (do mockup aprovado) ── */
 const STYLES = `
@@ -207,6 +208,7 @@ const FILTERS: [FilterKey, string][] = [
 export default function Atender() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const { playSound } = useAudioArena();
   const [selId, setSelId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>("prio");
   const [infoOpen, setInfoOpen] = useState(true);
@@ -240,6 +242,21 @@ export default function Atender() {
       (p: any) => setConnected(p.new?.status === "open")).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [botId]);
+
+  /* Arena Sonora: sincroniza MP3 custom + toca som de LEAD NOVO (INSERT) e VENDA (UPDATE→CONCLUDED) */
+  useEffect(() => { syncAudioSettings(supabase); }, []);
+  useEffect(() => {
+    if (!user?.id) return;
+    const ch = supabase.channel(`atd_sound_${user.id}`)
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "leads", filter: `broker_id=eq.${user.id}` },
+        () => { playSound("NEW_LEAD"); qc.invalidateQueries({ queryKey: ["atenderLeads"] }); })
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "leads", filter: `broker_id=eq.${user.id}` },
+        (p: any) => { if (p.new?.status === "CONCLUDED" && p.old?.status !== "CONCLUDED") playSound("SALE"); })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.id, playSound, qc]);
 
   /* ranking simples (top 6 do mês por XP) */
   const { data: ranking = [] } = useQuery({
