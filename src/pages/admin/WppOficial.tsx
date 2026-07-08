@@ -123,7 +123,7 @@ function Disparos() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [queues, setQueues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState<any>({ name: "", template_id: "", audience_source: "novos", dias: 7, tag: "", target_queue_id: "", ai_autoreply: false, throttle_per_min: 10, csv: "", scheduled_at: "" });
+  const [form, setForm] = useState<any>({ name: "", template_id: "", audience_source: "novos", dias: 7, tag: "", target_queue_id: "", ai_autoreply: false, throttle_per_min: 10, csv: "", scheduled_at: "", region: "SJC" });
   const [busy, setBusy] = useState(false);
 
   async function load() {
@@ -148,6 +148,7 @@ function Disparos() {
     const { data: camp, error } = await supabase.from("whatsapp_campaigns").insert({
       name: form.name, template_id: form.template_id, audience_source: form.audience_source,
       audience_filter: filter, target_queue_id: form.target_queue_id || null,
+      region: form.region || "SJC",
       ai_autoreply: form.ai_autoreply, throttle_per_min: Number(form.throttle_per_min) || 10,
       scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null,
       status: "draft", created_by: u?.user?.id || null,
@@ -226,6 +227,17 @@ function Disparos() {
               {form.csv.trim() && <p className="text-[11px] text-green-400">{parseLeads(form.csv).length} contatos válidos detectados</p>}
             </div>
           )}
+          <div>
+            <label className="text-xs text-slate-400">Enviar por qual número</label>
+            <Select value={form.region} onValueChange={(v) => setForm({ ...form, region: v })}>
+              <SelectTrigger><SelectValue placeholder="Escolha o número" /></SelectTrigger>
+              <SelectContent style={WA_DARK}>
+                <SelectItem value="SJC">SJC — Consórcio (+55 11 91339-0468)</SelectItem>
+                <SelectItem value="SP">SP — Ana / MCMV (+55 11 95502-0447)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-slate-500 mt-1">SP usa a <b>Ana</b> (motor MCMV). SJC usa o consórcio.</p>
+          </div>
           <div>
             <label className="text-xs text-slate-400">Fila que recebe os interessados</label>
             <Select value={form.target_queue_id} onValueChange={(v) => setForm({ ...form, target_queue_id: v })}>
