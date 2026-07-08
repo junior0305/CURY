@@ -206,9 +206,12 @@ const FILTERS: [FilterKey, string][] = [
 ];
 
 export default function Atender() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const qc = useQueryClient();
   const { playSound } = useAudioArena();
+  const [dark, setDark] = useState(() => { try { return localStorage.getItem("atd_theme") === "dark"; } catch { return false; } });
+  const [prospOpen, setProspOpen] = useState(false);
+  const [comSeen, setComSeen] = useState(false);
   const [selId, setSelId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>("prio");
   const [infoOpen, setInfoOpen] = useState(true);
@@ -320,6 +323,36 @@ export default function Atender() {
     return () => clearInterval(t);
   }, [agFeed.length]);
   const ag = agFeed[Math.min(agIdx, agFeed.length - 1)] || null;
+
+  /* Prospecção: leads frios (abandonados parados >15d) pra pegar */
+  const { data: coldLeads = [], refetch: refetchCold } = useQuery({
+    queryKey: ["atenderCold"], enabled: prospOpen && !!user, refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const cutoff = new Date(Date.now() - 15 * 864e5).toISOString();
+      const { data } = await supabase.from("leads")
+        .select("id,name,status,last_interaction_at,tag,lost_reason")
+        .eq("status", "ABANDONED").lt("last_interaction_at", cutoff)
+        .order("last_interaction_at", { ascending: true }).limit(25);
+      return data || [];
+    },
+  });
+  async function pegarCold(id: string) {
+    try {
+      await supabase.from("leads").update({ broker_id: user?.id, status: "REACTIVATED", last_interaction_at: new Date().toISOString() }).eq("id", id);
+      toast.success("Lead pego! Já está na sua fila.");
+      refetchCold(); qc.invalidateQueries({ queryKey: ["atenderLeads"] });
+    } catch { toast.error("Não consegui pegar esse lead."); }
+  }
+
+  /* Comunicado que explode e congela a tela (reaparece por 3 dias até confirmar) */
+  const comId = (announcement as any)?.id as string | undefined;
+  const comToday = new Date().toISOString().slice(0, 10);
+  const comSt = () => { try { return JSON.parse(localStorage.getItem(`atd_com_${comId}`) || '{"c":0,"d":""}'); } catch { return { c: 0, d: "" }; } };
+  const showCom = !!comId && !comSeen && (() => { const s = comSt(); return s.c < 3 && s.d !== comToday; })();
+  function ackCom() {
+    if (comId) { const s = comSt(); if (s.d !== comToday) { s.c++; s.d = comToday; } try { localStorage.setItem(`atd_com_${comId}`, JSON.stringify(s)); } catch {} }
+    setComSeen(true);
+  }
   useEffect(() => { if (!selId && rows.length) setSelId(rows[0].id); }, [rows, selId]);
 
   const { data: conv = [] } = useQuery({ queryKey: ["atenderConv", selId, connected], queryFn: () => fetchLeadConversation(selId!), enabled: !!selId && connected !== false, refetchInterval: 20000 });
@@ -383,7 +416,7 @@ export default function Atender() {
   const ci = sel ? STAGES.findIndex((s) => s[0] === sel.status) : -1;
 
   return (
-    <div className={`atd${mchat ? " mchat" : ""}`}>
+    <div className={`atd${mchat ? " mchat" : ""}${dark ? " dark" : ""}`}>
       <style>{STYLES}</style>
       <style>{`
         .atd .agorabar{flex:1;display:flex;align-items:center;gap:10px;min-width:0;padding-left:10px;border-left:1px solid var(--line);}
@@ -392,6 +425,44 @@ export default function Atender() {
         .atd .agtxt{flex:1;min-width:0;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .atd .agbtn{flex:0 0 auto;border:none;border-radius:8px;padding:6px 13px;font-size:12.5px;font-weight:700;background:var(--teal);color:#fff;cursor:pointer;}
         @keyframes agp{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+        /* toggle claro/escuro + Sair no topbar */
+        .atd .tglbtn{width:34px;height:34px;border-radius:999px;border:1px solid var(--line);background:var(--rail);cursor:pointer;font-size:15px;display:grid;place-items:center;}
+        .atd .sairbtn{height:34px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);font-weight:700;font-size:13px;cursor:pointer;font-family:var(--af);display:inline-flex;align-items:center;gap:6px;}
+        .atd .sairbtn:hover{color:var(--lost);border-color:var(--lost);}
+        /* Verdade do lead */
+        .atd .verdade{padding:12px 18px;border-top:1px solid var(--line);}
+        .atd .verdade h4{padding:0;margin-bottom:9px;font-size:12.5px;font-weight:800;color:var(--ink);}
+        .atd .trow{font-size:12.5px;line-height:1.4;padding-left:20px;position:relative;color:var(--muted);margin-bottom:7px;}
+        .atd .trow::before{position:absolute;left:0;top:0;font-size:12px;}
+        .atd .trow.ok::before{content:"✅";} .atd .trow.bad::before{content:"⚠️";}
+        .atd .trow b{color:var(--ink);}
+        .atd .nextpill{display:inline-block;margin-left:20px;font-size:11px;font-weight:800;padding:4px 11px;border-radius:7px;background:rgba(11,125,111,.12);color:var(--teal-ink);}
+        /* Prospecção botão */
+        .atd .prospbtn{width:calc(100% - 24px);margin:8px 12px;background:var(--teal);color:#fff;border:none;border-radius:11px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--af);}
+        /* modais (prospecção + comunicado) */
+        .atd .ov2{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;}
+        .atd .md2{background:var(--panel);border-radius:16px;width:min(500px,94vw);max-height:88vh;overflow:auto;box-shadow:0 24px 70px rgba(0,0,0,.4);}
+        .atd .md2 .mh2{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line);}
+        .atd .md2 .mh2 h3{font-size:15px;font-weight:800;color:var(--ink);} .atd .md2 .mh2 .x{background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;}
+        .atd .md2 .mb2{padding:14px 18px;}
+        .atd .prosphead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:13px;color:var(--muted);}
+        .atd .coldrow{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--line);}
+        .atd .coldrow:last-child{border:none;} .atd .coldrow .cav2{width:36px;height:36px;border-radius:50%;background:var(--rail);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--muted);}
+        .atd .coldrow .cmid2{flex:1;min-width:0;} .atd .coldrow .cn2{font-size:13.5px;font-weight:700;color:var(--ink);} .atd .coldrow .cw2{font-size:11.5px;color:var(--muted);}
+        .atd .pegarbtn{background:var(--teal);color:#fff;border:none;border-radius:8px;padding:7px 15px;font-size:12.5px;font-weight:700;cursor:pointer;}
+        .atd .comov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:300;padding:24px;}
+        .atd .commd{background:var(--panel);border-radius:18px;border-top:6px solid var(--warm);width:min(460px,94vw);padding:30px 28px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.5);}
+        .atd .commd .em{font-size:44px;} .atd .commd .kk{font-size:11px;font-weight:800;letter-spacing:2px;color:var(--warm);margin:8px 0;}
+        .atd .commd h2{font-size:20px;margin-bottom:10px;color:var(--ink);} .atd .commd p{font-size:14px;color:var(--muted);line-height:1.55;}
+        .atd .commd .rep{font-size:11px;color:var(--faint);margin-top:14px;} .atd .comok{margin-top:18px;width:100%;background:var(--teal);color:#fff;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;}
+        /* ===== TEMA ESCURO ===== */
+        .atd.dark{--bg:#0b141a;--panel:#111b21;--rail:#202c33;--chat:#0b141a;--ink:#e9edef;--muted:#8696a0;--faint:#5c6b70;--line:#2a3942;--teal:#00a884;--teal-ink:#53d6b0;--sent:#025c4c;--sent-line:#036e5c;--lost:#f15c6d;--warm:#f5c451;}
+        .atd.dark .row:hover,.atd.dark .row.active{background:#182229;} .atd.dark .row{border-bottom-color:#1b2a30;}
+        .atd.dark .search input:focus{background:#202c33;}
+        .atd.dark .fchip{background:#202c33;} .atd.dark .fchip.on{background:var(--teal);}
+        .atd.dark .msg.in{background:#202c33;color:#e9edef;}
+        .atd.dark .promo{background:linear-gradient(90deg,#2a2416,#1e1a10);border-color:#3a3320;} .atd.dark .promo .txt,.atd.dark .promo .txt b{color:#f0d79a;}
+        .atd.dark .agorabar .agtxt{color:#e9edef;}
       `}</style>
 
       <div className="ticker"><WallOfFameTicker /></div>
@@ -410,7 +481,9 @@ export default function Atender() {
         </div>
         {announcement && <div className="chip" onClick={() => setDrawer("cmt")}>📣 <span className="k">Comunicados</span><span className="dotred" /></div>}
         <WhatsAppQuickButton />
+        <button className="tglbtn" title={dark ? "Tema claro" : "Tema escuro"} onClick={() => { const n = !dark; setDark(n); try { localStorage.setItem("atd_theme", n ? "dark" : "light"); } catch {} }}>{dark ? "☀️" : "🌙"}</button>
         <div className="me">{initials(user?.email?.split("@")[0] || "EU")}</div>
+        <button className="sairbtn" onClick={() => signOut?.()}>⏻ Sair</button>
       </div>
 
       {connected === false && <div style={{ flex: "0 0 auto" }}><WhatsAppQRBanner /></div>}
@@ -433,6 +506,7 @@ export default function Atender() {
             })}
           </div>
           <div className="volhint">📊 {rows.length} na tela · <b>{myLeads.length}</b> no total — filtre pra achar</div>
+          <button className="prospbtn" onClick={() => setProspOpen(true)}>🧲 Prospecção — pegar leads frios</button>
           <div className="rows">
             {rows.map((l) => {
               const last = conv.length && l.id === selId ? conv[conv.length - 1] : null;
@@ -531,6 +605,23 @@ export default function Atender() {
                 <button className={`tempbtn m${sel.leadTemperature === "morno" ? " on" : ""}`} onClick={() => setTemp("morno")}>🟡 Morno</button>
                 <button className={`tempbtn f${sel.leadTemperature === "frio" ? " on" : ""}`} onClick={() => setTemp("frio")}>🔵 Frio</button>
               </div>
+              {(() => {
+                const inc = conv.filter((m: any) => m.direction === "incoming").length;
+                const renda = sel.rendaDeclarada || (sel as any).rendaFamiliar;
+                const hs = (t?: string | null) => (t ? (Date.now() - new Date(t).getTime()) / 3.6e6 : 0);
+                const parado = Math.round(hs(sel.lastLeadResponseAt));
+                const proximo = sel.status === "NEW" ? "fazer o 1º contato" : sel.status === "IN_PROGRESS" ? "oferecer a visita" : sel.status === "NEGOTIATING" ? "fechar a visita" : sel.status === "VISIT_SCHEDULED" ? "confirmar a visita" : sel.status === "DOCS_REQUESTED" ? "cobrar os documentos" : "avançar a etapa";
+                return (
+                  <div className="verdade">
+                    <h4>⚖️ Verdade do lead</h4>
+                    {inc > 0 && <div className="trow ok"><b>Respondeu {inc}×</b> <span className="d">— engajado, não é curioso</span></div>}
+                    {renda && <div className="trow ok"><b>Informou renda</b> <span className="d">({renda})</span></div>}
+                    {sel.leadTemperature === "quente" && parado >= 2 && <div className="trow bad"><b>Quente parado há {parado}h</b> <span className="d">sem resposta sua</span></div>}
+                    {inc === 0 && sel.status !== "NEW" && <div className="trow bad"><b>Ainda não respondeu</b> <span className="d">— reative com novidade</span></div>}
+                    <span className="nextpill">PRÓXIMO: {proximo}</span>
+                  </div>
+                );
+              })()}
               <div className="notebox">
                 <h4 style={{ paddingLeft: 0 }}>O que aconteceu — anotações</h4>
                 <div className="noteadd">
@@ -582,6 +673,40 @@ export default function Atender() {
           <div className="foot"><button className="cancel" onClick={() => setDiscardOpen(false)}>Cancelar</button></div>
         </div>
       </div>
+
+      {/* MODAL Prospecção — pegar leads frios */}
+      {prospOpen && (
+        <div className="ov2" onClick={(e) => { if (e.target === e.currentTarget) setProspOpen(false); }}>
+          <div className="md2">
+            <div className="mh2"><h3>🧲 Prospecção — pegar leads frios</h3><button className="x" onClick={() => setProspOpen(false)}>✕</button></div>
+            <div className="mb2">
+              <div className="prosphead"><span><b style={{ color: "var(--ink)" }}>{coldLeads.length}</b> leads frios disponíveis (abandonados +15d)</span></div>
+              {coldLeads.length === 0 && <div style={{ color: "var(--faint)", fontSize: 13, padding: "10px 0" }}>Nenhum lead frio no pool agora.</div>}
+              {coldLeads.map((c: any) => (
+                <div className="coldrow" key={c.id}>
+                  <div className="cav2">{initials(c.name)}</div>
+                  <div className="cmid2"><div className="cn2">{c.name}</div><div className="cw2">{c.tag || "sem tag"} · parado {c.last_interaction_at ? Math.round((Date.now() - new Date(c.last_interaction_at).getTime()) / 864e5) : "?"}d</div></div>
+                  <button className="pegarbtn" onClick={() => pegarCold(c.id)}>Pegar</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COMUNICADO que explode e congela a tela */}
+      {showCom && announcement && (
+        <div className="comov">
+          <div className="commd">
+            <div className="em">📢</div>
+            <div className="kk">COMUNICADO</div>
+            <h2>{(announcement as any).title || (announcement as any).titulo || "Comunicado"}</h2>
+            <p>{(announcement as any).message || (announcement as any).body || (announcement as any).content || (announcement as any).texto || ""}</p>
+            <div className="rep">↻ Reaparece por 3 dias até você confirmar a leitura.</div>
+            <button className="comok" onClick={ackCom}>OK, li e entendi</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
