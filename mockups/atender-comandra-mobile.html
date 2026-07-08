@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comandra · Atender — Mobile</title>
+<style>
+  :root{
+    --panel:#fff; --rail:#f0f2f5; --line:#e4e8eb; --teal:#008069; --teal2:#00a884;
+    --txt:#111b21; --txt2:#667781; --chatbg:#efeae2; --in:#fff; --out:#d9fdd3;
+    --gold:#b8860b; --red:#d9334a; --blue:#027eb5; --af:'Segoe UI',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:var(--af);}
+  body{background:#c9d3da;padding:26px;display:flex;gap:26px;flex-wrap:wrap;justify-content:center;align-items:flex-start;}
+  .wrap{display:flex;flex-direction:column;align-items:center;gap:10px;}
+  .cap{font-size:12px;font-weight:700;color:#3a4a52;letter-spacing:.3px;}
+  .phone{width:340px;height:720px;background:var(--panel);border-radius:32px;border:9px solid #12191f;overflow:hidden;position:relative;display:flex;flex-direction:column;box-shadow:0 14px 40px rgba(0,0,0,.28);}
+
+  /* header */
+  .hd{height:50px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:0 12px;flex-shrink:0;}
+  .hd .mk{width:30px;height:30px;display:flex;align-items:center;justify-content:center;}
+  .hd .mk img{width:100%;height:100%;object-fit:contain;}
+  .hd .wm{font-weight:800;font-size:14.5px;flex:1;}
+  .hd .dot{width:8px;height:8px;border-radius:50%;background:var(--teal2);box-shadow:0 0 7px var(--teal2);}
+  .hd .ex{font-size:17px;color:var(--txt2);}
+
+  /* ticker */
+  .tk{height:26px;background:var(--rail);border-bottom:1px solid var(--line);display:flex;align-items:center;overflow:hidden;white-space:nowrap;flex-shrink:0;}
+  .tk .run{display:inline-block;padding-left:100%;animation:mv 24s linear infinite;font-size:11px;color:var(--txt2);}
+  .tk .run b{color:var(--teal);}.tk .run i{color:var(--gold);font-style:normal;font-weight:700;}
+  @keyframes mv{from{transform:translateX(0)}to{transform:translateX(-100%)}}
+
+  /* AGORA compacto */
+  .ag{background:linear-gradient(100deg,#d5f4ec,#eef8f4);border-bottom:1px solid #a9e5d6;border-left:4px solid var(--teal2);padding:9px 12px;flex-shrink:0;}
+  .ag .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+  .ag .bd{font-size:10px;font-weight:800;letter-spacing:.6px;color:var(--teal);background:rgba(0,160,132,.15);border-radius:20px;padding:3px 9px;}
+  .ag .go{background:var(--teal);color:#fff;border:none;border-radius:7px;padding:5px 12px;font-size:11.5px;font-weight:700;}
+  .ag .tx{font-size:12px;color:#33524b;line-height:1.35;}
+  .ag .tx b{color:var(--txt);}.ag .tx em{color:var(--red);font-style:normal;font-weight:700;}
+
+  /* busca + filtros + prosp */
+  .sr{padding:8px 10px;flex-shrink:0;}
+  .sr input{width:100%;height:32px;border:1px solid var(--line);background:var(--rail);border-radius:8px;padding:0 11px;font-size:12.5px;outline:none;}
+  .fl{display:flex;gap:5px;padding:0 10px 7px;overflow-x:auto;flex-shrink:0;}
+  .fl span{font-size:11px;padding:4px 10px;border-radius:20px;background:var(--rail);color:var(--txt2);white-space:nowrap;}
+  .fl span.on{background:var(--teal);color:#fff;font-weight:700;}
+  .pb{margin:0 10px 6px;background:var(--teal);color:#fff;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:700;flex-shrink:0;}
+
+  /* lista */
+  .ls{flex:1;overflow-y:auto;}
+  .ld{display:flex;gap:9px;padding:9px 12px;border-bottom:1px solid var(--line);}
+  .av{width:38px;height:38px;border-radius:50%;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;opacity:.9;}
+  .lm{flex:1;min-width:0;}
+  .ln{font-size:13px;font-weight:600;display:flex;justify-content:space-between;}
+  .ln .tm{font-size:10px;color:var(--txt2);font-weight:400;}
+  .lw{font-size:11px;margin-top:2px;display:flex;gap:4px;align-items:center;}
+  .tg{font-size:9.5px;padding:2px 6px;border-radius:5px;font-weight:700;}
+  .t-hot{background:rgba(217,51,74,.14);color:var(--red);}.t-new{background:rgba(2,126,181,.14);color:var(--blue);}
+  .t-doc{background:rgba(184,134,11,.16);color:var(--gold);}.t-warm{background:rgba(200,128,30,.16);color:#c8801e;}
+  .lw .x{color:var(--txt2);}
+
+  /* bottom nav */
+  .bn{height:56px;background:var(--panel);border-top:1px solid var(--line);display:flex;flex-shrink:0;}
+  .bi{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:17px;color:var(--txt2);}
+  .bi span{font-size:9.5px;font-weight:600;}
+  .bi.on{color:var(--teal);}
+
+  /* conversa */
+  .ch{height:52px;background:var(--rail);display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--line);flex-shrink:0;}
+  .ch .bk{font-size:20px;color:var(--teal);}
+  .ch .nm{font-weight:600;font-size:13.5px;}.ch .st{font-size:10.5px;color:var(--teal);}
+  .ch .i{margin-left:auto;font-size:19px;color:var(--txt2);border:1px solid var(--line);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;}
+  .cb{flex:1;overflow-y:auto;padding:14px;background:var(--chatbg);display:flex;flex-direction:column;gap:7px;}
+  .ms{max-width:80%;padding:7px 10px;border-radius:8px;font-size:12.5px;line-height:1.4;box-shadow:0 1px 1px rgba(0,0,0,.08);}
+  .ms .t{display:block;font-size:9px;color:var(--txt2);text-align:right;margin-top:2px;}
+  .ms.in{background:var(--in);align-self:flex-start;border-top-left-radius:2px;}
+  .ms.out{background:var(--out);align-self:flex-end;border-top-right-radius:2px;}
+  .cp{height:52px;border-top:1px solid var(--line);background:var(--rail);display:flex;align-items:center;gap:8px;padding:0 10px;flex-shrink:0;}
+  .cp input{flex:1;height:38px;border:1px solid var(--line);background:var(--panel);border-radius:20px;padding:0 13px;font-size:13px;outline:none;}
+  .cp .snd{width:38px;height:38px;border-radius:50%;background:var(--teal);border:none;color:#fff;font-size:15px;}
+
+  /* info sheet */
+  .is{flex:1;overflow-y:auto;}
+  .sc{padding:12px 14px;border-bottom:1px solid var(--line);}
+  .sc h4{font-size:10px;letter-spacing:.8px;color:var(--txt2);text-transform:uppercase;margin-bottom:8px;}
+  .tp{display:flex;gap:5px;}.tp span{font-size:11px;padding:5px 9px;border-radius:7px;background:var(--rail);color:var(--txt2);}
+  .tp span.on{background:rgba(217,51,74,.14);color:var(--red);font-weight:700;}
+  .dr{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--line);}
+  .dr:last-child{border:none;}.dr span{color:var(--txt2);}.dr b{color:var(--txt);}
+  .tr{font-size:12px;line-height:1.35;padding-left:17px;position:relative;margin-bottom:6px;}
+  .tr.ok::before{content:"✅";position:absolute;left:0;}.tr.bad::before{content:"⚠️";position:absolute;left:0;}
+  .tr b{color:var(--txt);}.tr .d{color:var(--txt2);}
+  .pill{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:6px;background:rgba(217,51,74,.14);color:var(--red);}
+  .an{width:100%;background:var(--rail);border:1px dashed var(--teal);color:var(--teal);border-radius:8px;padding:8px;font-size:11.5px;font-weight:700;margin-bottom:8px;}
+  .nt{font-size:11.5px;line-height:1.4;padding:7px 9px;background:var(--rail);border-radius:8px;margin-bottom:6px;}
+  .nt .h{display:block;font-size:9.5px;color:var(--txt2);margin-bottom:2px;}
+  .ds{width:100%;background:transparent;border:1px solid var(--red);color:var(--red);border-radius:8px;padding:8px;font-size:11.5px;}
+
+  /* comunicado explode (phone 4) */
+  .ov{position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:22px;}
+  .md{background:#fff;border-radius:16px;padding:24px 20px;text-align:center;border-top:5px solid var(--gold);}
+  .md .z{font-size:36px;}.md .k{font-size:10px;font-weight:800;letter-spacing:2px;color:var(--gold);margin:6px 0;}
+  .md h2{font-size:16px;margin-bottom:8px;}.md p{font-size:12.5px;color:var(--txt2);line-height:1.5;}
+  .md .r{font-size:10px;color:var(--txt2);margin-top:11px;opacity:.85;}
+  .md .ok{margin-top:14px;width:100%;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:11px;font-size:13px;font-weight:700;}
+  /* toast: fatos ao vivo pipocam por cima e somem */
+  .mtoast{position:absolute;left:12px;right:12px;bottom:66px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--teal2);border-radius:10px;padding:9px 12px;font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,.2);opacity:0;transform:translateY(12px);transition:all .35s;z-index:20;}
+  .mtoast.show{opacity:1;transform:translateY(0);}
+  .mtoast b{color:var(--teal);}
+</style>
+</head>
+<body>
+
+<!-- PHONE 1 — LISTA (home) -->
+<div class="wrap"><div class="cap">1 · Início (lista + AGORA)</div>
+<div class="phone">
+  <div class="hd"><div class="mk"><img src="comandra-icon.png"></div><div class="wm">Comandra</div><span class="dot"></span><span class="ex">⏻</span></div>
+  <div class="ag">
+    <div class="top"><span class="bd" id="mbd">⚡ AGORA</span><button class="go" id="mgo">Atender ›</button></div>
+    <div class="tx" id="mtx"><b>Camila Santos</b> — quente e <em>parada há 2h07</em> (perguntou a parcela). Seu lead mais quente sem resposta.</div>
+  </div>
+  <div class="sr"><input placeholder="🔍  Buscar lead"></div>
+  <div class="fl"><span class="on">⚡ Agora</span><span>Todos</span><span>🔥 Quentes</span><span>🆕 Novos</span><span>Docs</span></div>
+  <button class="pb">🧲 Prospecção — pegar leads frios (240)</button>
+  <div class="ls">
+    <div class="ld"><div class="av">CS</div><div class="lm"><div class="ln">Camila Santos <span class="tm">14:23</span></div><div class="lw"><span class="tg t-hot">🔥 PAROU 2h</span><span class="x">perguntou parcela</span></div></div></div>
+    <div class="ld"><div class="av">JS</div><div class="lm"><div class="ln">Jonathan Silva <span class="tm">14:19</span></div><div class="lw"><span class="tg t-new">🆕 NOVO 6min</span><span class="x">responda já</span></div></div></div>
+    <div class="ld"><div class="av">AP</div><div class="lm"><div class="ln">Ana Paula <span class="tm">13:50</span></div><div class="lw"><span class="tg t-doc">📄 DOC 3d</span><span class="x">falta comprovante</span></div></div></div>
+    <div class="ld"><div class="av">MA</div><div class="lm"><div class="ln">Marcos Antonio <span class="tm">ontem</span></div><div class="lw"><span class="tg t-warm">🟠 MORNO</span><span class="x">reaquecer</span></div></div></div>
+    <div class="ld"><div class="av">DL</div><div class="lm"><div class="ln">Douglas L. <span class="tm">ontem</span></div><div class="lw"><span class="tg t-warm">🟠 MORNO</span><span class="x">visita s/ confirmar</span></div></div></div>
+  </div>
+  <div class="mtoast" id="mtoast">🎉 <b>Dudu</b> fechou uma venda!</div>
+  <div class="bn"><div class="bi on">📋<span>Atender</span></div><div class="bi">🧲<span>Prospecção</span></div><div class="bi">🏆<span>Ranking</span></div><div class="bi">🎯<span>Meta</span></div></div>
+</div></div>
+
+<!-- PHONE 2 — CONVERSA -->
+<div class="wrap"><div class="cap">2 · Conversa (toca no lead)</div>
+<div class="phone">
+  <div class="ch"><span class="bk">‹</span><div class="av" style="width:34px;height:34px;font-size:12px;">CS</div><div><div class="nm">Camila Santos</div><div class="st">🔥 Quente · Negociando</div></div><span class="i">ⓘ</span></div>
+  <div class="cb">
+    <div class="ms in">Oi! Vi o anúncio do apê no Jardim Anália 😊<span class="t">13:40</span></div>
+    <div class="ms out">Oi Camila! Que bom 😀 Tá com condição especial essa semana. Quer os detalhes?<span class="t">13:41</span></div>
+    <div class="ms in">Quero sim. Quanto fica a parcela?<span class="t">14:21</span></div>
+    <div class="ms in">Consigo pagar até uns 1.400<span class="t">14:23</span></div>
+  </div>
+  <div class="cp"><input placeholder="Escreva sua mensagem…"><button class="snd">➤</button></div>
+</div></div>
+
+<!-- PHONE 3 — INFO (toca no ⓘ) -->
+<div class="wrap"><div class="cap">3 · Info do lead (toca no ⓘ)</div>
+<div class="phone">
+  <div class="ch"><span class="bk">‹</span><div class="nm" style="font-size:14px;">Camila Santos · dados</div></div>
+  <div class="is">
+    <div class="sc"><h4>🌡️ Temperatura</h4><div class="tp"><span class="on">🔥 Quente</span><span>🟠 Morno</span><span>🔵 Frio</span></div></div>
+    <div class="sc"><h4>📋 Dados do lead</h4>
+      <div class="dr"><span>Renda</span><b>~R$ 3.000</b></div>
+      <div class="dr"><span>Parcela até</span><b>R$ 1.400</b></div>
+      <div class="dr"><span>Faixa MCMV</span><b>Faixa 2</b></div>
+      <div class="dr"><span>FGTS</span><b>Sim</b></div>
+      <div class="dr"><span>Origem</span><b>FB · Jd. Anália</b></div>
+    </div>
+    <div class="sc"><h4>⚖️ Verdade do lead</h4>
+      <div class="tr ok"><b>Respondeu 2×</b> <span class="d">— engajada</span></div>
+      <div class="tr ok"><b>Deu a parcela</b> <span class="d">(R$1.400)</span></div>
+      <div class="tr bad"><b>Você demorou 2h</b> <span class="d">pra responder</span></div>
+      <span class="pill">PRÓXIMO: fechar visita</span>
+    </div>
+    <div class="sc"><h4>📝 Anotações</h4>
+      <button class="an">＋ Registrar ação / nota</button>
+      <div class="nt"><span class="h">14:24 · você</span>Perguntou parcela, ancorou em R$ 1.400</div>
+    </div>
+    <div class="sc"><button class="ds">🗑️ Descartar com motivo</button></div>
+  </div>
+</div></div>
+
+<!-- PHONE 4 — COMUNICADO EXPLODE -->
+<div class="wrap"><div class="cap">4 · Comunicado (congela até o OK)</div>
+<div class="phone">
+  <div class="hd"><div class="mk"><img src="comandra-icon.png"></div><div class="wm">Comandra</div><span class="dot"></span><span class="ex">⏻</span></div>
+  <div class="ag"><div class="top"><span class="bd">⚡ AGORA</span><button class="go">Atender ›</button></div><div class="tx"><b>Camila Santos</b> — quente e parada…</div></div>
+  <div class="ls"></div>
+  <div class="bn"><div class="bi on">📋<span>Atender</span></div><div class="bi">🧲<span>Prospecção</span></div><div class="bi">🏆<span>Ranking</span></div><div class="bi">🎯<span>Meta</span></div></div>
+  <div class="ov">
+    <div class="md">
+      <div class="z">📢</div><div class="k">COMUNICADO</div>
+      <h2>Nova tabela Cury</h2>
+      <p>Reajuste no Jardim Anália válido a partir de amanhã. Confira antes de passar valores.</p>
+      <div class="r">↻ Reaparece por 3 dias até confirmar a leitura</div>
+      <button class="ok">OK, li e entendi</button>
+    </div>
+  </div>
+</div></div>
+
+<script>
+  // AGORA rotativo (só phone 1): jogada → risco → oportunidade → ritmo
+  const FEED=[
+    {bd:'⚡ AGORA',bg:'rgba(0,160,132,.15)',c:'var(--teal)',tx:'<b>Camila Santos</b> — quente e <em>parada há 2h07</em> (perguntou a parcela). Seu lead mais quente sem resposta.',go:'Atender ›'},
+    {bd:'⏳ RISCO',bg:'rgba(217,51,74,.15)',c:'var(--red)',tx:'<b>3 leads quentes</b> vão esfriar hoje se ninguém tocar — o mais crítico é o Jonathan.',go:'Ver ›'},
+    {bd:'🆕 OPORTUNIDADE',bg:'rgba(2,126,181,.15)',c:'var(--blue)',tx:'<b>Jonathan Silva</b> chegou agora (6min). Responder já <em>dobra</em> a chance de visita.',go:'Atender ›'},
+    {bd:'🎯 SEU RITMO',bg:'rgba(184,134,11,.18)',c:'var(--gold)',tx:'Você atendeu <b>4 de 10</b> hoje — faltam <b>6</b> pra bater sua meta do dia.',go:''},
+  ];
+  let i=0;const G=id=>document.getElementById(id);
+  function p(){const f=FEED[i];G('mbd').textContent=f.bd;G('mbd').style.background=f.bg;G('mbd').style.color=f.c;G('mtx').innerHTML=f.tx;G('mgo').style.display=f.go?'':'none';G('mgo').textContent=f.go;}
+  p();setInterval(()=>{i=(i+1)%FEED.length;G('mtx').style.opacity=0;setTimeout(()=>{p();G('mtx').style.opacity=1;},250);},4500);
+  G('mtx').style.transition='opacity .25s';
+  // fatos ao vivo = toast que pipoca dentro do celular e some
+  const MEV=['🎉 <b>Dudu</b> fechou uma venda!','📅 <b>Ully</b> agendou uma visita','🏆 Você subiu pra <b>3º</b>!','✅ <b>Kirin</b> pediu documentação'];
+  let mi=0;const mt=G('mtoast');
+  function mtoast(){mt.innerHTML=MEV[mi%MEV.length];mt.classList.add('show');setTimeout(()=>mt.classList.remove('show'),3200);mi++;}
+  setTimeout(mtoast,1400);setInterval(mtoast,5200);
+</script>
+</body>
+</html>
