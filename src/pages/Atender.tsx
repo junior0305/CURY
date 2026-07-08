@@ -22,6 +22,7 @@ import { useNextAnnouncement } from "@/hooks/useNextAnnouncement";
 import AnnouncementCard from "@/components/announcements/AnnouncementCard";
 import { toast } from "sonner";
 import { useAudioArena, syncAudioSettings } from "@/hooks/use-audio-arena";
+import ProspeccaoMode from "@/components/broker/ProspeccaoMode";
 
 /* ── styles (do mockup aprovado) ── */
 const STYLES = `
@@ -210,7 +211,8 @@ export default function Atender() {
   const qc = useQueryClient();
   const { playSound } = useAudioArena();
   const [dark, setDark] = useState(() => { try { return localStorage.getItem("atd_theme") === "dark"; } catch { return false; } });
-  const [prospOpen, setProspOpen] = useState(false);
+  const [prospMode, setProspMode] = useState(false);
+  const [managerId, setManagerId] = useState<string | null>(null);
   const [comSeen, setComSeen] = useState(false);
   const [selId, setSelId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>("prio");
@@ -231,9 +233,10 @@ export default function Atender() {
   /* chip do corretor + status de conexão (realtime) */
   useEffect(() => {
     if (!user?.id) return;
-    supabase.from("profiles").select("bot_instance_id").eq("id", user.id).maybeSingle().then(({ data }) => {
+    supabase.from("profiles").select("bot_instance_id, manager_id").eq("id", user.id).maybeSingle().then(({ data }) => {
       const bid = data?.bot_instance_id ?? null;
       setBotId(bid);
+      setManagerId((data as any)?.manager_id ?? null);
       if (!bid) { setConnected(false); return; }
       supabase.from("bot_instances").select("status").eq("id", bid).maybeSingle().then(({ data: b }) => setConnected(b?.status === "open"));
     });
@@ -324,25 +327,11 @@ export default function Atender() {
   }, [agFeed.length]);
   const ag = agFeed[Math.min(agIdx, agFeed.length - 1)] || null;
 
-  /* Prospecção: leads frios (abandonados parados >15d) pra pegar */
-  const { data: coldLeads = [], refetch: refetchCold } = useQuery({
-    queryKey: ["atenderCold"], enabled: prospOpen && !!user, refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const cutoff = new Date(Date.now() - 15 * 864e5).toISOString();
-      const { data } = await supabase.from("leads")
-        .select("id,name,status,last_interaction_at,tag,lost_reason")
-        .eq("status", "ABANDONED").lt("last_interaction_at", cutoff)
-        .order("last_interaction_at", { ascending: true }).limit(25);
-      return data || [];
-    },
-  });
-  async function pegarCold(id: string) {
-    try {
-      await supabase.from("leads").update({ broker_id: user?.id, status: "REACTIVATED", last_interaction_at: new Date().toISOString() }).eq("id", id);
-      toast.success("Lead pego! Já está na sua fila.");
-      refetchCold(); qc.invalidateQueries({ queryKey: ["atenderLeads"] });
-    } catch { toast.error("Não consegui pegar esse lead."); }
-  }
+  /* vendas do mês (pra meta) */
+  const vendasMes = useMemo(() => {
+    const d0 = new Date(); d0.setDate(1); d0.setHours(0, 0, 0, 0);
+    return myLeads.filter((l) => l.status === "CONCLUDED" && l.lastInteractionAt && new Date(l.lastInteractionAt) >= d0).length;
+  }, [myLeads]);
 
   /* Comunicado que explode e congela a tela (reaparece por 3 dias até confirmar) */
   const comId = (announcement as any)?.id as string | undefined;
@@ -439,6 +428,12 @@ export default function Atender() {
         .atd .nextpill{display:inline-block;margin-left:20px;font-size:11px;font-weight:800;padding:4px 11px;border-radius:7px;background:rgba(11,125,111,.12);color:var(--teal-ink);}
         /* Prospecção botão */
         .atd .prospbtn{width:calc(100% - 24px);margin:8px 12px;background:var(--teal);color:#fff;border:none;border-radius:11px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--af);}
+        .atd .stripcards{display:flex;gap:8px;padding:8px 14px;background:var(--bg);border-bottom:1px solid var(--line);flex:0 0 auto;}
+        .atd .scard2{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 12px;display:flex;align-items:center;gap:9px;cursor:pointer;}
+        .atd .scard2:hover{border-color:var(--teal);}
+        .atd .scard2 .ic2{font-size:16px;}
+        .atd .scard2 .kk2{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px;}
+        .atd .scard2 .vv2{font-weight:700;font-size:12.5px;color:var(--ink);}
         /* modais (prospecção + comunicado) */
         .atd .ov2{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;}
         .atd .md2{background:var(--panel);border-radius:16px;width:min(500px,94vw);max-height:88vh;overflow:auto;box-shadow:0 24px 70px rgba(0,0,0,.4);}
@@ -486,6 +481,11 @@ export default function Atender() {
         <button className="sairbtn" onClick={() => signOut?.()}>⏻ Sair</button>
       </div>
 
+      <div className="stripcards">
+        <div className="scard2" onClick={() => setDrawer("rank")}><span className="ic2">🏆</span><div><div className="kk2">Ranking</div><div className="vv2">{myRank ? `Você · ${myRank.pos}º lugar` : "—"}</div></div></div>
+        <div className="scard2"><span className="ic2">🎯</span><div><div className="kk2">Meta do mês</div><div className="vv2">{vendasMes} venda{vendasMes === 1 ? "" : "s"} no mês</div></div></div>
+      </div>
+
       {connected === false && <div style={{ flex: "0 0 auto" }}><WhatsAppQRBanner /></div>}
 
       {prize && (
@@ -506,7 +506,7 @@ export default function Atender() {
             })}
           </div>
           <div className="volhint">📊 {rows.length} na tela · <b>{myLeads.length}</b> no total — filtre pra achar</div>
-          <button className="prospbtn" onClick={() => setProspOpen(true)}>🧲 Prospecção — pegar leads frios</button>
+          <button className="prospbtn" onClick={() => setProspMode(true)}>🧲 Prospecção — pool por região</button>
           <div className="rows">
             {rows.map((l) => {
               const last = conv.length && l.id === selId ? conv[conv.length - 1] : null;
@@ -674,23 +674,10 @@ export default function Atender() {
         </div>
       </div>
 
-      {/* MODAL Prospecção — pegar leads frios */}
-      {prospOpen && (
-        <div className="ov2" onClick={(e) => { if (e.target === e.currentTarget) setProspOpen(false); }}>
-          <div className="md2">
-            <div className="mh2"><h3>🧲 Prospecção — pegar leads frios</h3><button className="x" onClick={() => setProspOpen(false)}>✕</button></div>
-            <div className="mb2">
-              <div className="prosphead"><span><b style={{ color: "var(--ink)" }}>{coldLeads.length}</b> leads frios disponíveis (abandonados +15d)</span></div>
-              {coldLeads.length === 0 && <div style={{ color: "var(--faint)", fontSize: 13, padding: "10px 0" }}>Nenhum lead frio no pool agora.</div>}
-              {coldLeads.map((c: any) => (
-                <div className="coldrow" key={c.id}>
-                  <div className="cav2">{initials(c.name)}</div>
-                  <div className="cmid2"><div className="cn2">{c.name}</div><div className="cw2">{c.tag || "sem tag"} · parado {c.last_interaction_at ? Math.round((Date.now() - new Date(c.last_interaction_at).getTime()) / 864e5) : "?"}d</div></div>
-                  <button className="pegarbtn" onClick={() => pegarCold(c.id)}>Pegar</button>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* MODO PROSPECÇÃO — pool frio por região (só com chip online), reusa o módulo antigo */}
+      {prospMode && user?.id && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 200, background: "var(--bg)", overflowY: "auto" }}>
+          <ProspeccaoMode brokerId={user.id} managerId={managerId} botInstanceId={botId} onExit={() => setProspMode(false)} />
         </div>
       )}
 
