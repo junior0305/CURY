@@ -358,6 +358,10 @@ function Conversas() {
   }
   useEffect(() => { loadThreads(); }, []);
   const windowOpen = sel?.window_open_until && new Date(sel.window_open_until) > new Date();
+  const [filtro, setFiltro] = useState("all");
+  const origem = (t: any) => t.region === "SP" ? { label: "🟢 SP", cls: "bg-green-900 text-green-300" } : t.region === "SJC_MCMV" ? { label: "🏠 SJC", cls: "bg-blue-900 text-blue-300" } : { label: "💰 Consórcio", cls: "bg-amber-900 text-amber-300" };
+  const matchF = (t: any) => filtro === "all" ? true : filtro === "sp" ? t.region === "SP" : filtro === "sjc" ? t.region === "SJC_MCMV" : filtro === "cons" ? (t.region === "SJC" || !t.region) : true;
+  const filtered = threads.filter(matchF);
 
   return (
     <div className="grid md:grid-cols-3 gap-4">
@@ -366,17 +370,27 @@ function Conversas() {
           <span className="font-bold text-sm">Conversas</span>
           <button onClick={loadThreads}><RefreshCw className="w-4 h-4 text-slate-400" /></button>
         </div>
-        {threads.length === 0 && <p className="text-xs text-slate-500 p-2">Nenhuma conversa ainda.</p>}
-        {threads.map((t) => (
+        <div className="flex gap-1 mb-2 flex-wrap">
+          {([["all","Todos"],["sp","🟢 SP"],["sjc","🏠 SJC"],["cons","💰 Consórcio"]] as [string,string][]).map(([k,l]) => (
+            <button key={k} onClick={() => setFiltro(k)} className={`text-[11px] px-2 py-1 rounded-lg font-semibold ${filtro===k ? "bg-green-600 text-white" : "bg-slate-800 text-slate-300"}`}>{l}</button>
+          ))}
+        </div>
+        {filtered.length === 0 && <p className="text-xs text-slate-500 p-2">Nenhuma conversa aqui.</p>}
+        {filtered.map((t) => { const o = origem(t); return (
           <button key={t.id} onClick={() => openThread(t)}
             className={`w-full text-left px-3 py-2 rounded-lg mb-1 ${sel?.id === t.id ? "bg-slate-700" : "hover:bg-slate-800"}`}>
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold truncate">{t.contact_name || t.phone}</span>
               {(t.unread || 0) > 0 && <span className="bg-green-500 text-black text-[10px] rounded-full px-1.5">{t.unread}</span>}
             </div>
-            <span className="text-[11px] text-slate-400">{t.phone}</span>
+            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+              <span className={`text-[9px] px-1 rounded ${o.cls}`}>{o.label}</span>
+              {t.sdr_stage && <span className="text-[9px] px-1 rounded bg-slate-700 text-slate-300">{t.sdr_stage}</span>}
+              {t.sdr_qualified_at && <span className="text-[9px] px-1 rounded bg-green-600 text-black font-bold">✓ {t.handoff_to || "qualificado"}</span>}
+            </div>
+            <span className="text-[10px] text-slate-500">{t.phone}</span>
           </button>
-        ))}
+        ); })}
       </div>
 
       <div className="md:col-span-2 bg-slate-900 rounded-2xl border border-slate-800 flex flex-col max-h-[75vh]">
