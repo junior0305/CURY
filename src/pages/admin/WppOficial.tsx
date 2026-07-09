@@ -19,6 +19,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
+const SJC_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRjaW1ldWVmbmhhaWVtcmZpa2xqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNzgyNzIsImV4cCI6MjA4Njk1NDI3Mn0.Y0DOXDbrPVzVw41f9oONjsz8ggwDYi3wZ71iPR0GCqs";
+
 type Tab = "disparos" | "conversas" | "templates" | "gastos";
 
 const AUDIENCE = [
@@ -338,22 +340,34 @@ function Conversas() {
   const [busy, setBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
+  // O disparador vive TODO no SJC. A tela le/escreve via edge wa-inbox (valida o usuario logado de qualquer empresa),
+  // por isso as conversas de SP aparecem no admin de qualquer ambiente.
+  async function waInbox(action: string, extra: any = {}) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const r = await fetch("https://dcimeuefnhaiemrfiklj.supabase.co/functions/v1/wa-inbox", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": SJC_ANON, "Authorization": "Bearer " + SJC_ANON },
+      body: JSON.stringify({ action, user_token: session?.access_token, ...extra }),
+    });
+    return r.json().catch(() => ({}));
+  }
   async function loadThreads() {
-    const { data } = await supabase.from("whatsapp_threads").select("*").order("last_inbound_at", { ascending: false, nullsFirst: false }).limit(100);
-    setThreads(data || []);
+    const j = await waInbox("threads");
+    setThreads(j.threads || []);
   }
   async function openThread(t: any) {
     setSel(t);
-    const { data } = await supabase.from("whatsapp_messages").select("*").eq("thread_id", t.id).order("created_at", { ascending: true }).limit(200);
-    setMsgs(data || []);
-    if ((t.unread || 0) > 0) { await supabase.from("whatsapp_threads").update({ unread: 0 }).eq("id", t.id); loadThreads(); }
+    const j = await waInbox("messages", { thread_id: t.id });
+    setMsgs(j.messages || []);
+    if ((t.unread || 0) > 0) { await waInbox("read", { thread_id: t.id }); loadThreads(); }
     setTimeout(() => endRef.current?.scrollIntoView(), 100);
   }
   async function enviar() {
     if (!reply.trim() || !sel) return;
     setBusy(true);
-    const { data, error } = await supabase.functions.invoke("wa-sender", { body: { to: sel.phone, kind: "text", text: reply } });
-    if (error || data?.error) { toast.error(data?.error?.hint || data?.error?.message || "Falha (janela 24h fechada?)"); setBusy(false); return; }
+    const j = await waInbox("send", { to: sel.phone, text: reply });
+    const err = j?.result?.error || j?.error;
+    if (err) { toast.error(err?.hint || err?.message || "Falha (janela 24h fechada?)"); setBusy(false); return; }
     setReply(""); await openThread(sel); setBusy(false);
   }
   useEffect(() => { loadThreads(); }, []);
