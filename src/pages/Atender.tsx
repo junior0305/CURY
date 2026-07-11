@@ -376,7 +376,7 @@ export default function Atender() {
   }
   useEffect(() => { if (!selId && rows.length) setSelId(rows[0].id); }, [rows, selId]);
 
-  const { data: conv = [] } = useQuery({ queryKey: ["atenderConv", selId, connected], queryFn: () => fetchLeadConversation(selId!), enabled: !!selId && connected !== false, refetchInterval: 20000 });
+  const { data: conv = [] } = useQuery({ queryKey: ["atenderConv", selId, connected, botId], queryFn: () => fetchLeadConversation(selId!, botId), enabled: !!selId && connected !== false, refetchInterval: 20000 });
   const { data: notes = [] } = useQuery({ queryKey: ["atenderNotes", selId], queryFn: () => fetchLeadNotes(selId!), enabled: !!selId });
 
   const msgsRef = useRef<HTMLDivElement>(null);
@@ -414,7 +414,7 @@ export default function Atender() {
     const text = draft.trim();
     if (connected && botId) {
       setDraft("");
-      const convId = await fetchActiveConversationId(sel.id);
+      const convId = await fetchActiveConversationId(sel.id, botId);
       const r = await sendLeadMessage(botId, sel.phone, text, convId);
       if (r.success) { toast.success("Enviada"); qc.invalidateQueries({ queryKey: ["atenderConv", sel.id] }); }
       else { toast.error("Falha ao enviar: " + r.error); setDraft(text); }

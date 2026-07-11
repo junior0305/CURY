@@ -13,12 +13,19 @@ export interface ChatMessage {
   createdAt: string;
 }
 
-/** Espelho da conversa do lead no WhatsApp (última ia_conversation → ia_messages). */
-export async function fetchLeadConversation(leadId: string): Promise<ChatMessage[]> {
-  const { data: conv } = await supabase
+/**
+ * Espelho da conversa do lead no WhatsApp (última ia_conversation → ia_messages).
+ * ISOLAMENTO POR CHIP: quando `botInstanceId` é informado, mostra APENAS a conversa
+ * que passou pelo chip do próprio corretor. Assim a mensagem de um colega que
+ * atende o mesmo número (mesma lead) nunca vaza na tela deste corretor.
+ */
+export async function fetchLeadConversation(leadId: string, botInstanceId?: string | null): Promise<ChatMessage[]> {
+  let q = supabase
     .from("ia_conversations")
     .select("id")
-    .eq("lead_id", leadId)
+    .eq("lead_id", leadId);
+  if (botInstanceId) q = q.eq("bot_instance_id", botInstanceId);
+  const { data: conv } = await q
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -40,12 +47,14 @@ export async function fetchLeadConversation(leadId: string): Promise<ChatMessage
     }));
 }
 
-/** Retorna o id da conversa ativa do lead (pra enviar msg no thread certo). */
-export async function fetchActiveConversationId(leadId: string): Promise<string | null> {
-  const { data } = await supabase
+/** Retorna o id da conversa ativa do lead NO CHIP DO CORRETOR (pra enviar/receber no thread certo dele). */
+export async function fetchActiveConversationId(leadId: string, botInstanceId?: string | null): Promise<string | null> {
+  let q = supabase
     .from("ia_conversations")
     .select("id")
-    .eq("lead_id", leadId)
+    .eq("lead_id", leadId);
+  if (botInstanceId) q = q.eq("bot_instance_id", botInstanceId);
+  const { data } = await q
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
