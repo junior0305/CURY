@@ -33,6 +33,9 @@ const mapLeadFromDB = (l: any): Lead => ({
   leadTemperature:    (l.lead_temperature ?? null) as LeadTemperature,
   temperatureUpdatedAt: l.temperature_updated_at ?? null,
   source:             (l.source ?? null) as LeadSource,
+  anaContactedAt:     l.ana_contacted_at ?? null,
+  anaQualifiedAt:     l.ana_qualified_at ?? null,
+  handoffReason:      l.ana_qualified_at ? 'ana_gold' : (l.ana_contacted_at ? 'ana_cold' : null),
 });
 
 // ─── XP por transição de status ───────────────────────────────────────────────
@@ -198,11 +201,18 @@ export const fetchTeamLeads = async (brokerIds: string[]): Promise<Lead[]> => {
 };
 
 export const fetchUnassignedLeads = async (): Promise<Lead[]> => {
+  // ESCONDE quem está ATIVO com a Ana (SDR): contatada há menos de 24h e ainda não
+  // entregue a corretor. Esses NÃO são órfãos — a Ana está qualificando. Assim o
+  // gerente não "Redistribui" um lead no meio do trabalho da Ana.
+  // Continua mostrando: nunca tocado pela Ana (ana_contacted_at null) e os que a Ana
+  // tocou há +24h e travaram (precisam de gente de verdade).
+  const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('leads')
     .select('*')
     .is('broker_id', null)
     .not('status', 'in', '("EXCLUDED","ABANDONED","CONCLUDED")')
+    .or(`ana_contacted_at.is.null,ana_contacted_at.lt.${cutoff24h}`)
     .order('created_at', { ascending: true })
     .limit(50);
   if (error) throw error;

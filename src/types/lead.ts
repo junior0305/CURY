@@ -110,7 +110,15 @@ export interface Lead {
   leadTemperature: LeadTemperature;    // Calculado pelo banco — só populado em IN_PROGRESS
   temperatureUpdatedAt: string | null; // Última atualização da temperatura
   source: LeadSource;                  // Origem: funil, prospecção, manual etc.
+  // Rastro da Ana (SDR). No SJC ana_qualified_at pode não existir → vem null.
+  anaContactedAt: string | null;       // Ana abordou o lead
+  anaQualifiedAt: string | null;       // Ana QUALIFICOU o lead (🥇 ouro)
+  handoffReason: HandoffReason;        // Por que caiu pro corretor
 }
+
+// Como o lead chegou ao corretor a partir da Ana:
+// 'ana_gold' = a Ana qualificou (ouro puro) · 'ana_cold' = estourou 24h sem qualificar · null = não passou pela Ana
+export type HandoffReason = 'ana_gold' | 'ana_cold' | null;
 
 // Labels para exibição na UI
 export const STATUS_LABEL: Record<LeadStatus, string> = {

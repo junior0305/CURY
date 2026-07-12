@@ -387,7 +387,12 @@ export default function Atender() {
   function leadTags(l: Lead) {
     const t = l.leadTemperature && TEMP_TAG[l.leadTemperature] ? TEMP_TAG[l.leadTemperature] : null;
     const s = STAGE_TAG[l.status] || null;
-    return <>{t && tagPill(t[0], t[1])}{s && tagPill(s[0], s[1])}</>;
+    // 🥇 lead qualificado pela Ana = ouro puro (vem antes de tudo)
+    const gold = l.handoffReason === "ana_gold";
+    return <>
+      {gold && <span className="tag" style={{ background: "#fff6d5", color: "#8a6d00", border: "1px solid #e6c34d" }}><span className="d" style={{ background: "#f2b705" }} />🥇 Ouro Ana</span>}
+      {t && tagPill(t[0], t[1])}{s && tagPill(s[0], s[1])}
+    </>;
   }
 
   async function advance(status: LeadStatus) {

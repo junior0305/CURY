@@ -35,6 +35,7 @@ import UserManagement from "@/pages/UserManagement";
 import AtribuirChips from "@/pages/admin/AtribuirChips";
 import ColdPool from "@/pages/admin/ColdPool";
 import Replicacao from "@/pages/admin/Replicacao";
+import OuroAna from "@/pages/admin/OuroAna";
 import Secretaria from "@/pages/Secretaria";
 import ForcePasswordChange from "@/pages/ForcePasswordChange";
 
@@ -137,6 +138,7 @@ const App = () => (
             <Route path="/atribuir-chips" element={<ProtectedAdminRoute><AtribuirChips /></ProtectedAdminRoute>} />
             <Route path="/cold-pool" element={<ProtectedAdminRoute><ColdPool /></ProtectedAdminRoute>} />
             <Route path="/admin/replicacao" element={<ProtectedAdminRoute><Replicacao /></ProtectedAdminRoute>} />
+            <Route path="/admin/ouro-ana" element={<ProtectedAdminRoute><OuroAna /></ProtectedAdminRoute>} />
             <Route path="/secretaria" element={<ProtectedSecretaryRoute><Secretaria /></ProtectedSecretaryRoute>} />
             <Route path="/force-password-change" element={<ForcePasswordChange />} />
             <Route path="/bootstrap-admin" element={<BootstrapAdmin />} />
