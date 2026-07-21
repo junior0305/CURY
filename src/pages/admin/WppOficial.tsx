@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Send, MessageSquare, FileText, DollarSign, Plus, RefreshCw,
-  Loader2, CheckCircle2, Rocket, Bot, Users,
+  Loader2, CheckCircle2, Rocket, Bot, Users, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,6 +119,37 @@ export default function WppOficial() {
   );
 }
 
+// ─────────────────────────────── EXPORTAR LEADS (SP) ───────────────────────────────
+// Baixa leads do SP (MCMV) em CSV nome,telefone(55) — filtrável por região/campanha.
+// Usa o endpoint export-leads-csv (projeto SP), protegido por token.
+function ExportLeads() {
+  const [regiao, setRegiao] = useState("");
+  const [campanha, setCampanha] = useState("");
+  const BASE = "https://vaghxnypfphhxiobnhpk.supabase.co/functions/v1/export-leads-csv";
+  const TOKEN = "cury-sp-leads-2026-x7k9";
+  function baixar() {
+    const p = new URLSearchParams({ token: TOKEN });
+    if (regiao.trim()) p.set("regiao", regiao.trim());
+    if (campanha.trim()) p.set("campanha", campanha.trim());
+    window.open(`${BASE}?${p.toString()}`, "_blank");
+  }
+  return (
+    <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800">
+      <h3 className="font-bold mb-1 flex items-center gap-2"><Download className="w-4 h-4 text-green-400" /> Exportar leads (SP · MCMV) — CSV nome,telefone</h3>
+      <p className="text-xs text-slate-400 mb-3">Baixa os leads em CSV (telefone já com 55). Em branco = <b>todos</b>; ou filtre por região e/ou campanha. Região usa <code className="bg-slate-800 px-1 rounded">_</code> no lugar de espaço (ex: <code className="bg-slate-800 px-1 rounded">ZONA_SUL</code>, <code className="bg-slate-800 px-1 rounded">AGUA_BRANCA</code>).</p>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Input placeholder="Região (opcional) — ex: LEOPOLDINA" value={regiao} onChange={(e) => setRegiao(e.target.value)} />
+        <Input placeholder="Campanha (opcional) — ex: EQ_DATTI_ZS" value={campanha} onChange={(e) => setCampanha(e.target.value)} />
+        <Button onClick={baixar} className="bg-green-600 hover:bg-green-500 shrink-0"><Download className="w-4 h-4 mr-1" /> Baixar CSV</Button>
+      </div>
+      <div className="flex gap-3 mt-2 text-[11px]">
+        <a className="text-green-400 hover:underline" href={`${BASE}?token=${TOKEN}&list=regioes`} target="_blank" rel="noreferrer">ver regiões disponíveis</a>
+        <a className="text-green-400 hover:underline" href={`${BASE}?token=${TOKEN}&list=campanhas`} target="_blank" rel="noreferrer">ver campanhas</a>
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────── DISPAROS ───────────────────────────────
 function Disparos() {
   const [camps, setCamps] = useState<any[]>([]);
@@ -193,6 +224,7 @@ function Disparos() {
 
   return (
     <div className="grid md:grid-cols-2 gap-6">
+      <div className="md:col-span-2"><ExportLeads /></div>
       {/* Compositor / novo disparo */}
       <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
         <h3 className="font-bold mb-1 flex items-center gap-2"><Plus className="w-4 h-4" /> Novo disparo</h3>
@@ -309,6 +341,11 @@ function Disparos() {
                 <div className="text-xs text-slate-300 mt-1 flex flex-wrap gap-x-3">
                   <span>✅ {c.sent_count}</span><span>📬 {c.delivered_count}</span><span>👁️ {c.read_count}</span>
                   <span>💬 {c.reply_count}</span><span>⚠️ {c.failed_count}</span>
+                </div>
+                <div className="text-xs mt-1 flex flex-wrap gap-x-3 items-center">
+                  <span className="text-green-400 font-bold">🔥 {c.interessados_count || 0} apertaram 1</span>
+                  <span className="text-red-400 font-bold">🚫 {c.optout_count || 0} apertaram 2</span>
+                  {Number(c.cost_total) > 0 && <span className="text-amber-400">💰 R$ {Number(c.cost_total).toFixed(2)}</span>}
                 </div>
                 <div className="flex gap-2 mt-2">
                   {c.status === "draft" && (
@@ -547,7 +584,7 @@ function Gastos() {
   useEffect(() => {
     (async () => {
       const [c, m] = await Promise.all([
-        supabase.from("whatsapp_campaigns").select("name,sent_count,delivered_count,read_count,reply_count,failed_count").order("created_at", { ascending: false }).limit(50),
+        supabase.from("whatsapp_campaigns").select("name,sent_count,delivered_count,read_count,reply_count,failed_count,cost_total,interessados_count,optout_count").order("created_at", { ascending: false }).limit(50),
         supabase.from("whatsapp_messages").select("pricing_category").eq("direction", "outbound").not("pricing_category", "is", null),
       ]);
       setCamps(c.data || []);
@@ -559,14 +596,16 @@ function Gastos() {
 
   const totalSent = camps.reduce((s, c) => s + (c.sent_count || 0), 0);
   const totalReply = camps.reduce((s, c) => s + (c.reply_count || 0), 0);
+  const totalInteressados = camps.reduce((s, c) => s + (c.interessados_count || 0), 0);
+  const totalGasto = camps.reduce((s, c) => s + (Number(c.cost_total) || 0), 0);
 
   if (loading) return <Loader2 className="w-5 h-5 animate-spin" />;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[["Enviadas", totalSent, "text-blue-400"], ["Respostas", totalReply, "text-green-400"],
-          ["Categorias", Object.keys(byCat).length, "text-purple-400"],
-          ["Msgs cobradas", Object.values(byCat).reduce((a, b) => a + b, 0), "text-amber-400"]].map(([l, v, c]: any) => (
+        {[["Enviadas", totalSent, "text-blue-400"], ["🔥 Interessados (1)", totalInteressados, "text-green-400"],
+          ["💰 Gasto ~R$", totalGasto.toFixed(2), "text-amber-400"],
+          ["Msgs cobradas", Object.values(byCat).reduce((a, b) => a + b, 0), "text-purple-400"]].map(([l, v, c]: any) => (
           <div key={l} className="bg-slate-900 rounded-2xl p-4 border border-slate-800">
             <div className={`text-2xl font-black ${c}`}>{v}</div>
             <div className="text-xs text-slate-400">{l}</div>
@@ -585,8 +624,8 @@ function Gastos() {
       <div className="bg-slate-900 rounded-2xl p-5 border border-slate-800">
         <h3 className="font-bold mb-2">Por disparo</h3>
         <div className="space-y-1">{camps.map((c, i) => (
-          <div key={i} className="flex justify-between text-sm"><span>{c.name}</span>
-            <span className="text-slate-300">{c.sent_count} env · {c.reply_count} resp</span></div>
+          <div key={i} className="flex justify-between text-sm gap-2"><span className="truncate">{c.name}</span>
+            <span className="text-slate-300 whitespace-nowrap">{c.sent_count} env · 🔥{c.interessados_count || 0} · 🚫{c.optout_count || 0} · R$ {(Number(c.cost_total) || 0).toFixed(2)}</span></div>
         ))}</div>
       </div>
     </div>
