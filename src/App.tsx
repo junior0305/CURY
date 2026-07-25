@@ -116,8 +116,8 @@ const App = () => (
             <Route path="/atender" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-classico" element={<ProtectedBrokerRoute><DashboardFoco /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-wolf" element={<ProtectedBrokerRoute><DashboardWolf /></ProtectedBrokerRoute>} />
-            {/* /manager = novo cockpit (v2). /manager-v1 = backup do antigo. */}
-            <Route path="/manager" element={<ProtectedManagerRoute><ManagerV2 /></ProtectedManagerRoute>} />
+            {/* /manager = cockpit v3 (Jarvis). /manager-v2 = v2 (rollback). /manager-v1 = antigo. */}
+            <Route path="/manager" element={<ProtectedManagerRoute><ManagerV3 /></ProtectedManagerRoute>} />
             <Route path="/manager-v1" element={<ProtectedManagerRoute><ManagerDashboard /></ProtectedManagerRoute>} />
             <Route path="/manager-v3" element={<ProtectedManagerRoute><ManagerV3 /></ProtectedManagerRoute>} />
             <Route path="/manager/coach" element={<ProtectedManagerRoute><CoachIndex /></ProtectedManagerRoute>} />
@@ -128,8 +128,8 @@ const App = () => (
             <Route path="/manager/liga" element={<ProtectedManagerRoute><LigaPage /></ProtectedManagerRoute>} />
             <Route path="/manager/analise" element={<ProtectedManagerRoute><AnalisePage /></ProtectedManagerRoute>} />
             <Route path="/manager/pool" element={<ProtectedManagerRoute><PoolPage /></ProtectedManagerRoute>} />
-            {/* Aliases legados — redirecionam pra nova URL */}
-            <Route path="/manager-v2" element={<Navigate to="/manager" replace />} />
+            {/* /manager-v2 = cockpit v2 (rollback rápido). Demais aliases legados redirecionam. */}
+            <Route path="/manager-v2" element={<ProtectedManagerRoute><ManagerV2 /></ProtectedManagerRoute>} />
             <Route path="/manager-v2/coach" element={<Navigate to="/manager/coach" replace />} />
             <Route path="/manager-v2/liga" element={<Navigate to="/manager/liga" replace />} />
             <Route path="/manager-v2/campanha" element={<Navigate to="/manager/campanha" replace />} />
