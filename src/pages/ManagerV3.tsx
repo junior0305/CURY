@@ -245,6 +245,24 @@ export default function ManagerV3() {
       .slice(0, 4);
   }, [leads]);
 
+  // ── Motor: métricas REAIS dos leads da equipe (hoje = desde a meia-noite local) ──
+  const motor = useMemo(() => {
+    const mid = new Date(); mid.setHours(0, 0, 0, 0);
+    const t0 = mid.getTime();
+    const isToday = (d?: string | null) => !!d && new Date(d).getTime() >= t0;
+    const fn = (id?: string | null) => (brokers.find((b) => b.id === id)?.first_name || "corretor");
+    const first = (n?: string | null) => (n || "Lead").trim().split(/\s+/)[0];
+    const ana = leads.filter((l) => isToday(l.ai_qualified_at));
+    const welcomed = leads.filter((l) => l.welcome_template_id && isToday(l.created_at));
+    const welcomedResp = welcomed.filter((l) => l.welcome_responded_at);
+    const welcomeRate = welcomed.length ? Math.round((welcomedResp.length / welcomed.length) * 100) : null;
+    const fups = leads.filter((l) => isToday(l.followup_started_at));
+    const fupReheated = fups.filter((l) => l.last_lead_response_at && l.followup_started_at && new Date(l.last_lead_response_at).getTime() >= new Date(l.followup_started_at).getTime());
+    const react = leads.filter((l) => l.status === "REACTIVATED" && isToday(l.last_interaction_at));
+    const names = (arr: any[]) => arr.slice(0, 3).map((l) => `${first(l.name)}→${fn(l.broker_id)}`).join(" · ") + (arr.length > 3 ? ` +${arr.length - 3}` : "");
+    return { ana, welcomed, welcomedResp, welcomeRate, fups, fupReheated, react, names };
+  }, [leads, brokers]);
+
   // ── Funil por período (dados reais dos leads carregados) ─────────────────
   const funnel = useMemo(() => {
     let start: Date, end: Date;
@@ -718,9 +736,9 @@ export default function ManagerV3() {
           <div className={"kpi leak" + (filaFilter === "vazando" ? " active" : "")} onClick={() => filterFila("vazando")}>
             <div className="k-lbl">🩸 vazando</div><div className="k-val">{kpi.vazando}</div><div className="k-sub down">recebem mas param</div>
           </div>
-          {/* pool frio: sem fonte ligada nesta tela — placeholder honesto, sem número inventado */}
-          <div className="kpi" onClick={() => toast("Pool de frios ainda não está ligado nesta tela.")}>
-            <div className="k-lbl">🧊 pool frio</div><div className="k-val" style={{ color: "var(--faint)" }}>—</div><div className="k-sub">em construção</div>
+          {/* reativados hoje: leads que voltaram pro jogo (status REACTIVATED hoje) — real */}
+          <div className="kpi" onClick={() => toast(`${motor.react.length} lead(s) reativado(s) hoje`)}>
+            <div className="k-lbl">🔁 reativados</div><div className="k-val">{motor.react.length}</div><div className="k-sub">voltaram hoje</div>
           </div>
         </div>
 
@@ -815,30 +833,9 @@ export default function ManagerV3() {
           </div>
         </div>
 
-        {/* ── EFETIVIDADE (em construção — depende do ledger de movimento no backend) ── */}
-        <div className="efband rv" style={{ animationDelay: ".16s", display: "block" }}>
-          <div className="panel">
-            <div className="ph"><h3>Efetividade</h3><span className="n">em construção</span></div>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, color: "var(--muted)", lineHeight: 1.7 }}>
-              Em construção. A atribuição de quem moveu o funil (Comandra · corretor · Ana) e a garantia de contato dependem do ledger de movimento, que ainda não existe no backend. Chega na próxima fase.
-              <div style={{ marginTop: 8, color: "var(--faint)" }}>Leads recebidos hoje: <b style={{ color: "var(--text)" }}>{kpi.recebidosHoje}</b> (real)</div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── NÚMEROS: pool frio | ouro apodrecendo ── */}
-        <div className="sec-h rv" style={{ animationDelay: ".22s" }}><h2>Números que sustentam a operação</h2><div className="rule" /><span className="count">frios · ouro</span></div>
-        <div className="trio duo">
-          {/* Pool frio — em construção (não ligado ao cold pool nesta tela) */}
-          <div className="panel rv" style={{ animationDelay: ".24s" }}>
-            <div className="ph"><h3><span className="dotc frio" /> Pool de leads frios</h3><span className="n">em construção</span></div>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, color: "var(--muted)", lineHeight: 1.7 }}>
-              Em construção. Quem puxou frio e quantos leads voltaram do pool ainda não está ligado nesta tela — vem na próxima fase.
-            </div>
-            <div style={{ marginTop: 12 }}><button className="btn brain wide sm" onClick={() => toast("Soltar frios ainda não está ligado nesta tela.")}>Soltar frios pra quem trabalha</button></div>
-          </div>
-
-          {/* Ouro apodrecendo — REAL (ai_qualified_at + parado) */}
+        {/* ── OURO APODRECENDO — REAL (ai_qualified_at + parado) ── */}
+        <div className="sec-h rv" style={{ animationDelay: ".22s" }}><h2>Ouro apodrecendo · leads da Ana esfriando</h2><div className="rule" /><span className="count">{goldLeads.length} lead(s)</span></div>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,520px)", gap: 14 }}>
           <div className="panel rv" style={{ animationDelay: ".28s" }}>
             <div className="ph"><h3><span className="dotc gold" /> Ouro apodrecendo</h3><span className="n">{goldLeads.length} lead(s)</span></div>
             {goldLeads.length === 0 && <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--muted)", padding: "10px 0" }}>Nenhum ouro da Ana esfriando agora. 🙌</div>}
@@ -885,32 +882,32 @@ export default function ManagerV3() {
           })}
         </div>
 
-        {/* ── MOTOR (em construção — detalhe por corretor/lead depende de fontes ainda não ligadas aqui) ── */}
-        <div className="sec-h rv" style={{ animationDelay: ".2s" }}><h2>Motor rodando · está funcionando?</h2><div className="rule" /><span className="count">em construção</span></div>
+        {/* ── MOTOR — métricas REAIS dos leads da equipe (hoje) ── */}
+        <div className="sec-h rv" style={{ animationDelay: ".2s" }}><h2>Motor rodando · está funcionando?</h2><div className="rule" /><span className="count">hoje · sua equipe</span></div>
         <div className="autostrip rv" style={{ animationDelay: ".24s" }}>
           <div className="acard">
             <div className="ah"><div className="an">🤖 Ana <span style={{ fontFamily: "var(--mono)", fontSize: 9, color: "var(--faint)" }}>SDR</span></div></div>
-            <div className="asub">em construção — detalhe por lead na próxima fase</div>
+            <div className="abig">{motor.ana.length}<small> qualificados</small></div>
+            <div className="asub">{motor.ana.length ? motor.names(motor.ana) : "nenhum lead qualificado hoje"}</div>
           </div>
           <div className="acard">
             <div className="ah"><div className="an">📣 Disparos</div></div>
-            <div className="asub">em construção — detalhe por lead na próxima fase</div>
+            <div className="abig">{motor.react.length}<small> voltaram</small></div>
+            <div className="asub">{motor.react.length ? motor.names(motor.react) : "ninguém reativado hoje"}</div>
           </div>
           <div className="acard">
             <div className="ah"><div className="an">👋 Boas-vindas</div></div>
-            <div className="asub">em construção — detalhe por lead na próxima fase</div>
+            <div className="abig">{motor.welcomeRate == null ? "—" : motor.welcomeRate + "%"}<small> resposta</small></div>
+            <div className="asub">{motor.welcomed.length} enviada(s) hoje · {motor.welcomedResp.length} responderam</div>
           </div>
           <div className="acard">
             <div className="ah"><div className="an">🔁 Follow-up</div></div>
-            <div className="asub">em construção — detalhe por lead na próxima fase</div>
-          </div>
-          <div className="acard">
-            <div className="ah"><div className="an">🎤 Setup corretor</div></div>
-            <div className="asub">em construção — detalhe por corretor na próxima fase</div>
+            <div className="abig">{motor.fups.length}<small> disparados</small></div>
+            <div className="asub">{motor.fupReheated.length} reaqueceram hoje</div>
           </div>
         </div>
 
-        <div className="protonote">Cockpit do Gestor v3 · dados reais (fila, funil, meta mês, ouro, coach) + seções em construção marcadas</div>
+        <div className="protonote">Cockpit do Gestor v3 · dados reais: fila, funil, meta, ouro, motor (Ana/disparos/boas-vindas/follow-up), coach. "Quem moveu o funil" aguarda o ledger de movimento.</div>
       </div>
 
       {/* ── DRAWERS ── */}
