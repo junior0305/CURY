@@ -116,8 +116,8 @@ const App = () => (
             <Route path="/atender" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-classico" element={<ProtectedBrokerRoute><DashboardFoco /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-wolf" element={<ProtectedBrokerRoute><DashboardWolf /></ProtectedBrokerRoute>} />
-            {/* /manager = cockpit v2 (COMPLETO: redistribuir, conversas, painéis). /manager-v3 = overview Jarvis (incompleto). /manager-v1 = antigo. */}
-            <Route path="/manager" element={<ProtectedManagerRoute><ManagerV2 /></ProtectedManagerRoute>} />
+            {/* /manager = cockpit v3 (Jarvis, padrão do gerente). /manager-v2 = v2 completo (redistribuir/conversas). /manager-v1 = antigo. */}
+            <Route path="/manager" element={<ProtectedManagerRoute><ManagerV3 /></ProtectedManagerRoute>} />
             <Route path="/manager-v1" element={<ProtectedManagerRoute><ManagerDashboard /></ProtectedManagerRoute>} />
             <Route path="/manager-v3" element={<ProtectedManagerRoute><ManagerV3 /></ProtectedManagerRoute>} />
             <Route path="/manager/coach" element={<ProtectedManagerRoute><CoachIndex /></ProtectedManagerRoute>} />
