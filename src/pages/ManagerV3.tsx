@@ -130,6 +130,16 @@ function isToday(d?: string | null): boolean {
   const n = new Date();
   return x.getDate() === n.getDate() && x.getMonth() === n.getMonth() && x.getFullYear() === n.getFullYear();
 }
+// Rótulo de tempo relativo curto
+function agoLabel(ts?: string | null): string {
+  if (!ts) return "";
+  const m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000));
+  if (m < 1) return "agora";
+  if (m < 60) return `há ${m}min`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `há ${h}h`;
+  return `há ${Math.round(h / 24)}d`;
+}
 // Lead "parado": quente (lead respondeu) há +2h e o corretor não respondeu depois
 function isStalled(l: any): boolean {
   if (DEAD.has(l.status) || l.status === "CONCLUDED") return false;
@@ -166,6 +176,42 @@ export default function ManagerV3() {
   const { session } = useAuth();
   const userId = session?.user?.id;
   const { data, isLoading } = useTeamData(userId);
+
+  // "Já fiz por você" — ações reais do gerente hoje (internal_notifications), persiste entre reloads
+  const { data: realActions = [] } = useQuery({
+    queryKey: ["v3-mgr-actions", userId],
+    enabled: !!userId,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const mid = new Date(); mid.setHours(0, 0, 0, 0);
+      const { data: rows } = await supabase
+        .from("internal_notifications")
+        .select("id, message, created_at")
+        .eq("from_id", userId!)
+        .gte("created_at", mid.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(30);
+      return rows || [];
+    },
+  });
+
+  // Movimento do funil hoje (ledger lead_movements). Retorna 0 se a tabela ainda não existe → bloco fica escondido.
+  const { data: movesToday = 0 } = useQuery({
+    queryKey: ["v3-moves-today", userId],
+    enabled: !!userId,
+    retry: false,
+    refetchInterval: 120_000,
+    queryFn: async () => {
+      const mid = new Date(); mid.setHours(0, 0, 0, 0);
+      const { count, error } = await supabase
+        .from("lead_movements")
+        .select("id", { count: "exact", head: true })
+        .eq("manager_id", userId!)
+        .gte("created_at", mid.toISOString());
+      if (error) return 0;
+      return count || 0;
+    },
+  });
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -833,6 +879,17 @@ export default function ManagerV3() {
           </div>
         </div>
 
+        {/* ── MOVIMENTO DO FUNIL HOJE — real (ledger). Aparece só quando a migração 0064 estiver aplicada + houver dados. ── */}
+        {movesToday > 0 && (
+          <div className="efband rv" style={{ animationDelay: ".16s", display: "block" }}>
+            <div className="panel">
+              <div className="ph"><h3>🔀 Movimento do funil hoje</h3><span className="n">ledger</span></div>
+              <div style={{ fontFamily: "var(--disp)", fontWeight: 800, fontSize: 30, lineHeight: 1 }}>{movesToday}<small style={{ fontSize: 14, color: "var(--muted)", fontWeight: 600 }}> leads avançaram de etapa</small></div>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--faint)", marginTop: 6 }}>atribuição por fonte (Comandra · corretor · Ana) exige instrumentar os edges — próxima etapa</div>
+            </div>
+          </div>
+        )}
+
         {/* ── OURO APODRECENDO — REAL (ai_qualified_at + parado) ── */}
         <div className="sec-h rv" style={{ animationDelay: ".22s" }}><h2>Ouro apodrecendo · leads da Ana esfriando</h2><div className="rule" /><span className="count">{goldLeads.length} lead(s)</span></div>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0,520px)", gap: 14 }}>
@@ -933,13 +990,16 @@ export default function ManagerV3() {
       </div>
 
       <div className={"drawer" + (drawer === "log" ? " open" : "")}>
-        <div className="dh"><h3><span className="dotc done" /> Já fiz por você <span style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--muted)" }}>{logEntries.length} hoje</span></h3><div className="x" onClick={() => setDrawer(null)}>×</div></div>
+        <div className="dh"><h3><span className="dotc done" /> Já fiz por você <span style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--muted)" }}>{logEntries.length + realActions.length} hoje</span></h3><div className="x" onClick={() => setDrawer(null)}>×</div></div>
         <div className="dbody"><ul className="log">
-          {logEntries.length === 0 && (
+          {logEntries.length === 0 && realActions.length === 0 && (
             <li style={{ color: "var(--muted)", fontFamily: "var(--mono)", fontSize: 12, lineHeight: 1.6 }}>Ainda nada hoje. As cobranças e ações que você fizer por aqui aparecem nesta lista.</li>
           )}
           {logEntries.map((e) => (
             <li key={e.id}><span className="when">{e.when}</span><span className="act" dangerouslySetInnerHTML={{ __html: e.html }} /></li>
+          ))}
+          {realActions.map((a: any) => (
+            <li key={a.id}><span className="when">{agoLabel(a.created_at)}</span><span className="act">{a.message}</span></li>
           ))}
         </ul></div>
       </div>
