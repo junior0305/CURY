@@ -19,6 +19,7 @@ import DashboardFoco from "./pages/DashboardFoco";
 import Atender from "./pages/Atender";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import ManagerV2 from "./pages/ManagerV2";
+import ManagerV3 from "./pages/ManagerV3";
 import CoachIndex from "./pages/manager-v2/CoachIndex";
 import CoachBroker from "./pages/manager-v2/CoachBroker";
 import CampanhaIndex from "./pages/manager-v2/CampanhaIndex";
@@ -118,6 +119,7 @@ const App = () => (
             {/* /manager = novo cockpit (v2). /manager-v1 = backup do antigo. */}
             <Route path="/manager" element={<ProtectedManagerRoute><ManagerV2 /></ProtectedManagerRoute>} />
             <Route path="/manager-v1" element={<ProtectedManagerRoute><ManagerDashboard /></ProtectedManagerRoute>} />
+            <Route path="/manager-v3" element={<ProtectedManagerRoute><ManagerV3 /></ProtectedManagerRoute>} />
             <Route path="/manager/coach" element={<ProtectedManagerRoute><CoachIndex /></ProtectedManagerRoute>} />
             <Route path="/manager/coach/:brokerId" element={<ProtectedManagerRoute><CoachBroker /></ProtectedManagerRoute>} />
             <Route path="/manager/campanha" element={<ProtectedManagerRoute><CampanhaIndex /></ProtectedManagerRoute>} />
