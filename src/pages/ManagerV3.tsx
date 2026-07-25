@@ -182,16 +182,13 @@ export default function ManagerV3() {
   const [savedGold, setSavedGold] = useState<Record<string, boolean>>({});
   const [capOpen, setCapOpen] = useState(false);
   const [cmd, setCmd] = useState("");
+  const [cmdAnswer, setCmdAnswer] = useState<string | null>(null); // resposta persistente sob o input
   const [drawer, setDrawer] = useState<null | "dec" | "log">(null);
   const [voiceIdx, setVoiceIdx] = useState(0);
   const [voiceHtml, setVoiceHtml] = useState<string | null>(null); // resposta do comando sobrescreve o rodízio
   const [orbThink, setOrbThink] = useState(false);
-  const [logEntries, setLogEntries] = useState<{ id: number; when: string; html: string }[]>([
-    // TODO(ledger de movimento): "Já fiz" hoje deveria vir de um ledger de ações reais do Jarvis.
-    { id: 1, when: "há 8min", html: 'Cobrei o <b>Datti</b>: <span class="em">2 leads quentes</span> sem resposta +2h' },
-    { id: 2, when: "há 22min", html: 'Redistribui 1 lead órfão → <b>Giorge</b>' },
-    { id: 3, when: "há 41min", html: 'Silenciei follow-up de <b>3 leads</b> (opt-out)' },
-  ]);
+  // "Já fiz" começa vazio: só entram AÇÕES REAIS que o gerente fizer nesta tela (logAction).
+  const [logEntries, setLogEntries] = useState<{ id: number; when: string; html: string }[]>([]);
   const logSeq = useRef(100);
 
   // Throttle de cobrança (proteção do chip do gerente) — igual ManagerV2
@@ -237,9 +234,6 @@ export default function ManagerV3() {
     const vazando = perBroker.filter((p) => p.enabled && !p.working).length;
     return { recebidosHoje, parados, naFila, total: brokers.length, vazando };
   }, [leads, perBroker, brokers.length]);
-  // TODO(pool frio): sem fonte fácil no escopo do time; placeholder até ligar cold pool.
-  const POOL_FRIO_STUB = 312;
-  const POOL_PUXADOS_STUB = 18;
 
   // ── Ouro apodrecendo (Ana qualificou + parado) ───────────────────────────
   // NOTE: o protótipo usa handoffReason==='ana_gold'. Esse campo não está no select;
@@ -298,15 +292,13 @@ export default function ManagerV3() {
         sub: `${fill}% da meta do mês · dados reais (leads CONCLUDED no mês)`,
       };
     }
-    // TODO(meta semanal): números STUB — falta query team_goals goal_type='weekly' da semana ISO.
-    const doneW = funnel.vend; // usa vendas reais da semana do funil como aproximação
-    const tgtW = 7; // STUB
-    const falta = Math.max(0, tgtW - doneW);
-    const fill = tgtW > 0 ? Math.min(100, Math.round((doneW / tgtW) * 100)) : 0;
+    // Meta semanal ainda nao configurada no backend (falta query team_goals goal_type='weekly').
+    // Honesto: mostra as vendas REAIS da semana, sem alvo inventado.
+    const doneW = funnel.vend; // vendas reais da semana (do funil)
     return {
-      scope: "da semana", done: doneW, tgt: tgtW, falta, fill,
-      fcHtml: `faltam <b style="color:var(--text)">${falta}</b> · forecast <b class="warn">${doneW}</b> 🟡 <span style="color:var(--faint)">(meta semanal STUB)</span>`,
-      sub: `${fill}% da meta da semana · foco nos quentes até domingo`,
+      scope: "da semana", done: doneW, tgt: null as number | null, falta: null as number | null, fill: 0,
+      fcHtml: `<span style="color:var(--faint)">meta semanal não configurada</span>`,
+      sub: `${doneW} venda(s) fechada(s) nesta semana · configure a meta semanal em team_goals`,
     };
   }, [period, funnel.vend, data?.monthlySales, data?.monthlyGoal]);
 
@@ -347,6 +339,7 @@ export default function ManagerV3() {
   function jarvisSay(html: string) {
     setOrbThink(true);
     setVoiceHtml(html);
+    setCmdAnswer(html); // bolha persistente sob o input (some só quando o gerente fecha)
     setTimeout(() => setOrbThink(false), 500);
     // volta ao rodízio após 9s
     window.clearTimeout((jarvisSay as any)._t);
@@ -510,7 +503,7 @@ export default function ManagerV3() {
       return;
     }
     if (/pool/.test(t)) {
-      jarvisSay(`Pool de frios ainda é STUB nesta tela (~${POOL_FRIO_STUB}). Fonte real fica no /cold-pool.`);
+      jarvisSay(`O detalhe do pool de frios ainda não está ligado nesta tela.`);
       return;
     }
     if (b) {
@@ -528,17 +521,19 @@ export default function ManagerV3() {
     return brokers
       .map((b) => {
         const c = coachMap?.[b.id];
+        const hasAnalysis = !!c;
         return {
           brokerId: b.id,
           name: b.first_name || "—",
-          // TODO(coach): quando não há ai_coach_analysis, score STUB=null; gargalo/prob/train STUB.
+          hasAnalysis,
           q: c?.quality_score ?? null,
-          gap: c?.severity || "sem análise",
-          prob: c?.summary || "Sem análise do coach ainda para este corretor.",
-          train: c?.suggestion || "Rodar o processador de coach para gerar sugestão.",
+          gap: c?.severity || "sem análise ainda",
+          prob: c?.summary || "O coach ainda não avaliou este corretor.",
+          train: c?.suggestion || "",
         };
       })
-      .sort((a, b) => (a.q ?? -1) - (b.q ?? -1));
+      // menor score (maior necessidade) primeiro; quem não tem análise vai pro fim
+      .sort((a, b) => (a.q ?? Infinity) - (b.q ?? Infinity));
   }, [brokers, coachMap]);
 
   function qColor(q: number | null): string {
@@ -698,6 +693,15 @@ export default function ManagerV3() {
               </div>
             </div>
           </div>
+          {cmdAnswer && (
+            <div style={{ margin: "0 16px 14px", background: "var(--surface)", border: "1px solid var(--border-2)", borderRadius: 10, padding: "10px 12px", marginTop: 8, fontSize: 13, display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "var(--mono)", fontSize: 9.5, letterSpacing: ".15em", textTransform: "uppercase", color: "var(--brain)", marginBottom: 4 }}>COMANDRA</div>
+                <div dangerouslySetInnerHTML={{ __html: cmdAnswer }} />
+              </div>
+              <span onClick={() => setCmdAnswer(null)} style={{ cursor: "pointer", color: "var(--muted)", fontSize: 16, lineHeight: 1, flex: "none", padding: "0 2px" }}>×</span>
+            </div>
+          )}
         </div>
 
         {/* ── KPI ── */}
@@ -714,9 +718,9 @@ export default function ManagerV3() {
           <div className={"kpi leak" + (filaFilter === "vazando" ? " active" : "")} onClick={() => filterFila("vazando")}>
             <div className="k-lbl">🩸 vazando</div><div className="k-val">{kpi.vazando}</div><div className="k-sub down">recebem mas param</div>
           </div>
-          {/* TODO(pool frio): número real do cold pool */}
-          <div className="kpi" onClick={() => toast(`${POOL_FRIO_STUB} frios no pool (STUB) — role até o card Pool de leads frios`)}>
-            <div className="k-lbl">🧊 pool frio</div><div className="k-val">{POOL_FRIO_STUB}</div><div className="k-sub">{POOL_PUXADOS_STUB} puxados hoje · STUB</div>
+          {/* pool frio: sem fonte ligada nesta tela — placeholder honesto, sem número inventado */}
+          <div className="kpi" onClick={() => toast("Pool de frios ainda não está ligado nesta tela.")}>
+            <div className="k-lbl">🧊 pool frio</div><div className="k-val" style={{ color: "var(--faint)" }}>—</div><div className="k-sub">em construção</div>
           </div>
         </div>
 
@@ -736,10 +740,10 @@ export default function ManagerV3() {
           </div>
           <div className="meta-hero big-hero">
             <div className="mh-top">
-              <div><div className="mh-lbl">🎯 Meta <span>{meta.scope}</span></div><div className="mh-big">{meta.done}<small>/{meta.tgt}</small></div></div>
+              <div><div className="mh-lbl">🎯 Meta <span>{meta.scope}</span></div><div className="mh-big">{meta.done}<small>{meta.tgt != null ? `/${meta.tgt}` : " vendas"}</small></div></div>
               <div className="mh-fc" dangerouslySetInnerHTML={{ __html: meta.fcHtml }} />
             </div>
-            <div className="mh-thermo"><div className="mh-fill" style={{ width: meta.fill + "%" }} /></div>
+            {meta.tgt != null && <div className="mh-thermo"><div className="mh-fill" style={{ width: meta.fill + "%" }} /></div>}
             <div className="mh-sub">{meta.sub}</div>
           </div>
         </div>
@@ -811,41 +815,27 @@ export default function ManagerV3() {
           </div>
         </div>
 
-        {/* ── EFETIVIDADE (STUB) ── */}
-        {/* TODO(ledger de movimento): substituir por dados reais — não existe ledger de quem moveu o funil hoje. */}
-        <div className="efband rv" style={{ animationDelay: ".16s" }}>
-          <div className="efbox">
-            <h3>O que andou hoje <span className="tot">STUB · sem ledger de movimento</span></h3>
-            <div className="movbar">
-              <span className="m-jarvis" style={{ flex: 14 }} title="Jarvis">14</span>
-              <span className="m-brk" style={{ flex: 9 }} title="Corretor">9</span>
-              <span className="m-ana" style={{ flex: 6 }} title="Ana">6</span>
+        {/* ── EFETIVIDADE (em construção — depende do ledger de movimento no backend) ── */}
+        <div className="efband rv" style={{ animationDelay: ".16s", display: "block" }}>
+          <div className="panel">
+            <div className="ph"><h3>Efetividade</h3><span className="n">em construção</span></div>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, color: "var(--muted)", lineHeight: 1.7 }}>
+              Em construção. A atribuição de quem moveu o funil (Comandra · corretor · Ana) e a garantia de contato dependem do ledger de movimento, que ainda não existe no backend. Chega na próxima fase.
+              <div style={{ marginTop: 8, color: "var(--faint)" }}>Leads recebidos hoje: <b style={{ color: "var(--text)" }}>{kpi.recebidosHoje}</b> (real)</div>
             </div>
-            <div className="movleg">
-              <div className="lg"><span className="sw" style={{ background: "var(--brain)" }} />Jarvis moveu <b style={{ color: "var(--text)" }}>14</b> — STUB</div>
-              <div className="lg"><span className="sw" style={{ background: "#6E9BFF" }} />Corretor moveu <b style={{ color: "var(--text)" }}>9</b> — STUB</div>
-              <div className="lg"><span className="sw" style={{ background: "var(--gold)" }} />Ana moveu <b style={{ color: "var(--text)" }}>6</b> — STUB</div>
-            </div>
-          </div>
-          <div className="efbox guarantee">
-            {/* TODO(ledger de movimento): "contato garantido" precisa do ledger real. */}
-            <h3>Contato garantido <span className="tot">STUB</span></h3>
-            <div className="gbig">{kpi.recebidosHoje}<small>/{kpi.recebidosHoje}</small></div>
-            <div className="gnote">recebidos hoje (real). <b>Cobertura por Jarvis/Ana</b> = STUB até haver ledger.</div>
           </div>
         </div>
 
         {/* ── NÚMEROS: pool frio | ouro apodrecendo ── */}
         <div className="sec-h rv" style={{ animationDelay: ".22s" }}><h2>Números que sustentam a operação</h2><div className="rule" /><span className="count">frios · ouro</span></div>
         <div className="trio duo">
-          {/* Pool frio — STUB */}
+          {/* Pool frio — em construção (não ligado ao cold pool nesta tela) */}
           <div className="panel rv" style={{ animationDelay: ".24s" }}>
-            <div className="ph"><h3><span className="dotc frio" /> Pool de leads frios</h3><span className="n">STUB</span></div>
-            <div className="pool-top"><div className="big">{POOL_FRIO_STUB}</div><div className="lb">no pool · <b>{POOL_PUXADOS_STUB}</b> puxados hoje<br /><span style={{ color: "var(--faint)" }}>TODO: ligar cold pool real</span></div></div>
-            <ul className="pool" style={{ listStyle: "none" }}>
-              <li><span className="rank">—</span><div><div className="pn" style={{ color: "var(--muted)" }}>Ranking de quem puxa frio <small>STUB — sem fonte no escopo do time</small></div></div><span className="pv zero">0</span></li>
-            </ul>
-            <div style={{ marginTop: 12 }}><button className="btn brain wide sm" onClick={() => toast("Distribuição de frios vive no /cold-pool (não ligada aqui)")}>Soltar frios pra quem trabalha</button></div>
+            <div className="ph"><h3><span className="dotc frio" /> Pool de leads frios</h3><span className="n">em construção</span></div>
+            <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, color: "var(--muted)", lineHeight: 1.7 }}>
+              Em construção. Quem puxou frio e quantos leads voltaram do pool ainda não está ligado nesta tela — vem na próxima fase.
+            </div>
+            <div style={{ marginTop: 12 }}><button className="btn brain wide sm" onClick={() => toast("Soltar frios ainda não está ligado nesta tela.")}>Soltar frios pra quem trabalha</button></div>
           </div>
 
           {/* Ouro apodrecendo — REAL (ai_qualified_at + parado) */}
@@ -873,8 +863,11 @@ export default function ManagerV3() {
         {/* ── COACH ── */}
         <div className="sec-h rv" style={{ animationDelay: ".2s" }}><h2>Quem treinar hoje · o Jarvis leu as conversas</h2><div className="rule" /><span className="count coach">por gargalo</span></div>
         <div className="coachstrip rv" style={{ animationDelay: ".24s" }}>
+          {coachRank.length === 0 && (
+            <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, color: "var(--muted)", padding: "6px 2px" }}>Sem corretores na sua equipe.</div>
+          )}
           {coachRank.map((c) => {
-            const gc = gapClass(c.gap);
+            const gc = c.hasAnalysis ? gapClass(c.gap) : "g-open";
             const col = qColor(c.q);
             return (
               <div key={c.brokerId} className={"ccard " + gc} onClick={() => navigate(`/manager/coach/${c.brokerId}`)}>
@@ -886,39 +879,38 @@ export default function ManagerV3() {
                 </div>
                 <span className={"gap " + gc}>{c.gap}</span>
                 <div className="prob">{c.prob}</div>
-                <div className="train"><span className="tl">treina:</span><span>{c.train}</span></div>
+                {c.hasAnalysis && c.train && <div className="train"><span className="tl">treina:</span><span>{c.train}</span></div>}
               </div>
             );
           })}
         </div>
 
-        {/* ── MOTOR (STUB) ── */}
-        {/* TODO: mapear pra tabelas reais (welcome_responded_at, ai_qualification, disparos, follow-up, broker_kit). */}
-        <div className="sec-h rv" style={{ animationDelay: ".2s" }}><h2>Motor rodando · está funcionando?</h2><div className="rule" /><span className="count">agentes · STUB</span></div>
+        {/* ── MOTOR (em construção — detalhe por corretor/lead depende de fontes ainda não ligadas aqui) ── */}
+        <div className="sec-h rv" style={{ animationDelay: ".2s" }}><h2>Motor rodando · está funcionando?</h2><div className="rule" /><span className="count">em construção</span></div>
         <div className="autostrip rv" style={{ animationDelay: ".24s" }}>
           <div className="acard">
-            <div className="ah"><div className="an">🤖 Ana <span style={{ fontFamily: "var(--mono)", fontSize: 9, color: "var(--faint)" }}>SDR</span></div><span className="status on"><span className="dotc done" />rodando</span></div>
-            <div className="abig">6<small> qualificados</small></div><div className="asub">STUB — ligar ai_qualified_at do dia</div>
+            <div className="ah"><div className="an">🤖 Ana <span style={{ fontFamily: "var(--mono)", fontSize: 9, color: "var(--faint)" }}>SDR</span></div></div>
+            <div className="asub">em construção — detalhe por lead na próxima fase</div>
           </div>
           <div className="acard">
-            <div className="ah"><div className="an">📣 Disparos</div><span className="status on"><span className="dotc done" />rodando</span></div>
-            <div className="abig">18<small> voltaram</small></div><div className="asub">STUB</div>
+            <div className="ah"><div className="an">📣 Disparos</div></div>
+            <div className="asub">em construção — detalhe por lead na próxima fase</div>
           </div>
           <div className="acard">
-            <div className="ah"><div className="an">👋 Boas-vindas</div><span className="status on"><span className="dotc done" />rodando</span></div>
-            <div className="abig">61%<small> resposta</small></div><div className="asub">STUB — welcome_responded_at</div><div className="abar"><i style={{ width: "61%" }} /></div>
+            <div className="ah"><div className="an">👋 Boas-vindas</div></div>
+            <div className="asub">em construção — detalhe por lead na próxima fase</div>
           </div>
           <div className="acard">
-            <div className="ah"><div className="an">🔁 Follow-up</div><span className="status on"><span className="dotc done" />rodando</span></div>
-            <div className="abig">47<small> disparados</small></div><div className="asub">STUB — followup_started_at</div><div className="abar"><i style={{ width: "26%" }} /></div>
+            <div className="ah"><div className="an">🔁 Follow-up</div></div>
+            <div className="asub">em construção — detalhe por lead na próxima fase</div>
           </div>
           <div className="acard">
-            <div className="ah"><div className="an">🎤 Setup corretor</div><span className="status warn">STUB</span></div>
-            <div className="abig">4<small>/6 kits</small></div><div className="asub">STUB — comandra_broker_kit</div>
+            <div className="ah"><div className="an">🎤 Setup corretor</div></div>
+            <div className="asub">em construção — detalhe por corretor na próxima fase</div>
           </div>
         </div>
 
-        <div className="protonote">Cockpit do Gestor v3 · dados reais (fila, funil, meta mês, ouro, coach) + seções STUB marcadas</div>
+        <div className="protonote">Cockpit do Gestor v3 · dados reais (fila, funil, meta mês, ouro, coach) + seções em construção marcadas</div>
       </div>
 
       {/* ── DRAWERS ── */}
@@ -946,6 +938,9 @@ export default function ManagerV3() {
       <div className={"drawer" + (drawer === "log" ? " open" : "")}>
         <div className="dh"><h3><span className="dotc done" /> Já fiz por você <span style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--muted)" }}>{logEntries.length} hoje</span></h3><div className="x" onClick={() => setDrawer(null)}>×</div></div>
         <div className="dbody"><ul className="log">
+          {logEntries.length === 0 && (
+            <li style={{ color: "var(--muted)", fontFamily: "var(--mono)", fontSize: 12, lineHeight: 1.6 }}>Ainda nada hoje. As cobranças e ações que você fizer por aqui aparecem nesta lista.</li>
+          )}
           {logEntries.map((e) => (
             <li key={e.id}><span className="when">{e.when}</span><span className="act" dangerouslySetInnerHTML={{ __html: e.html }} /></li>
           ))}
