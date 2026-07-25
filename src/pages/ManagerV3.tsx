@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
+import TopNav from "@/components/manager-v2/TopNav";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -504,9 +505,17 @@ export default function ManagerV3() {
   function runCmd(rawInput?: string) {
     const raw = (rawInput ?? cmd).trim();
     if (!raw) return;
-    const t = raw.toLowerCase();
     setCmd("");
     setCapOpen(false);
+    try { runCmdInner(raw); }
+    catch (err: any) {
+      console.error("[jarvis] erro no runCmd:", err);
+      jarvisSay(`Ops — erro ao processar <i>"${raw}"</i>: ${String(err?.message || err)}`);
+    }
+  }
+  function runCmdInner(raw: string) {
+    const t = raw.toLowerCase();
+    console.log("[jarvis] comando:", raw);
     const b = findBrokerByName(t);
     const nm = b?.first_name || null;
 
@@ -701,6 +710,8 @@ export default function ManagerV3() {
           </div>
         </div>
       </header>
+
+      <TopNav />
 
       <div className="wrap">
         {/* ── BRAIN CONSOLE ── */}
