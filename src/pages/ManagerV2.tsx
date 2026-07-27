@@ -11,6 +11,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, Sparkles, Search, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { LeadMonitorDrawer } from "@/components/manager/LeadMonitorDrawer";
+import JarvisConsole from "@/components/manager/JarvisConsole";
 
 import MetaThermometer from "@/components/manager-v2/MetaThermometer";
 import WhatYouNeedToDo from "@/components/manager-v2/WhatYouNeedToDo";
@@ -381,6 +382,17 @@ export default function ManagerV2() {
 
       {/* ─── Top Nav ─────────────────────────────────────────────────────── */}
       <TopNav />
+
+      {/* ─── Console do Jarvis (campo de digitação "pergunte ou mande") ──── */}
+      <section className="px-4 sm:px-6 pt-4">
+        <JarvisConsole
+          brokers={brokers}
+          leads={leads}
+          monthlySales={monthlySales}
+          monthlyGoal={monthlyGoal}
+          onChargeBroker={(id) => { const l = (leads as any[]).find((x) => x.broker_id === id); if (l) chargeBroker(l); }}
+        />
+      </section>
 
       {/* ─── Banner urgente: WhatsApp do manager desconectado ───────────── */}
       <WhatsAppQRBanner />
