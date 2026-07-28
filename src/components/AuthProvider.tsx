@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { COMPANIES, getSelectedCompanyId } from '@/integrations/supabase/companies';
@@ -23,6 +23,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Usuário já carregado. Evita remontar a app quando o supabase re-emite
+  // SIGNED_IN/TOKEN_REFRESHED ao voltar o foco da aba (mesmo usuário).
+  const loadedUidRef = useRef<string | null>(null);
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -158,6 +161,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setAuthDebug({ sessionId: session?.user?.id ?? null });
 
       if (session) {
+        loadedUidRef.current = session.user.id;
         // Ensure we explicitly mark loading true while resolving role
         setLoading(true);
         fetchUserRole(session.user.id, session.user.email ?? undefined);
@@ -173,17 +177,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(session?.user ?? null);
       setAuthDebug({ lastAuthEvent: event, sessionId: session?.user?.id ?? null });
 
-      if (event === 'SIGNED_IN') {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session) {
-          setLoading(true);
-          fetchUserRole(session.user.id, session.user.email ?? undefined);
-          touchLastSeen(); // registra atividade real no login
-        }
-      } else if (event === 'TOKEN_REFRESHED') {
-        // Refresh de token dispara ao VOLTAR O FOCO DA ABA. NÃO mostra loading nem remonta
-        // a app — era isso que fazia o banner "reconectar WhatsApp" piscar ao trocar de aba.
-        // Revalida o role em background e registra atividade, sem travar a UI.
-        if (session) {
+          // O supabase RE-EMITE SIGNED_IN/TOKEN_REFRESHED ao voltar o foco da aba.
+          // Só mostra loading (que desmonta/remonta a app inteira e fazia o banner
+          // "reconectar WhatsApp" piscar) quando o usuário REALMENTE muda — login novo.
+          const sameUser = loadedUidRef.current === session.user.id;
+          if (!sameUser) {
+            loadedUidRef.current = session.user.id;
+            setLoading(true);
+          }
+          // Revalida o role em background (sem remontar quando é o mesmo usuário).
           fetchUserRole(session.user.id, session.user.email ?? undefined);
           touchLastSeen();
         }
@@ -194,6 +198,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           fetchUserRole(session.user.id, session.user.email ?? undefined);
         }
       } else if (event === 'SIGNED_OUT') {
+        loadedUidRef.current = null;
         setRole(null);
         setUser(null);
         setMustChangePassword(false);
