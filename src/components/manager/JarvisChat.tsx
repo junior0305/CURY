@@ -13,17 +13,31 @@ function isStalled(l: any) {
   return hoursSince(l.last_broker_whatsapp_at) > r;
 }
 
+// Extrai nome + telefone de um comando "cria lead Fulano, 11 99999-8888"
+function parseLead(text: string): { name: string; phone: string } {
+  const digits = text.replace(/[^\d]/g, "");
+  const phone = /^\d{10,13}$/.test(digits) ? digits : digits.length >= 10 ? digits.slice(-11) : "";
+  const name = text
+    .replace(/[\d()+\-.]/g, " ")
+    .replace(/\b(cria|criar|crie|adiciona|adicionar|adicione|cadastr\w*|nov[oa]|um|uma|lead|contato|cliente|manual|por|favor|pra|para|telefone|tel|fone|numero|número|com|nome|do|da|de|o|a)\b/gi, " ")
+    .replace(/[,:;]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return { name, phone };
+}
+
 type Action = { kind: "cobrar" | "fila_out" | "fila_in"; brokerId: string; brokerName: string };
 type Msg = { id: number; role: "user" | "jarvis"; html: string; action?: Action; done?: boolean };
 
 export default function JarvisChat({
   open, onClose, managerName = "Gestor",
   brokers = [], leads = [], monthlySales = 0, monthlyGoal = null,
-  initialQuestion = null, onChargeBroker,
+  initialQuestion = null, onChargeBroker, onCreateLead,
 }: {
   open: boolean; onClose: () => void; managerName?: string;
   brokers?: any[]; leads?: any[]; monthlySales?: number; monthlyGoal?: number | null;
   initialQuestion?: string | null; onChargeBroker?: (brokerId: string) => void;
+  onCreateLead?: (name: string, phone: string) => void;
 }) {
   const navigate = useNavigate();
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -58,6 +72,13 @@ export default function JarvisChat({
     try {
       const b = findBroker(t);
       const nm = b?.first_name || "";
+      // ── CRIAR LEAD: abre o cadastro já preenchido (o modal é a confirmação) ──
+      if (/(cria|criar|crie|adiciona|adicionar|adicione|cadastr|nov[oa])/.test(t) && /(lead|contato|cliente)/.test(t)) {
+        const { name, phone } = parseLead(text);
+        push({ role: "jarvis", html: `Vou abrir o cadastro${name ? ` com <b>${name}</b>` : ""}${phone ? ` · ${phone}` : ""}. Escolhe o corretor e salva.` });
+        onCreateLead?.(name, phone);
+        return;
+      }
       // ── AÇÕES: sugere + confirma ──
       if (/(cobr|aperta|chama)/.test(t) && b) { push({ role: "jarvis", html: `Quer que eu cobre <b>${nm}</b> agora (mensagem pelo seu chip)?`, action: { kind: "cobrar", brokerId: b.id, brokerName: nm } }); return; }
       if (/(tira|remov|fora|pausa|desativa)/.test(t) && b) { push({ role: "jarvis", html: `Tirar <b>${nm}</b> da fila de recebimento? Ele para de receber lead novo até você reativar.`, action: { kind: "fila_out", brokerId: b.id, brokerName: nm } }); return; }

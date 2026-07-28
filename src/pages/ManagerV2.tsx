@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { LeadMonitorDrawer } from "@/components/manager/LeadMonitorDrawer";
 import JarvisConsole from "@/components/manager/JarvisConsole";
 import JarvisChat from "@/components/manager/JarvisChat";
+import { NewLeadModal } from "@/components/manager/NewLeadModal";
 
 import MetaThermometer from "@/components/manager-v2/MetaThermometer";
 import WhatYouNeedToDo from "@/components/manager-v2/WhatYouNeedToDo";
@@ -132,6 +133,7 @@ export default function ManagerV2() {
   const [coachQuestion, setCoachQuestion] = useState<string | null>(null);
   const [monitorLead, setMonitorLead] = useState<any>(null);
   const [opsOpen, setOpsOpen] = useState(false);
+  const [newLead, setNewLead] = useState<{ name: string; phone: string } | null>(null);
 
   // Throttle de cobrança: protege chip do manager de virar "robô" + evita spam ao mesmo corretor
   const chargeRef = useRef<{ globalAt: number; perBroker: Map<string, number> }>({
@@ -470,7 +472,20 @@ export default function ManagerV2() {
         monthlyGoal={monthlyGoal}
         initialQuestion={coachQuestion}
         onChargeBroker={(id) => { const l = (leads as any[]).find((x) => x.broker_id === id); if (l) chargeBroker(l); }}
+        onCreateLead={(name, phone) => { setCoachOpen(false); setCoachQuestion(null); setNewLead({ name, phone }); }}
       />
+
+      {/* ─── Novo lead (aberto pelo Jarvis, já preenchido) ─────────────── */}
+      {newLead && userId && (
+        <NewLeadModal
+          managerId={userId}
+          managerName={firstName}
+          brokers={brokers.map((b: any) => ({ id: b.id, firstName: b.first_name, lastName: b.last_name, leadAssignmentEnabled: b.lead_assignment_enabled })) as any}
+          initialName={newLead.name}
+          initialPhone={newLead.phone}
+          onClose={() => setNewLead(null)}
+        />
+      )}
 
       {/* ─── Pop-up dica do Coach (aparece 2.5s após carregar) ──────────── */}
       <CoachTipPopup

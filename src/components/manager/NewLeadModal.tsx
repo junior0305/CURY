@@ -12,6 +12,8 @@ interface Props {
   managerName: string;
   brokers: User[];
   onClose: () => void;
+  initialName?: string;
+  initialPhone?: string;
 }
 
 const STATUS_OPTIONS: { v: LeadStatus; label: string; color: string }[] = [
@@ -36,10 +38,10 @@ function normalizePhone(raw: string): { phone: string|null; reason?: string } {
   return { phone: null, reason: `formato inválido (${digits.length}d)` };
 }
 
-export function NewLeadModal({ managerId, managerName, brokers, onClose }: Props) {
+export function NewLeadModal({ managerId, managerName, brokers, onClose, initialName, initialPhone }: Props) {
   const qc = useQueryClient();
-  const [name, setName]   = useState("");
-  const [phone, setPhone] = useState("");
+  const [name, setName]   = useState(initialName || "");
+  const [phone, setPhone] = useState(initialPhone || "");
   const [email, setEmail] = useState("");
   const [origin, setOrigin] = useState("");
   const [product, setProduct] = useState("");
