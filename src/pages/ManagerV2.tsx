@@ -12,6 +12,7 @@ import { ArrowLeft, Sparkles, Search, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { LeadMonitorDrawer } from "@/components/manager/LeadMonitorDrawer";
 import JarvisConsole from "@/components/manager/JarvisConsole";
+import JarvisChat from "@/components/manager/JarvisChat";
 
 import MetaThermometer from "@/components/manager-v2/MetaThermometer";
 import WhatYouNeedToDo from "@/components/manager-v2/WhatYouNeedToDo";
@@ -385,13 +386,7 @@ export default function ManagerV2() {
 
       {/* ─── Console do Jarvis (campo de digitação "pergunte ou mande") ──── */}
       <section className="px-4 sm:px-6 pt-4">
-        <JarvisConsole
-          brokers={brokers}
-          leads={leads}
-          monthlySales={monthlySales}
-          monthlyGoal={monthlyGoal}
-          onChargeBroker={(id) => { const l = (leads as any[]).find((x) => x.broker_id === id); if (l) chargeBroker(l); }}
-        />
+        <JarvisConsole onLaunch={askCoach} />
       </section>
 
       {/* ─── Banner urgente: WhatsApp do manager desconectado ───────────── */}
@@ -464,12 +459,17 @@ export default function ManagerV2() {
         <CampaignsActivity managerId={userId} brokers={brokers} />
       </footer>
 
-      {/* ─── Coach Chat Drawer ─────────────────────────────────────────── */}
-      <CoachChat
+      {/* ─── Jarvis (drawer) — substitui o CoachChat fake ──────────────── */}
+      <JarvisChat
         open={coachOpen}
         onClose={() => { setCoachOpen(false); setCoachQuestion(null); }}
         managerName={firstName}
+        brokers={brokers}
+        leads={leads}
+        monthlySales={monthlySales}
+        monthlyGoal={monthlyGoal}
         initialQuestion={coachQuestion}
+        onChargeBroker={(id) => { const l = (leads as any[]).find((x) => x.broker_id === id); if (l) chargeBroker(l); }}
       />
 
       {/* ─── Pop-up dica do Coach (aparece 2.5s após carregar) ──────────── */}
