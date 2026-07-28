@@ -15,6 +15,9 @@ import {
 import type { Lead, LeadStatus, LostReason, LeadTemperature } from "@/types/lead";
 import { LOST_REASON_LABEL, TIPO_TRABALHO_LABEL } from "@/types/lead";
 import { WallOfFameTicker } from "@/components/dashboard/WallOfFameTicker";
+import BrokerJarvis from "@/components/broker/BrokerJarvis";
+import LeadForm from "@/components/broker/LeadForm";
+import { Sheet } from "@/components/ui/sheet";
 import { WhatsAppQuickButton } from "@/components/broker/WhatsAppQuickButton";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 import { useActiveLaunches, registerLaunchClaim } from "@/components/launches/useActiveLaunches";
@@ -213,6 +216,8 @@ export default function Atender() {
   const [dark, setDark] = useState(() => { try { return localStorage.getItem("atd_theme") === "dark"; } catch { return false; } });
   const [prospMode, setProspMode] = useState(false);
   const [managerId, setManagerId] = useState<string | null>(null);
+  const [newLeadOpen, setNewLeadOpen] = useState(false);
+  const [newLeadPrefill, setNewLeadPrefill] = useState<{ name: string; phone: string }>({ name: "", phone: "" });
   const [comSeen, setComSeen] = useState(false);
   const [reativarOpen, setReativarOpen] = useState(false);
   const [reativarTpl, setReativarTpl] = useState("Oi {nome}, tudo bem? 😊 Passando pra retomar nossa conversa — ainda tem interesse em avançar? Consigo te atualizar as condições dessa semana.");
@@ -501,6 +506,28 @@ export default function Atender() {
       `}</style>
 
       <div className="ticker"><WallOfFameTicker /></div>
+
+      {user?.id && (
+        <div style={{ padding: "0 12px" }}>
+          <BrokerJarvis
+            leads={myLeads}
+            onCreateLead={(name, phone) => { setNewLeadPrefill({ name, phone }); setNewLeadOpen(true); }}
+          />
+        </div>
+      )}
+
+      <Sheet open={newLeadOpen} onOpenChange={setNewLeadOpen}>
+        {user?.id && newLeadOpen && (
+          <LeadForm
+            key={newLeadPrefill.name + newLeadPrefill.phone}
+            onOpenChange={setNewLeadOpen}
+            brokerId={user.id}
+            managerId={managerId}
+            initialName={newLeadPrefill.name}
+            initialPhone={newLeadPrefill.phone}
+          />
+        )}
+      </Sheet>
 
       <div className="topbar">
         <div className="brand"><span className="dot">C</span>Comandra <small>Atender</small></div>

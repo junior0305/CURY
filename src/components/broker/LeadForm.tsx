@@ -12,12 +12,14 @@ interface LeadFormProps {
   onOpenChange: (open: boolean) => void;
   brokerId: string;
   managerId: string | null;
+  initialName?: string;
+  initialPhone?: string;
 }
 
-const LeadForm = ({ onOpenChange, brokerId, managerId }: LeadFormProps) => {
+const LeadForm = ({ onOpenChange, brokerId, managerId, initialName, initialPhone }: LeadFormProps) => {
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({ name: "", email: "", phone: "", tag: "" });
+  const [formData, setFormData] = useState({ name: initialName || "", email: "", phone: initialPhone || "", tag: "" });
 
   const handleChange = (field: string, value: string) =>
     setFormData(prev => ({ ...prev, [field]: value }));
