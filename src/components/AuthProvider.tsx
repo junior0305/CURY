@@ -173,11 +173,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(session?.user ?? null);
       setAuthDebug({ lastAuthEvent: event, sessionId: session?.user?.id ?? null });
 
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      if (event === 'SIGNED_IN') {
         if (session) {
           setLoading(true);
           fetchUserRole(session.user.id, session.user.email ?? undefined);
-          touchLastSeen(); // registra atividade real no login e no refresh de sessão
+          touchLastSeen(); // registra atividade real no login
+        }
+      } else if (event === 'TOKEN_REFRESHED') {
+        // Refresh de token dispara ao VOLTAR O FOCO DA ABA. NÃO mostra loading nem remonta
+        // a app — era isso que fazia o banner "reconectar WhatsApp" piscar ao trocar de aba.
+        // Revalida o role em background e registra atividade, sem travar a UI.
+        if (session) {
+          fetchUserRole(session.user.id, session.user.email ?? undefined);
+          touchLastSeen();
         }
       } else if (event === 'USER_UPDATED') {
         // Atualização de dados do usuário (ex: troca de senha) — não mostra loading screen.
