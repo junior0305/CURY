@@ -4,6 +4,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Smartphone, RefreshCw, CheckCircle2, WifiOff, Wifi } from "lucide-react";
+import { isChipLive } from "@/utils/chipLive";
 
 // QR do WhatsApp expira em ~60s. O servidor pode levar até ~30s pra gerar,
 // então atualizamos a cada 45s e NUNCA apagamos o QR atual durante o refresh
@@ -33,9 +34,9 @@ export function WhatsAppQRBanner() {
       .then(({ data }) => {
         if (!data?.bot_instance_id) { setIsConnected(null); return; }
         setBotInstanceId(data.bot_instance_id);
-        supabase.from("bot_instances").select("status, instance_name").eq("id", data.bot_instance_id).maybeSingle()
+        supabase.from("bot_instances").select("status, real_state, instance_name").eq("id", data.bot_instance_id).maybeSingle()
           .then(({ data: bot }) => {
-            if (bot) { setInstanceName(bot.instance_name); setIsConnected(bot.status === "open"); }
+            if (bot) { setInstanceName(bot.instance_name); setIsConnected(isChipLive(bot)); }
             else setIsConnected(false);
           });
       });
@@ -49,7 +50,7 @@ export function WhatsAppQRBanner() {
       .on("postgres_changes",
         { event: "UPDATE", schema: "public", table: "bot_instances", filter: `id=eq.${botInstanceId}` },
         (payload) => {
-          const connected = payload.new?.status === "open";
+          const connected = isChipLive(payload.new as { status?: string | null; real_state?: string | null });
           setIsConnected(connected);
           if (connected) { setJustConnected(true); }
         })
@@ -61,8 +62,8 @@ export function WhatsAppQRBanner() {
   useEffect(() => {
     if (!open || !botInstanceId || justConnected) return;
     pollRef.current = setInterval(async () => {
-      const { data } = await supabase.from("bot_instances").select("status").eq("id", botInstanceId).maybeSingle();
-      if (data?.status === "open") {
+      const { data } = await supabase.from("bot_instances").select("status, real_state").eq("id", botInstanceId).maybeSingle();
+      if (isChipLive(data)) {
         setIsConnected(true); setJustConnected(true);
         if (pollRef.current) clearInterval(pollRef.current);
       }

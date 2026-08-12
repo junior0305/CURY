@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Loader2, RefreshCw, Wifi, WifiOff, CheckCircle2, Smartphone, AlertTriangle, Clock } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
+import { isChipLive } from "@/utils/chipLive";
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@500;600;700&display=swap');
@@ -85,11 +86,11 @@ function useBotStatus(userId: string | undefined, role: string | null) {
 
         const { data: botInst } = await supabase
           .from("bot_instances")
-          .select("status")
+          .select("status, real_state")
           .eq("id", id)
           .maybeSingle();
 
-        if (botInst?.status === "open") {
+        if (isChipLive(botInst)) {
           sessionStorage.setItem(SESSION_KEY(userId), "1");
           setStatus("connected");
           return;

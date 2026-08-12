@@ -16,6 +16,7 @@ import type { Lead, LeadStatus, LostReason, LeadTemperature } from "@/types/lead
 import { LOST_REASON_LABEL, TIPO_TRABALHO_LABEL } from "@/types/lead";
 import { WallOfFameTicker } from "@/components/dashboard/WallOfFameTicker";
 import BrokerJarvis from "@/components/broker/BrokerJarvis";
+import { isChipLive } from "@/utils/chipLive";
 import LeadForm from "@/components/broker/LeadForm";
 import { Sheet } from "@/components/ui/sheet";
 import { WhatsAppQuickButton } from "@/components/broker/WhatsAppQuickButton";
@@ -247,14 +248,14 @@ export default function Atender() {
       setBotId(bid);
       setManagerId((data as any)?.manager_id ?? null);
       if (!bid) { setConnected(false); return; }
-      supabase.from("bot_instances").select("status").eq("id", bid).maybeSingle().then(({ data: b }) => setConnected(b?.status === "open"));
+      supabase.from("bot_instances").select("status, real_state").eq("id", bid).maybeSingle().then(({ data: b }) => setConnected(isChipLive(b)));
     });
   }, [user?.id]);
   useEffect(() => {
     if (!botId) return;
     const ch = supabase.channel(`atd_bot_${botId}`).on("postgres_changes",
       { event: "UPDATE", schema: "public", table: "bot_instances", filter: `id=eq.${botId}` },
-      (p: any) => setConnected(p.new?.status === "open")).subscribe();
+      (p: any) => setConnected(isChipLive(p.new))).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [botId]);
 
