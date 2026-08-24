@@ -211,7 +211,7 @@ export default function OperationHealth({
               strokeDasharray={2 * Math.PI * 28}
               initial={{ strokeDashoffset: 2 * Math.PI * 28 }}
               animate={{ strokeDashoffset: 2 * Math.PI * 28 * (1 - metrics.healthScore / 100) }}
-              transition={{ duration: 1, ease: "easeOut" }}
+              transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
               style={{ filter: `drop-shadow(0 0 8px ${status.color}60)` }}
             />
           </svg>

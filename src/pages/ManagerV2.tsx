@@ -6,9 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
-import { motion, AnimatePresence } from "framer-motion";
-import { Link } from "react-router-dom";
-import { ArrowLeft, Sparkles, Search, UserPlus } from "lucide-react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { Sparkles, Search, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { LeadMonitorDrawer } from "@/components/manager/LeadMonitorDrawer";
 import JarvisConsole from "@/components/manager/JarvisConsole";
@@ -27,9 +26,8 @@ import OperacoesSheet from "@/components/manager-v2/OperacoesSheet";
 import CoachChat, {
   CoachChatButton, getCoachTodayCount,
 } from "@/components/manager-v2/CoachChat";
-import CoachTipPopup from "@/components/manager-v2/CoachTipPopup";
+// import CoachTipPopup from "@/components/manager-v2/CoachTipPopup"; // ver nota no corpo
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { useTheme } from "@/contexts/ThemeContext";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 
 // ─── Hook: dados base do time ────────────────────────────────────────────────
@@ -124,8 +122,9 @@ export default function ManagerV2() {
   const { session } = useAuth();
   const userId = session?.user?.id;
   const { data, isLoading } = useTeamData(userId);
-  const { mode } = useTheme();
-  const isDark = mode === "dark";
+  // Respeita "reduzir movimento" do sistema. Framer Motion não é alcançado pela
+  // variante motion-safe: do Tailwind — precisa deste hook.
+  const reduceMotion = useReducedMotion();
 
   const queryClient = useQueryClient();
   const [coachOpen, setCoachOpen] = useState(false);
@@ -319,18 +318,14 @@ export default function ManagerV2() {
 
   return (
     <div
-      className="crm-themed min-h-screen text-slate-100 antialiased relative"
+      className="crm-themed min-h-screen antialiased relative"
       style={{
         fontFamily: "Inter, system-ui, sans-serif",
         color: "var(--crm-text)",
-        background: isDark
-          ? `radial-gradient(ellipse 90% 60% at 50% -10%, rgba(56,189,248,0.10), transparent 70%),
-             radial-gradient(ellipse 60% 45% at 0% 100%, rgba(14,116,144,0.08), transparent 65%),
-             radial-gradient(ellipse 60% 45% at 100% 80%, rgba(59,130,246,0.06), transparent 65%),
-             linear-gradient(180deg, #020617 0%, #0F172A 50%, #0B1220 100%)`
-          : `radial-gradient(ellipse 90% 60% at 50% -10%, rgba(56,189,248,0.10), transparent 70%),
-             radial-gradient(ellipse 60% 45% at 0% 100%, rgba(14,116,144,0.05), transparent 65%),
-             linear-gradient(180deg, #EEF2F7 0%, #F8FAFC 50%, #EEF2F7 100%)`,
+        // Fundo chapado. Os 3 gradientes radiais ciano que existiam aqui competiam
+        // com o conteúdo e são a assinatura visual de template genérico. Numa
+        // ferramenta operacional a cor tem que marcar informação, não decorar o fundo.
+        background: "var(--crm-bg)",
       }}
     >
       {/* ─── Header ──────────────────────────────────────────────────────── */}
@@ -342,43 +337,29 @@ export default function ManagerV2() {
         }}
       >
         <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Link
-              to="/manager-v1"
-              className="text-xs text-slate-500 hover:text-slate-300 transition flex items-center gap-1"
-              title="Versão antiga (backup)"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">v1 (backup)</span>
-            </Link>
-            <div className="h-4 w-px bg-slate-800" />
-            <div>
-              <h1 className="text-base sm:text-lg font-bold tracking-tight">
-                Olá, <span className="text-cyan-300">{firstName}</span>
-                <span className="text-slate-500 font-medium ml-2 text-sm">Painel v2</span>
-              </h1>
-              <p className="text-[11px] text-slate-500 mt-0.5 hidden sm:block">
-                {brokers.length} corretores · {leads.length} leads ativos
-              </p>
-            </div>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-semibold tracking-tight truncate">
+              Olá, {firstName}
+            </h1>
+            <p className="text-xs mt-0.5 hidden sm:block" style={{ color: "var(--crm-text-muted)" }}>
+              {brokers.length} corretores · {leads.length} leads ativos
+              {monthlyGoal ? <> · {monthlySales}/{monthlyGoal} vendas no mês</> : null}
+            </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setOpsOpen(true)}
               title="Buscar lead ou adicionar lead manual"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-colors duration-150"
             >
               <Search className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-bold uppercase tracking-wider hidden sm:inline">Buscar</span>
+              <span className="text-xs font-semibold hidden sm:inline">Buscar</span>
               <span className="w-px h-3 bg-cyan-500/30 hidden sm:block" />
               <UserPlus className="w-3.5 h-3.5" />
-              <span className="text-[11px] font-bold uppercase tracking-wider hidden sm:inline">Lead</span>
+              <span className="text-xs font-semibold hidden sm:inline">Lead</span>
             </button>
             <ThemeToggle compact />
             <CoachChatButton onClick={() => setCoachOpen(true)} count={coachCount} />
-            <span className="text-[11px] uppercase tracking-widest text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-full px-2.5 py-1 font-bold hidden sm:inline">
-              BETA
-            </span>
           </div>
         </div>
       </header>
@@ -386,47 +367,42 @@ export default function ManagerV2() {
       {/* ─── Top Nav ─────────────────────────────────────────────────────── */}
       <TopNav />
 
-      {/* ─── Console do Jarvis (campo de digitação "pergunte ou mande") ──── */}
+      {/* ─── Console do Jarvis — ÚNICA faixa de decisão da tela ─────────── */}
       <section className="px-4 sm:px-6 pt-4">
         <JarvisConsole onLaunch={askCoach} />
       </section>
 
       {/* ─── Banner urgente: WhatsApp do manager desconectado ───────────── */}
+      {/* Só renderiza quando o chip caiu — é a única interrupção legítima. */}
       <WhatsAppQRBanner />
 
-      {/* ─── Status Banner (mensagem curta, link Liga) ──────────────────── */}
-      <section className="px-4 sm:px-6 pt-4">
-        <StatusBanner managerId={userId} managerName={firstName} />
-      </section>
+      {/* ─── Grid principal ──────────────────────────────────────────────
+          Antes existiam 7 faixas full-width empilhadas e 5 superfícies
+          disputando o papel de "o que fazer agora". Agora há uma divisão só:
 
-      {/* ─── Termômetro de Meta — pulse + glow quando crítico ───────────── */}
-      <section className="px-4 sm:px-6 mt-3">
-        <MetaThermometer managerId={userId} teamId={manager?.team_id} />
-      </section>
+            ESQUERDA = TRABALHO   (o que exige ação do gestor hoje)
+            DIREITA  = CONTEXTO   (resultado e leitura, não pedem ação)
 
-      {/* ─── "Hoje você precisa…" ─ personalizado ──────────────────────── */}
-      <section className="px-4 sm:px-6 mt-4">
-        <WhatYouNeedToDo
-          leads={leads}
-          brokers={brokers}
-          unassigned={unassigned}
-          managerName={firstName}
-          onShowUnassigned={() => {
-            toast.info("💡 Os leads sem corretor aparecem no card 'Sem corretor' na 'Ação no time' abaixo. Click pra atribuir.");
-          }}
-          onOpenLead={openMonitor}
-          onChargeLead={(lead) => chargeBroker(lead)}
-          onRedistributeLead={redistributeLead}
-        />
-      </section>
-
-      {/* ─── Grid principal: Ação + Equipe/Saúde ────────────────────────── */}
-      <main className="px-4 sm:px-6 mt-4 pb-6 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4">
+          Nada foi removido — Meta, Liga, Ranking e Saúde mudaram de coluna. */}
+      <main className="px-4 sm:px-6 mt-4 pb-6 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
         <motion.div
-          initial={{ opacity: 0, y: 8 }}
+          initial={reduceMotion ? false : { opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.05 }}
+          transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+          className="space-y-4"
         >
+          <WhatYouNeedToDo
+            leads={leads}
+            brokers={brokers}
+            unassigned={unassigned}
+            managerName={firstName}
+            onShowUnassigned={() => {
+              toast.info("Os leads sem corretor estão no card 'Sem corretor', logo abaixo. Clique pra atribuir.");
+            }}
+            onOpenLead={openMonitor}
+            onChargeLead={(lead) => chargeBroker(lead)}
+            onRedistributeLead={redistributeLead}
+          />
           <SmartActionCards
             leads={leads}
             brokers={brokers}
@@ -440,11 +416,13 @@ export default function ManagerV2() {
         </motion.div>
 
         <motion.aside
-          initial={{ opacity: 0, x: 10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.35, delay: 0.1 }}
-          className="space-y-4"
+          initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1], delay: 0.03 }}
+          className="space-y-4 lg:sticky lg:top-[4.5rem]"
         >
+          <MetaThermometer managerId={userId} teamId={manager?.team_id} />
+          <StatusBanner managerId={userId} managerName={firstName} />
           <TeamRankingPanel brokers={brokers} leads={leads} />
           <OperationHealth
             managerId={userId}
@@ -487,15 +465,10 @@ export default function ManagerV2() {
         />
       )}
 
-      {/* ─── Pop-up dica do Coach (aparece 2.5s após carregar) ──────────── */}
-      <CoachTipPopup
-        managerName={firstName}
-        monthlySales={monthlySales}
-        monthlyGoal={monthlyGoal}
-        daysLeftMonth={Math.max(1, new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate())}
-        daysInMonth={new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()}
-        onAsk={askCoach}
-      />
+      {/* CoachTipPopup removido daqui: abria sozinho 2,5s depois de CADA carga da
+          página. Interrupção não solicitada, várias vezes por dia, numa tela de
+          trabalho. O mesmo conteúdo continua acessível pelo botão do Jarvis no
+          header. Pra reativar, basta reinserir <CoachTipPopup … /> neste ponto. */}
 
       {/* ─── Operações: buscar / novo lead / descartados ───────────────── */}
       {userId && (

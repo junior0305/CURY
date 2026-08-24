@@ -2,7 +2,7 @@
 // Click no card → expande lista inline com ações inline (👁️ 🔔 🔄).
 
 import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Clock, Eye, Bell, RotateCcw, Sparkles, Trash2, Zap, Undo2,
   ChevronDown, ChevronRight,
@@ -54,6 +54,7 @@ function formatHours(h: number) {
 }
 
 export default function SmartActionCards({ leads, brokers, onMonitor, onCharge, onRedist, onRestore }: Props) {
+  const reduceMotion = useReducedMotion();
   const brokerMap = useMemo(() => {
     const m = new Map<string, string>();
     brokers.forEach((b) => m.set(b.id, b.first_name || "—"));
@@ -163,8 +164,10 @@ export default function SmartActionCards({ leads, brokers, onMonitor, onCharge, 
                 <motion.div
                   className="absolute top-2 right-2 w-2 h-2 rounded-full"
                   style={{ background: cat.color, boxShadow: `0 0 8px ${cat.color}` }}
-                  animate={{ scale: [1, 1.4, 1], opacity: [1, 0.5, 1] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
+                  // Com reduzir-movimento, o ponto continua existindo (a
+                  // informação "urgente" não se perde) — só para de pulsar.
+                  animate={reduceMotion ? undefined : { scale: [1, 1.4, 1], opacity: [1, 0.5, 1] }}
+                  transition={reduceMotion ? undefined : { duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
                 />
               )}
               <div className="flex items-start gap-3">

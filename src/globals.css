@@ -39,31 +39,43 @@ html[data-theme="dark"] {
   --crm-popover-border: rgba(255,255,255,0.10);
 }
 
+/* Paleta clara — neutro levemente quente, superfície branca sobre fundo cinza.
+   Regra: fundo NUNCA é branco puro e texto NUNCA é preto puro; a hierarquia vem
+   da superfície subindo (cinza → branco), não de sombra pesada.
+   Todo par texto/fundo abaixo passa em AA (>= 4.5:1). */
 html[data-theme="light"] {
-  --crm-bg:           #EEF2F7;
-  --crm-bg-alt:       #E4EAF3;
-  --crm-surface:      rgba(255,255,255,0.95);
+  --crm-bg:           #F4F5F7;
+  --crm-bg-alt:       #EBEDF1;
+  --crm-surface:      rgba(255,255,255,0.92);
   --crm-surface-hex:  #FFFFFF;
-  --crm-glass:        rgba(255,255,255,0.75);
-  --crm-border:       rgba(15,23,42,0.08);
-  --crm-border-mid:   rgba(15,23,42,0.14);
-  --crm-text:         #0F172A;
-  --crm-text-muted:   #475569;
-  --crm-text-subtle:  #94A3B8;
+  --crm-glass:        rgba(255,255,255,0.72);
+  --crm-border:       rgba(16,24,40,0.09);
+  --crm-border-mid:   rgba(16,24,40,0.16);
+  --crm-text:         #101828;   /* 15.9:1 */
+  --crm-text-muted:   #52607A;   /*  6.5:1 */
+  --crm-text-subtle:  #667186;   /*  4.5:1 */
   --crm-scan:         0;
-  --crm-ticker-bg:    rgba(226,232,240,0.96);
-  --crm-ticker-fade:  #EEF2F7;
-  --crm-nav-bg:       linear-gradient(135deg, #E4EAF3 0%, #EEF2F7 100%);
+  --crm-ticker-bg:    rgba(255,255,255,0.96);
+  --crm-ticker-fade:  #F4F5F7;
+  --crm-nav-bg:       linear-gradient(180deg, #FFFFFF 0%, #F4F5F7 100%);
   --crm-nav-surface:  rgba(255,255,255,0.96);
-  --crm-nav-border:   rgba(15,23,42,0.10);
-  --crm-grid-line:    rgba(0,102,255,0.04);
-  --crm-header-glow:  rgba(0,102,255,0.07);
-  --crm-card:         rgba(255,255,255,0.85);
-  --crm-card-soft:    rgba(255,255,255,0.7);
-  --crm-card-strong:  rgba(255,255,255,0.95);
+  --crm-nav-border:   rgba(16,24,40,0.10);
+  --crm-grid-line:    rgba(16,24,40,0.03);
+  --crm-header-glow:  transparent;
+  --crm-card:         #FFFFFF;
+  --crm-card-soft:    rgba(255,255,255,0.72);
+  --crm-card-strong:  #FFFFFF;
   --crm-overlay:      rgba(255,255,255,0.96);
   --crm-popover:      #FFFFFF;
-  --crm-popover-border: rgba(15,23,42,0.10);
+  --crm-popover-border: rgba(16,24,40,0.10);
+  /* Acentos do tema claro — versões escuras o bastante pra ler sobre --crm-bg */
+  --crm-accent:       #0E7490;
+  --crm-accent-soft:  rgba(14,116,144,0.10);
+  --crm-accent-line:  rgba(14,116,144,0.28);
+  --crm-good:         #047857;
+  --crm-warn:         #B45309;
+  --crm-bad:          #BE123C;
+  --crm-info:         #6D28D9;
 }
 
 /* ── Light theme: remap Tailwind slate utilities inside .wolf-ui & manager ── */
@@ -83,12 +95,16 @@ html[data-theme="light"] .wolf-ui .text-slate-300,
 html[data-theme="light"] .crm-themed .text-slate-300 { color: #334155 !important; }
 html[data-theme="light"] .wolf-ui .text-slate-400,
 html[data-theme="light"] .crm-themed .text-slate-400 { color: #475569 !important; }
+/* A rampa slate do tema escuro vai do claro (100) ao escuro (700).
+   No tema claro ela precisa ser ESPELHADA, não repetida: 500/600/700 são usados
+   como "texto secundário/terciário" e no claro têm que ESCURECER, não clarear.
+   A versão anterior clareava (700 -> #CBD5E1 = 1.32:1) e sumia da tela. */
 html[data-theme="light"] .wolf-ui .text-slate-500,
-html[data-theme="light"] .crm-themed .text-slate-500 { color: #64748B !important; }
+html[data-theme="light"] .crm-themed .text-slate-500 { color: var(--crm-text-muted) !important; }
 html[data-theme="light"] .wolf-ui .text-slate-600,
-html[data-theme="light"] .crm-themed .text-slate-600 { color: #94A3B8 !important; }
+html[data-theme="light"] .crm-themed .text-slate-600 { color: #414D63 !important; }
 html[data-theme="light"] .wolf-ui .text-slate-700,
-html[data-theme="light"] .crm-themed .text-slate-700 { color: #CBD5E1 !important; }
+html[data-theme="light"] .crm-themed .text-slate-700 { color: #2A3446 !important; }
 
 html[data-theme="light"] .wolf-ui .bg-slate-700,
 html[data-theme="light"] .crm-themed .bg-slate-700 { background: #CBD5E1 !important; }
@@ -121,6 +137,49 @@ html[data-theme="light"] .crm-themed .text-slate-100 { color: #0F172A !important
 html[data-theme="light"] .crm-themed .text-slate-300 { color: #1E293B !important; }
 html[data-theme="light"] .crm-themed .hover\:text-slate-100:hover { color: #0F172A !important; }
 html[data-theme="light"] .crm-themed .hover\:text-slate-200:hover { color: #1E293B !important; }
+html[data-theme="light"] .crm-themed .hover\:text-slate-300:hover { color: #101828 !important; }
+html[data-theme="light"] .crm-themed .hover\:text-slate-400:hover { color: #2A3446 !important; }
+html[data-theme="light"] .crm-themed .hover\:text-white:hover      { color: #101828 !important; }
+
+/* ── Acentos no tema claro ────────────────────────────────────────────────────
+   As famílias cyan/emerald/amber/rose/red/violet eram usadas nos tons 200-400,
+   calibrados pra fundo escuro. Sobre #F4F5F7 elas ficam entre 1.2:1 e 2.5:1 —
+   ilegíveis. Aqui cada uma cai pro tom escuro equivalente, preservando o
+   SIGNIFICADO da cor (ciano=ação, verde=bom, âmbar=atenção, rosa=risco). */
+html[data-theme="light"] .crm-themed .text-cyan-200,
+html[data-theme="light"] .crm-themed .text-cyan-300,
+html[data-theme="light"] .crm-themed .text-cyan-400    { color: var(--crm-accent) !important; }
+html[data-theme="light"] .crm-themed .text-emerald-200,
+html[data-theme="light"] .crm-themed .text-emerald-300,
+html[data-theme="light"] .crm-themed .text-emerald-400,
+html[data-theme="light"] .crm-themed .text-emerald-500 { color: var(--crm-good) !important; }
+html[data-theme="light"] .crm-themed .text-amber-200,
+html[data-theme="light"] .crm-themed .text-amber-300,
+html[data-theme="light"] .crm-themed .text-amber-400   { color: var(--crm-warn) !important; }
+html[data-theme="light"] .crm-themed .text-rose-200,
+html[data-theme="light"] .crm-themed .text-rose-300,
+html[data-theme="light"] .crm-themed .text-rose-400,
+html[data-theme="light"] .crm-themed .text-red-300,
+html[data-theme="light"] .crm-themed .text-red-400     { color: var(--crm-bad) !important; }
+html[data-theme="light"] .crm-themed .text-violet-100,
+html[data-theme="light"] .crm-themed .text-violet-200,
+html[data-theme="light"] .crm-themed .text-violet-300,
+html[data-theme="light"] .crm-themed .text-violet-400  { color: var(--crm-info) !important; }
+
+/* Fundos e bordas de acento: no escuro são véus sobre preto; no claro precisam
+   ser véus sobre branco, senão viram blocos saturados. */
+html[data-theme="light"] .crm-themed [class*="bg-cyan-500/"]    { background: var(--crm-accent-soft) !important; }
+html[data-theme="light"] .crm-themed [class*="bg-emerald-500/"] { background: rgba(4,120,87,0.09) !important; }
+html[data-theme="light"] .crm-themed [class*="bg-amber-500/"]   { background: rgba(180,83,9,0.09) !important; }
+html[data-theme="light"] .crm-themed [class*="bg-rose-500/"],
+html[data-theme="light"] .crm-themed [class*="bg-red-500/"]     { background: rgba(190,18,60,0.08) !important; }
+html[data-theme="light"] .crm-themed [class*="bg-violet-500/"]  { background: rgba(109,40,217,0.08) !important; }
+html[data-theme="light"] .crm-themed [class*="border-cyan-500/"]    { border-color: var(--crm-accent-line) !important; }
+html[data-theme="light"] .crm-themed [class*="border-emerald-500/"] { border-color: rgba(4,120,87,0.26) !important; }
+html[data-theme="light"] .crm-themed [class*="border-amber-500/"]   { border-color: rgba(180,83,9,0.26) !important; }
+html[data-theme="light"] .crm-themed [class*="border-rose-500/"],
+html[data-theme="light"] .crm-themed [class*="border-red-500/"]     { border-color: rgba(190,18,60,0.24) !important; }
+html[data-theme="light"] .crm-themed [class*="border-violet-500/"]  { border-color: rgba(109,40,217,0.24) !important; }
 html[data-theme="light"] .crm-themed .hover\:bg-slate-800\/50:hover,
 html[data-theme="light"] .crm-themed .hover\:bg-slate-800\/60:hover,
 html[data-theme="light"] .crm-themed .hover\:bg-slate-700\/60:hover { background: rgba(15,23,42,0.06) !important; }

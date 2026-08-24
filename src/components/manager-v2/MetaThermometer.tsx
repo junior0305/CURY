@@ -2,7 +2,7 @@
 // Clicável: colapsado mostra resumo, expandido mostra detalhe + alerta.
 
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import {
   TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Calendar,
@@ -65,6 +65,9 @@ export default function MetaThermometer({ managerId, teamId }: Props) {
   const [monthlySales, setMonthlySales] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
+  // Hook no topo, ANTES dos returns antecipados de loading/sem-dados.
+  // Chamado depois deles, quebraria as regras de hooks na transição.
+  const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     (async () => {
@@ -146,27 +149,31 @@ export default function MetaThermometer({ managerId, teamId }: Props) {
 
   const StatusIcon = monthStatus.icon;
 
-  // "Respiração" suave de contraste quando atenção/crítico — sem piscar
-  const shouldBreathe = monthStatus.severity !== "ok";
+  // "Respiração" de contraste — só quando atenção/crítico, e nunca com
+  // reduzir-movimento ligado. Loop infinito numa tela de trabalho é ruído
+  // permanente; aqui ele sobrevive porque carrega informação (meta em risco).
+  const shouldBreathe = monthStatus.severity !== "ok" && !reduceMotion;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: -8 }}
+      initial={reduceMotion ? false : { opacity: 0, y: -4 }}
       animate={shouldBreathe ? {
         opacity: 1,
         y: 0,
-        filter: ["brightness(0.96) saturate(0.95)", "brightness(1.06) saturate(1.1)", "brightness(0.96) saturate(0.95)"],
+        filter: ["brightness(0.98) saturate(0.98)", "brightness(1.04) saturate(1.06)", "brightness(0.98) saturate(0.98)"],
       } : { opacity: 1, y: 0 }}
       transition={{
-        opacity: { duration: 0.4 },
-        y: { duration: 0.4 },
+        opacity: { duration: 0.18, ease: [0.23, 1, 0.32, 1] },
+        y: { duration: 0.18, ease: [0.23, 1, 0.32, 1] },
         filter: shouldBreathe ? { duration: 5, repeat: Infinity, ease: "easeInOut" } : undefined,
       }}
-      className="rounded-2xl overflow-hidden border backdrop-blur-sm relative"
+      className="rounded-2xl overflow-hidden border relative"
       style={{
-        background: `linear-gradient(135deg, ${monthStatus.color}15, var(--crm-card))`,
-        borderColor: `${monthStatus.color}60`,
-        boxShadow: `0 0 32px ${monthStatus.color}20`,
+        background: "var(--crm-card)",
+        // A cor de status vive na borda e no ícone, não num glow de 32px em volta
+        // do card. Sombra difusa colorida é o que faz a tela parecer "de template".
+        borderColor: `${monthStatus.color}55`,
+        boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 1px 3px rgba(16,24,40,0.06)",
       }}
     >
       {/* ─── Barra resumo (sempre visível) ──────────────────────────────── */}
@@ -355,10 +362,10 @@ export default function MetaThermometer({ managerId, teamId }: Props) {
                 </div>
                 <div className="h-2 bg-slate-800/80 rounded-full overflow-hidden">
                   <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, weekPct)}%` }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
-                    className="h-full rounded-full"
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: Math.min(100, weekPct) / 100 }}
+                    transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                    className="h-full w-full rounded-full origin-left"
                     style={{
                       background: `linear-gradient(90deg, ${monthStatus.color}80, ${monthStatus.color})`,
                       boxShadow: `0 0 12px ${monthStatus.color}80`,

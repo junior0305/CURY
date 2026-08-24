@@ -253,10 +253,13 @@ export default function TeamRankingPanel({ brokers, leads }: Props) {
                 <div className="flex items-center gap-2 mt-1">
                   <div className="flex-1 h-1 rounded-full bg-slate-800 overflow-hidden">
                     <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${s.score}%` }}
-                      transition={{ duration: 0.6, delay: i * 0.04 }}
-                      className="h-full rounded-full"
+                      // scaleX em vez de width: width dispara layout+paint a cada
+                      // frame; scaleX roda na GPU. transformOrigin left mantém a
+                      // barra crescendo da esquerda.
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: s.score / 100 }}
+                      transition={{ duration: 0.18, delay: i * 0.03, ease: [0.23, 1, 0.32, 1] }}
+                      className="h-full w-full rounded-full origin-left"
                       style={{ background: barColor, boxShadow: `0 0 6px ${barColor}80` }}
                     />
                   </div>
