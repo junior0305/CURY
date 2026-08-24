@@ -170,9 +170,7 @@ serve(async (req) => {
       .eq('redistribution_stage', 0)
       .not('broker_id', 'is', null)
       .lt('last_interaction_at', avisoThresholdAgo)
-      .gt('last_interaction_at', proprioThresholdAgo) // ainda não passou dos 7 dias
-      // Não avisa se está conversando ativamente (quente/morno) — só Frio ou status sem temperatura (NEW/DOCS)
-      .or('lead_temperature.is.null,lead_temperature.eq.frio');
+      .gt('last_interaction_at', proprioThresholdAgo); // ainda não passou dos 7 dias
 
     for (const lead of leadsParaAviso || []) {
       const broker = (lead as any).broker;
@@ -302,8 +300,6 @@ serve(async (req) => {
       .not('broker_id', 'is', null)
       .not('last_lead_response_at', 'is', null)
       .lt('last_lead_response_at', gerenteThresholdAgo)
-      // Não redistribui se conversa está ativa (quente/morno) — só Frio ou NEW/DOCS sem temperatura
-      .or('lead_temperature.is.null,lead_temperature.eq.frio')
       .limit(20);
 
     for (const lead of gerenteLeads || []) {
@@ -403,8 +399,6 @@ serve(async (req) => {
       .eq('redistribution_stage', 0)
       .not('broker_id', 'is', null)
       .lt('last_interaction_at', proprioThresholdAgo)
-      // Lead próprio também não redistribui se conversa está ativa
-      .or('lead_temperature.is.null,lead_temperature.eq.frio')
       .limit(10);
 
     for (const lead of proprioLeads || []) {

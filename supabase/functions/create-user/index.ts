@@ -45,7 +45,7 @@ serve(async (req) => {
         first_name: firstName, 
         last_name: lastName, 
         role: role,
-        phone: phone, // Passando telefone para o metadata
+        phone: phone,
         team_id: (teamId === 'none' || !teamId) ? null : teamId,
         manager_id: (managerId === 'none' || !managerId) ? null : managerId
       }
@@ -57,10 +57,8 @@ serve(async (req) => {
     let resolvedBotInstanceId = (botInstanceId === 'none' || !botInstanceId) ? null : botInstanceId;
 
     if ((role === 'BROKER' || role === 'MANAGER') && !resolvedBotInstanceId) {
-      // Nome da instância = primeiro nome com 1ª letra maiúscula (padrão obrigatório)
       const instanceName = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
 
-      // Verifica se já existe instância com esse nome (idempotente)
       const { data: existingBot } = await supabaseAdmin
         .from('bot_instances')
         .select('id')
@@ -68,11 +66,9 @@ serve(async (req) => {
         .maybeSingle();
 
       if (existingBot?.id) {
-        // Reaproveita instância existente com mesmo nome
         resolvedBotInstanceId = existingBot.id;
         console.log(`[create-user] bot_instance existente reutilizada: ${instanceName} (${existingBot.id})`);
       } else {
-        // Busca URL e key da Evolution API de uma instância de referência
         const { data: refBot } = await supabaseAdmin
           .from('bot_instances')
           .select('evolution_api_url, evolution_api_key')
@@ -86,7 +82,7 @@ serve(async (req) => {
             .insert({
               name: instanceName,
               instance_name: instanceName,
-              phone: phone || null, // usa o telefone real do corretor/gerente
+              phone: phone || null,
               evolution_api_url: refBot.evolution_api_url,
               evolution_api_key: refBot.evolution_api_key,
               status: 'active',
@@ -109,7 +105,6 @@ serve(async (req) => {
       }
     }
 
-    // Force creation of profile to ensure it doesn't fail
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({
@@ -123,7 +118,6 @@ serve(async (req) => {
         phone: phone,
         lead_assignment_enabled: leadAssignmentEnabled || false,
         bot_instance_id: resolvedBotInstanceId,
-        // Força troca de senha no primeiro login para BROKER e MANAGER
         must_change_password: (role === 'BROKER' || role === 'MANAGER'),
         updated_at: new Date().toISOString()
       })

@@ -6,7 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Classifica um lead com base no histórico de mensagens e dados disponíveis
 async function classifyLead(
   geminiKey: string,
   leadName: string,
@@ -34,10 +33,7 @@ async function classifyLead(
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: context }] }],
           systemInstruction: { parts: [{ text:
-            `Analise os dados de um lead de imóvel MCMV e classifique.
-Responda APENAS em JSON válido, sem markdown, sem explicação:
-{"intencao":"quente|morno|frio","tema":"preco|entrada|localizacao|documentacao|sem_info","momento":"explorando|comparando|decidido|sumiu"}
-Se não houver informação suficiente, use "morno", "sem_info", "explorando".`
+            `Analise os dados de um lead de imóvel MCMV e classifique.\nResponda APENAS em JSON válido, sem markdown, sem explicação:\n{"intencao":"quente|morno|frio","tema":"preco|entrada|localizacao|documentacao|sem_info","momento":"explorando|comparando|decidido|sumiu"}\nSe não houver informação suficiente, use "morno", "sem_info", "explorando".`
           }] },
           generationConfig: { maxOutputTokens: 80, temperature: 0.1 },
         }),
@@ -68,18 +64,16 @@ serve(async (req) => {
   }
 
   try {
-    // Parâmetros opcionais via body
     const body = await req.json().catch(() => ({}));
-    const batchSize  = Math.min(body.batch ?? 50, 100); // máx 100 por execução
-    const onlyStale  = body.only_stale !== false;       // default: só sem_info
+    const batchSize  = Math.min(body.batch ?? 50, 100);
+    const onlyStale  = body.only_stale !== false;
 
-    // 1. Leads ativos sem lead_state OU com intencao = 'sem_info'
     const { data: leadsWithoutState } = await supabase
       .from('leads')
       .select('id, name, tag, source')
       .in('status', ['NEW', 'IN_PROGRESS', 'DOCS_REQUESTED'])
       .not('broker_id', 'is', null)
-      .limit(batchSize * 2); // busca mais pra filtrar depois
+      .limit(batchSize * 2);
 
     if (!leadsWithoutState?.length) {
       return new Response(JSON.stringify({ processed: 0, reason: 'no_active_leads' }), {
@@ -87,7 +81,6 @@ serve(async (req) => {
       });
     }
 
-    // Filtra: só leads sem estado ou com sem_info
     const leadIds = leadsWithoutState.map(l => l.id);
     const { data: existingStates } = await supabase
       .from('lead_state')
@@ -99,8 +92,8 @@ serve(async (req) => {
     const toClassify = leadsWithoutState
       .filter(l => {
         const state = stateMap.get(l.id);
-        if (!state) return true;             // sem estado algum
-        if (onlyStale && state === 'sem_info') return true; // tem estado mas sem_info
+        if (!state) return true;
+        if (onlyStale && state === 'sem_info') return true;
         return false;
       })
       .slice(0, batchSize);
@@ -111,14 +104,11 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[classificacao-retroativa] ${toClassify.length} leads para classificar`);
-
     let classified = 0, failed = 0;
     const results: any[] = [];
 
     for (const lead of toClassify) {
       try {
-        // Busca últimas mensagens do lead
         const { data: conv } = await supabase
           .from('ia_conversations')
           .select('id')
@@ -138,12 +128,9 @@ serve(async (req) => {
           messages = (msgs || []).reverse();
         }
 
-        // Classifica
         const cls = await classifyLead(geminiKey, lead.name, lead.tag, lead.source, messages);
-
         if (!cls) { failed++; continue; }
 
-        // Persiste no lead_state
         await supabase.rpc('upsert_lead_state', {
           p_lead_id:        lead.id,
           p_intencao:       cls.intencao,
@@ -155,18 +142,12 @@ serve(async (req) => {
 
         classified++;
         results.push({ lead: lead.name, ...cls });
-        console.log(`[classificacao-retroativa] ✅ ${lead.name}: ${cls.intencao}/${cls.tema}`);
-
       } catch (e: any) {
-        console.error(`[classificacao-retroativa] ❌ ${lead.name}:`, e.message);
         failed++;
       }
 
-      // Pausa para não estourar rate limit da Gemini
       await new Promise(r => setTimeout(r, 300));
     }
-
-    console.log(`[classificacao-retroativa] done — classified=${classified} failed=${failed}`);
 
     return new Response(
       JSON.stringify({ classified, failed, total: toClassify.length, results }),
@@ -174,7 +155,6 @@ serve(async (req) => {
     );
 
   } catch (error: any) {
-    console.error('[classificacao-retroativa] fatal:', error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

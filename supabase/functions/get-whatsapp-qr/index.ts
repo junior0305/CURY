@@ -6,8 +6,48 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Servidor api.ape77.com.br pode levar ~30s. Timeout generoso.
+const EVO_TIMEOUT = 35000;
+
+async function evoConnect(base: string, instance: string, apiKey: string, phone?: string | null): Promise<any | null> {
+  try {
+    const qs = phone ? `?number=${encodeURIComponent(phone)}` : '';
+    const r = await fetch(`${base}/instance/connect/${instance}${qs}`, {
+      headers: { apikey: apiKey },
+      signal: AbortSignal.timeout(EVO_TIMEOUT),
+    });
+    if (!r.ok) { console.warn(`[qr] connect ${r.status}`); return null; }
+    return await r.json().catch(() => null);
+  } catch (e: any) {
+    console.warn(`[qr] connect erro: ${e.message}`);
+    return null;
+  }
+}
+
+async function evoRestart(base: string, instance: string, apiKey: string) {
+  try {
+    await fetch(`${base}/instance/restart/${instance}`, { method: 'PUT', headers: { apikey: apiKey }, signal: AbortSignal.timeout(10000) });
+    await new Promise(r => setTimeout(r, 3000));
+  } catch (_) { /* noop */ }
+}
+
+async function evoLogout(base: string, instance: string, apiKey: string) {
+  try {
+    await fetch(`${base}/instance/logout/${instance}`, { method: 'DELETE', headers: { apikey: apiKey }, signal: AbortSignal.timeout(10000) });
+    await new Promise(r => setTimeout(r, 1500));
+  } catch (_) { /* noop */ }
+}
+
+function extractQR(j: any): string | null { return j?.base64 || j?.qrcode?.base64 || null; }
+function extractPairing(j: any): string | null {
+  const c = j?.pairingCode || j?.pairing_code || null;
+  return c ? String(c) : null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  const json = (body: object, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   try {
     const supabase = createClient(
@@ -15,184 +55,93 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
     );
 
-    const { botInstanceId, forceQR } = await req.json();
-    if (!botInstanceId) {
-      return new Response(JSON.stringify({ error: 'botInstanceId required' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    const { botInstanceId, forceQR, method } = await req.json();
+    if (!botInstanceId) return json({ error: 'botInstanceId required' }, 400);
+    const wantPairing = method === 'pairing';
 
-    const { data: bot, error } = await supabase
+    const { data: bot, error: botErr } = await supabase
       .from('bot_instances')
-      .select('evolution_api_url, evolution_api_key, instance_name, name, status, last_qr_base64, last_qr_at')
+      .select('evolution_api_url, evolution_api_key, instance_name, name, status, real_state, phone, last_qr_base64, last_qr_at')
       .eq('id', botInstanceId)
       .maybeSingle();
-
-    if (error || !bot) {
-      return new Response(JSON.stringify({ error: 'Bot instance not found' }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ── Fast path: QR em cache recebido via webhook (< 25s) ─────────────────
-    // Evita chamada lenta à Evolution API quando o webhook já entregou o QR.
-    if (bot.status === 'connecting' && bot.last_qr_base64 && bot.last_qr_at) {
-      const qrAgeMs = Date.now() - new Date(bot.last_qr_at).getTime();
-      if (qrAgeMs < 25000) {
-        console.log(`[get-whatsapp-qr] QR servido do cache do banco (${Math.round(qrAgeMs / 1000)}s atrás)`);
-        return new Response(
-          JSON.stringify({ connected: false, base64: bot.last_qr_base64, fromCache: true }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
-
-    // ── Fast path: já conectado conforme DB ──────────────────────────────────
-    if (bot.status === 'open') {
-      console.log(`[get-whatsapp-qr] status=open no DB — retornando connected sem chamar Evolution`);
-      return new Response(
-        JSON.stringify({ connected: true, fromCache: true }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    if (botErr || !bot) return json({ error: 'Bot instance not found' }, 404);
 
     const base = (bot.evolution_api_url || '').replace(/\/+$/, '');
-    const instance = encodeURIComponent((bot.instance_name || bot.name || '').trim());
+    const instanceRaw = (bot.instance_name || bot.name || '').trim();
+    const instance = encodeURIComponent(instanceRaw);
     const apiKey = bot.evolution_api_key || '';
+    const phone = (bot.phone || '').replace(/[^0-9]/g, '') || null;
+    const deadSession = ['logged_out', 'banned'].includes(bot.real_state || '');
 
-    if (!base || !instance) {
-      return new Response(JSON.stringify({
-        error: 'Bot instance not configured',
-        error_detail: 'A instância não tem URL da Evolution API ou nome configurado. Verifique as configurações do chip.',
-      }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (!base || !instanceRaw) {
+      return json({ connected: false, error: 'not_configured', error_detail: 'Instância sem URL/nome da Evolution.' });
     }
 
-    // ── 1. Verificar estado atual da instância ───────────────────────────────
-    let rawState = 'unknown';
+    if (!wantPairing && !forceQR && bot.last_qr_base64 && bot.last_qr_at) {
+      if (Date.now() - new Date(bot.last_qr_at).getTime() < 25000) {
+        return json({ connected: false, base64: bot.last_qr_base64, method: 'qr', fromCache: true });
+      }
+    }
+    if (bot.status === 'open') return json({ connected: true, fromCache: true });
+
     let state = 'unknown';
-
     try {
-      const stateResp = await fetch(`${base}/instance/connectionState/${instance}`, {
-        headers: { apikey: apiKey },
-        signal: AbortSignal.timeout(8000),
-      });
-
-      if (stateResp.ok) {
-        const stateJson = await stateResp.json().catch(() => ({}));
-        rawState = stateJson?.instance?.state || stateJson?.state || 'unknown';
-        state = String(rawState).toLowerCase();
-      } else {
-        // Evolution API não respondeu ao estado — tratar como desconectado e tentar QR
-        console.warn(`[get-whatsapp-qr] connectionState retornou ${stateResp.status} para ${instance}`);
-        state = 'unknown';
-      }
-    } catch (fetchErr: any) {
-      console.error(`[get-whatsapp-qr] Timeout ou erro ao checar estado: ${fetchErr.message}`);
-      return new Response(JSON.stringify({
-        error: 'evolution_api_unreachable',
-        error_detail: 'Não foi possível contatar a Evolution API. Verifique se o servidor está online.',
-        connected: false,
-      }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      const sr = await fetch(`${base}/instance/connectionState/${instance}`, { headers: { apikey: apiKey }, signal: AbortSignal.timeout(EVO_TIMEOUT) });
+      if (sr.ok) { const j = await sr.json().catch(() => ({})); state = String(j?.instance?.state || j?.state || 'unknown').toLowerCase(); }
+    } catch (e: any) {
+      return json({ connected: false, error: 'evolution_unreachable', error_detail: 'Não consegui falar com o servidor do WhatsApp. Tente de novo em alguns segundos.' });
     }
-
-    console.log(`[get-whatsapp-qr] instance=${instance} state=${state}`);
-
-    // ── 2. Conectado ─────────────────────────────────────────────────────────
     if (state === 'open') {
-      return new Response(JSON.stringify({ connected: true, state: rawState }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      await supabase.from('bot_instances').update({ status: 'open', real_state: 'open' }).eq('id', botInstanceId);
+      return json({ connected: true, state });
     }
 
-    // ── 3. Transitório pós-scan — aguardar, a menos que forceQR esteja ativo ──
-    if (state === 'connecting' && !forceQR) {
-      return new Response(JSON.stringify({
-        connected: false,
-        connecting: true,
-        state: rawState,
-        base64: null,
-      }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ── 4. Buscar QR Code ────────────────────────────────────────────────────
-    let qrResp: Response;
-    try {
-      qrResp = await fetch(`${base}/instance/connect/${instance}`, {
-        headers: { apikey: apiKey },
-        signal: AbortSignal.timeout(10000),
-      });
-    } catch (fetchErr: any) {
-      console.error(`[get-whatsapp-qr] Timeout ao buscar QR: ${fetchErr.message}`);
-      return new Response(JSON.stringify({
-        connected: false,
-        error: 'qr_fetch_timeout',
-        error_detail: 'A Evolution API demorou demais para responder ao gerar o QR Code.',
-        base64: null,
-      }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (!qrResp.ok) {
-      const txt = await qrResp.text().catch(() => '');
-      console.error('[get-whatsapp-qr] Evolution error:', qrResp.status, txt);
-
-      let errorDetail = `A Evolution API retornou erro ${qrResp.status} ao tentar gerar o QR Code.`;
-      if (qrResp.status === 404) {
-        errorDetail = `A instância "${bot.instance_name || bot.name}" não foi encontrada na Evolution API. Ela pode ter sido deletada ou o nome está incorreto.`;
-      } else if (qrResp.status === 401 || qrResp.status === 403) {
-        errorDetail = 'Chave de API da Evolution inválida ou sem permissão.';
-      } else if (qrResp.status >= 500) {
-        errorDetail = 'A Evolution API está com problemas internos. Tente novamente em alguns instantes.';
+    // FIX conecta-e-cai: instância em 'connecting' = QR aguardando scan OU handshake pos-scan.
+    // Pega o QR atual via connect (nao destrutivo), mas NUNCA reinicia/desloga aqui —
+    // restart/logout num handshake em andamento matam a sessao e causam o loop "conecta e pede QR de novo".
+    if (state === 'connecting') {
+      const jc = await evoConnect(base, instance, apiKey);
+      const qrc = extractQR(jc);
+      if (qrc) {
+        await supabase.from('bot_instances').update({ last_qr_base64: qrc, last_qr_at: new Date().toISOString(), status: 'connecting' }).eq('id', botInstanceId);
+        return json({ connected: false, method: 'qr', base64: qrc, connecting: true });
       }
-
-      return new Response(JSON.stringify({
-        connected: false,
-        error: `evolution_error_${qrResp.status}`,
-        error_detail: errorDetail,
-        base64: null,
-      }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      // connect nao trouxe QR (provavel handshake pos-scan) -> devolve o QR em cache, sem destruir a sessao.
+      return json({ connected: false, method: 'qr', base64: bot.last_qr_base64 || null, connecting: true });
     }
 
-    const qrJson = await qrResp.json().catch(() => ({}));
+    // Sessão morta (401/403): logout ANTES de gerar QR garante QR limpo e pareável.
+    if (deadSession) { await evoLogout(base, instance, apiKey); }
 
-    // Evolution API v2: { base64: "data:image/png;base64,..." } ou { qrcode: { base64: ... } }
-    const base64 = qrJson?.base64 || qrJson?.qrcode?.base64 || null;
-    const code   = qrJson?.code   || qrJson?.qrcode?.code   || null;
-
-    if (!base64 && !code) {
-      console.warn('[get-whatsapp-qr] QR gerado mas sem base64/code:', JSON.stringify(qrJson).slice(0, 200));
-      return new Response(JSON.stringify({
-        connected: false,
-        error: 'qr_empty_response',
-        error_detail: 'A Evolution API respondeu mas não retornou o QR Code. A instância pode precisar ser reiniciada.',
-        base64: null,
-        raw: qrJson,
-      }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    // Código de pareamento (se a infra suportar; cai pro QR se vier null)
+    if (wantPairing && phone) {
+      let j = await evoConnect(base, instance, apiKey, phone);
+      let code = extractPairing(j);
+      if (!code) { await evoRestart(base, instance, apiKey); j = await evoConnect(base, instance, apiKey, phone); code = extractPairing(j); }
+      if (code) {
+        await supabase.from('bot_instances').update({ status: 'connecting' }).eq('id', botInstanceId);
+        return json({ connected: false, method: 'pairing', pairingCode: code, phone });
+      }
+      const qrFallback = extractQR(j);
+      if (qrFallback) {
+        await supabase.from('bot_instances').update({ last_qr_base64: qrFallback, last_qr_at: new Date().toISOString(), status: 'connecting' }).eq('id', botInstanceId);
+        return json({ connected: false, method: 'qr', base64: qrFallback, pairingUnavailable: true });
+      }
     }
 
-    return new Response(JSON.stringify({ connected: false, state: rawState, base64, code }), {
-      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    // QR (método padrão nesta infra)
+    let j = await evoConnect(base, instance, apiKey);
+    let qr = extractQR(j);
+    if (!qr) { await evoRestart(base, instance, apiKey); j = await evoConnect(base, instance, apiKey); qr = extractQR(j); }
+    if (!qr) { await evoLogout(base, instance, apiKey); j = await evoConnect(base, instance, apiKey); qr = extractQR(j); }
+    if (qr) {
+      await supabase.from('bot_instances').update({ last_qr_base64: qr, last_qr_at: new Date().toISOString(), status: 'connecting' }).eq('id', botInstanceId);
+      return json({ connected: false, method: 'qr', base64: qr });
+    }
 
+    return json({ connected: false, error: 'unavailable', error_detail: 'Não consegui gerar o QR após várias tentativas. O servidor do WhatsApp pode estar lento — tente de novo em 1 min.' });
   } catch (err: any) {
-    console.error('[get-whatsapp-qr] error:', err.message);
-    return new Response(JSON.stringify({
-      error: err.message,
-      error_detail: 'Erro interno ao processar a requisição.',
-      connected: false,
-    }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error('[qr] error:', err.message);
+    return json({ connected: false, error: err.message, error_detail: 'Erro interno.' }, 500);
   }
 });

@@ -49,20 +49,18 @@ async function sendMsg(supabase: any, botId: string, phone: string, message: str
 // ── Gemini Flash helper ────────────────────────────────────────────────────
 async function callGemini(apiKey: string, system: string, user: string): Promise<string | null> {
   try {
-    const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: user }] }],
-          systemInstruction: { parts: [{ text: system }] },
-          generationConfig: { maxOutputTokens: 200, temperature: 0.7 },
-        }),
-      }
-    );
+    const oaKey = Deno.env.get('OPENAI_API_KEY') || '';
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${oaKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        max_tokens: 400, temperature: 0.7,
+      }),
+    });
     const json = await resp.json();
-    return json.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+    return json.choices?.[0]?.message?.content?.trim() || null;
   } catch {
     return null;
   }

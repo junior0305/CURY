@@ -8,267 +8,145 @@ const corsHeaders = {
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') || '';
 
-// ── Fechamento do ciclo após qualificação (Melhoria B) ────────────────────────
 async function handleLeadQualification(supabase: any, conversation: any, newStatus: string) {
   try {
     let brokerId: string | null = null;
-
-    // 1. Tentar achar o broker pelo chip (bot_instance_id é do corretor?)
     const { data: brokerByChip } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('bot_instance_id', conversation.bot_instance_id)
-      .maybeSingle();
-
-    if (brokerByChip?.id) {
-      brokerId = brokerByChip.id;
-      console.log(`[ia_chat_engine] Broker encontrado pelo chip: ${brokerId}`);
-    } else {
-      // Chip é de prospecção (não é chip pessoal de corretor) → usar broker do lead
-      const { data: leadData } = await supabase
-        .from('leads')
-        .select('broker_id')
-        .eq('id', conversation.lead_id)
-        .maybeSingle();
+      .from('profiles').select('id').eq('bot_instance_id', conversation.bot_instance_id).maybeSingle();
+    if (brokerByChip?.id) brokerId = brokerByChip.id;
+    else {
+      const { data: leadData } = await supabase.from('leads').select('broker_id').eq('id', conversation.lead_id).maybeSingle();
       brokerId = leadData?.broker_id || null;
-      console.log(`[ia_chat_engine] Broker via lead: ${brokerId}`);
     }
-
-    if (!brokerId) {
-      console.warn('[ia_chat_engine] Nenhum broker encontrado para lead qualificado');
-      return;
-    }
-
-    // 2. Atualizar lead no CRM
+    if (!brokerId) return;
     await supabase.from('leads').update({
-      broker_id: brokerId,
-      status: 'IN_PROGRESS',
-      last_interaction_at: new Date().toISOString(),
+      broker_id: brokerId, status: 'IN_PROGRESS', last_interaction_at: new Date().toISOString(),
     }).eq('id', conversation.lead_id);
-
-    // 3. Notificar corretor
-    const title = newStatus === 'qualified'
-      ? '🎯 Lead qualificado! Atenda agora'
-      : '🔥 Lead quer falar com corretor!';
+    const title = newStatus === 'qualified' ? '🎯 Lead qualificado! Atenda agora' : '🔥 Lead quer falar com corretor!';
     const msg = `${conversation.lead_name} demonstrou interesse e está esperando você. Lead pronto para atendimento!`;
-
     await supabase.from('internal_notifications').insert({
-      to_id: brokerId,
-      type: 'LEAD_QUALIFIED',
-      title,
-      message: msg,
-      related_lead_id: conversation.lead_id,
+      to_id: brokerId, type: 'LEAD_QUALIFIED', title, message: msg, related_lead_id: conversation.lead_id,
     });
-
-    // 4. Registrar escalação na conversa
     await supabase.from('ia_conversations').update({
-      escalated_to: brokerId,
-      escalated_at: new Date().toISOString(),
+      escalated_to: brokerId, escalated_at: new Date().toISOString(),
       escalation_reason: newStatus === 'qualified' ? 'lead_qualified' : 'lead_requested_human',
     }).eq('id', conversation.id);
-
-    console.log(`[ia_chat_engine] ✅ Lead ${conversation.lead_id} → broker ${brokerId} notificado`);
-  } catch (err: any) {
-    console.error('[ia_chat_engine] Erro ao fechar ciclo de qualificação:', err.message);
-  }
+  } catch (err: any) { console.error('[ia_chat_engine] handleLeadQualification:', err.message); }
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
+    const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
     const { conversationId, incomingMessage } = await req.json();
     console.log(`[ia_chat_engine] conversa=${conversationId}`);
 
-    // ── GUARDA: só processa se houver ia_message incoming REAL recém-inserida ──
-    // Evita invocações fora do fluxo do webhook_receiver (anti-abuso).
-    // O webhook_receiver insere a ia_message ANTES de invocar esta função,
-    // então a mensagem deve estar lá nos últimos 60s.
     if (!conversationId || !incomingMessage) {
-      return new Response(JSON.stringify({ error: 'Missing conversationId or incomingMessage' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify({ error: 'Missing conversationId or incomingMessage' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+
+    // ── GUARDA anti-abuso: só processa se houver ia_message incoming REAL recente ──
+    // O webhook_receiver insere ia_message ANTES de invocar esta função.
+    // Se alguém chama esta função sem ter passado pelo webhook, não vai ter a mensagem registrada.
     const guardSince = new Date(Date.now() - 60_000).toISOString();
     const { data: recentIncoming } = await supabase
-      .from('ia_messages')
-      .select('id')
+      .from('ia_messages').select('id')
       .eq('conversation_id', conversationId)
       .eq('direction', 'incoming')
       .eq('message_text', incomingMessage)
       .gte('created_at', guardSince)
-      .limit(1)
-      .maybeSingle();
+      .limit(1).maybeSingle();
     if (!recentIncoming) {
-      console.warn(`[ia_chat_engine] 🚫 BLOQUEADO — conversa=${conversationId} sem ia_message incoming correspondente nos últimos 60s. Provável invocação fora do webhook.`);
-      return new Response(JSON.stringify({ skipped: 'no_recent_incoming_message', reason: 'guard' }), {
-        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      console.warn(`[ia_chat_engine] 🚫 BLOQUEADO conversa=${conversationId} — sem ia_message incoming nos últimos 60s. Invocação fora do fluxo.`);
+      return new Response(JSON.stringify({ skipped: 'no_recent_incoming_message', reason: 'guard_anti_abuse' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const { data: conversation } = await supabase
       .from('ia_conversations')
       .select('*, ia_campaigns(*, ai_profiles(*)), bot_instances(*)')
-      .eq('id', conversationId)
-      .single();
+      .eq('id', conversationId).single();
 
     if (!conversation) {
-      return new Response(JSON.stringify({ error: 'Conversation not found' }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify({ error: 'Conversation not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // ── Não responder se conversa já foi encerrada ────────────────────────
     if (['no_interest', 'qualified', 'escalated'].includes(conversation.status)) {
-      console.log(`[ia_chat_engine] Conversa ${conversationId} encerrada (${conversation.status}), ignorando`);
-      return new Response(JSON.stringify({ success: true, skipped: 'conversation_closed' }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify({ success: true, skipped: 'conversation_closed' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // ── Melhoria C: Limite de mensagens ──────────────────────────────────
     const maxMessages = conversation.ia_campaigns?.max_messages_per_lead ?? 10;
     const currentCount = conversation.messages_count ?? 0;
-
     if (currentCount >= maxMessages) {
-      await supabase.from('ia_conversations').update({
-        status: 'waiting_response',
-        last_ai_action: new Date().toISOString(),
-      }).eq('id', conversationId);
-      console.log(`[ia_chat_engine] Limite de ${maxMessages} msgs atingido para ${conversationId}`);
-      return new Response(JSON.stringify({ success: true, skipped: 'max_messages_reached' }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      await supabase.from('ia_conversations').update({ status: 'waiting_response', last_ai_action: new Date().toISOString() }).eq('id', conversationId);
+      return new Response(JSON.stringify({ success: true, skipped: 'max_messages_reached' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // ── Carregar histórico ────────────────────────────────────────────────
-    const { data: history } = await supabase
-      .from('ia_messages')
-      .select('*')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true })
-      .limit(15);
+    const { data: history } = await supabase.from('ia_messages').select('*')
+      .eq('conversation_id', conversationId).order('created_at', { ascending: true }).limit(15);
+    const historyText = (history || []).map((m: any) =>
+      `${m.sender_type === 'ia' ? 'Assistente' : 'Cliente'}: ${m.message_text}`).join('\n');
 
-    const historyText = (history || []).map(m =>
-      `${m.sender_type === 'ia' ? 'Assistente' : 'Cliente'}: ${m.message_text}`
-    ).join('\n');
-
-    // ── System prompt ─────────────────────────────────────────────────────
     let systemPrompt = 'Você é um assistente de vendas de imóveis. Seja prestativo, cordial e objetivo. Fale em português do Brasil, tom casual. Máximo 3 frases por resposta.';
-    if (conversation.ia_campaigns?.ai_profiles?.system_prompt) {
-      systemPrompt = conversation.ia_campaigns.ai_profiles.system_prompt;
-    } else if (conversation.ia_campaigns?.ai_instructions) {
-      systemPrompt = conversation.ia_campaigns.ai_instructions;
-    } else {
-      // Sem campanha → tentar usar o perfil padrão da Sentinela como fallback
-      const { data: sentConfig } = await supabase
-        .from('ai_sentinela_config')
-        .select('default_profile_id')
-        .maybeSingle();
+    if (conversation.ia_campaigns?.ai_profiles?.system_prompt) systemPrompt = conversation.ia_campaigns.ai_profiles.system_prompt;
+    else if (conversation.ia_campaigns?.ai_instructions) systemPrompt = conversation.ia_campaigns.ai_instructions;
+    else {
+      const { data: sentConfig } = await supabase.from('ai_sentinela_config').select('default_profile_id').maybeSingle();
       if (sentConfig?.default_profile_id) {
-        const { data: defaultProfile } = await supabase
-          .from('ai_profiles')
-          .select('system_prompt')
-          .eq('id', sentConfig.default_profile_id)
-          .maybeSingle();
-        if (defaultProfile?.system_prompt) {
-          systemPrompt = defaultProfile.system_prompt;
-          console.log(`[ia_chat_engine] Usando perfil padrão da Sentinela como fallback`);
-        }
+        const { data: defaultProfile } = await supabase.from('ai_profiles').select('system_prompt').eq('id', sentConfig.default_profile_id).maybeSingle();
+        if (defaultProfile?.system_prompt) systemPrompt = defaultProfile.system_prompt;
       }
     }
     const fullSystemPrompt = `${systemPrompt}\n\nVocê está conversando com ${conversation.lead_name || 'Cliente'}.\n\nREGRAS ABSOLUTAS:\n- Responda APENAS com o texto da mensagem para o cliente. Nada mais.\n- NUNCA inclua notas, anotações, comentários internos, colchetes, asteriscos explicativos ou meta-texto de qualquer tipo.\n- NUNCA escreva coisas como "[Nota: ...]", "(Observação: ...)", "---", ou qualquer marcação que não seja parte natural da conversa.\n- Sua resposta vai direto para o WhatsApp do cliente sem revisão humana.`;
     const userPrompt = `Histórico:\n${historyText}\n\nCliente: ${incomingMessage}\n\nResponda naturalmente:`;
 
-    // ── Chamar Anthropic ──────────────────────────────────────────────────
     const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
-        system: fullSystemPrompt,
+        model: 'claude-haiku-4-5-20251001', max_tokens: 300, system: fullSystemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
       }),
     });
-
     if (!anthropicRes.ok) {
       const errText = await anthropicRes.text();
       throw new Error(`Anthropic API error: ${anthropicRes.status} ${errText}`);
     }
-
     const aiResult = await anthropicRes.json();
     const aiResponse = aiResult.content?.[0]?.text || 'Desculpe, pode repetir?';
-    console.log(`[ia_chat_engine] Resposta gerada: ${aiResponse.substring(0, 80)}`);
 
-    // ── Classificação de status ───────────────────────────────────────────
     const lowerMsg = incomingMessage.toLowerCase();
     const lowerResp = aiResponse.toLowerCase();
-
     let newStatus = conversation.status;
     let sentiment = conversation.sentiment || 'neutral';
+    if (lowerMsg.match(/sim|quero|interesse|agendar|visita|quando|como|preço|valor|documento|subsidio/)) { newStatus = 'qualified'; sentiment = 'positive'; }
+    else if (lowerResp.match(/transfer|corretor|humano|atendente/)) { newStatus = 'escalated'; sentiment = 'positive'; }
+    else if (lowerMsg.match(/não|nunca|pare|desinteress|remov|sai|chato/)) { newStatus = 'no_interest'; sentiment = 'negative'; }
+    else if (lowerMsg.match(/depois|pensar|ver|talvez|mais tarde/)) { newStatus = 'waiting_response'; sentiment = 'neutral'; }
 
-    if (lowerMsg.match(/sim|quero|interesse|agendar|visita|quando|como|preço|valor|documento|subsidio/)) {
-      newStatus = 'qualified';
-      sentiment = 'positive';
-    } else if (lowerResp.match(/transfer|corretor|humano|atendente/)) {
-      newStatus = 'escalated';
-      sentiment = 'positive';
-    } else if (lowerMsg.match(/não|nunca|pare|desinteress|remov|sai|chato/)) {
-      newStatus = 'no_interest';
-      sentiment = 'negative';
-    } else if (lowerMsg.match(/depois|pensar|ver|talvez|mais tarde/)) {
-      newStatus = 'waiting_response';
-      sentiment = 'neutral';
-    }
-
-    console.log(`[ia_chat_engine] Status: ${newStatus} | Sentimento: ${sentiment}`);
-
-    // ── Enviar mensagem WhatsApp ──────────────────────────────────────────
     await supabase.functions.invoke('send_whatsapp_message', {
       body: { botId: conversation.bot_instance_id, phone: conversation.lead_phone, message: aiResponse, conversationId },
     });
-
-    // ── Atualizar conversa ────────────────────────────────────────────────
     await supabase.from('ia_conversations').update({
-      last_ai_action: new Date().toISOString(),
-      messages_count: (history?.length ?? 0) + 2,
-      status: newStatus,
-      sentiment,
+      last_ai_action: new Date().toISOString(), messages_count: (history?.length ?? 0) + 2, status: newStatus, sentiment,
     }).eq('id', conversationId);
 
-    // ── Métrica de template: incrementar qualified_count UMA vez por conversa
-    // (só se a conversa transitou agora pra qualified/escalated e veio de um template)
-    const transitionedToQualified =
-      ['qualified', 'escalated'].includes(newStatus) &&
-      !['qualified', 'escalated'].includes(conversation.status);
+    const transitionedToQualified = ['qualified', 'escalated'].includes(newStatus) && !['qualified', 'escalated'].includes(conversation.status);
     if (transitionedToQualified && conversation.template_id) {
-      await supabase.rpc('increment_template_qualified', { p_template_id: conversation.template_id })
-        .then(() => {}, (err: any) => console.warn('[ia_chat_engine] increment_template_qualified falhou:', err?.message));
+      await supabase.rpc('increment_template_qualified', { p_template_id: conversation.template_id }).then(() => {}, () => {});
     }
-
-    // ── Melhoria B: fechar ciclo se qualificado/escalado ─────────────────
     if (['qualified', 'escalated'].includes(newStatus) && conversation.lead_id) {
       await handleLeadQualification(supabase, conversation, newStatus);
     }
-
-    return new Response(JSON.stringify({ success: true, aiResponse, status: newStatus }), {
-      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-
+    return new Response(JSON.stringify({ success: true, aiResponse, status: newStatus }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error: any) {
     console.error('[ia_chat_engine] Erro fatal:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return new Response(JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });

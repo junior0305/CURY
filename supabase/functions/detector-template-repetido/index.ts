@@ -1,11 +1,3 @@
-// detector-template-repetido — roda de hora em hora
-// Detecta texto idêntico saindo de ≥3 chips diferentes nas últimas 24h.
-// Foi o padrão que banou Ully/Jesus: vários chips replicando "Sou Ully da Cury".
-// Alerta admin ANTES do WhatsApp banar.
-//
-// O agrupamento pesado é feito por RPC SQL (`detect_template_repetition_24h`),
-// não pela edge function — assim não esbarramos no limite de 1000 rows do PostgREST.
-
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -29,7 +21,6 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
     );
 
-    // 1) RPC SQL faz o agrupamento direto no banco (sem limite de rows)
     const { data: groups, error: rpcErr } = await supabase
       .rpc('detect_template_repetition_24h');
 
@@ -50,7 +41,6 @@ serve(async (req) => {
       severity: classifySeverity(g.chip_count),
     }));
 
-    // 2) UPSERT por (text_hash, alert_day=today)
     let inserted = 0, updated = 0;
     const newAlerts: any[] = [];
     const today = new Date().toISOString().split('T')[0];
@@ -84,7 +74,6 @@ serve(async (req) => {
       }
     }
 
-    // 3) Notifica admins (apenas novos alertas ou severity escalada)
     if (newAlerts.length > 0) {
       const { data: admins } = await supabase
         .from('profiles').select('id').in('role', ['ADMIN', 'SUPERINTENDENT']);

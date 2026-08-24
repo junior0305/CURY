@@ -17,7 +17,6 @@ serve(async (req) => {
 
     const appUrl = Deno.env.get('APP_URL') || 'https://comandra.com.br/dashboard';
 
-    // ── 1. Buscar corretores com chip desconectado ────────────────────────────
     const { data: disconnectedBrokers } = await supabase
       .from('profiles')
       .select(`
@@ -43,7 +42,6 @@ serve(async (req) => {
       });
     }
 
-    // Filtrar apenas os que estão desconectados
     const offline = disconnectedBrokers.filter((b: any) => {
       const chipStatus = (b.bot_instances?.status || '').toLowerCase();
       return chipStatus !== 'open';
@@ -57,7 +55,6 @@ serve(async (req) => {
       });
     }
 
-    // ── 2. Verificar quem já foi notificado nas últimas 8h ───────────────────
     const cutoff = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
     const { data: recentNotifs } = await supabase
       .from('internal_notifications')
@@ -67,7 +64,6 @@ serve(async (req) => {
 
     const alreadyNotified = new Set((recentNotifs || []).map((n: any) => n.to_id));
 
-    // ── 3. Buscar chips dos gerentes ─────────────────────────────────────────
     const managerIds = [...new Set(offline.map((b: any) => b.manager_id).filter(Boolean))];
     const { data: managers } = await supabase
       .from('profiles')
@@ -82,7 +78,6 @@ serve(async (req) => {
       `)
       .in('id', managerIds);
 
-    // Mapa managerId → dados do gerente (só se chip estiver conectado)
     const managerMap = new Map<string, any>();
     for (const m of managers || []) {
       const chipStatus = (m.bot_instances?.status || '').toLowerCase();
@@ -91,7 +86,6 @@ serve(async (req) => {
       }
     }
 
-    // ── 4. Enviar notificações ────────────────────────────────────────────────
     let sent = 0;
     let skipped = 0;
     const results: any[] = [];
@@ -100,21 +94,18 @@ serve(async (req) => {
       const brokerName = broker.first_name || broker.full_name?.split(' ')[0] || broker.bot_instances?.name || 'Corretor';
       const chipName = broker.bot_instances?.instance_name || broker.bot_instances?.name || '?';
 
-      // Já notificado hoje?
       if (alreadyNotified.has(broker.id)) {
         skipped++;
         results.push({ broker: brokerName, status: 'already_notified' });
         continue;
       }
 
-      // Sem telefone pessoal?
       if (!broker.phone) {
         skipped++;
         results.push({ broker: brokerName, status: 'no_phone' });
         continue;
       }
 
-      // Gerente com chip conectado?
       const manager = broker.manager_id ? managerMap.get(broker.manager_id) : null;
       if (!manager) {
         skipped++;
@@ -122,27 +113,26 @@ serve(async (req) => {
         continue;
       }
 
-      const managerName = manager.first_name || manager.full_name?.split(' ')[0] || 'Gerência';
+      const managerName = manager.first_name || manager.full_name?.split(' ')[0] || 'Ger\u00eancia';
 
       const message = [
-        `🚨 *ATENÇÃO, ${brokerName}!*`,
+        `\ud83d\udea8 *ATEN\u00c7\u00c3O, ${brokerName}!*`,
         ``,
-        `Seu chip WhatsApp *"${chipName}"* está DESCONECTADO do CRM.`,
+        `Seu chip WhatsApp *"${chipName}"* est\u00e1 DESCONECTADO do CRM.`,
         ``,
-        `❌ Seus leads *não recebem* follow-up automático`,
-        `❌ Mensagens automáticas estão *paralisadas*`,
-        `❌ Você pode estar *perdendo vendas agora*`,
+        `\u274c Seus leads *n\u00e3o recebem* follow-up autom\u00e1tico`,
+        `\u274c Mensagens autom\u00e1ticas est\u00e3o *paralisadas*`,
+        `\u274c Voc\u00ea pode estar *perdendo vendas agora*`,
         ``,
-        `👉 *Acesse o sistema AGORA e reconecte:*`,
+        `\ud83d\udc49 *Acesse o sistema AGORA e reconecte:*`,
         `${appUrl}`,
         ``,
-        `Entre no app → toque em "Conectar" → escaneie o QR Code. Leva menos de 30 segundos.`,
+        `Entre no app \u2192 toque em "Conectar" \u2192 escaneie o QR Code. Leva menos de 30 segundos.`,
         ``,
-        `_${managerName} - Gestão Comandra_`,
+        `_${managerName} - Gest\u00e3o Comandra_`,
       ].join('\n');
 
       try {
-        // Enviar via send_whatsapp_message (reutiliza a lógica existente)
         const { error: sendError } = await supabase.functions.invoke('send_whatsapp_message', {
           body: {
             botId: manager.bot_instance_id,
@@ -153,26 +143,24 @@ serve(async (req) => {
 
         if (sendError) throw new Error(sendError.message);
 
-        // Registrar notificação para evitar duplicata
         await supabase.from('internal_notifications').insert({
           to_id: broker.id,
           type: 'WHATSAPP_RECONNECT_ALERT',
-          title: '📲 Alerta de reconexão enviado',
-          message: `Mensagem de reconexão enviada ao corretor ${brokerName} (chip ${chipName}) via gerente ${managerName}`,
+          title: '\ud83d\udcf2 Alerta de reconex\u00e3o enviado',
+          message: `Mensagem de reconex\u00e3o enviada ao corretor ${brokerName} (chip ${chipName}) via gerente ${managerName}`,
           related_lead_id: null,
         });
 
         sent++;
         results.push({ broker: brokerName, chip: chipName, status: 'sent', via: managerName });
-        console.log(`[notify-disconnected] ✅ ${brokerName} notificado via ${managerName}`);
+        console.log(`[notify-disconnected] \u2705 ${brokerName} notificado via ${managerName}`);
 
-        // Pausa para não estourar rate limit da Evolution API
         await new Promise(r => setTimeout(r, 1500));
 
       } catch (err: any) {
         skipped++;
         results.push({ broker: brokerName, status: 'send_failed', error: err.message });
-        console.error(`[notify-disconnected] ❌ Falha ao notificar ${brokerName}:`, err.message);
+        console.error(`[notify-disconnected] \u274c Falha ao notificar ${brokerName}:`, err.message);
       }
     }
 

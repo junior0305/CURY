@@ -10,8 +10,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ── Detecta erro de saldo/cota ────────────────────────────────────────────────
-
 function isBalanceError(msg: string): boolean {
   const lower = msg.toLowerCase();
   return (
@@ -26,8 +24,6 @@ function isBalanceError(msg: string): boolean {
     lower.includes('no credits')
   );
 }
-
-// ── Chamadas de LLM ───────────────────────────────────────────────────────────
 
 async function callGeminiAPI(prompt: string, model: string, maxTokens: number): Promise<string> {
   const response = await fetch(
@@ -92,8 +88,6 @@ async function callOpenAIAPI(prompt: string, model: string, maxTokens: number): 
   return json.choices?.[0]?.message?.content || '';
 }
 
-// ── Tenta LLMs em ordem de prioridade (fallback automático) ──────────────────
-
 async function callLLMWithFallback(
   supabase: any,
   configs: any[],
@@ -128,14 +122,12 @@ async function callLLMWithFallback(
             message: `O provedor ${cfg.provider} (${cfg.model_name}) falhou por saldo/cota.`,
           }));
           if (notifications.length > 0) await supabase.from('internal_notifications').insert(notifications);
-        } catch (_) { /* não falha por causa da notificação */ }
+        } catch (_) { }
       }
     }
   }
   throw new Error(`Todos os LLMs falharam. Último erro: ${lastError}`);
 }
-
-// ── Formata transcrição de conversa para o prompt ─────────────────────────────
 
 function formatConversation(
   leadName: string,
@@ -146,7 +138,7 @@ function formatConversation(
 
   const lines = messages
     .filter(m => m.message_text && m.message_text.trim().length > 0)
-    .slice(0, 20) // limita a 20 mensagens por conversa para não explodir o prompt
+    .slice(0, 20)
     .map(m => {
       const quem = m.sender_type === 'lead' ? `  LEAD` : `  BOT `;
       const texto = m.message_text.replace(/\n/g, ' ').slice(0, 200);
@@ -155,8 +147,6 @@ function formatConversation(
 
   return `  Lead: ${leadName} (status: ${leadStatus})\n${lines.join('\n')}`;
 }
-
-// ── Handler principal ─────────────────────────────────────────────────────────
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -167,7 +157,6 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Carrega LLMs ativos
     const { data: llmConfigs } = await supabaseClient
       .from('ai_coach_llm_config')
       .select('*')
@@ -180,7 +169,6 @@ serve(async (req) => {
       );
     }
 
-    // Busca fila pendente
     const { data: queue } = await supabaseClient
       .from('ai_coach_queue')
       .select('*')
@@ -212,7 +200,6 @@ serve(async (req) => {
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
         const sevenDaysAgo  = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000).toISOString();
 
-        // ── 1. Métricas CRM ───────────────────────────────────────────────────
         const { data: brokerLeads } = await supabaseClient
           .from('leads')
           .select('id, name, status, contact_attempts, last_broker_whatsapp_at, last_lead_response_at, created_at, last_interaction_at')
@@ -249,8 +236,6 @@ serve(async (req) => {
           ? Math.round(leads.reduce((s: number, l: any) => s + (l.contact_attempts || 0), 0) / totalLeads * 10) / 10
           : 0;
 
-        // ── 2. Conversas reais (ia_messages) ─────────────────────────────────
-        // Busca os lead_ids deste corretor que têm conversa no bot
         const leadIds = leads.map((l: any) => l.id);
 
         const { data: conversations } = await supabaseClient
@@ -259,7 +244,7 @@ serve(async (req) => {
           .in('lead_id', leadIds)
           .gte('created_at', thirtyDaysAgo)
           .order('created_at', { ascending: false })
-          .limit(8); // máx 8 conversas para não explodir o prompt
+          .limit(8);
 
         const convs = conversations || [];
         let transcripts = '';
@@ -281,20 +266,17 @@ serve(async (req) => {
           const msgs = messages || [];
           totalMsgs  = msgs.length;
 
-          // Agrupa mensagens por conversa
           const msgsByConv: Record<string, any[]> = {};
           msgs.forEach((m: any) => {
             if (!msgsByConv[m.conversation_id]) msgsByConv[m.conversation_id] = [];
             msgsByConv[m.conversation_id].push(m);
           });
 
-          // Detecta padrões problemáticos
           for (const conv of convs) {
             const convMsgs = msgsByConv[conv.id] || [];
             const botMsgs  = convMsgs.filter((m: any) => m.sender_type !== 'lead').map((m: any) => m.message_text);
             const leadMsgs = convMsgs.filter((m: any) => m.sender_type === 'lead').map((m: any) => m.message_text);
 
-            // Detecta mensagens repetidas do bot (mesmo texto 2+ vezes na conversa)
             const botMsgCount: Record<string, number> = {};
             botMsgs.forEach(t => {
               const key = (t || '').slice(0, 60);
@@ -302,20 +284,17 @@ serve(async (req) => {
             });
             if (Object.values(botMsgCount).some(n => n >= 2)) repeticoesDetectadas++;
 
-            // Detecta sinais de compra do lead que o bot não avançou
             const sinaisCompra = ['quero', 'tenho interesse', 'me interessa', 'quero comprar',
               'quanto custa', 'qual o valor', 'como faço', 'vamos', 'bora', 'topo',
               'pode ser', 'sim', 'adorei', 'gostei'];
             const leadMostrouInteresse = leadMsgs.some(t =>
               sinaisCompra.some(s => (t || '').toLowerCase().includes(s))
             );
-            const leadId = conv.lead_id;
-            const leadData = leads.find((l: any) => l.id === leadId);
+            const leadData = leads.find((l: any) => l.id === conv.lead_id);
             const naoAvancou = leadData && ['NEW', 'IN_PROGRESS', 'ABANDONED', 'EXCLUDED'].includes(leadData.status);
             if (leadMostrouInteresse && naoAvancou) sinaisCompraIgnorados++;
           }
 
-          // Formata transcrições (até 5 conversas)
           const transList: string[] = [];
           let convCount = 0;
           for (const conv of convs) {
@@ -335,63 +314,14 @@ serve(async (req) => {
           }
         }
 
-        // ── 3. Monta prompt com métricas + transcrições ───────────────────────
-        const prompt = `Você é um coach de vendas especialista em imóveis MCMV no Brasil. Analise a performance do chip de WhatsApp do corretor ${brokerName} nos últimos 30 dias.
-
-IMPORTANTE: As conversas abaixo são entre o BOT AUTOMÁTICO do chip e os leads — não são mensagens manuais do corretor. O corretor é responsável por configurar o bot e garantir que os leads avancem no funil após a qualificação automática.
-
-MÉTRICAS DO CRM (30 dias):
-- Total de leads: ${totalLeads}
-- Leads que o bot contactou: ${contacted} (${Math.round(contacted/totalLeads*100)}%)
-- Leads que responderam: ${responded} — taxa de resposta: ${responseRate}%
-- Leads sem nenhum contato: ${neverContacted}
-- Leads com 5+ tentativas sem sucesso: ${highAttempts}
-- Leads com atividade nos últimos 7 dias: ${recentActivity}
-- Leads que avançaram no funil: ${advanced} — taxa de conversão: ${conversionRate}%
-- Média de tentativas por lead: ${avgAttempts}
-
-DISTRIBUIÇÃO DE STATUS:
-${Object.entries(byStatus).map(([s, n]) => `- ${s}: ${n} leads`).join('\n')}
-
-PADRÕES DETECTADOS NAS CONVERSAS:
-- Conversas com mensagem repetida do bot (2+ vezes igual): ${repeticoesDetectadas}
-- Leads que mostraram interesse mas não avançaram no funil: ${sinaisCompraIgnorados}
-- Total de mensagens analisadas: ${totalMsgs}
-${transcripts}
-
-CRITÉRIOS DE AVALIAÇÃO:
-1. Qualidade do fluxo do bot: perguntas repetidas, travamentos, respostas que ignoram o que o lead disse
-2. Conversão: leads que mostraram interesse e não avançaram
-3. Volume: leads sem contato nenhum
-4. Engajamento: taxa de resposta e profundidade da qualificação
-5. Continuidade: após qualificação pelo bot, o corretor deve assumir e avançar o lead
-
-ERROS TÍPICOS A IDENTIFICAR:
-- Bot repete a mesma pergunta sem ouvir a resposta do lead
-- Lead diz "sim", "quero", "bora" e o bot reinicia o roteiro
-- Lead qualificado (respondeu perguntas de renda/FGTS) mas ficou em NEW
-- Bot não personalizou a resposta com base no que o lead informou
-- Conversas longas sem progresso (lead responde mas não avança de etapa)
-
-Retorne JSON (somente JSON, sem markdown):
-{
-  "quality_score": 0-100,
-  "severity": "low|medium|high",
-  "errors": [
-    {"type": "codigo_do_problema", "description": "descrição detalhada com exemplo real da conversa se possível"}
-  ],
-  "positives": ["ponto positivo concreto com dado ou exemplo"],
-  "summary": "análise em 3-5 frases: o que está funcionando, o que está travando, e qual a ação mais urgente para melhorar"
-}`;
+        const prompt = `Você é um coach de vendas especialista em imóveis MCMV no Brasil. Analise a performance do chip de WhatsApp do corretor ${brokerName} nos últimos 30 dias.\n\nIMPORTANTE: As conversas abaixo são entre o BOT AUTOMÁTICO do chip e os leads — não são mensagens manuais do corretor. O corretor é responsável por configurar o bot e garantir que os leads avancem no funil após a qualificação automática.\n\nMÉTRICAS DO CRM (30 dias):\n- Total de leads: ${totalLeads}\n- Leads que o bot contactou: ${contacted} (${Math.round(contacted/totalLeads*100)}%)\n- Leads que responderam: ${responded} — taxa de resposta: ${responseRate}%\n- Leads sem nenhum contato: ${neverContacted}\n- Leads com 5+ tentativas sem sucesso: ${highAttempts}\n- Leads com atividade nos últimos 7 dias: ${recentActivity}\n- Leads que avançaram no funil: ${advanced} — taxa de conversão: ${conversionRate}%\n- Média de tentativas por lead: ${avgAttempts}\n\nDISTRIBUIÇÃO DE STATUS:\n${Object.entries(byStatus).map(([s, n]) => `- ${s}: ${n} leads`).join('\n')}\n\nPADRÕES DETECTADOS NAS CONVERSAS:\n- Conversas com mensagem repetida do bot (2+ vezes igual): ${repeticoesDetectadas}\n- Leads que mostraram interesse mas não avançaram no funil: ${sinaisCompraIgnorados}\n- Total de mensagens analisadas: ${totalMsgs}\n${transcripts}\n\nCRITÉRIOS DE AVALIAÇÃO:\n1. Qualidade do fluxo do bot: perguntas repetidas, travamentos, respostas que ignoram o que o lead disse\n2. Conversão: leads que mostraram interesse e não avançaram\n3. Volume: leads sem contato nenhum\n4. Engajamento: taxa de resposta e profundidade da qualificação\n5. Continuidade: após qualificação pelo bot, o corretor deve assumir e avançar o lead\n\nERROS TÍPICOS A IDENTIFICAR:\n- Bot repete a mesma pergunta sem ouvir a resposta do lead\n- Lead diz "sim", "quero", "bora" e o bot reinicia o roteiro\n- Lead qualificado (respondeu perguntas de renda/FGTS) mas ficou em NEW\n- Bot não personalizou a resposta com base no que o lead informou\n- Conversas longas sem progresso (lead responde mas não avança de etapa)\n\nRetorne JSON (somente JSON, sem markdown):\n{\n  "quality_score": 0-100,\n  "severity": "low|medium|high",\n  "errors": [\n    {"type": "codigo_do_problema", "description": "descrição detalhada com exemplo real da conversa se possível"}\n  ],\n  "positives": ["ponto positivo concreto com dado ou exemplo"],\n  "summary": "análise em 3-5 frases: o que está funcionando, o que está travando, e qual a ação mais urgente para melhorar"\n}`;
 
         const responseText = await callLLMWithFallback(supabaseClient, llmConfigs, prompt);
 
-        // Extrai JSON da resposta
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error('No JSON found in LLM response');
         const analysis = JSON.parse(jsonMatch[0]);
 
-        // Salva análise enriquecida
         await supabaseClient.from('ai_coach_analysis').insert({
           broker_id: item.broker_id,
           analysis_period: item.analysis_period,

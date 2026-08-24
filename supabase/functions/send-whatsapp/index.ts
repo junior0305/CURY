@@ -44,33 +44,30 @@ serve(async (req) => {
 
     if (botError || !bot) {
       console.error('[send-whatsapp] Bot not found:', instance_id);
+      if (lead_id) {
+        await supabase.from('automation_logs').insert({
+          entity_type: type, entity_id: lead_id,
+          status: 'failed', message_sent: message, recipient_phone: phone,
+          error_message: `Bot instance not found: ${instance_id}`,
+        });
+      }
       return new Response(JSON.stringify({ error: 'Bot instance not found' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // Normaliza URL e instance name (igual ao send_whatsapp_message)
-    const base = (bot.evolution_api_url || '').toString().replace(/\/+$/g, '');
-    const instance = encodeURIComponent((bot.instance_name || bot.name || '').toString().trim());
-    const cleanPhone = phone.replace(/\D/g, '');
-
     console.log(`[send-whatsapp] Bot: ${bot.instance_name}`);
-    console.log(`[send-whatsapp] URL: ${base}/message/sendText/${instance}`);
-    console.log(`[send-whatsapp] Phone cleaned: ${cleanPhone}`);
 
     const response = await fetch(
-      `${base}/message/sendText/${instance}`,
+      `${bot.evolution_api_url}/message/sendText/${bot.instance_name}`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': (bot.evolution_api_key || '').toString().trim()
+          'apikey': bot.evolution_api_key
         },
-        body: JSON.stringify({
-          number: cleanPhone,
-          text: message
-        })
+        body: JSON.stringify({ number: phone, text: message })
       }
     );
 
@@ -86,7 +83,8 @@ serve(async (req) => {
         entity_id: lead_id,
         status: success ? 'success' : 'failed',
         message_sent: message,
-        recipient_phone: phone
+        recipient_phone: phone,
+        error_message: success ? null : `HTTP ${response.status}: ${responseText.substring(0, 480)}`,
       });
     }
 

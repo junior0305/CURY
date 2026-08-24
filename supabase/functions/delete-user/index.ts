@@ -26,7 +26,6 @@ serve(async (req) => {
       })
     }
 
-    // Delete the user from Auth.users. This will cascade delete the profile due to RLS.
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
 
     if (deleteError) throw deleteError
@@ -39,7 +38,7 @@ serve(async (req) => {
     })
 
   } catch (error) {
-    console.error("[delete-user] Error deleting user:", error.message);
+    console.error("[delete-user] Error:", error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400
