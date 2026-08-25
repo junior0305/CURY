@@ -38,7 +38,6 @@ const STYLES = `
 }
 .atd *{box-sizing:border-box;}
 .atd{position:fixed;inset:0;font-family:var(--af);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.4;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;}
-.atd .ticker{height:30px;flex:0 0 30px;background:#0f1a17;color:#eafaf4;display:flex;align-items:center;overflow:hidden;}
 .atd .topbar{height:52px;flex:0 0 52px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 14px;}
 .atd .brand{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:-.02em;font-size:16px;}
 .atd .brand .dot{width:22px;height:22px;border-radius:7px;background:var(--teal);display:grid;place-items:center;color:#fff;font-size:13px;font-weight:800;}
@@ -51,20 +50,28 @@ const STYLES = `
 .atd .me{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#0b7d6f,#12a892);color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px;}
 .atd .promo{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:8px 16px;background:linear-gradient(90deg,#fff6e8,#fdeccb);border-bottom:1px solid #f2e0bd;}
 .atd .promo .gift{width:30px;height:30px;border-radius:9px;background:var(--warm);display:grid;place-items:center;font-size:15px;}
-.atd .promo .txt{font-size:13.5px;color:#8a6410;} .atd .promo .txt b{color:#7a4e06;}
+.atd .promox{margin-left:auto;background:none;border:0;color:#a8823a;font-size:15px;line-height:1;cursor:pointer;padding:4px 6px;border-radius:6px;}
+        .atd .promox:hover{background:rgba(0,0,0,.06);}
+        .atd .promo .txt{font-size:13.5px;color:#8a6410;} .atd .promo .txt b{color:#7a4e06;}
 .atd .body{flex:1;display:flex;min-height:0;}
 .atd .list{width:378px;flex:0 0 378px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;}
-.atd .search{padding:10px 12px;border-bottom:1px solid var(--line);}
-.atd .search input{width:100%;height:38px;border:1px solid var(--line);background:var(--rail);border-radius:10px;padding:0 14px;font-size:13.5px;font-family:var(--af);outline:none;}
+.atd .search{padding:8px 12px 6px;}
+.atd .search input{width:100%;height:34px;border:1px solid var(--line);background:var(--rail);border-radius:10px;padding:0 14px;font-size:13.5px;font-family:var(--af);outline:none;}
 .atd .search input:focus{border-color:var(--teal);background:#fff;}
-.atd .filters{display:flex;gap:6px;padding:9px 12px;border-bottom:1px solid var(--line);overflow-x:auto;}
+.atd .fchip.urgent{border-color:#d9334a;color:#d9334a;}
+        .atd .fchip.urgent .n{background:#d9334a;color:#fff;padding:1px 6px;border-radius:999px;font-weight:800;}
+        .atd .filters{display:flex;gap:6px;padding:0 12px 8px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;}
+        .atd .filters::-webkit-scrollbar{display:none;}
 .atd .filters::-webkit-scrollbar{height:0;}
 .atd .fchip{white-space:nowrap;height:28px;padding:0 11px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--muted);font-weight:600;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;}
 .atd .fchip.on{background:var(--teal);border-color:var(--teal);color:#fff;}
 .atd .fchip .n{font-variant-numeric:tabular-nums;opacity:.85;}
-.atd .volhint{padding:7px 14px;font-size:12px;color:var(--faint);border-bottom:1px solid var(--line);font-weight:600;}
 .atd .rows{flex:1;overflow-y:auto;min-height:0;}
-.atd .row{display:flex;gap:12px;padding:11px 14px;cursor:pointer;border-bottom:1px solid #f1f5f3;align-items:flex-start;position:relative;}
+.atd .row.waiting{box-shadow:inset 3px 0 0 #d9334a;background:rgba(217,51,74,.035);}
+        .atd .row.waiting .nm{font-weight:800;}
+        .atd .tm.wait{color:#d9334a;font-weight:800;font-variant-numeric:normal;}
+        .atd.dark .row.waiting{background:rgba(217,51,74,.10);}
+        .atd .row{display:flex;gap:11px;padding:9px 14px;cursor:pointer;border-bottom:1px solid #f1f5f3;align-items:flex-start;position:relative;}
 .atd .row:hover{background:#f6faf8;} .atd .row.active{background:#eef7f3;}
 .atd .row.active::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--teal);}
 .atd .av{width:48px;height:48px;flex:0 0 48px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;font-size:16px;}
@@ -76,7 +83,7 @@ const STYLES = `
 .atd .pv{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
 .atd .pv .snt{color:var(--faint);}
 .atd .badge{min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:var(--teal);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;}
-.atd .tags{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;}
+.atd .tags{display:flex;gap:5px;flex:0 0 auto;flex-wrap:nowrap;}
 .atd .tag{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:700;cursor:default;}
 .atd .tag .d{width:6px;height:6px;border-radius:50%;}
 .atd .tag.quente{background:#fdeae7;color:#c0453f;} .atd .tag.quente .d{background:#d1544e;}
@@ -148,7 +155,8 @@ const STYLES = `
 .atd .ov.open{opacity:1;pointer-events:auto;}
 .atd .draw{position:fixed;top:0;right:0;height:100%;width:370px;background:var(--panel);transform:translateX(100%);transition:transform .24s;z-index:41;box-shadow:-10px 0 40px rgba(0,0,0,.15);display:flex;flex-direction:column;overflow-y:auto;}
 .atd .draw.open{transform:none;}
-.atd .draw h3{margin:0;padding:18px 20px;border-bottom:1px solid var(--line);font-size:16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;}
+.atd .drawticker{margin:-4px 0 12px;border-radius:10px;overflow:hidden;background:#0f1a17;}
+        .atd .draw h3{margin:0;padding:18px 20px;border-bottom:1px solid var(--line);font-size:16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;}
 .atd .draw h3 span{cursor:pointer;color:var(--faint);}
 .atd .rankrow{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid #f1f5f3;}
 .atd .rankrow.you{background:#eef7f3;}
@@ -189,6 +197,45 @@ const STAGE_TAG: Partial<Record<LeadStatus, [string, string]>> = {
 const TEMP_TAG: Record<string, [string, string]> = { quente: ["quente", "Quente"], morno: ["morno", "Morno"], frio: ["frio", "Frio"] };
 const AVC = ["#0b7d6f", "#2563eb", "#e0900c", "#7c5cd6", "#c2506b", "#0ea5b7", "#b4772a"];
 const XP: Partial<Record<LeadStatus, number>> = { IN_PROGRESS: 10, NEGOTIATING: 15, VISIT_SCHEDULED: 30, VISITA_REALIZADA: 50, DOCS_REQUESTED: 80, CONCLUDED: 200 };
+/* ────────────────────────────────────────────────────────────────────
+   PRIORIDADE = risco de perder a venda, não recência.
+   O WhatsApp ordena por quem falou por último porque numa conversa a
+   mensagem nova É a relevante. Num funil é o contrário: o lead que você
+   NÃO tocou é o que está morrendo. Ordenar por lastInteractionAt fazia
+   o lead ignorado afundar exatamente onde ele some da vista.
+   ──────────────────────────────────────────────────────────────────── */
+function waitingHours(l: Lead): number | null {
+  if (!l.lastLeadResponseAt) return null;
+  const resp = new Date(l.lastLeadResponseAt).getTime();
+  const mine = l.lastBrokerWhatsappAt ? new Date(l.lastBrokerWhatsappAt).getTime() : 0;
+  if (mine >= resp) return null;              // você já respondeu: a bola não é sua
+  return (Date.now() - resp) / 3.6e6;
+}
+function priority(l: Lead): number {
+  const w = waitingHours(l);
+  // 1 · o cliente falou e você não voltou. Acima de 72h vira recuperação, não resposta.
+  if (w !== null && w <= 72) return 1_000_000 + Math.min(w, 72) * 1000;
+  // 2 · novo sem primeiro contato — os primeiros minutos decidem a visita
+  if (l.status === "NEW" && !l.lastBrokerWhatsappAt) {
+    const min = (Date.now() - new Date(l.createdAt).getTime()) / 6e4;
+    return 900_000 + Math.max(0, 600 - min);
+  }
+  // 3 · quente esfriando
+  if (l.leadTemperature === "quente") {
+    const silent = (Date.now() - new Date(l.lastInteractionAt).getTime()) / 3.6e6;
+    return 800_000 + Math.min(silent, 72) * 100;
+  }
+  // 4 · esperando há mais de 72h: importa, mas não na frente do que está vivo
+  if (w !== null) return 700_000 + Math.min(w, 720);
+  // 5 · o resto, por recência
+  return new Date(l.lastInteractionAt).getTime() / 1e7;
+}
+function waitLabel(h: number): string {
+  if (h < 1) return Math.max(1, Math.round(h * 60)) + "min";
+  if (h < 24) return Math.round(h) + "h";
+  return Math.round(h / 24) + "d";
+}
+
 function initials(n: string) { return (n || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase(); }
 function avColor(n: string) { let s = 0; for (const c of n || "") s += c.charCodeAt(0); return AVC[s % AVC.length]; }
 function fmtTime(iso: string | null) {
@@ -205,9 +252,9 @@ const DISCARD_REASONS: LostReason[] = [
   "NAO_COMPARECEU", "FOI_CONCORRENTE", "DESISTIU", "SEM_RETORNO", "NUMERO_ERRADO", "SEM_PERFIL", "LOCALIZACAO",
 ];
 
-type FilterKey = "prio" | "ALL" | "hot" | "NEW" | "VIS" | "DOC";
+type FilterKey = "wait" | "prio" | "ALL" | "hot" | "NEW" | "VIS" | "DOC";
 const FILTERS: [FilterKey, string][] = [
-  ["prio", "⚡ Agora"], ["ALL", "Todos"], ["hot", "🔥 Quentes"], ["NEW", "🆕 Novos"], ["VIS", "Visita"], ["DOC", "Docs"],
+  ["wait", "⏳ Esperando você"], ["prio", "⚡ Agora"], ["ALL", "Todos"], ["hot", "🔥 Quentes"], ["NEW", "🆕 Novos"], ["VIS", "Visita"], ["DOC", "Docs"],
 ];
 
 export default function Atender() {
@@ -216,6 +263,7 @@ export default function Atender() {
   const { playSound } = useAudioArena();
   const [dark, setDark] = useState(() => { try { return localStorage.getItem("atd_theme") === "dark"; } catch { return false; } });
   const [prospMode, setProspMode] = useState(false);
+  const [promoOff, setPromoOff] = useState(() => { try { return localStorage.getItem("atd_promo_off") === "1"; } catch { return false; } });
   const [managerId, setManagerId] = useState<string | null>(null);
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [newLeadPrefill, setNewLeadPrefill] = useState<{ name: string; phone: string }>({ name: "", phone: "" });
@@ -293,7 +341,8 @@ export default function Atender() {
 
   const myLeads = useMemo(() => leads.filter((l) => l.brokerId === user?.id), [leads, user?.id]);
   function matchKey(k: FilterKey, l: Lead) {
-    if (k === "prio") return l.leadTemperature === "quente" || l.status === "NEW" || l.status === "VISIT_SCHEDULED";
+    if (k === "wait") { const w = waitingHours(l); return w !== null && w <= 72; }
+    if (k === "prio") return waitingHours(l) !== null || l.leadTemperature === "quente" || l.status === "NEW" || l.status === "VISIT_SCHEDULED";
     if (k === "ALL") return true;
     if (k === "hot") return l.leadTemperature === "quente";
     if (k === "NEW") return l.status === "NEW";
@@ -303,7 +352,7 @@ export default function Atender() {
   }
   const rows = useMemo(() => myLeads
     .filter((l) => matchKey(filter, l) && (l.name || "").toLowerCase().includes(q.toLowerCase()))
-    .sort((a, b) => new Date(b.lastInteractionAt).getTime() - new Date(a.lastInteractionAt).getTime()),
+    .sort((a, b) => priority(b) - priority(a)),
     [myLeads, filter, q]);
 
   const sel = useMemo(() => myLeads.find((l) => l.id === selId) || null, [myLeads, selId]);
@@ -470,16 +519,11 @@ export default function Atender() {
         .atd .trow b{color:var(--ink);}
         .atd .nextpill{display:inline-block;margin-left:20px;font-size:11px;font-weight:800;padding:4px 11px;border-radius:7px;background:rgba(11,125,111,.12);color:var(--teal-ink);}
         /* Prospecção botão */
-        .atd .prospbtn{width:calc(100% - 24px);margin:8px 12px 4px;background:var(--teal);color:#fff;border:none;border-radius:11px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--af);}
-        .atd .reativarbtn{width:calc(100% - 24px);margin:0 12px 8px;background:#b8860b;color:#fff;border:none;border-radius:11px;padding:10px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:var(--af);}
+        .atd .listacts{display:flex;gap:6px;padding:7px 12px;border-bottom:1px solid var(--line);}
+        .atd .prospbtn{flex:1;background:var(--teal);color:#fff;border:none;border-radius:9px;padding:8px 6px;font-size:12px;font-weight:800;cursor:pointer;font-family:var(--af);white-space:nowrap;}
+        .atd .reativarbtn{flex:1;background:#b8860b;color:#fff;border:none;border-radius:9px;padding:8px 6px;font-size:12px;font-weight:800;cursor:pointer;font-family:var(--af);white-space:nowrap;}
         .atd .btn2go{width:100%;background:var(--teal);color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--af);}
         .atd .btn2go:disabled{opacity:.6;cursor:default;}
-        .atd .stripcards{display:flex;gap:8px;padding:8px 14px;background:var(--bg);border-bottom:1px solid var(--line);flex:0 0 auto;}
-        .atd .scard2{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 12px;display:flex;align-items:center;gap:9px;cursor:pointer;}
-        .atd .scard2:hover{border-color:var(--teal);}
-        .atd .scard2 .ic2{font-size:16px;}
-        .atd .scard2 .kk2{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px;}
-        .atd .scard2 .vv2{font-weight:700;font-size:12.5px;color:var(--ink);}
         /* modais (prospecção + comunicado) */
         .atd .ov2{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;}
         .atd .md2{background:var(--panel);border-radius:16px;width:min(500px,94vw);max-height:88vh;overflow:auto;box-shadow:0 24px 70px rgba(0,0,0,.4);}
@@ -505,8 +549,6 @@ export default function Atender() {
         .atd.dark .promo{background:linear-gradient(90deg,#2a2416,#1e1a10);border-color:#3a3320;} .atd.dark .promo .txt,.atd.dark .promo .txt b{color:#f0d79a;}
         .atd.dark .agorabar .agtxt{color:#e9edef;}
       `}</style>
-
-      <div className="ticker"><WallOfFameTicker /></div>
 
       {user?.id && (
         <div style={{ padding: "0 12px" }}>
@@ -542,6 +584,9 @@ export default function Atender() {
         <div className="chip" onClick={() => setDrawer("rank")}>
           <span className="k">Ranking</span> {myRank ? <><b>{myRank.pos}º</b> · <b>{myRank.pts}</b></> : "—"}
         </div>
+        <div className="chip" title="Vendas fechadas no mês">
+          <span className="k">Meta</span> <b>{vendasMes}</b> <span className="k">no mês</span>
+        </div>
         {announcement && <div className="chip" onClick={() => setDrawer("cmt")}>📣 <span className="k">Comunicados</span><span className="dotred" /></div>}
         <WhatsAppQuickButton />
         <button className="tglbtn" title={dark ? "Tema claro" : "Tema escuro"} onClick={() => { const n = !dark; setDark(n); try { localStorage.setItem("atd_theme", n ? "dark" : "light"); } catch {} }}>{dark ? "☀️" : "🌙"}</button>
@@ -549,17 +594,14 @@ export default function Atender() {
         <button className="sairbtn" onClick={() => signOut?.()}>⏻ Sair</button>
       </div>
 
-      <div className="stripcards">
-        <div className="scard2" onClick={() => setDrawer("rank")}><span className="ic2">🏆</span><div><div className="kk2">Ranking</div><div className="vv2">{myRank ? `Você · ${myRank.pos}º lugar` : "—"}</div></div></div>
-        <div className="scard2"><span className="ic2">🎯</span><div><div className="kk2">Meta do mês</div><div className="vv2">{vendasMes} venda{vendasMes === 1 ? "" : "s"} no mês</div></div></div>
-      </div>
-
       {connected === false && <div style={{ flex: "0 0 auto" }}><WhatsAppQRBanner /></div>}
 
-      {prize && (
+      {prize && !promoOff && (
         <div className="promo">
           <div className="gift">{prize.hero_emoji || "🎁"}</div>
           <div className="txt"><b>{prize.name}</b>{prize.description ? " — " + prize.description : ""}</div>
+          <button className="promox" aria-label="Ocultar o prêmio"
+            onClick={() => { setPromoOff(true); try { localStorage.setItem("atd_promo_off", "1"); } catch {} }}>✕</button>
         </div>
       )}
 
@@ -570,23 +612,28 @@ export default function Atender() {
           <div className="filters">
             {FILTERS.map(([k, lbl]) => {
               const n = myLeads.filter((l) => matchKey(k, l)).length;
-              return <div key={k} className={`fchip${filter === k ? " on" : ""}`} onClick={() => setFilter(k)}>{lbl} <span className="n">{n}</span></div>;
+              return <div key={k} className={`fchip${filter === k ? " on" : ""}${k === "wait" && n > 0 ? " urgent" : ""}`} onClick={() => setFilter(k)}>{lbl} <span className="n">{n}</span></div>;
             })}
           </div>
-          <div className="volhint">📊 {rows.length} na tela · <b>{myLeads.length}</b> no total — filtre pra achar</div>
-          <button className="prospbtn" onClick={() => setProspMode(true)}>🧲 Prospecção — pool por região</button>
-          {reativaveis.length > 0 && <button className="reativarbtn" onClick={() => setReativarOpen(true)}>🔄 Comandra sugere reativar {reativaveis.length}</button>}
+          <div className="listacts">
+            <button className="prospbtn" onClick={() => setProspMode(true)}>🧲 Prospecção</button>
+            {reativaveis.length > 0 && <button className="reativarbtn" onClick={() => setReativarOpen(true)}>🔄 Reativar {reativaveis.length}</button>}
+          </div>
           <div className="rows">
             {rows.map((l) => {
               const last = conv.length && l.id === selId ? conv[conv.length - 1] : null;
               const pv = last ? (last.direction === "outgoing" ? "Você: " : "") + last.text : (l.tag || "—");
+              const w = waitingHours(l);            // o "não lido" do WhatsApp, traduzido
               return (
-                <div key={l.id} className={`row${selId === l.id ? " active" : ""}`} onClick={() => pick(l.id)}>
+                <div key={l.id} className={`row${selId === l.id ? " active" : ""}${w !== null ? " waiting" : ""}`} onClick={() => pick(l.id)}>
                   <div className="av" style={{ background: avColor(l.name) }}>{initials(l.name)}</div>
                   <div className="mid">
-                    <div className="l1"><span className="nm">{l.name}</span><span className="tm">{fmtTime(l.lastInteractionAt)}</span></div>
-                    <div className="l2"><span className="pv">{pv.length > 40 ? pv.slice(0, 40) + "…" : pv}</span></div>
-                    <div className="tags">{leadTags(l)}</div>
+                    <div className="l1"><span className="nm">{l.name}</span>
+                      {w !== null
+                        ? <span className="tm wait" title={`${l.name.split(" ")[0]} falou e você ainda não respondeu`}>⏳ {waitLabel(w)}</span>
+                        : <span className="tm">{fmtTime(l.lastInteractionAt)}</span>}
+                    </div>
+                    <div className="l2"><span className="pv">{pv.length > 34 ? pv.slice(0, 34) + "…" : pv}</span><span className="tags">{leadTags(l)}</span></div>
                   </div>
                 </div>
               );
@@ -716,6 +763,7 @@ export default function Atender() {
       <div className={`draw${drawer ? " open" : ""}`}>
         {drawer === "rank" && <>
           <h3>Ranking da equipe <span onClick={() => setDrawer(null)}>✕</span></h3>
+          <div className="drawticker"><WallOfFameTicker /></div>
           {ranking.map((r, i) => (
             <div key={r.id} className={`rankrow${r.id === user?.id ? " you" : ""}`}>
               <span className="pos">{i + 1}º</span>

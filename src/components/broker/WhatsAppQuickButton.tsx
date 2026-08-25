@@ -13,11 +13,14 @@ const QR_REFRESH_INTERVAL_S = 28;
 
 type ChipStatus = "open" | "connecting" | "offline" | "no_chip" | "loading";
 
-const STATUS_STYLE: Record<ChipStatus, { color: string; bg: string; ring: string; label: string; pulse: boolean }> = {
+/* `alarm` = o estado impede o corretor de trabalhar (não recebe lead novo e o
+   follow-up falha calado). Aí o botão deixa de ser um ícone de 36px e passa a
+   se nomear. Silêncio quando saudável, voz quando bloqueia. */
+const STATUS_STYLE: Record<ChipStatus, { color: string; bg: string; ring: string; label: string; pulse: boolean; alarm?: boolean }> = {
   open:       { color: "#10B981", bg: "rgba(16,185,129,0.12)",  ring: "rgba(16,185,129,0.40)",  label: "WhatsApp conectado",  pulse: false },
   connecting: { color: "#F59E0B", bg: "rgba(245,158,11,0.12)",  ring: "rgba(245,158,11,0.40)",  label: "Conectando…",          pulse: true  },
-  offline:    { color: "#EF4444", bg: "rgba(239,68,68,0.15)",   ring: "rgba(239,68,68,0.50)",   label: "WhatsApp desconectado", pulse: true  },
-  no_chip:    { color: "#9CA3AF", bg: "rgba(156,163,175,0.12)", ring: "rgba(156,163,175,0.40)", label: "Sem chip vinculado",    pulse: false },
+  offline:    { color: "#EF4444", bg: "rgba(239,68,68,0.15)",   ring: "rgba(239,68,68,0.55)",   label: "Conectar WhatsApp",     pulse: true, alarm: true },
+  no_chip:    { color: "#9CA3AF", bg: "rgba(156,163,175,0.12)", ring: "rgba(156,163,175,0.45)", label: "Vincular um chip",      pulse: false, alarm: true },
   loading:    { color: "#64748B", bg: "rgba(100,116,139,0.10)", ring: "rgba(100,116,139,0.30)", label: "Verificando…",          pulse: false },
 };
 
@@ -154,13 +157,22 @@ export function WhatsAppQuickButton() {
       <button
         onClick={handleOpen}
         title={s.label}
-        className="relative w-9 h-9 rounded-lg flex items-center justify-center transition hover:brightness-110"
+        aria-label={s.label}
+        className={`relative h-9 rounded-lg flex items-center justify-center gap-2 shrink-0 transition hover:brightness-110 ${
+          s.alarm ? "w-auto px-3" : "w-9"
+        }`}
         style={{ background: s.bg, border: `1px solid ${s.ring}` }}
       >
-        <MessageCircle className="w-4 h-4" style={{ color: s.color }} />
+        <MessageCircle className="w-4 h-4 shrink-0" style={{ color: s.color }} aria-hidden="true" />
+        {s.alarm && (
+          <span className="text-[12.5px] font-bold whitespace-nowrap" style={{ color: s.color }}>
+            {s.label}
+          </span>
+        )}
         <span
           className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ${s.pulse ? "animate-pulse" : ""}`}
           style={{ background: s.color, boxShadow: `0 0 6px ${s.color}` }}
+          aria-hidden="true"
         />
       </button>
 
