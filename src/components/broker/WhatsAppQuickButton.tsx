@@ -8,8 +8,21 @@ import { useAuth } from "@/components/AuthProvider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { MessageCircle, Smartphone, RefreshCw, CheckCircle2, WifiOff, Wifi, AlertCircle } from "lucide-react";
+import { isChipLive, CHIP_STATE_COLUMNS } from "@/utils/chipLive";
 
 const QR_REFRESH_INTERVAL_S = 28;
+
+/* `status` erra nos DOIS sentidos (medido 11/08: 18 chips "open" mortos, 11
+   "offline" vivos). Este botão lia só `status` — era a origem do "WhatsApp
+   desconectado" aparecendo do nada em corretor com tudo funcionando, porque
+   cada UPDATE do check-bot-health chega por realtime e repinta o botão.
+   QRBanner e Gatekeeper já usavam isChipLive; este ficou pra trás. */
+function chipStatusOf(bot: { status?: string | null; real_state?: string | null } | null | undefined): ChipStatus {
+  if (!bot) return "offline";
+  if (isChipLive(bot)) return "open";
+  if (bot.status === "connecting" || bot.real_state === "restarting") return "connecting";
+  return "offline";
+}
 
 type ChipStatus = "open" | "connecting" | "offline" | "no_chip" | "loading";
 
@@ -47,10 +60,10 @@ export function WhatsAppQuickButton() {
     supabase.from("profiles").select("bot_instance_id").eq("id", user.id).maybeSingle().then(({ data }) => {
       if (!data?.bot_instance_id) { setStatus("no_chip"); return; }
       setBotInstanceId(data.bot_instance_id);
-      supabase.from("bot_instances").select("status, instance_name").eq("id", data.bot_instance_id).maybeSingle().then(({ data: bot }) => {
+      supabase.from("bot_instances").select(`${CHIP_STATE_COLUMNS}, instance_name`).eq("id", data.bot_instance_id).maybeSingle().then(({ data: bot }) => {
         if (!bot) { setStatus("offline"); return; }
         setInstanceName(bot.instance_name);
-        setStatus(bot.status === "open" ? "open" : bot.status === "connecting" ? "connecting" : "offline");
+        setStatus(chipStatusOf(bot));
       });
     });
   }, [user?.id]);
@@ -62,13 +75,12 @@ export function WhatsAppQuickButton() {
       .on("postgres_changes",
         { event: "UPDATE", schema: "public", table: "bot_instances", filter: `id=eq.${botInstanceId}` },
         (payload) => {
-          const newStatus = payload.new?.status;
-          if (newStatus === "open") {
+          const next = chipStatusOf(payload.new as { status?: string | null; real_state?: string | null });
+          if (next === "open") {
             setStatus("open");
             setJustConnected(true);
             setOpen(false);
-          } else if (newStatus === "connecting") setStatus("connecting");
-          else setStatus("offline");
+          } else setStatus(next);
         })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -78,8 +90,8 @@ export function WhatsAppQuickButton() {
   useEffect(() => {
     if (!open || !botInstanceId || status === "open") return;
     pollRef.current = setInterval(async () => {
-      const { data } = await supabase.from("bot_instances").select("status").eq("id", botInstanceId).maybeSingle();
-      if (data?.status === "open") {
+      const { data } = await supabase.from("bot_instances").select(CHIP_STATE_COLUMNS).eq("id", botInstanceId).maybeSingle();
+      if (isChipLive(data)) {
         setStatus("open"); setJustConnected(true);
         if (pollRef.current) clearInterval(pollRef.current);
       }
