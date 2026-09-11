@@ -233,14 +233,22 @@ export default function Tropas() {
         if (data?.error) throw new Error(data.error);
 
         if (data?.user?.id) {
-          await supabase.from("profiles").update({
+          // O create-user já criou a instância de WhatsApp e gravou o
+          // bot_instance_id no perfil. Este update existe só pros campos que a
+          // edge não recebe — e ele NÃO pode reenviar bot_instance_id vazio:
+          // num cadastro novo o formulário nasce com null, e mandar esse null
+          // apagava justamente o vínculo recém-criado. O corretor ficava sem
+          // instância ligada e o QR nunca gerava.
+          const extras: Record<string, unknown> = {
             full_name: formData.full_name,
             lead_assignment_enabled: formData.lead_assignment_enabled,
             evolution_instance: formData.evolution_instance,
             qualification_ai_enabled: formData.qualification_ai_enabled,
-            bot_instance_id: formData.bot_instance_id,
             automation_settings: formData.automation_settings,
-          }).eq("id", data.user.id);
+          };
+          // Só sobrescreve se o admin escolheu uma instância na mão.
+          if (formData.bot_instance_id) extras.bot_instance_id = formData.bot_instance_id;
+          await supabase.from("profiles").update(extras).eq("id", data.user.id);
         }
 
         toast({ title: "✅ Usuário criado!" });

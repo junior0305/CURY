@@ -35,34 +35,39 @@ export const DARK: ThemeColors = {
 };
 
 export const LIGHT: ThemeColors = {
-  // Backgrounds
-  bg:             "#EEF2F7",
-  bgAlt:          "#E4EAF3",
+  // Backgrounds — azul + branco. O fundo é um azul MUITO claro (não cinza, não
+  // branco puro) e o card sobe pra branco. A hierarquia vem dessa subida.
+  bg:             "#F2F6FC",
+  bgAlt:          "#E7EEFA",
   surface:        "#FFFFFF",
-  surfaceAlpha:   "rgba(255,255,255,0.95)",
-  glass:          "rgba(255,255,255,0.7)",
-  glassHover:     "rgba(255,255,255,0.9)",
+  surfaceAlpha:   "rgba(255,255,255,0.94)",
+  glass:          "rgba(255,255,255,0.74)",
+  glassHover:     "rgba(37,99,235,0.07)",
 
-  // Borders
-  border:         "rgba(15,23,42,0.08)",
-  borderMid:      "rgba(15,23,42,0.12)",
-  borderStrong:   "rgba(15,23,42,0.20)",
+  // Borders — azul-acinzentadas, nunca cinza neutro
+  border:         "rgba(23,53,110,0.10)",
+  borderMid:      "rgba(23,53,110,0.18)",
+  borderStrong:   "rgba(23,53,110,0.28)",
 
-  // Text
-  text:           "#0F172A",
-  textMuted:      "#475569",
-  textSubtle:     "#94A3B8",
+  // Text — navy profundo, nunca preto puro
+  text:           "#0B1B36",
+  textMuted:      "#47597A",
+  textSubtle:     "#5C6E92",
 
   // Decorative
-  gridLine:       "rgba(0,102,255,0.04)",
-  headerGlow:     "rgba(0,102,255,0.07)",
+  gridLine:       "rgba(37,99,235,0.045)",
+  headerGlow:     "rgba(37,99,235,0.10)",
   scanOpacity:    "0",
 
   // Admin nav
-  navBg:          "linear-gradient(135deg, #E4EAF3 0%, #EEF2F7 100%)",
-  navSurface:     "rgba(255,255,255,0.95)",
-  navBorder:      "rgba(15,23,42,0.1)",
+  navBg:          "linear-gradient(180deg, #FFFFFF 0%, #EDF3FD 100%)",
+  navSurface:     "rgba(255,255,255,0.96)",
+  navBorder:      "rgba(23,53,110,0.10)",
 };
+
+/* Azul da marca no tema claro. #2563EB preenche (barra, dot, estado ativo) e
+   #1D4ED8 escreve (texto e ícone em corpo pequeno, 7.0:1 no branco). */
+export const BLUE = { fill: "#2563EB", ink: "#1D4ED8" } as const;
 
 export interface ThemeColors {
   bg: string;
@@ -93,13 +98,22 @@ interface ThemeContextType {
   mode: ThemeMode;
   t: ThemeColors;
   toggle: () => void;
+  /** Pede o tema claro como PADRÃO desta área — só vale enquanto a pessoa nunca
+   *  escolheu tema na mão. Uma escolha explícita (toggle ou perfil) sempre ganha. */
+  preferLight: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextType>({
   mode: "dark",
   t: DARK,
   toggle: () => {},
+  preferLight: () => {},
 });
+
+/* "crm-theme" guarda o tema aplicado (escrito a cada render, inclusive o padrão).
+   Por isso ele NÃO serve pra saber se a pessoa escolheu algo. Esta chave separada
+   é gravada só quando há escolha real — no toggle ou vinda do perfil. */
+const EXPLICIT_KEY = "crm-theme-explicit";
 
 // ─── Provider ──────────────────────────────────────────────────────────────────
 
@@ -112,7 +126,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Apply to <html>
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", mode);
-    document.body.style.background = mode === "dark" ? "#080B14" : "#EEF2F7";
+    document.body.style.background = mode === "dark" ? DARK.bg : LIGHT.bg;
     localStorage.setItem("crm-theme", mode);
   }, [mode]);
 
@@ -126,6 +140,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       .maybeSingle()
       .then(({ data }) => {
         if (data?.theme_preference && (data.theme_preference === "dark" || data.theme_preference === "light")) {
+          localStorage.setItem(EXPLICIT_KEY, "1");
           setMode(data.theme_preference as ThemeMode);
         }
       });
@@ -133,6 +148,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const toggle = () => {
     const next: ThemeMode = mode === "dark" ? "light" : "dark";
+    localStorage.setItem(EXPLICIT_KEY, "1");
     setMode(next);
     // Persist to profile (fire-and-forget)
     if (user?.id) {
@@ -144,8 +160,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const preferLight = React.useCallback(() => {
+    if (localStorage.getItem(EXPLICIT_KEY) === "1") return;
+    setMode("light");
+  }, []);
+
   return (
-    <ThemeContext.Provider value={{ mode, t: mode === "dark" ? DARK : LIGHT, toggle }}>
+    <ThemeContext.Provider value={{ mode, t: mode === "dark" ? DARK : LIGHT, toggle, preferLight }}>
       {children}
     </ThemeContext.Provider>
   );

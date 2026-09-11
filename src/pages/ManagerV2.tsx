@@ -28,6 +28,7 @@ import CoachChat, {
 } from "@/components/manager-v2/CoachChat";
 // import CoachTipPopup from "@/components/manager-v2/CoachTipPopup"; // ver nota no corpo
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { useTheme } from "@/contexts/ThemeContext";
 import { WhatsAppQRBanner } from "@/components/broker/WhatsAppQRBanner";
 
 // ─── Hook: dados base do time ────────────────────────────────────────────────
@@ -125,6 +126,12 @@ export default function ManagerV2() {
   // Respeita "reduzir movimento" do sistema. Framer Motion não é alcançado pela
   // variante motion-safe: do Tailwind — precisa deste hook.
   const reduceMotion = useReducedMotion();
+
+  // Azul + branco é o padrão do painel do gerente. `preferLight` só age enquanto
+  // a pessoa nunca escolheu tema na mão — o toggle no header continua mandando,
+  // e a escolha dela persiste no perfil.
+  const { preferLight } = useTheme();
+  useEffect(() => { preferLight(); }, [preferLight]);
 
   const queryClient = useQueryClient();
   const [coachOpen, setCoachOpen] = useState(false);

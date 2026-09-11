@@ -8,6 +8,8 @@ import {
   TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Calendar,
   ChevronDown, Zap, DollarSign, Banknote, Target, Loader2,
 } from "lucide-react";
+import { useHex, adaptHex } from "@/components/manager-v2/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface WeekMetrics {
   week_start: string;
@@ -35,7 +37,8 @@ interface Props {
 
 // Cor / status — gradiente progressivo: vermelho → âmbar → amarelo → verde → ciano → azul
 // Quanto melhor a meta, mais "azul" — sinal de excelência.
-function statusFromPct(pct: number, daysLeft: number, daysTotal: number) {
+function statusFromPct(pct: number, daysLeft: number, daysTotal: number, mode: "dark" | "light") {
+  const c = (hex: string) => adaptHex(hex, mode);
   const expectedPct = Math.max(0, Math.min(100, ((daysTotal - daysLeft) / daysTotal) * 100));
   const lag = pct - expectedPct;
   // Crítico (>20% atrás)        — vermelho
@@ -44,12 +47,12 @@ function statusFromPct(pct: number, daysLeft: number, daysTotal: number) {
   // No ritmo (-2 a +5%)          — verde
   // Acelerando (+5 a +15%)       — ciano
   // Superando (>15% à frente)    — azul (excelência)
-  if (lag < -20) return { color: "#EF4444", label: "Crítico",     icon: TrendingDown,  severity: "crit" as const };
-  if (lag < -10) return { color: "#F59E0B", label: "Atenção",     icon: AlertTriangle, severity: "warn" as const };
-  if (lag < -2)  return { color: "#FBBF24", label: "Quase lá",    icon: AlertTriangle, severity: "warn" as const };
-  if (lag < 5)   return { color: "#10B981", label: "No ritmo",    icon: CheckCircle2,  severity: "ok"   as const };
-  if (lag < 15)  return { color: "#06B6D4", label: "Acelerando",  icon: TrendingUp,    severity: "ok"   as const };
-  return        { color: "#3B82F6", label: "Superando",   icon: TrendingUp,    severity: "ok"   as const };
+  if (lag < -20) return { color: c("#EF4444"), label: "Crítico",     icon: TrendingDown,  severity: "crit" as const };
+  if (lag < -10) return { color: c("#F59E0B"), label: "Atenção",     icon: AlertTriangle, severity: "warn" as const };
+  if (lag < -2)  return { color: c("#FBBF24"), label: "Quase lá",    icon: AlertTriangle, severity: "warn" as const };
+  if (lag < 5)   return { color: c("#10B981"), label: "No ritmo",    icon: CheckCircle2,  severity: "ok"   as const };
+  if (lag < 15)  return { color: c("#06B6D4"), label: "Acelerando",  icon: TrendingUp,    severity: "ok"   as const };
+  return        { color: c("#3B82F6"), label: "Superando",   icon: TrendingUp,    severity: "ok"   as const };
 }
 
 function fmtMoney(n: number | null | undefined) {
@@ -60,6 +63,10 @@ function fmtMoney(n: number | null | undefined) {
 }
 
 export default function MetaThermometer({ managerId, teamId }: Props) {
+  // Assina o contexto de tema: sem isto o card não re-renderiza no toggle e fica
+  // com as cores do tema anterior.
+  const { mode } = useTheme();
+  const hex = useHex();
   const [metrics, setMetrics] = useState<WeekMetrics | null>(null);
   const [monthlyGoal, setMonthlyGoal] = useState<number | null>(null);
   const [monthlySales, setMonthlySales] = useState<number>(0);
@@ -135,7 +142,7 @@ export default function MetaThermometer({ managerId, teamId }: Props) {
   const daysLeftMonth = Math.max(1, daysInMonth - dayOfMonth);
 
   const monthPct = monthlyGoal ? (monthlySales / monthlyGoal) * 100 : 0;
-  const monthStatus = statusFromPct(monthPct, daysLeftMonth, daysInMonth);
+  const monthStatus = statusFromPct(monthPct, daysLeftMonth, daysInMonth, mode);
 
   const weekPct = metrics.target > 0 ? (metrics.sales_so_far / metrics.target) * 100 : 0;
   const forecastDelta = metrics.forecast_vs_target;
@@ -211,7 +218,11 @@ export default function MetaThermometer({ managerId, teamId }: Props) {
                 className="text-4xl font-black tabular-nums leading-none"
                 style={{
                   color: monthStatus.color,
-                  textShadow: shouldBreathe ? `0 0 16px ${monthStatus.color}50` : `0 0 12px ${monthStatus.color}30`,
+                  // Glow existe pra dar presença sobre preto. Sobre branco ele
+                  // não brilha — borra o algarismo. No claro, sem glow.
+                  textShadow: mode === "light"
+                    ? "none"
+                    : shouldBreathe ? `0 0 16px ${monthStatus.color}50` : `0 0 12px ${monthStatus.color}30`,
                 }}
               >
                 {monthlySales}
@@ -327,26 +338,26 @@ export default function MetaThermometer({ managerId, teamId }: Props) {
                 label="Pipeline quente"
                 value={metrics.pipeline_quente}
                 sub={`+${metrics.pipeline_frio} frio`}
-                color="#F97316"
+                color={hex("#F97316")}
               />
               <DetailCard
                 label="Visitas (sem)"
                 value={metrics.visitas_week}
                 sub={`${metrics.docs_week} em docs`}
-                color="#06B6D4"
+                color={hex("#06B6D4")}
               />
               <DetailCard
                 label="CAC"
                 value={fmtMoney(metrics.cac)}
                 sub="por venda"
-                color="#A78BFA"
+                color={hex("#A78BFA")}
                 icon={DollarSign}
               />
               <DetailCard
                 label="CPL"
                 value={fmtMoney(metrics.cpl)}
                 sub={`${metrics.leads_week} leads · ADS ${fmtMoney(metrics.ads_invested)}`}
-                color="#22D3EE"
+                color={hex("#22D3EE")}
                 icon={Banknote}
               />
             </div>
@@ -368,7 +379,7 @@ export default function MetaThermometer({ managerId, teamId }: Props) {
                     className="h-full w-full rounded-full origin-left"
                     style={{
                       background: `linear-gradient(90deg, ${monthStatus.color}80, ${monthStatus.color})`,
-                      boxShadow: `0 0 12px ${monthStatus.color}80`,
+                      boxShadow: mode === "light" ? "none" : `0 0 12px ${monthStatus.color}80`,
                     }}
                   />
                 </div>

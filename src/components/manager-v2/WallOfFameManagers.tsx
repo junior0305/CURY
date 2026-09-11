@@ -9,6 +9,7 @@ import { getSecretaryCounts } from "@/integrations/supabase/secretaryMetrics";
 import {
   Trophy, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Loader2,
 } from "lucide-react";
+import { useHex } from "@/components/manager-v2/palette";
 
 type Period = "week" | "month";
 type ManagerRow = {
@@ -55,6 +56,7 @@ function calcWindow(period: Period, offset: number): { start: Date; end: Date; l
 }
 
 export default function WallOfFameManagers({ managerId }: Props) {
+  const hex = useHex();
   const [period, setPeriod] = useState<Period>("week");
   const [offset, setOffset] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -218,7 +220,7 @@ export default function WallOfFameManagers({ managerId }: Props) {
                 const TrendIcon =
                   delta > 0 ? TrendingUp : delta < 0 ? TrendingDown : Minus;
                 const trendColor =
-                  delta > 0 ? "#10B981" : delta < 0 ? "#EF4444" : "#71717A";
+                  delta > 0 ? hex("#10B981") : delta < 0 ? hex("#EF4444") : hex("#71717A");
                 const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : null;
 
                 return (

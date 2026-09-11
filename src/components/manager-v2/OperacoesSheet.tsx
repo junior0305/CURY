@@ -91,9 +91,9 @@ export default function OperacoesSheet({
                 onClick={() => setSection(t.v)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
                 style={{
-                  background: active ? "rgba(6,182,212,0.15)" : "var(--crm-glass)",
-                  border: `1px solid ${active ? "rgba(6,182,212,0.5)" : "rgba(51,65,85,0.5)"}`,
-                  color: active ? "#06B6D4" : "#94A3B8",
+                  background: active ? "var(--crm-accent-soft)" : "var(--crm-glass)",
+                  border: `1px solid ${active ? "var(--crm-accent-line)" : "var(--crm-border)"}`,
+                  color: active ? "var(--crm-accent)" : "var(--crm-text-muted)",
                 }}
               >
                 <Icon className="w-3.5 h-3.5" />

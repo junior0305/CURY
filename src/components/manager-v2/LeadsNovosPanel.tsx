@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Eye, Bell, RotateCcw, Hand, Sparkles, MessageCircle, UserCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useHex } from "@/components/manager-v2/palette";
 
 interface Lead {
   id: string;
@@ -68,6 +69,7 @@ export default function LeadsNovosPanel({
   onCharge,
   onRedist,
 }: Props) {
+  const hex = useHex();
   const [period, setPeriod] = useState<Period>("today");
   const [iaLeadIds, setIaLeadIds] = useState<Set<string>>(new Set());
 
@@ -155,9 +157,9 @@ export default function LeadsNovosPanel({
                 onClick={() => setPeriod(p.v)}
                 className="px-2.5 py-1 rounded-md text-[11px] font-bold transition"
                 style={{
-                  background: active ? "rgba(6,182,212,0.18)" : "var(--crm-glass)",
-                  border: `1px solid ${active ? "rgba(6,182,212,0.5)" : "rgba(51,65,85,0.5)"}`,
-                  color: active ? "#06B6D4" : "#94A3B8",
+                  background: active ? "var(--crm-accent-soft)" : "var(--crm-glass)",
+                  border: `1px solid ${active ? "var(--crm-accent-line)" : "var(--crm-border)"}`,
+                  color: active ? "var(--crm-accent)" : "var(--crm-text-muted)",
                 }}
               >
                 {p.label}
@@ -169,12 +171,12 @@ export default function LeadsNovosPanel({
 
       {/* 4 KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-800/40">
-        <Kpi label="Entrou" value={kpis.total} sub="" color="#06B6D4" icon={Sparkles} />
+        <Kpi label="Entrou" value={kpis.total} sub="" color={hex("#06B6D4")} icon={Sparkles} />
         <Kpi
           label="Boas-vindas"
           value={kpis.welcomeCount}
           sub={`${kpis.welcomePct}%`}
-          color="#10B981"
+          color={hex("#10B981")}
           icon={Hand}
           warn={kpis.total > 0 && kpis.welcomePct < 70}
         />
@@ -189,7 +191,7 @@ export default function LeadsNovosPanel({
           label="Corretor entrou"
           value={kpis.brokerCount}
           sub={`${kpis.brokerPct}%`}
-          color="#F59E0B"
+          color={hex("#F59E0B")}
           icon={UserCheck}
           warn={kpis.total > 5 && kpis.brokerPct < 50}
         />
@@ -230,15 +232,15 @@ export default function LeadsNovosPanel({
                   </div>
                   {/* Mini pipeline */}
                   <div className="flex items-center gap-2 mt-1.5">
-                    <PipelineDot ok={hasWelcome} label="Boas-vindas" color="#10B981" />
+                    <PipelineDot ok={hasWelcome} label="Boas-vindas" color={hex("#10B981")} />
                     <PipelineDot ok={hasIa} label="IA" color="#A78BFA" />
-                    <PipelineDot ok={hasBroker} label="Corretor" color="#F59E0B" />
+                    <PipelineDot ok={hasBroker} label="Corretor" color={hex("#F59E0B")} />
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <ActionBtn icon={Eye} color="#06B6D4" onClick={() => onMonitor(l)} />
+                  <ActionBtn icon={Eye} color={hex("#06B6D4")} onClick={() => onMonitor(l)} />
                   {l.broker_id && (
-                    <ActionBtn icon={Bell} color="#EF4444" onClick={() => onCharge(l)} />
+                    <ActionBtn icon={Bell} color={hex("#EF4444")} onClick={() => onCharge(l)} />
                   )}
                   <RedistMenu
                     candidates={brokers.filter((b) => b.id !== l.broker_id)}
@@ -288,7 +290,7 @@ function Kpi({
         {sub && (
           <span
             className="text-[11px] font-bold tabular-nums"
-            style={{ color: warn ? "#F59E0B" : "#475569" }}
+            style={{ color: warn ? "#F59E0B" : "var(--crm-text-muted)" }}
           >
             {sub}
           </span>

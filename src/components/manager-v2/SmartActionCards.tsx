@@ -8,6 +8,7 @@ import {
   ChevronDown, ChevronRight,
 } from "lucide-react";
 import LeadsNovosPanel from "@/components/manager-v2/LeadsNovosPanel";
+import { useHex } from "@/components/manager-v2/palette";
 
 interface Lead {
   id: string;
@@ -54,6 +55,7 @@ function formatHours(h: number) {
 }
 
 export default function SmartActionCards({ leads, brokers, onMonitor, onCharge, onRedist, onRestore }: Props) {
+  const hex = useHex();
   const reduceMotion = useReducedMotion();
   const brokerMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -90,7 +92,7 @@ export default function SmartActionCards({ leads, brokers, onMonitor, onCharge, 
         sub: "hoje · click pra ver período",
         count: novosHoje.length,
         leads: novosHoje,
-        color: "#06B6D4",
+        color: hex("#06B6D4"),
         icon: Sparkles,
         urgent: false,
       },
@@ -100,7 +102,7 @@ export default function SmartActionCards({ leads, brokers, onMonitor, onCharge, 
         sub: "+2h · SLA estourando",
         count: semResposta.length,
         leads: semResposta,
-        color: "#EF4444",
+        color: hex("#EF4444"),
         icon: Zap,
         urgent: semResposta.length > 0,
       },
@@ -120,7 +122,7 @@ export default function SmartActionCards({ leads, brokers, onMonitor, onCharge, 
         sub: "click pra restaurar",
         count: descartados.length,
         leads: descartados,
-        color: "#94A3B8",
+        color: hex("#94A3B8"),
         icon: Trash2,
         urgent: false,
       },
@@ -334,14 +336,14 @@ function ExpandedList({
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0 relative">
-                <ActionBtn icon={Eye} label="Ver" color="#06B6D4"
+                <ActionBtn icon={Eye} label="Ver" color={hex("#06B6D4")}
                   onClick={() => onMonitor(lead)} />
                 {category.id === "descarte" && onRestore && (
                   <ActionBtn icon={Undo2} label="Restaurar" color="#10B981"
                     onClick={() => onRestore(lead.id)} />
                 )}
                 {broker && category.id !== "descarte" && (
-                  <ActionBtn icon={Bell} label="Cobrar" color="#EF4444"
+                  <ActionBtn icon={Bell} label="Cobrar" color={hex("#EF4444")}
                     onClick={() => onCharge(lead)} />
                 )}
                 <ActionBtn icon={RotateCcw} label="Mover" color="#A78BFA"

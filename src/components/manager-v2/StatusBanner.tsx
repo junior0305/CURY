@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { Trophy, ArrowRight } from "lucide-react";
+import { useHex } from "@/components/manager-v2/palette";
 
 interface Props {
   managerId: string;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function StatusBanner({ managerId, managerName }: Props) {
+  const hex = useHex();
   const [pos, setPos] = useState<{ rank: number; total: number; vendas: number; topName?: string; gap?: number } | null>(null);
 
   useEffect(() => {
@@ -58,7 +60,7 @@ export default function StatusBanner({ managerId, managerName }: Props) {
   // Tom da mensagem
   let tone: "hot" | "warm" | "cool" = "cool";
   let message = "";
-  let color = "#06B6D4";
+  let color = hex("#06B6D4");
   let emoji = "💪";
 
   if (pos.rank === 1) {
@@ -75,7 +77,7 @@ export default function StatusBanner({ managerId, managerName }: Props) {
       : `${managerName}, você está em #${pos.rank}. ${pos.gap} vendas pra empatar com ${pos.topName}.`;
   } else {
     tone = "cool";
-    color = "#EF4444";
+    color = hex("#EF4444");
     emoji = "🎯";
     message = `${managerName}, você está em #${pos.rank} de ${pos.total}. ${pos.gap} vendas pra alcançar ${pos.topName}. Hora de virar o jogo.`;
   }

@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trophy, Power, PowerOff, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { useHex } from "@/components/manager-v2/palette";
 
 interface Lead {
   id: string;
@@ -83,6 +84,7 @@ interface Props {
 }
 
 export default function TeamRankingPanel({ brokers, leads }: Props) {
+  const hex = useHex();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -178,12 +180,12 @@ export default function TeamRankingPanel({ brokers, leads }: Props) {
           const isTop = i === 0 && s.vendasSemana > 0;
           const ausente = s.broker.lead_assignment_enabled === false;
           const barColor = ausente
-            ? "#71717A"
+            ? hex("#71717A")
             : isTop
-            ? "#10B981"
+            ? hex("#10B981")
             : s.score > 30
-            ? "#F59E0B"
-            : "#EF4444";
+            ? hex("#F59E0B")
+            : hex("#EF4444");
 
           return (
             <motion.div
@@ -216,7 +218,7 @@ export default function TeamRankingPanel({ brokers, leads }: Props) {
                 {/* Indicador de status */}
                 <div
                   className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-slate-900 flex items-center justify-center"
-                  style={{ background: ausente ? "#71717A" : "#10B981" }}
+                  style={{ background: ausente ? hex("#71717A") : hex("#10B981") }}
                 >
                   {ausente ? (
                     <PowerOff className="w-1.5 h-1.5 text-slate-900" />

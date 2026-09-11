@@ -12,6 +12,8 @@ import {
   Activity, AlertTriangle, UserPlus, Pause, GraduationCap,
   TrendingUp, Loader2, Heart,
 } from "lucide-react";
+import { useHex, adaptHex } from "@/components/manager-v2/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const CAPACITY_PER_BROKER = 10; // leads/dia saudáveis
 const SATURATION_THRESHOLD = 0.8; // 80% da capacidade já é amarelo
@@ -35,15 +37,19 @@ interface Metrics {
   healthScore: number;       // 0..100
 }
 
-function statusFor(metrics: Metrics): { color: string; label: string; severity: "ok" | "warn" | "crit" } {
-  if (metrics.healthScore >= 70) return { color: "#10B981", label: "Saudável", severity: "ok" };
-  if (metrics.healthScore >= 45) return { color: "#F59E0B", label: "Atenção", severity: "warn" };
-  return { color: "#EF4444", label: "Crítico", severity: "crit" };
+function statusFor(metrics: Metrics, mode: "dark" | "light"): { color: string; label: string; severity: "ok" | "warn" | "crit" } {
+  const c = (h: string) => adaptHex(h, mode);
+  if (metrics.healthScore >= 70) return { color: c("#10B981"), label: "Saudável", severity: "ok" };
+  if (metrics.healthScore >= 45) return { color: c("#F59E0B"), label: "Atenção", severity: "warn" };
+  return { color: c("#EF4444"), label: "Crítico", severity: "crit" };
 }
 
 export default function OperationHealth({
   managerId, brokers, leads, goalMonth, vendasMonth,
 }: Props) {
+  // Assina o tema — sem isto as cores não acompanham o toggle.
+  const { mode } = useTheme();
+  const hex = useHex();
   const [tprMin, setTprMin] = useState<number | null>(null);
   const [vazao7d, setVazao7d] = useState<number>(0);
   const [loading, setLoading] = useState(true);
@@ -127,7 +133,7 @@ export default function OperationHealth({
     };
   }, [brokers, leads, vazao7d, tprMin, goalMonth, vendasMonth]);
 
-  const status = statusFor(metrics);
+  const status = statusFor(metrics, mode);
 
   // Alertas estratégicos
   const alertas: { id: string; icon: any; color: string; title: string; cta: string; action?: () => void }[] = [];
@@ -135,7 +141,7 @@ export default function OperationHealth({
     alertas.push({
       id: "contratar",
       icon: UserPlus,
-      color: "#EF4444",
+      color: hex("#EF4444"),
       title: `Time sobrecarregado · ${Math.round((metrics.saturacao - 1) * 100)}% acima da capacidade`,
       cta: "Solicitar contratação",
       action: () => {
@@ -148,7 +154,7 @@ export default function OperationHealth({
     alertas.push({
       id: "vazao-baixa",
       icon: TrendingUp,
-      color: "#F59E0B",
+      color: hex("#F59E0B"),
       title: "Vazão de leads baixa esta semana",
       cta: "Aumentar prospecção",
     });
@@ -212,7 +218,7 @@ export default function OperationHealth({
               initial={{ strokeDashoffset: 2 * Math.PI * 28 }}
               animate={{ strokeDashoffset: 2 * Math.PI * 28 * (1 - metrics.healthScore / 100) }}
               transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-              style={{ filter: `drop-shadow(0 0 8px ${status.color}60)` }}
+              style={{ filter: mode === "light" ? "none" : `drop-shadow(0 0 8px ${status.color}60)` }}
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
@@ -236,14 +242,14 @@ export default function OperationHealth({
           label="Vazão / dia"
           value={metrics.vazaoDiaria.toFixed(1)}
           sub={`capacidade: ${metrics.capacidadeDiaria}`}
-          color={metrics.saturacao > 1 ? "#EF4444" : "#06B6D4"}
+          color={hex(metrics.saturacao > 1 ? "#EF4444" : "#06B6D4")}
         />
         <KpiBox
           icon={UserPlus}
           label="Saturação time"
           value={`${Math.round(metrics.saturacao * 100)}%`}
           sub={`${metrics.saturados}/${metrics.ativosTime} no limite`}
-          color={metrics.saturacao > 0.9 ? "#EF4444" : metrics.saturacao > 0.7 ? "#F59E0B" : "#10B981"}
+          color={hex(metrics.saturacao > 0.9 ? "#EF4444" : metrics.saturacao > 0.7 ? "#F59E0B" : "#10B981")}
         />
       </div>
 
@@ -256,10 +262,10 @@ export default function OperationHealth({
               style={{
                 color:
                   metrics.tprMedioMin <= 10
-                    ? "#10B981"
+                    ? hex("#10B981")
                     : metrics.tprMedioMin <= 30
-                    ? "#F59E0B"
-                    : "#EF4444",
+                    ? hex("#F59E0B")
+                    : hex("#EF4444"),
               }}
             >
               {metrics.tprMedioMin}min

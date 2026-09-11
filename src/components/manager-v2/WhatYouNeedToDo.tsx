@@ -62,7 +62,9 @@ function formatHours(h: number) {
 function generateActions(
   leads: Lead[],
   brokers: Broker[],
-  unassigned: Lead[]
+  unassigned: Lead[],
+  /** As cores dos cards são calibradas pro escuro; o tema escolhe a legível. */
+  mode: "dark" | "light"
 ): Action[] {
   const actions: Action[] = [];
 
@@ -97,7 +99,7 @@ function generateActions(
       id: "cobrar-consolidado",
       priority: 1,
       icon: Flame,
-      color: "#EF4444",
+      color: adaptHex("#EF4444", mode),
       title,
       detail,
       cta: "Ver leads",
@@ -112,7 +114,7 @@ function generateActions(
       id: "sem-corretor",
       priority: 1,
       icon: UserX,
-      color: "#F59E0B",
+      color: adaptHex("#F59E0B", mode),
       title: `${unassigned.length} lead${unassigned.length > 1 ? "s" : ""} sem corretor`,
       detail: "esperando atribuição na fila",
       cta: "Atribuir",
@@ -196,9 +198,10 @@ export default function WhatYouNeedToDo({
   onShowUnassigned,
   onOpenLead, onChargeLead, onRedistributeLead,
 }: Props) {
+  const { mode } = useTheme();
   const actions = useMemo(
-    () => generateActions(leads as Lead[], brokers as Broker[], unassigned as Lead[]),
-    [leads, brokers, unassigned]
+    () => generateActions(leads as Lead[], brokers as Broker[], unassigned as Lead[], mode),
+    [leads, brokers, unassigned, mode]
   );
 
   const [expanded, setExpanded] = useState<string | null>(null);

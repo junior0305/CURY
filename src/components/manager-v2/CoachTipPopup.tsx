@@ -5,6 +5,8 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, ArrowRight } from "lucide-react";
+import { useHex, adaptHex } from "@/components/manager-v2/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface Tip {
   message: string;
@@ -20,8 +22,10 @@ function pickTip(args: {
   daysLeft: number;
   daysTotal: number;
   ligaRank?: number;
+  /** As cores da dica são calibradas pro escuro; o tema decide a versão legível. */
+  mode: "dark" | "light";
 }): Tip | null {
-  const { managerName, monthlySales, monthlyGoal, daysLeft, daysTotal, ligaRank } = args;
+  const { managerName, monthlySales, monthlyGoal, daysLeft, daysTotal, ligaRank, mode } = args;
   const elapsed = daysTotal - daysLeft;
   const expectedPct = (elapsed / daysTotal) * 100;
   const realPct = monthlyGoal && monthlyGoal > 0 ? (monthlySales / monthlyGoal) * 100 : 0;
@@ -31,7 +35,7 @@ function pickTip(args: {
     return {
       message: `${managerName}, sua equipe não tem meta cadastrada. Sem meta, não dá pra medir progresso.`,
       question: "Como recuperar a meta deste mês?",
-      color: "#F59E0B",
+      color: adaptHex("#F59E0B", mode),
       emoji: "🎯",
     };
   }
@@ -40,7 +44,7 @@ function pickTip(args: {
     return {
       message: `${managerName}, sua meta está crítica. Só ${monthlySales}/${monthlyGoal} vendas em ${elapsed} dias. Veja como virar o jogo.`,
       question: "Como recuperar a meta deste mês?",
-      color: "#EF4444",
+      color: adaptHex("#EF4444", mode),
       emoji: "🔥",
     };
   }
@@ -49,7 +53,7 @@ function pickTip(args: {
     return {
       message: `${managerName}, você está abaixo do ritmo da meta. Veja onde estão seus pontos fracos.`,
       question: "Onde estão meus pontos fracos?",
-      color: "#F59E0B",
+      color: adaptHex("#F59E0B", mode),
       emoji: "⚠️",
     };
   }
@@ -67,7 +71,7 @@ function pickTip(args: {
   return {
     message: `${managerName}, time bem encaminhado. Hora de olhar quem do seu time pode acelerar mais.`,
     question: "O que fazer com minha equipe agora?",
-    color: "#10B981",
+    color: adaptHex("#10B981", mode),
     emoji: "💪",
   };
 }
@@ -87,12 +91,13 @@ export default function CoachTipPopup({
   managerName, monthlySales, monthlyGoal, daysLeftMonth, daysInMonth, ligaRank,
   delayMs = 2500, onAsk,
 }: Props) {
+  const { mode } = useTheme();
   const [visible, setVisible] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   const tip = pickTip({
     managerName, monthlySales, monthlyGoal,
-    daysLeft: daysLeftMonth, daysTotal: daysInMonth, ligaRank,
+    daysLeft: daysLeftMonth, daysTotal: daysInMonth, ligaRank, mode,
   });
 
   useEffect(() => {
