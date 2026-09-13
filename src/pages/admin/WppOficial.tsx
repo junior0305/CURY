@@ -125,7 +125,7 @@ export default function WppOficial() {
 function ExportLeads() {
   const [regiao, setRegiao] = useState("");
   const [campanha, setCampanha] = useState("");
-  const BASE = "https://vaghxnypfphhxiobnhpk.supabase.co/functions/v1/export-leads-csv";
+  const BASE = "https://comandra.com.br/supabase/functions/v1/export-leads-csv";
   const TOKEN = "cury-sp-leads-2026-x7k9";
   function baixar() {
     const p = new URLSearchParams({ token: TOKEN });

@@ -12,8 +12,11 @@ export const COMPANIES = {
     name: 'São Paulo',
     shortName: 'SP',
     color: 'emerald',
-    url: 'https://vaghxnypfphhxiobnhpk.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZhZ2h4bnlwZnBoaHhpb2JuaHBrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMjY3MzUsImV4cCI6MjA4ODYwMjczNX0.eYpXthPp2QBg140SeoF5saARdEtAfW_c1-5S2PBlRwo',
+    // Migrado da Supabase paga para a stack self-hosted no VPS (13/09/2026).
+    // Fica num CAMINHO do domínio, não em subdomínio: o Traefik roteia
+    // /supabase por PathPrefix e remove o prefixo antes do gateway.
+    url: 'https://comandra.com.br/supabase',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5MjYzNDE2LCJleHAiOjIxMDQ2MjM0MTZ9.Ohs3PVk283wk0ozzjiaZkzxGiqyECdY4i02nxInmvao',
   },
 } as const;
 
