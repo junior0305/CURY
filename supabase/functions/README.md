@@ -63,3 +63,23 @@ supabase functions download <slug> --project-ref vaghxnypfphhxiobnhpk   # uma a 
   download (`function_slug: Invalid string: must match pattern /^[A-Za-z0-9_-]+$/`). A função
   está ACTIVE em produção (versão 6, 20/04/2026) e só pode ser lida pelo dashboard do Supabase.
 - **`wa-inbox`** existe aqui mas **não** em produção — resquício, nunca foi deployada.
+
+---
+
+## Snapshot 2026-09-12
+
+Re-exportado de produção (SP `vaghxnypfphhxiobnhpk`) com `supabase functions download`.
+**95 de 96 funções.**
+
+### ⚠️ A que não dá para exportar
+`agente-prospecção-ativa` — o slug tem acento e cedilha, e **nem o CLI nem a
+Management API aceitam** (a API valida o slug contra `^[A-Za-z0-9_-]+$`).
+Ela nunca foi exportada, em nenhum snapshot. Só existe dentro da Supabase.
+Se a conta for encerrada, esse código se perde. Para salvá-la: copiar da tela
+do dashboard, ou renomear a função na Supabase para um slug sem acento e
+exportar em seguida.
+
+### Diferenças vs. o snapshot anterior
+- `create-user`, `get-whatsapp-qr` — correções de 11/09 (cadastro sem QR)
+- `wa-sender`, `wa-webhook` — evoluções do disparador oficial (25/08)
+- `wa-inbox` — **não existe mais em produção**, removida deste espelho

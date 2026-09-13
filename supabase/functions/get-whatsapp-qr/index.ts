@@ -9,6 +9,16 @@ const corsHeaders = {
 // Servidor api.ape77.com.br pode levar ~30s. Timeout generoso.
 const EVO_TIMEOUT = 35000;
 
+// Mesma lista da setup-evolution-webhooks. Se divergir, o chip conecta e o
+// sistema fica surdo pra ele.
+const WEBHOOK_EVENTS = [
+  'QRCODE_UPDATED',
+  'CONNECTION_UPDATE',
+  'MESSAGES_UPSERT',
+  'MESSAGES_UPDATE',
+  'SEND_MESSAGE',
+];
+
 async function evoConnect(base: string, instance: string, apiKey: string, phone?: string | null): Promise<any | null> {
   try {
     const qs = phone ? `?number=${encodeURIComponent(phone)}` : '';
@@ -38,6 +48,58 @@ async function evoLogout(base: string, instance: string, apiKey: string) {
   } catch (_) { /* noop */ }
 }
 
+// Aponta a instância pro webhook_receiver. Tem que acontecer na CRIAÇÃO: chip
+// que conecta sem webhook recebe mensagem e o sistema não fica sabendo —
+// é o ponto 3 do checklist de troca de chip, e o mais fácil de esquecer.
+async function evoSetWebhook(base: string, instance: string, apiKey: string, webhookUrl: string) {
+  try {
+    const r = await fetch(`${base}/webhook/set/${instance}`, {
+      method: 'POST',
+      headers: { apikey: apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true, url: webhookUrl, webhook_by_events: false, events: WEBHOOK_EVENTS }),
+      signal: AbortSignal.timeout(12000),
+    });
+    console.log(`[qr] webhook/set ${instance}: ${r.status}`);
+    return r.ok;
+  } catch (e: any) {
+    console.warn(`[qr] webhook/set erro: ${e.message}`);
+    return false;
+  }
+}
+
+// Cria a instância no servidor Evolution.
+// Isto NÃO existia em lugar nenhum do sistema: o create-user criava a linha em
+// bot_instances e mais nada, então pra todo corretor novo a instância existia no
+// banco e não no servidor. O connect batia 404, as tentativas de restart/logout
+// batiam 404 também, e a função terminava em "não consegui gerar o QR" — que era
+// verdade, mas escondia a causa. 67 instâncias estavam nesse estado.
+async function evoCreate(base: string, instanceRaw: string, apiKey: string, phone: string | null): Promise<any | null> {
+  try {
+    const r = await fetch(`${base}/instance/create`, {
+      method: 'POST',
+      headers: { apikey: apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        instanceName: instanceRaw,
+        qrcode: true,
+        integration: 'WHATSAPP-BAILEYS',
+        ...(phone ? { number: phone } : {}),
+      }),
+      signal: AbortSignal.timeout(EVO_TIMEOUT),
+    });
+    const body = await r.json().catch(() => null);
+    if (!r.ok) {
+      // 403/409 = já existe. Não é erro: segue pro connect normal.
+      console.warn(`[qr] create ${r.status}: ${JSON.stringify(body)?.substring(0, 200)}`);
+      return r.status === 403 || r.status === 409 ? {} : null;
+    }
+    console.log(`[qr] instância criada no servidor: ${instanceRaw}`);
+    return body;
+  } catch (e: any) {
+    console.warn(`[qr] create erro: ${e.message}`);
+    return null;
+  }
+}
+
 function extractQR(j: any): string | null { return j?.base64 || j?.qrcode?.base64 || null; }
 function extractPairing(j: any): string | null {
   const c = j?.pairingCode || j?.pairing_code || null;
@@ -50,10 +112,12 @@ serve(async (req) => {
     new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') || '',
+      supabaseUrl,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
     );
+    const webhookUrl = `${supabaseUrl}/functions/v1/webhook_receiver`;
 
     const { botInstanceId, forceQR, method } = await req.json();
     if (!botInstanceId) return json({ error: 'botInstanceId required' }, 400);
@@ -82,11 +146,16 @@ serve(async (req) => {
         return json({ connected: false, base64: bot.last_qr_base64, method: 'qr', fromCache: true });
       }
     }
-    if (bot.status === 'open') return json({ connected: true, fromCache: true });
+    // `status` mente: check-bot-health e outros caminhos deixam status='open' em chip
+    // com sessao morta (401). Quem manda aqui e o real_state — senao o atalho responde
+    // "ja conectado" e o corretor nunca ve o QR. Caso Flavia/equipe Dudalina 25/08.
+    if (bot.status === 'open' && bot.real_state === 'open') return json({ connected: true, fromCache: true });
 
     let state = 'unknown';
+    let stateHttp = 0;
     try {
       const sr = await fetch(`${base}/instance/connectionState/${instance}`, { headers: { apikey: apiKey }, signal: AbortSignal.timeout(EVO_TIMEOUT) });
+      stateHttp = sr.status;
       if (sr.ok) { const j = await sr.json().catch(() => ({})); state = String(j?.instance?.state || j?.state || 'unknown').toLowerCase(); }
     } catch (e: any) {
       return json({ connected: false, error: 'evolution_unreachable', error_detail: 'Não consegui falar com o servidor do WhatsApp. Tente de novo em alguns segundos.' });
@@ -94,6 +163,25 @@ serve(async (req) => {
     if (state === 'open') {
       await supabase.from('bot_instances').update({ status: 'open', real_state: 'open' }).eq('id', botInstanceId);
       return json({ connected: true, state });
+    }
+
+    // A instância não existe NO SERVIDOR (corretor recém-cadastrado). Cria agora,
+    // já com o webhook, e aproveita o QR que o próprio create devolve.
+    if (stateHttp === 404) {
+      const created = await evoCreate(base, instanceRaw, apiKey, phone);
+      if (created === null) {
+        return json({ connected: false, error: 'not_created', error_detail: 'Não consegui criar a instância no servidor do WhatsApp. Avise o suporte.' });
+      }
+      await evoSetWebhook(base, instance, apiKey, webhookUrl);
+      let qrNew = extractQR(created);
+      if (!qrNew) { const jc = await evoConnect(base, instance, apiKey); qrNew = extractQR(jc); }
+      if (qrNew) {
+        await supabase.from('bot_instances')
+          .update({ last_qr_base64: qrNew, last_qr_at: new Date().toISOString(), status: 'connecting', real_state: 'connecting' })
+          .eq('id', botInstanceId);
+        return json({ connected: false, method: 'qr', base64: qrNew, created: true });
+      }
+      return json({ connected: false, error: 'unavailable', error_detail: 'Instância criada, mas o QR não veio. Tente de novo em alguns segundos.' });
     }
 
     // FIX conecta-e-cai: instância em 'connecting' = QR aguardando scan OU handshake pos-scan.

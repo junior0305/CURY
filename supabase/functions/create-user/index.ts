@@ -69,12 +69,38 @@ serve(async (req) => {
         resolvedBotInstanceId = existingBot.id;
         console.log(`[create-user] bot_instance existente reutilizada: ${instanceName} (${existingBot.id})`);
       } else {
+        // Qual servidor Evolution esta instância vai morar. Antes isto não era
+        // resolvido: a instância nascia com evolution_server_id NULL, e sem
+        // servidor o QR não tem onde ser gerado — o corretor ficava travado.
+        // Preferência: o servidor onde já está a MAIORIA da equipe do gerente
+        // (mantém o time junto e a carga previsível); se não der, o servidor de
+        // qualquer instância de referência.
+        let serverId: string | null = null;
+        const mgrId = (managerId === 'none' || !managerId) ? null : managerId;
+        if (mgrId) {
+          const { data: irmaos } = await supabaseAdmin
+            .from('profiles')
+            .select('bot_instances!bot_instance_id(evolution_server_id)')
+            .eq('manager_id', mgrId)
+            .not('bot_instance_id', 'is', null);
+          const contagem = new Map<string, number>();
+          for (const row of (irmaos ?? [])) {
+            const sid = (row as any)?.bot_instances?.evolution_server_id;
+            if (sid) contagem.set(sid, (contagem.get(sid) ?? 0) + 1);
+          }
+          let melhor = 0;
+          for (const [sid, n] of contagem) if (n > melhor) { melhor = n; serverId = sid; }
+        }
+
         const { data: refBot } = await supabaseAdmin
           .from('bot_instances')
-          .select('evolution_api_url, evolution_api_key')
+          .select('evolution_api_url, evolution_api_key, evolution_server_id')
           .not('evolution_api_url', 'is', null)
+          .not('evolution_server_id', 'is', null)
           .limit(1)
           .maybeSingle();
+
+        if (!serverId) serverId = refBot?.evolution_server_id ?? null;
 
         if (refBot?.evolution_api_url) {
           const { data: newBot } = await supabaseAdmin
@@ -85,6 +111,8 @@ serve(async (req) => {
               phone: phone || null,
               evolution_api_url: refBot.evolution_api_url,
               evolution_api_key: refBot.evolution_api_key,
+              evolution_server_id: serverId,
+              team_manager_id: mgrId,
               status: 'active',
               weight: 50,
               priority: 5,
@@ -122,7 +150,17 @@ serve(async (req) => {
         updated_at: new Date().toISOString()
       })
 
-    if (profileError) console.error("Profile update error:", profileError.message)
+    // Antes isto era só um console.error e a função devolvia success:true — o
+    // admin via "usuário criado" com o perfil pela metade. Se o perfil não
+    // gravou, o cadastro NÃO deu certo e quem cadastrou precisa saber.
+    if (profileError) {
+      console.error("[create-user] falha ao gravar o perfil:", profileError.message)
+      // O usuário de auth já existe neste ponto. Se ele ficasse pra trás, a
+      // segunda tentativa esbarraria em "e-mail já cadastrado" e a pessoa
+      // ficaria sem saída. Desfaz e deixa o cadastro repetível.
+      await supabaseAdmin.auth.admin.deleteUser(userData.user.id).catch(() => {})
+      throw new Error(`Cadastro desfeito: o perfil não gravou (${profileError.message}). Tente de novo.`)
+    }
 
     return new Response(JSON.stringify({ success: true, user: userData.user }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

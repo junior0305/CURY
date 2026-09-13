@@ -54,7 +54,13 @@ serve(async (req) => {
       const { data: nt } = await sb.from('whatsapp_threads').insert({ phone: to, contact_name: b.name||null, lead_id: b.lead_id||null, campaign_id: b.campaign_id||null, ai_autoreply: b.ai_autoreply||false, last_outbound_at: new Date().toISOString() }).select('*').maybeSingle();
       thread = nt;
     } else {
-      await sb.from('whatsapp_threads').update({ last_outbound_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', thread.id);
+      // Thread que ja existia nunca recebia o campaign_id do disparo novo — e o
+      // roteamento no wa-webhook exige campaign_id. Sem isto, quem ja tinha conversa
+      // respondia "1" e nao caia em corretor nenhum.
+      const upd: Record<string, unknown> = { last_outbound_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      if (b.campaign_id) upd.campaign_id = b.campaign_id;
+      if (b.lead_id && !thread.lead_id) upd.lead_id = b.lead_id;
+      await sb.from('whatsapp_threads').update(upd).eq('id', thread.id);
     }
 
     await sb.from('whatsapp_messages').insert({ wamid, thread_id: thread?.id||null, campaign_id: b.campaign_id||null, phone: to, direction:'outbound', msg_type: kind, body: kind==='text'? String(b.text||'') : (b.template_name||null), media_url: b.header_image_url||null, template_name: kind==='template'? b.template_name : null, status: ok?'sent':'failed', error: ok? null : (j?.error||{ raw:'send_failed' }) });
