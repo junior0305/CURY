@@ -107,3 +107,149 @@ html[data-theme="dark"] .mgr10{
 .mgr10 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:40;display:grid;grid-template-columns:repeat(5,1fr);background:color-mix(in srgb,var(--paper) 92%,transparent);backdrop-filter:saturate(1.6) blur(16px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}.mgr10 .tab{display:grid;justify-items:center;gap:3px;padding:9px 0;color:var(--ink-3);transition:color .14s}.mgr10 .tab svg{width:21px;height:21px}.mgr10 .tab span{font-size:10px;font-weight:600}.mgr10 .tab.on{color:var(--ink)}.mgr10 .tab-w{position:relative}.mgr10 .badge{position:absolute;top:-3px;right:-7px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--red);color:#fff;font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:700;display:grid;place-items:center}@media(min-width:900px){.mgr10{padding-bottom:var(--s6);padding-left:82px}.mgr10 .bar-in{padding-left:calc(var(--s2) + 82px)}.mgr10 .tabs{top:56px;bottom:auto;left:0;right:auto;width:82px;height:calc(100vh - 56px);grid-template-columns:1fr;grid-auto-rows:min-content;gap:4px;padding:var(--s2) 0;border-top:0;border-right:1px solid var(--line);align-content:start}.mgr10 .tab{padding:11px 0;border-radius:10px;margin:0 10px}.mgr10 .tab.on{background:var(--sunk)}
 }.mgr10 .view[hidden]{display:none}.mgr10 .recalc{opacity:.45;transition:opacity .2s}
 
+
+/* ──────────────────────────────────────────────────────────────────────────
+   TEMPO REAL — o estado de hoje da equipe.
+   Regra visual que manda aqui: a tarja de gravidade é grossa e o "online" é um
+   ponto pequeno. Alguém pode estar verde e crítico ao mesmo tempo, e nesse caso
+   a gravidade tem que ganhar o olho.
+   ────────────────────────────────────────────────────────────────────────── */
+.mgr10 .tr{ --crit:#C8265C; --crit-s:rgba(200,38,92,.11);
+            --trav:#8B46C9; --trav-s:rgba(139,70,201,.12);
+            --warn:#B4690E; --warn-s:rgba(180,105,14,.12);
+            --okk:#0E8A5F;  --okk-s:rgba(14,138,95,.12);
+            --o-anuncio:#1D4ED8; --o-disparo:#8B46C9;
+            --o-repescagem:#B4690E; --o-propria:#9AA9C4; }
+html[data-theme="dark"] .mgr10 .tr{ --crit:#FF6E9C; --crit-s:rgba(255,110,156,.14);
+            --trav:#C08BF0; --trav-s:rgba(192,139,240,.15);
+            --warn:#E0A34A; --warn-s:rgba(224,163,74,.14);
+            --okk:#3FCF96;  --okk-s:rgba(63,207,150,.14);
+            --o-anuncio:#6C9BF5; --o-disparo:#C08BF0;
+            --o-repescagem:#E0A34A; --o-propria:#5B6C8A; }
+
+.mgr10 .tr-filtros{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:var(--s2)}
+.mgr10 .tr-fl{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card);
+  border-radius:99px;padding:5px 12px 5px 10px;font-size:12.5px;color:var(--ink-2);cursor:pointer;
+  transition:background .13s,border-color .13s,color .13s}
+.mgr10 .tr-fl:hover{background:var(--sunk)}
+.mgr10 .tr-fl.on{border-color:var(--ink-3);color:var(--ink);font-weight:600;background:var(--sunk)}
+.mgr10 .tr-fl s{width:8px;height:8px;border-radius:3px;text-decoration:none;flex:none;background:var(--ink-3)}
+.mgr10 .tr-fl.n-crit s{background:var(--crit)} .tr-fl.n-trav s{background:var(--trav)}
+.mgr10 .tr-fl.n-warn s{background:var(--warn)} .tr-fl.n-ok s{background:var(--okk)}
+.mgr10 .tr-fl b{font-family:var("JetBrains Mono",monospace);font-weight:700;font-variant-numeric:tabular-nums}
+.mgr10 .tr-fl.work.on{background:var(--okk-s);border-color:var(--okk);color:var(--okk);font-weight:700}
+.mgr10 .tr-fl .x{width:16px;height:16px;border-radius:99px;background:currentColor;color:var(--card);
+  display:grid;place-items:center;font-size:10px;font-weight:700;margin-left:2px}
+.mgr10 .tr-fsep{width:1px;height:20px;background:var(--line);margin:0 3px}
+
+.mgr10 .tr-item{position:relative;border-top:1px solid var(--hair)}
+.mgr10 .tr-item:first-child{border-top:0}
+.mgr10 .tr-item::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:transparent;z-index:1}
+.mgr10 .tr-item.n-crit::before{background:var(--crit)}
+.mgr10 .tr-item.n-trav::before{background:var(--trav)}
+.mgr10 .tr-item.n-warn::before{background:var(--warn)}
+
+.mgr10 .tr-row{display:grid;grid-template-columns:34px minmax(0,1.5fr) 126px 136px 120px minmax(0,.8fr) auto;
+  align-items:center;gap:11px;padding:11px 14px 11px 17px;cursor:pointer}
+.mgr10 .tr-row:hover{background:var(--sunk)}
+.mgr10 .tr-row:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+
+.mgr10 .tr-av{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+  font-weight:700;font-size:12.5px;letter-spacing:-.02em;background:var(--sunk);color:var(--ink-3)}
+.mgr10 .n-crit .tr-av{background:var(--crit-s);color:var(--crit)}
+.mgr10 .n-trav .tr-av{background:var(--trav-s);color:var(--trav)}
+.mgr10 .n-warn .tr-av{background:var(--warn-s);color:var(--warn)}
+.mgr10 .n-ok   .tr-av{background:var(--okk-s);color:var(--okk)}
+
+.mgr10 .tr-nm{min-width:0}
+.mgr10 .tr-nm b{display:block;font-size:14.5px;font-weight:600;letter-spacing:-.012em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mgr10 .tr-cw{display:flex;align-items:center;gap:7px;margin-top:5px}
+.mgr10 .tr-cw>span{font-size:11px;color:var(--ink-3);white-space:nowrap}
+.mgr10 .tr-cart{display:flex;height:5px;border-radius:99px;overflow:hidden;width:92px;
+  background:var(--sunk);flex:none}
+.mgr10 .tr-cart.largo{width:100%;height:8px}
+.mgr10 .tr-cart i{display:block;height:100%}
+.mgr10 .tr-cart .o-anuncio{background:var(--o-anuncio)} .tr-cart .o-disparo{background:var(--o-disparo)}
+.mgr10 .tr-cart .o-repescagem{background:var(--o-repescagem)} .tr-cart .o-propria{background:var(--o-propria)}
+
+/* o online é a segunda informação da linha: o gerente precisa ver quem está no
+   sistema sem abrir um por um */
+.mgr10 .tr-trab{font-size:13px}
+.mgr10 .tr-trab b{display:block;color:var(--okk);font-weight:700;font-size:13.5px}
+.mgr10 .tr-trab.faltou b{color:var(--ink-3);font-weight:500}
+.mgr10 .tr-trab s{display:flex;align-items:center;gap:6px;text-decoration:none;font-size:12.5px;
+  margin-top:3px;font-weight:600;color:var(--ink-3)}
+.mgr10 .tr-trab s em{width:7px;height:7px;border-radius:99px;background:currentColor;font-style:normal;flex:none}
+.mgr10 .tr-trab s.on{color:var(--okk)}
+.mgr10 .tr-trab s.off{color:var(--ink-3);font-weight:500}
+
+.mgr10 .tr-sw{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--card);
+  border-radius:99px;padding:4px 11px 4px 5px;cursor:pointer;transition:border-color .13s;white-space:nowrap}
+.mgr10 .tr-sw:hover{border-color:var(--ink-3)}
+.mgr10 .tr-sw:disabled{opacity:.5;cursor:default}
+.mgr10 .tr-sw-d{width:26px;height:15px;border-radius:99px;background:var(--sunk);position:relative;flex:none;
+  transition:background .18s}
+.mgr10 .tr-sw-d i{position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:99px;
+  background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.25);
+  transition:transform .18s cubic-bezier(.22,.7,.3,1)}
+.mgr10 .tr-sw.on .tr-sw-d{background:var(--okk)}
+.mgr10 .tr-sw.on .tr-sw-d i{transform:translateX(11px)}
+.mgr10 .tr-sw-t{font-size:11.5px;font-weight:600;color:var(--ink-3);line-height:1.25;text-align:left}
+.mgr10 .tr-sw.on .tr-sw-t{color:var(--ink-2)}
+.mgr10 .tr-sw-t em{display:block;font-style:normal;font-size:9.5px;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--ink-3);margin-top:1px}
+.mgr10 .tr-sw[data-src="gerente"] .tr-sw-t em{color:var(--blue)}
+
+.mgr10 .tr-badge{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:5px 7px 5px 11px;
+  font-weight:700;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;
+  background:var(--sunk);color:var(--ink-3)}
+.mgr10 .n-crit .tr-badge{background:var(--crit-s);color:var(--crit)}
+.mgr10 .n-trav .tr-badge{background:var(--trav-s);color:var(--trav)}
+.mgr10 .n-warn .tr-badge{background:var(--warn-s);color:var(--warn)}
+.mgr10 .n-ok   .tr-badge{background:var(--okk-s);color:var(--okk)}
+.mgr10 .tr-badge i{width:16px;height:16px;border-radius:99px;border:1.3px solid currentColor;opacity:.55;
+  display:grid;place-items:center;font-size:9.5px;font-weight:700;letter-spacing:0;font-style:normal}
+.mgr10 .tr-item.pq .tr-badge i{opacity:1}
+
+.mgr10 .tr-mini{display:flex;gap:13px}
+.mgr10 .tr-mini>span{text-align:right;min-width:28px}
+.mgr10 .tr-mini b{display:block;font-family:var("JetBrains Mono",monospace);font-weight:700;font-size:15px;line-height:1;
+  font-variant-numeric:tabular-nums}
+.mgr10 .tr-mini i{display:block;font-style:normal;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ink-3);margin-top:3px}
+.mgr10 .tr-mini .z b{color:var(--ink-3);font-weight:400}
+.mgr10 .tr-mini .h b{color:var(--crit)}
+
+/* a explicação abre DENTRO do card — sem balãozinho flutuante, que no celular
+   vaza da tela e abre no lugar errado */
+.mgr10 .tr-pq{display:grid;grid-template-rows:0fr;transition:grid-template-rows .24s cubic-bezier(.22,.7,.3,1)}
+.mgr10 .tr-item.pq .tr-pq{grid-template-rows:1fr}
+.mgr10 .tr-pq-in{overflow:hidden}
+.mgr10 .tr-pq-c{margin:0 14px 13px 62px;padding:12px 14px;border-radius:11px;background:var(--sunk)}
+.mgr10 .tr-pq-c h4{margin:0 0 6px;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+.mgr10 .n-crit .tr-pq-c h4{color:var(--crit)} .n-trav .tr-pq-c h4{color:var(--trav)}
+.mgr10 .n-warn .tr-pq-c h4{color:var(--warn)} .n-ok .tr-pq-c h4{color:var(--okk)}
+.mgr10 .tr-pq-c p{margin:0;font-size:13px;line-height:1.5;color:var(--ink-2)}
+.mgr10 .tr-pq-c ul{margin:8px 0 0;padding-left:17px;font-size:12.5px;color:var(--ink-2);line-height:1.65}
+.mgr10 .tr-orig{margin-top:13px}
+.mgr10 .tr-orig-l{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:9px;font-size:12px;color:var(--ink-2)}
+.mgr10 .tr-orig-l span{display:flex;align-items:center;gap:6px}
+.mgr10 .tr-orig-l s{width:8px;height:8px;border-radius:3px;text-decoration:none;flex:none}
+.mgr10 .tr-orig-l .o-anuncio{background:var(--o-anuncio)} .tr-orig-l .o-disparo{background:var(--o-disparo)}
+.mgr10 .tr-orig-l .o-repescagem{background:var(--o-repescagem)} .tr-orig-l .o-propria{background:var(--o-propria)}
+.mgr10 .tr-orig-l b{font-family:var("JetBrains Mono",monospace);font-weight:700}
+
+@media (max-width:1240px){
+  .tr-row{grid-template-columns:34px minmax(0,1.2fr) 120px 128px minmax(0,.8fr) auto;gap:10px}
+  .tr-row .tr-sw{grid-column:2/-1;justify-self:start}
+}
+@media (max-width:1040px){
+  .tr-row{grid-template-columns:34px minmax(0,1fr) auto;gap:11px;row-gap:10px;padding:12px 13px 12px 17px}
+  .tr-trab{grid-column:2/-1}
+  .tr-row .tr-sw{grid-column:1/-1;margin-left:45px}
+  .tr-mini{grid-column:1/-1;padding-left:45px}
+  .tr-acao{grid-column:2/-1;justify-self:end}
+  .tr-pq-c{margin-left:45px}
+}
+@media (max-width:560px){ .tr-pq-c{margin-left:13px} }

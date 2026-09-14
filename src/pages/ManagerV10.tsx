@@ -18,7 +18,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useManagerV10, diasUteisRestantes, type V10Lead } from "@/hooks/useManagerV10";
 import { useCruzamentoCury } from "@/hooks/useCruzamentoCury";
 import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/components/manager-v10/ui";
-import AoVivo from "@/components/manager-v10/AoVivo";
+import TempoReal from "@/components/manager-v10/TempoReal";
 import AchadosCury from "@/components/manager-v10/AchadosCury";
 import "@/styles/manager-v10.css";
 
@@ -32,7 +32,7 @@ const VIEWS: { v: View; label: string; path: string }[] = [
   { v: "time", label: "Time", path: "M2.5 20c0-3.6 2.9-5.6 6.5-5.6s6.5 2 6.5 5.6M17 5.5a3 3 0 0 1 0 5.6M18.5 14.6c2 .7 3 2.4 3 5.4" },
   // Ao vivo: o que a operação FEZ hoje, medido na Cury. É a única métrica do
   // painel que não depende de alguém marcar alguma coisa aqui dentro.
-  { v: "aovivo", label: "Ao vivo", path: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3.5 2" },
+  { v: "aovivo", label: "Tempo real", path: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3.5 2" },
 ];
 
 // "WhatsApp" e "Campanhas" eram duas portas pra mesma coisa — mandar mensagem.
@@ -407,7 +407,7 @@ export default function ManagerV10() {
             </Sec>
           </section>
         ) : view === "aovivo" ? (
-          <AoVivo managerId={userId} />
+          <TempoReal managerId={userId} />
         ) : null}
       </main>
     </div>
