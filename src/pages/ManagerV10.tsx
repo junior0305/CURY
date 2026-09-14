@@ -17,9 +17,10 @@ import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useManagerV10, diasUteisRestantes, type V10Lead } from "@/hooks/useManagerV10";
 import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/components/manager-v10/ui";
+import AoVivo from "@/components/manager-v10/AoVivo";
 import "@/styles/manager-v10.css";
 
-type View = "hoje" | "time";
+type View = "hoje" | "time" | "aovivo";
 
 // Quatro portas, não sete. Coach, Liga, Análise e Pool foram feitos pra uma
 // operação que está parada — continuam em /manager/coach etc. e voltam pra cá
@@ -27,11 +28,15 @@ type View = "hoje" | "time";
 const VIEWS: { v: View; label: string; path: string }[] = [
   { v: "hoje", label: "Hoje", path: "M3 12l9-8 9 8M5 10v10h14V10" },
   { v: "time", label: "Time", path: "M2.5 20c0-3.6 2.9-5.6 6.5-5.6s6.5 2 6.5 5.6M17 5.5a3 3 0 0 1 0 5.6M18.5 14.6c2 .7 3 2.4 3 5.4" },
+  // Ao vivo: o que a operação FEZ hoje, medido na Cury. É a única métrica do
+  // painel que não depende de alguém marcar alguma coisa aqui dentro.
+  { v: "aovivo", label: "Ao vivo", path: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3.5 2" },
 ];
 
+// "WhatsApp" e "Campanhas" eram duas portas pra mesma coisa — mandar mensagem.
+// Viraram uma só, com as etapas (conexão, template, disparo, conversas) dentro.
 const LINKS: { to: string; label: string; path: string }[] = [
-  { to: "/manager/whatsapp", label: "WhatsApp",  path: "M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-5.7A8.4 8.4 0 1 1 21 11.5z" },
-  { to: "/manager/campanha", label: "Campanhas", path: "M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" },
+  { to: "/manager/whatsapp", label: "Disparar", path: "M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-5.7A8.4 8.4 0 1 1 21 11.5z" },
 ];
 
 function loadFonts() {
@@ -399,6 +404,8 @@ export default function ManagerV10() {
               ) : null}
             </Sec>
           </section>
+        ) : view === "aovivo" ? (
+          <AoVivo managerId={userId} />
         ) : null}
       </main>
     </div>
