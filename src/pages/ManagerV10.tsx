@@ -18,6 +18,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useManagerV10, diasUteisRestantes, type V10Lead } from "@/hooks/useManagerV10";
 import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/components/manager-v10/ui";
 import AoVivo from "@/components/manager-v10/AoVivo";
+import AchadosCury from "@/components/manager-v10/AchadosCury";
 import "@/styles/manager-v10.css";
 
 type View = "hoje" | "time" | "aovivo";
@@ -155,6 +156,9 @@ export default function ManagerV10() {
         id: b.id,
         nome: [b.first_name, b.last_name].filter(Boolean).join(" ") || "—",
         recebidos: doMes.length,
+        /** carteira ativa inteira, não só a do mês — é o que está na mão dele agora */
+        carteira: meus.filter((l) => !["CONCLUDED","EXCLUDED","ABANDONED"].includes(l.status ?? "")).length,
+        horasSemEntrar: horas(b.last_seen_at),
         respPct: doMes.length ? (responderamB / doMes.length) * 100 : null,
         visitas: data.visitasPorCorretor.get(b.id) || 0,
         vendas: vendasB,
@@ -396,6 +400,16 @@ export default function ManagerV10() {
                   </p>
                 </div>
               </Panel>
+              <AchadosCury
+                managerId={userId}
+                time={calc.porCorretor.map((c) => ({
+                  profileId: c.id, nome: c.nome,
+                  recebidos: c.recebidos, carteira: c.carteira,
+                  vendas: c.vendas, saldo: c.saldo,
+                  custoLead: data.dinheiro.custoLead,
+                  horasSemEntrar: c.horasSemEntrar, chip: c.chip,
+                }))}
+              />
               {data.visitasOrigem.funil === 0 ? (
                 <p className="sec-sub" style={{ marginTop: "var(--s2)" }}>
                   A coluna <b>Visitas</b> está vazia porque a visita não vem sendo registrada —
