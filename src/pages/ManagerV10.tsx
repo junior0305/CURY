@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useManagerV10, diasUteisRestantes, type V10Lead } from "@/hooks/useManagerV10";
+import { useCruzamentoCury } from "@/hooks/useCruzamentoCury";
 import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/components/manager-v10/ui";
 import AoVivo from "@/components/manager-v10/AoVivo";
 import AchadosCury from "@/components/manager-v10/AchadosCury";
@@ -69,6 +70,10 @@ export default function ManagerV10() {
   const userId = session?.user?.id;
   const { mode, toggle } = useTheme();
   const { data, isLoading } = useManagerV10(userId);
+  // Visita real vem da Cury. A coluna antiga lia `leads` e dava sempre zero,
+  // porque ninguém registra visita no Comandra — duas 'visitas' diferentes
+  // na mesma tela era o pior defeito da aba.
+  const { data: cruz } = useCruzamentoCury(userId);
   const [view, setView] = useState<View>("hoje");
 
   useEffect(loadFonts, []);
@@ -104,13 +109,22 @@ export default function ManagerV10() {
     const noMes = leads.filter((l) => l.created_at >= new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString());
     const responderam = noMes.filter((l) => !!l.last_lead_response_at).length;
     const emNegociacao = noMes.filter((l) => ["IN_PROGRESS", "NEGOTIATING", "REACTIVATED"].includes(l.status || "")).length;
+    // Visita e venda: a Cury é a fonte. O Comandra só sabe o que alguém digitou,
+    // e ninguém digita — o degrau vinha zero e contradizia as outras abas.
+    const visitasCury = cruz
+      ? [...cruz.porProfile.values()].reduce((a, c) => a + c.visitas, 0) : null;
+    const vendasCury = cruz
+      ? [...cruz.porProfile.values()].reduce((a, c) => a + c.vendas, 0) : null;
+    const visitasFunil = visitasCury ?? visitasMes;
+    const vendasFunil = vendasCury ?? vendas;
+
     const passos = [
       { label: "Entraram",       n: leadsMes,     keptPct: 100 as number | null },
       { label: "Responderam",    n: responderam,  keptPct: leadsMes ? (responderam / leadsMes) * 100 : null },
       { label: "Em negociação",  n: emNegociacao, keptPct: responderam ? (emNegociacao / responderam) * 100 : null },
-      { label: "Visitaram",      n: visitasMes,   keptPct: emNegociacao ? (visitasMes / emNegociacao) * 100 : null },
-      { label: "Em documentos",  n: docsMes,      keptPct: visitasMes ? (docsMes / visitasMes) * 100 : null },
-      { label: "Venderam",       n: vendas,       keptPct: docsMes ? (vendas / docsMes) * 100 : null },
+      { label: "Visitaram",      n: visitasFunil, keptPct: emNegociacao ? (visitasFunil / emNegociacao) * 100 : null },
+      { label: "Em documentos",  n: docsMes,      keptPct: visitasFunil ? (docsMes / visitasFunil) * 100 : null },
+      { label: "Venderam",       n: vendasFunil,  keptPct: docsMes ? (vendasFunil / docsMes) * 100 : null },
     ];
     // O degrau que mais retém MENOS é onde o dinheiro para.
     let pior = -1, piorPct = Infinity;
@@ -178,7 +192,7 @@ export default function ManagerV10() {
       porCorretor,
       parados: leads.filter(quenteParado),
     };
-  }, [data]);
+  }, [data, cruz]);
 
   if (!userId || isLoading || !data || !calc) {
     return (
@@ -275,14 +289,11 @@ export default function ManagerV10() {
               <Panel>
                 <Funnel steps={calc.passos.map((p, i) => ({ ...p, drop: i === calc.pior }))} />
               </Panel>
-              {data.visitasOrigem.funil + data.visitasOrigem.secretaria === 0 ? (
-                <p className="sec-sub" style={{ marginTop: "var(--s2)" }}>
-                  <b>Visita está zerada</b> — e não porque ninguém visitou. O campo
-                  <code> leads.visit_scheduled_at</code> nunca foi preenchido, e os lançamentos
-                  da secretária pararam em 08/08. Enquanto a visita não for registrada, este
-                  degrau e tudo que depende dele são cegos.
-                </p>
-              ) : null}
+              <p className="sec-sub" style={{ marginTop: "var(--s2)" }}>
+                <b>Visita</b> e <b>venda</b> vêm do app da Cury (atendimento e venda
+                registrados no plantão), não do que foi digitado aqui. É o mesmo número
+                que aparece em Ao vivo e em Time.
+              </p>
             </Sec>
 
             <Sec
@@ -333,44 +344,27 @@ export default function ManagerV10() {
           </section>
         ) : view === "time" ? (
           <section className="view">
-            <Sec title="Quem está de pé agora" tag={`${calc.doDia.online} de ${data.brokers.length} online`}>
-              <ScoreRow>
-                <Cell label="Online agora"  value={calc.doDia.online} tone={calc.doDia.online > 0 ? "good" : undefined} sub="visto nos últimos 15min" />
-                <Cell label="Sumidos"       value={calc.porCorretor.filter((c) => c.sumido).length} tone={calc.porCorretor.some((c) => c.sumido) ? "alert" : undefined} sub="+3 dias sem entrar" />
-                <Cell label="Sem chip"      value={calc.porCorretor.filter((c) => !c.chip).length} tone={calc.porCorretor.some((c) => !c.chip) ? "alert" : undefined} sub="não recebe no WhatsApp" />
-                <Cell label="Fora da roleta" value={calc.porCorretor.filter((c) => !c.naRoleta).length} sub="não entra no rodízio" />
-              </ScoreRow>
-              <div className="crew" style={{ marginTop: "var(--s2)" }}>
-                {calc.porCorretor.map((c) => (
-                  <span key={c.id} className="who">
-                    <span className={`dot ${c.online ? "on" : "off"}`} />
-                    <b>{c.nome}</b>
-                    <span className="who-n">{c.recebidos}</span>
-                  </span>
-                ))}
-              </div>
-            </Sec>
-
             <Sec
               title="Quem dá dinheiro, quem custa"
               tag="no mês"
               sub={<>Cada corretor recebeu leads que <b>foram pagos</b>. A coluna <b>saldo</b> é o que ele devolveu em comissão menos o que os leads dele custaram. Verde sustenta a operação; vermelho é lead pago virando nada.</>}
             >
               <Tbl
-                cols="minmax(140px,1.6fr) 62px 62px 62px 62px 96px 104px"
-                head={["Corretor", "Leads", "Resp", "Visitas", "Vendas", "Custo", "Saldo"]}
+                cols="minmax(140px,1.6fr) 62px 62px 62px 62px 62px 96px 104px"
+                head={["Corretor", "Leads", "Resp", "Plantão", "Visitas", "Vendas", "Custo", "Saldo"]}
               >
                 {calc.porCorretor.length === 0 ? (
                   <Blank title="Nenhum corretor nesta equipe" />
                 ) : calc.porCorretor.map((c) => (
-                  <Tr key={c.id} cols="minmax(140px,1.6fr) 62px 62px 62px 62px 96px 104px">
+                  <Tr key={c.id} cols="minmax(140px,1.6fr) 62px 62px 62px 62px 62px 96px 104px">
                     <span className="nmc">
                       <span className={`dot ${c.online ? "on" : "off"}`} />
                       <b>{c.nome}</b>
                     </span>
                     <span className="num">{c.recebidos}</span>
                     <span className="num">{c.respPct === null ? "—" : `${Math.round(c.respPct)}%`}</span>
-                    <span className="num">{c.visitas || "—"}</span>
+                    <span className="num">{cruz?.porProfile.get(c.id)?.diasDePlantao || "—"}</span>
+                    <span className="num">{cruz?.porProfile.get(c.id)?.visitas || "—"}</span>
                     <span className="num">{c.vendas}</span>
                     <span className="num">{brl(c.custo)}</span>
                     <span className={`num saldo ${c.saldo >= 0 ? "pos" : "neg"}`}>{brl(c.saldo)}</span>
@@ -401,7 +395,7 @@ export default function ManagerV10() {
                 </div>
               </Panel>
               <AchadosCury
-                managerId={userId}
+                cruz={cruz}
                 time={calc.porCorretor.map((c) => ({
                   profileId: c.id, nome: c.nome,
                   recebidos: c.recebidos, carteira: c.carteira,
@@ -410,12 +404,6 @@ export default function ManagerV10() {
                   horasSemEntrar: c.horasSemEntrar, chip: c.chip,
                 }))}
               />
-              {data.visitasOrigem.funil === 0 ? (
-                <p className="sec-sub" style={{ marginTop: "var(--s2)" }}>
-                  A coluna <b>Visitas</b> está vazia porque a visita não vem sendo registrada —
-                  não porque ninguém visitou.
-                </p>
-              ) : null}
             </Sec>
           </section>
         ) : view === "aovivo" ? (

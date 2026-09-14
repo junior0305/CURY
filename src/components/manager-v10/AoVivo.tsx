@@ -1,11 +1,17 @@
-// AO VIVO — quem está de plantão hoje e o que já produziu.
+// AO VIVO — o estado de HOJE. Nada aqui é histórico; histórico é a aba Time.
 //
-// O dado vem da Cury (check-in, atendimento, venda), sincronizado pelo job do
-// VPS. É a única fonte que PROVA que a pessoa foi trabalhar: tudo o mais no
-// Comandra depende de alguém marcar alguma coisa, e ninguém marca.
+// Uma lista só, ordenada por urgência. A versão anterior tinha quatro listas e
+// a mesma pessoa aparecia em duas delas ("sem receber lead" é um subconjunto de
+// "de plantão") — o gerente lia o mesmo nome duas vezes e não sabia se eram
+// dois problemas ou um.
 //
-// A tela SUGERE e o gerente decide (decisão do Junior, 14/09). Ligar o rodízio
-// sozinho distribuiria lead pra quem ele não conferiu.
+// A coluna que importa é "Situação": ela responde, em palavras, por que aquela
+// pessoa não está recebendo lead. Três coisas precisam ser verdade — bateu
+// ponto, chip vivo, gerente autorizou — e quando uma falha o lead some sem que
+// ninguém saiba qual foi.
+//
+// O check-in vem da Cury; é a única informação do sistema que prova que a
+// pessoa foi trabalhar.
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,60 +19,33 @@ import { toast } from "sonner";
 import { Sec, Panel, ScoreRow, Cell, Tbl, Tr, Mini, Blank } from "@/components/manager-v10/ui";
 import { useAoVivo, definirRecebeLead, type PessoaAoVivo } from "@/hooks/useAoVivo";
 
-/** Por que essa pessoa não está recebendo lead? A resposta em uma frase. */
-function porQueTravado(p: PessoaAoVivo): string | null {
-  if (!p.profileId) return "sem cadastro no Comandra";
-  if (!p.chipVivo) {
-    return p.chipEstado === "logged_out"
-      ? "chip deslogado — precisa ler o QR"
-      : p.botInstanceId ? "chip fora do ar" : "sem chip";
+type Situacao = { texto: string; tom: "grave" | "morno" | "ok"; ordem: number };
+
+/** Uma frase por pessoa. A ordem é a urgência: quanto menor, mais em cima. */
+function situacao(p: PessoaAoVivo): Situacao {
+  const veio = p.checkins > 0;
+
+  if (veio && !p.chipVivo) {
+    return {
+      texto: p.chipEstado === "logged_out"
+        ? "veio trabalhar · chip deslogado, precisa ler o QR"
+        : p.botInstanceId ? "veio trabalhar · chip fora do ar" : "veio trabalhar · sem chip",
+      tom: "grave", ordem: 0,
+    };
   }
-  if (!p.recebeLead) return null;   // só desligado; não é defeito
-  return null;
+  if (veio && !p.recebeLead) {
+    return { texto: "veio trabalhar · fora do rodízio de leads", tom: "grave", ordem: 1 };
+  }
+  if (veio) {
+    return { texto: "trabalhando e recebendo lead", tom: "ok", ordem: 2 };
+  }
+  if (p.recebeLead && !p.chipVivo) {
+    return { texto: "sem ponto hoje · e o chip está parado", tom: "morno", ordem: 3 };
+  }
+  return { texto: "sem ponto hoje", tom: "morno", ordem: 4 };
 }
 
-function Pessoa({
-  p, onAlternar, ocupado,
-}: { p: PessoaAoVivo; onAlternar: (p: PessoaAoVivo) => void; ocupado: boolean }) {
-  const trava = porQueTravado(p);
-  const nome = p.apelido || p.nome || "—";
-
-  return (
-    <Tr cols="1.4fr .8fr .8fr .6fr .6fr 1fr">
-      <span>
-        <b>{nome}</b>
-        {p.nome && p.apelido && p.nome !== p.apelido
-          ? <i className="dim"> · {p.nome}</i> : null}
-      </span>
-
-      <span className={p.checkins > 0 ? "good" : "dim"}>
-        {p.checkins > 0 ? `${p.checkins} check-in${p.checkins > 1 ? "s" : ""}` : "sem ponto"}
-      </span>
-
-      <span className={p.chipVivo ? "good" : "bad"}>
-        {p.chipVivo ? "chip ok" : (trava ?? "chip parado")}
-      </span>
-
-      <span className={p.visitas > 0 ? "good" : "dim"}>{p.visitas}</span>
-      <span className={p.vendas > 0 ? "good" : "dim"}>{p.vendas}</span>
-
-      <span>
-        {p.profileId ? (
-          <Mini
-            variant={p.recebeLead ? undefined : "solid"}
-            disabled={ocupado}
-            onClick={() => onAlternar(p)}
-            title={p.recebeLead
-              ? "Tirar do rodízio de leads"
-              : "Colocar no rodízio de leads"}
-          >
-            {p.recebeLead ? "recebe lead" : "ligar"}
-          </Mini>
-        ) : null}
-      </span>
-    </Tr>
-  );
-}
+const COLS = "minmax(130px,1.4fr) minmax(200px,1.8fr) 56px 56px 56px 92px";
 
 export default function AoVivo({ managerId }: { managerId: string | undefined }) {
   const { data, isLoading } = useAoVivo(managerId);
@@ -79,10 +58,9 @@ export default function AoVivo({ managerId }: { managerId: string | undefined })
     setOcupado(p.profileId);
     try {
       await definirRecebeLead(p.profileId, novo);
-      const nome = p.apelido || p.nome;
       toast.success(novo
-        ? `${nome} entrou no rodízio de leads`
-        : `${nome} saiu do rodízio`);
+        ? `${p.apelido || p.nome} entrou no rodízio de leads`
+        : `${p.apelido || p.nome} saiu do rodízio`);
       qc.invalidateQueries({ queryKey: ["ao-vivo"] });
     } catch (e: any) {
       toast.error(`Não consegui alterar: ${e?.message ?? e}`);
@@ -91,21 +69,27 @@ export default function AoVivo({ managerId }: { managerId: string | undefined })
     }
   }
 
-  if (isLoading) {
-    return <Blank title="Carregando o plantão de hoje…" />;
-  }
+  if (isLoading) return <Blank title="Carregando o plantão de hoje…" />;
 
   if (!data?.gerenteCuryId) {
     return (
       <Blank title="Seu cadastro ainda não foi ligado ao da Cury">
-        Sem esse vínculo eu não sei qual equipe mostrar aqui. É um ajuste de
-        cadastro, feito uma vez só — peça para o administrador ligar seu perfil.
+        Sem esse vínculo eu não sei qual equipe mostrar. É um ajuste feito
+        uma vez só — peça para o administrador.
       </Blank>
     );
   }
 
   const { emPlantao, semCadastro, ausentes, totais, atualizadoEm } = data;
-  const semLead = emPlantao.filter((p) => !p.recebeLead || !p.chipVivo);
+
+  // Uma lista só. Quem veio e está travado em cima; quem não veio, embaixo.
+  const todos = [...emPlantao, ...ausentes]
+    .map((p) => ({ p, s: situacao(p) }))
+    .sort((a, b) => a.s.ordem - b.s.ordem
+      || b.p.visitas - a.p.visitas
+      || (a.p.apelido || "").localeCompare(b.p.apelido || ""));
+
+  const travados = todos.filter((x) => x.s.tom === "grave").length;
 
   const hora = atualizadoEm
     ? new Date(atualizadoEm).toLocaleTimeString("pt-BR",
@@ -115,79 +99,82 @@ export default function AoVivo({ managerId }: { managerId: string | undefined })
   return (
     <section className="view">
       <Sec
-        title="Ao vivo"
+        title="Hoje, agora"
         tag={hora ? <span className="dim">atualizado {hora}</span> : null}
-        sub="Check-in, visita e venda vêm do app da Cury. É o que a operação fez hoje, não o que foi digitado aqui."
+        sub="Check-in, visita e venda vêm do app da Cury — é o que a operação fez, não o que foi digitado aqui."
       >
         <ScoreRow>
-          <Cell label="De plantão" value={emPlantao.length}
-                sub={`${totais.checkins} check-in${totais.checkins === 1 ? "" : "s"}`} />
-          <Cell label="Visitas hoje" value={totais.visitas}
+          <Cell label="Vieram trabalhar" value={emPlantao.length}
+                sub={`de ${emPlantao.length + ausentes.length} no time`} />
+          <Cell label="Travados" value={travados}
+                tone={travados > 0 ? "alert" : "good"}
+                sub={travados ? "vieram e não recebem lead" : "ninguém parado"} />
+          <Cell label="Visitas" value={totais.visitas}
                 tone={totais.visitas === 0 ? "alert" : "good"} />
-          <Cell label="Vendas hoje" value={totais.vendas}
+          <Cell label="Vendas" value={totais.vendas}
                 tone={totais.vendas > 0 ? "good" : undefined} />
-          <Cell label="Trabalhando sem receber lead" value={semLead.length}
-                tone={semLead.length > 0 ? "alert" : undefined}
-                sub={semLead.length ? "bateram ponto e estão fora do rodízio" : "ninguém parado"} />
         </ScoreRow>
       </Sec>
 
-      {/* O grupo que justifica a tela: gente que foi trabalhar e não recebe lead. */}
-      {semLead.length > 0 && (
-        <Sec
-          title="Foram trabalhar e não estão recebendo lead"
-          sub="Cada um destes é capacidade parada agora."
-        >
-          <Panel>
-            <Tbl
-              cols="1.4fr .8fr .8fr .6fr .6fr 1fr"
-              head={["Corretor", "Ponto", "Chip", "Vis.", "Vend.", ""]}
-            >
-              {semLead.map((p) => (
-                <Pessoa key={p.curyId || p.profileId!} p={p}
-                        onAlternar={alternar} ocupado={ocupado === p.profileId} />
-              ))}
-            </Tbl>
-          </Panel>
-        </Sec>
-      )}
-
-      <Sec title="De plantão hoje" tag={<span className="dim">{emPlantao.length}</span>}>
+      <Sec
+        title="O time hoje"
+        sub={travados > 0
+          ? "Quem veio trabalhar e está travado aparece primeiro — cada um é capacidade parada agora."
+          : undefined}
+      >
         <Panel>
-          {emPlantao.length === 0 ? (
-            <Blank title="Ninguém bateu ponto ainda hoje">
-              O check-in é sincronizado a cada 30 minutos no horário comercial.
-            </Blank>
+          {todos.length === 0 ? (
+            <Blank title="Nenhum corretor nesta equipe" />
           ) : (
-            <Tbl
-              cols="1.4fr .8fr .8fr .6fr .6fr 1fr"
-              head={["Corretor", "Ponto", "Chip", "Vis.", "Vend.", ""]}
-            >
-              {emPlantao.map((p) => (
-                <Pessoa key={p.curyId} p={p}
-                        onAlternar={alternar} ocupado={ocupado === p.profileId} />
+            <Tbl cols={COLS} head={["Corretor", "Situação", "Ponto", "Vis.", "Vend.", ""]}>
+              {todos.map(({ p, s }) => (
+                <Tr key={p.profileId || p.curyId} cols={COLS}>
+                  <span className="nmc">
+                    <span className={`dot ${s.tom === "ok" ? "on" : "off"}`} />
+                    <b>{p.apelido || p.nome}</b>
+                  </span>
+                  <span className={s.tom === "grave" ? "hot" : s.tom === "ok" ? "win" : "dim"}>
+                    {s.texto}
+                  </span>
+                  <span className="num">{p.checkins || "—"}</span>
+                  <span className="num">{p.visitas || "—"}</span>
+                  <span className="num">{p.vendas || "—"}</span>
+                  <span>
+                    {p.profileId ? (
+                      <Mini
+                        variant={p.recebeLead ? undefined : "solid"}
+                        disabled={ocupado === p.profileId}
+                        onClick={() => alternar(p)}
+                        title={p.recebeLead ? "Tirar do rodízio" : "Colocar no rodízio"}
+                      >
+                        {p.recebeLead ? "no rodízio" : "ligar"}
+                      </Mini>
+                    ) : null}
+                  </span>
+                </Tr>
               ))}
             </Tbl>
           )}
         </Panel>
       </Sec>
 
-      {/* Bateu ponto na Cury e não existe aqui — o gerente cria o login. */}
+      {/* Forma diferente das outras linhas: aqui não há o que ligar, há o que
+          cadastrar. Por isso continua separado. */}
       {semCadastro.length > 0 && (
         <Sec
           title="Trabalhando sem cadastro no Comandra"
           tag={<span className="bad">{semCadastro.length}</span>}
-          sub="Estão batendo ponto na Cury mas não têm login aqui, então não recebem lead nem aparecem na cobrança individual."
+          sub="Batem ponto na Cury e não têm login aqui — não recebem lead nem entram na cobrança individual."
         >
           <Panel>
-            <Tbl cols="1.4fr 1.6fr .6fr .6fr 1fr"
-                 head={["Nome na Cury", "Nome completo", "Vis.", "Vend.", ""]}>
+            <Tbl cols="minmax(130px,1.4fr) minmax(200px,1.8fr) 56px 56px 92px"
+                 head={["Na Cury", "Nome completo", "Vis.", "Vend.", ""]}>
               {semCadastro.map((p) => (
-                <Tr key={p.curyId} cols="1.4fr 1.6fr .6fr .6fr 1fr">
-                  <span><b>{p.apelido || "—"}</b></span>
+                <Tr key={p.curyId} cols="minmax(130px,1.4fr) minmax(200px,1.8fr) 56px 56px 92px">
+                  <span className="nmc"><b>{p.apelido || "—"}</b></span>
                   <span className="dim">{p.nome || "—"}</span>
-                  <span>{p.visitas}</span>
-                  <span>{p.vendas}</span>
+                  <span className="num">{p.visitas || "—"}</span>
+                  <span className="num">{p.vendas || "—"}</span>
                   <span>
                     <Mini variant="solid"
                           onClick={() => toast.info("Cadastro pela tela chega no próximo passo.")}>
@@ -195,22 +182,6 @@ export default function AoVivo({ managerId }: { managerId: string | undefined })
                     </Mini>
                   </span>
                 </Tr>
-              ))}
-            </Tbl>
-          </Panel>
-        </Sec>
-      )}
-
-      {ausentes.length > 0 && (
-        <Sec title="Sem ponto hoje" tag={<span className="dim">{ausentes.length}</span>}>
-          <Panel>
-            <Tbl
-              cols="1.4fr .8fr .8fr .6fr .6fr 1fr"
-              head={["Corretor", "Ponto", "Chip", "Vis.", "Vend.", ""]}
-            >
-              {ausentes.map((p) => (
-                <Pessoa key={p.profileId!} p={p}
-                        onAlternar={alternar} ocupado={ocupado === p.profileId} />
               ))}
             </Tbl>
           </Panel>
