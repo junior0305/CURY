@@ -8,7 +8,9 @@
 //   ✔ fundação (tokens, primitivas, casca, navegação de 5 modos)
 //   ✔ HOJE — herói, trilho de ritmo, o dia até agora, funil, carga do time
 //   ✔ TIME — presença + a economia por corretor (saldo real)
-//   ▢ LEADS · CRESCER · B.I.
+//   Leads/Crescer/B.I. do protótipo dependem de dado que o banco não tem
+//   (visita zerada, valor por venda vazio) — ficam fora até a operação
+//   registrar visita. Ver memory/project_manager_v10_porte.md
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
@@ -17,14 +19,19 @@ import { useManagerV10, diasUteisRestantes, type V10Lead } from "@/hooks/useMana
 import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/components/manager-v10/ui";
 import "@/styles/manager-v10.css";
 
-type View = "hoje" | "time" | "leads" | "crescer" | "bi";
+type View = "hoje" | "time";
 
+// Quatro portas, não sete. Coach, Liga, Análise e Pool foram feitos pra uma
+// operação que está parada — continuam em /manager/coach etc. e voltam pra cá
+// quando houver uso. Modo que não é usado não é recurso, é ruído.
 const VIEWS: { v: View; label: string; path: string }[] = [
-  { v: "hoje",    label: "Hoje",    path: "M3 12l9-8 9 8M5 10v10h14V10" },
-  { v: "time",    label: "Time",    path: "M2.5 20c0-3.6 2.9-5.6 6.5-5.6s6.5 2 6.5 5.6M17 5.5a3 3 0 0 1 0 5.6M18.5 14.6c2 .7 3 2.4 3 5.4" },
-  { v: "leads",   label: "Leads",   path: "M4 5h16M6.5 12h11M10 19h4" },
-  { v: "crescer", label: "Crescer", path: "M3 17l6-6 4 4 8-8M15 7h6v6" },
-  { v: "bi",      label: "B.I.",    path: "M4 20V10M10 20V4M16 20v-7M22 20H2" },
+  { v: "hoje", label: "Hoje", path: "M3 12l9-8 9 8M5 10v10h14V10" },
+  { v: "time", label: "Time", path: "M2.5 20c0-3.6 2.9-5.6 6.5-5.6s6.5 2 6.5 5.6M17 5.5a3 3 0 0 1 0 5.6M18.5 14.6c2 .7 3 2.4 3 5.4" },
+];
+
+const LINKS: { to: string; label: string; path: string }[] = [
+  { to: "/manager/whatsapp", label: "WhatsApp",  path: "M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-5.7A8.4 8.4 0 1 1 21 11.5z" },
+  { to: "/manager/campanha", label: "Campanhas", path: "M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" },
 ];
 
 function loadFonts() {
@@ -200,6 +207,14 @@ export default function ManagerV10() {
             </span>
             <span>{it.label}</span>
           </button>
+        ))}
+        {LINKS.map((it) => (
+          <a key={it.to} href={it.to} className="tab">
+            <span className="tab-w">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d={it.path} /></svg>
+            </span>
+            <span>{it.label}</span>
+          </a>
         ))}
       </nav>
 
@@ -384,18 +399,7 @@ export default function ManagerV10() {
               ) : null}
             </Sec>
           </section>
-        ) : (
-          <section className="view">
-            <Sec title={VIEWS.find((v) => v.v === view)!.label} tag="em construção">
-              <Panel>
-                <Blank title="Este modo ainda não foi portado">
-                  A fundação (tokens, primitivas, casca) já está de pé — falta ligar os
-                  blocos deste modo no banco.
-                </Blank>
-              </Panel>
-            </Sec>
-          </section>
-        )}
+        ) : null}
       </main>
     </div>
   );

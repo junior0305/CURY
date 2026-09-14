@@ -119,7 +119,9 @@ const App = () => (
             <Route path="/dashboard-classico" element={<ProtectedBrokerRoute><DashboardFoco /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-wolf" element={<ProtectedBrokerRoute><DashboardWolf /></ProtectedBrokerRoute>} />
             {/* /manager = v2 completo + console Jarvis no topo (escolha do gerente). /manager-v3 = experimento overview. /manager-v1 = antigo. */}
-            <Route path="/manager" element={<ProtectedManagerRoute><ManagerV2 /></ProtectedManagerRoute>} />
+            {/* O painel do gerente agora é o v10. O v2 fica em /manager-v2 como
+                volta rápida — trocar estas duas linhas reverte. */}
+            <Route path="/manager" element={<ProtectedManagerRoute><ManagerV10 /></ProtectedManagerRoute>} />
             <Route path="/manager-v1" element={<ProtectedManagerRoute><ManagerDashboard /></ProtectedManagerRoute>} />
             <Route path="/manager-v3" element={<ProtectedManagerRoute><ManagerV3 /></ProtectedManagerRoute>} />
             {/* v10 em construção — o /manager de produção segue intocado. */}
