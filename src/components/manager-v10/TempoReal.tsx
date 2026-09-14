@@ -19,6 +19,8 @@ import { toast } from "sonner";
 import { useTempoReal, definirRecebimento, status,
          type Pessoa, type Nivel, type Origem } from "@/hooks/useTempoReal";
 import { Sec, Panel, ScoreRow, Cell, Blank } from "@/components/manager-v10/ui";
+import FunilOrigem from "@/components/manager-v10/FunilOrigem";
+import PrecisaDeVoce from "@/components/manager-v10/PrecisaDeVoce";
 
 const NIVEIS: { n: Nivel; rot: string }[] = [
   { n: "crit", rot: "Crítico" }, { n: "trav", rot: "Travado" },
@@ -138,6 +140,8 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
         </ScoreRow>
       </Sec>
 
+      <FunilOrigem managerId={managerId} gerenteCuryId={data.gerenteCuryId} />
+
       <Sec title="Os corretores" tag={<span className="dim">
         {lista.length} {soPlantao ? "no plantão" : "no time"} · {totais.online} online
       </span>}>
@@ -232,6 +236,8 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
           })}
         </Panel>
       </Sec>
+
+      <PrecisaDeVoce gente={gente} />
     </section>
   );
 }
