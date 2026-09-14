@@ -21,6 +21,7 @@ import ManagerDashboard from "./pages/ManagerDashboard";
 import ManagerV2 from "./pages/ManagerV2";
 import ManagerV3 from "./pages/ManagerV3";
 import ManagerV10 from "./pages/ManagerV10";
+import WhatsAppOficial from "./pages/manager-v2/WhatsAppOficial";
 import CoachIndex from "./pages/manager-v2/CoachIndex";
 import CoachBroker from "./pages/manager-v2/CoachBroker";
 import CampanhaIndex from "./pages/manager-v2/CampanhaIndex";
@@ -131,6 +132,7 @@ const App = () => (
             <Route path="/manager/liga" element={<ProtectedManagerRoute><LigaPage /></ProtectedManagerRoute>} />
             <Route path="/manager/analise" element={<ProtectedManagerRoute><AnalisePage /></ProtectedManagerRoute>} />
             <Route path="/manager/pool" element={<ProtectedManagerRoute><PoolPage /></ProtectedManagerRoute>} />
+            <Route path="/manager/whatsapp" element={<ProtectedManagerRoute><WhatsAppOficial /></ProtectedManagerRoute>} />
             {/* /manager-v2 = cockpit v2 (rollback rápido). Demais aliases legados redirecionam. */}
             <Route path="/manager-v2" element={<ProtectedManagerRoute><ManagerV2 /></ProtectedManagerRoute>} />
             <Route path="/manager-v2/coach" element={<Navigate to="/manager/coach" replace />} />

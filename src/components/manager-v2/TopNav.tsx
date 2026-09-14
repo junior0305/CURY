@@ -4,7 +4,7 @@
 
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LayoutDashboard, Send, Trophy, GraduationCap, BarChart3, Snowflake } from "lucide-react";
+import { LayoutDashboard, Send, Trophy, GraduationCap, BarChart3, Snowflake, MessageSquare } from "lucide-react";
 import { useTone, type Tone } from "@/components/manager-v2/palette";
 
 // O tom é declarado por NOME, não por hex: o hex certo depende do tema e sai do
@@ -13,6 +13,7 @@ const ITEMS: { to: string; label: string; icon: any; tone: Tone }[] = [
   { to: "/manager",          label: "Cockpit",   icon: LayoutDashboard, tone: "accent" },
   { to: "/manager/pool",     label: "Pool",      icon: Snowflake,       tone: "sky"    },
   { to: "/manager/campanha", label: "Campanhas", icon: Send,            tone: "good"   },
+  { to: "/manager/whatsapp", label: "WhatsApp",  icon: MessageSquare,   tone: "sky"    },
   { to: "/manager/coach",    label: "Coach",     icon: GraduationCap,   tone: "info"   },
   { to: "/manager/liga",     label: "Liga",      icon: Trophy,          tone: "warn"   },
   { to: "/manager/analise",  label: "Análise",   icon: BarChart3,       tone: "pink"   },
