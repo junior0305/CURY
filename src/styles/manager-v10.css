@@ -739,3 +739,29 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
   .mgr10 .per-data{right:auto;left:0;width:min(320px,92vw)}
   .mgr10 .per-chips{font-size:12px}
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   ALINHAMENTO COM OS MOCKUPS VALIDADOS (15/09)
+   Duas diferenças que apareceram ao comparar a tela real com o mockup:
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* 1. O `.view` tinha fundo branco e envolvia a tela inteira num cartão só.
+      No mockup cada bloco é um cartão sobre o fundo — é o respiro entre eles
+      que separa os assuntos. */
+.mgr10 .view{background:transparent;border:0;box-shadow:none;padding:0}
+
+/* 2. O título de seção era 21px escuro, competindo com o conteúdo. No mockup
+      ele é um rótulo pequeno em maiúsculas: nomeia o bloco e sai da frente. */
+.mgr10 .sec-h h2{font-size:12px;font-weight:700;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink-3)}
+.mgr10 .sec-h .tag,.mgr10 .sec-h .dim{margin-left:auto;font-size:12.5px;color:var(--ink-3);
+  letter-spacing:0;text-transform:none;font-family:Archivo,sans-serif;font-weight:400}
+.mgr10 .sec{margin-top:32px}
+.mgr10 .sec:first-child{margin-top:0}
+.mgr10 .sec-h{margin-bottom:13px}
+.mgr10 .shell2{max-width:1180px}
+
+/* O painel herda o cartão do mockup: mesmo raio, mesma sombra, mesmo respiro. */
+.mgr10 .panel{padding:0}
+.mgr10 .view .panel{background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);box-shadow:var(--lift)}
