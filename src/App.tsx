@@ -23,6 +23,7 @@ import ManagerV3 from "./pages/ManagerV3";
 import ManagerV10 from "./pages/ManagerV10";
 import WhatsAppOficial from "./pages/manager-v2/WhatsAppOficial";
 import AnunciosV10 from "./pages/manager-v10/Anuncios";
+import LeadsV10 from "./pages/manager-v10/Leads";
 import CoachIndex from "./pages/manager-v2/CoachIndex";
 import CoachBroker from "./pages/manager-v2/CoachBroker";
 import CampanhaIndex from "./pages/manager-v2/CampanhaIndex";
@@ -127,6 +128,7 @@ const App = () => (
             <Route path="/manager-v3" element={<ProtectedManagerRoute><ManagerV3 /></ProtectedManagerRoute>} />
             {/* v10 em construção — o /manager de produção segue intocado. */}
             <Route path="/manager-v10" element={<ProtectedManagerRoute><ManagerV10 /></ProtectedManagerRoute>} />
+            <Route path="/manager/leads" element={<ProtectedManagerRoute><LeadsV10 /></ProtectedManagerRoute>} />
             <Route path="/manager/anuncios" element={<ProtectedManagerRoute><AnunciosV10 /></ProtectedManagerRoute>} />
             <Route path="/manager/coach" element={<ProtectedManagerRoute><CoachIndex /></ProtectedManagerRoute>} />
             <Route path="/manager/coach/:brokerId" element={<ProtectedManagerRoute><CoachBroker /></ProtectedManagerRoute>} />

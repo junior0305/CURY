@@ -16,11 +16,12 @@ export function loadFonts() {
   document.head.appendChild(l);
 }
 
-export type Aba = "tempo" | "time" | "anuncios" | "disparar";
+export type Aba = "tempo" | "time" | "leads" | "anuncios" | "disparar";
 
 export const ICONES: Record<Aba, string> = {
   tempo: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3.5 2",
   time: "M2.5 20c0-3.6 2.9-5.6 6.5-5.6s6.5 2 6.5 5.6M17 5.5a3 3 0 0 1 0 5.6M18.5 14.6c2 .7 3 2.4 3 5.4",
+  leads: "M4 6h16M4 12h11M4 18h7",
   anuncios: "M3 17l5-6 4 3 5-8M14 6h4v4",
   disparar: "M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-5.7A8.4 8.4 0 1 1 21 11.5z",
 };
@@ -29,6 +30,7 @@ export const ICONES: Record<Aba, string> = {
 export const ABAS: { k: Aba; label: string; to: string }[] = [
   { k: "tempo", label: "Tempo real", to: "/manager" },
   { k: "time", label: "Time", to: "/manager?aba=time" },
+  { k: "leads", label: "Leads", to: "/manager/leads" },
   { k: "anuncios", label: "Anúncios", to: "/manager/anuncios" },
   { k: "disparar", label: "Disparar", to: "/manager/whatsapp" },
 ];
@@ -76,9 +78,6 @@ export function RailV10({
       })}
 
       <div className="rail-sep" />
-      <a className="soon" aria-disabled="true">
-        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h11M4 18h7" /></svg>Leads
-      </a>
       <a className="soon" aria-disabled="true">
         <svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7" /></svg>B.I.
       </a>
