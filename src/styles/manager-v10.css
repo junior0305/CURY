@@ -950,3 +950,20 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
   .mgr10 .ld-dr{grid-template-columns:1fr auto}
   .mgr10 .ld-dr .bar{grid-column:1/-1}
 }
+
+/* ── ANÚNCIOS · a conta lida no Facebook ─────────────────────────────────
+   Tabela enxuta de campanha: nome, gasto, leads, CPL. O CPL fica vermelho
+   quando passa de uma vez e meia a média da própria conta — comparar com
+   a média dos outros seria comparar produto diferente. */
+.mgr10 .an-campfb{margin-top:var(--s2);background:var(--card);border:1px solid var(--line);
+  border-radius:var(--r);box-shadow:var(--lift);overflow:hidden}
+.mgr10 .an-cfb{display:grid;grid-template-columns:minmax(0,1fr) 108px 92px 96px;gap:var(--s2);
+  align-items:center;padding:11px var(--s2);border-bottom:1px solid var(--hair);font-size:13.5px}
+.mgr10 .an-cfb:last-child{border-bottom:0}
+.mgr10 .an-cfb b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mgr10 .an-cfb span{text-align:right;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.mgr10 .an-cfb span.ruim{color:var(--red);font-weight:700}
+@media(max-width:700px){
+  .mgr10 .an-cfb{grid-template-columns:minmax(0,1fr) auto;row-gap:4px}
+  .mgr10 .an-cfb b{grid-column:1/-1}
+}

@@ -14,6 +14,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAnuncios, salvarGestor } from "@/hooks/useAnuncios";
+import { useContaFacebook } from "@/hooks/useContaFacebook";
 import { Sec, Blank } from "@/components/manager-v10/ui";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { usePeriodo } from "@/hooks/usePeriodo";
@@ -29,6 +30,7 @@ export default function Anuncios() {
   const qc = useQueryClient();
   const { periodo } = usePeriodo();
   const { data, isLoading } = useAnuncios(userId, periodo);
+  const { data: fb } = useContaFacebook(userId, periodo);
   const [aberto, setAberto] = useState<string | null>(null);
   const [texto, setTexto] = useState("");
   const [editando, setEditando] = useState(false);
@@ -59,8 +61,87 @@ export default function Anuncios() {
       } catch (e: any) { toast.error(`Não consegui salvar: ${e?.message ?? e}`); }
     }
 
+    // A conta que a tela existia para não mostrar: o Facebook cobrou por N e
+    // chegaram M. Sem isto, gastar e não receber é indistinguível de não
+    // anunciar — as duas coisas aparecem como tela vazia.
+    const sumiram = fb && !fb.semConta ? Math.max(0, fb.leads - chegaram) : 0;
+    const perdido = fb?.cpl ? sumiram * fb.cpl : 0;
+
     return (
       <>
+        {/* 0 · a conta no Facebook, lida na fonte */}
+        <Sec title="Sua conta no Facebook"
+          tag={<span className="dim">{fb?.conta ?? periodo.rotulo}</span>}
+          sub="Lido direto na sua conta de anúncio, não no que chegou aqui. É o único jeito de ver dinheiro saindo sem lead entrando.">
+          {!fb ? (
+            <Blank title="Consultando o Facebook…" />
+          ) : fb.semConta ? (
+            <Blank title="Não consegui ler a sua conta de anúncio">
+              {fb.motivo ?? "Nenhuma conta ligada a este login."}
+            </Blank>
+          ) : (
+            <>
+              <div className="score-row">
+                <div className="cell">
+                  <span className="tag">gastou</span>
+                  <b>{brl(fb.gasto)}</b>
+                  <i>{fb.ativas} campanha{fb.ativas === 1 ? "" : "s"} ativa{fb.ativas === 1 ? "" : "s"}</i>
+                </div>
+                <div className="cell">
+                  <span className="tag">leads no Facebook</span>
+                  <b>{fb.leads}</b>
+                  <i>{fb.cpl ? `${brl(fb.cpl)} cada` : "—"}</i>
+                </div>
+                <div className="cell">
+                  <span className="tag">chegaram aqui</span>
+                  <b>{chegaram}</b>
+                  <i>{fb.leads ? `${Math.round((chegaram / fb.leads) * 100)}% do que foi pago` : "—"}</i>
+                </div>
+                <div className={`cell${sumiram ? " alert" : ""}`}>
+                  <span className="tag">não chegaram</span>
+                  <b>{sumiram}</b>
+                  <i>{perdido ? `cerca de ${brl(perdido)}` : "nenhum perdido"}</i>
+                </div>
+              </div>
+
+              {sumiram > 0 ? (
+                <div className="an-aviso crit" style={{ marginTop: 16 }}>
+                  <div>
+                    <b>O Facebook cobrou por {fb.leads} e chegaram {chegaram}.</b>
+                    {" "}Os outros {sumiram} foram pagos e não caíram na mão de nenhum
+                    corretor — cerca de {brl(perdido)}. Isso é falha de integração entre
+                    o formulário e o Comandra, não qualidade de lead: eles nem chegaram
+                    a ser recusados.
+                  </div>
+                </div>
+              ) : null}
+
+              {fb.saldo ? (
+                <p className="sec-sub" style={{ marginTop: 14 }}>
+                  {fb.saldo}{fb.prePago
+                    ? " — é saldo pré-pago de anúncio, e ele não paga disparo de WhatsApp."
+                    : "."}
+                </p>
+              ) : null}
+
+              {fb.campanhas.length ? (
+                <div className="an-campfb">
+                  {fb.campanhas.slice(0, 8).map((c) => (
+                    <div className="an-cfb" key={c.nome}>
+                      <b>{c.nome}</b>
+                      <span className="mono">{brl(c.gasto)}</span>
+                      <span className="mono">{c.leads} lead{c.leads === 1 ? "" : "s"}</span>
+                      <span className={`mono${c.cpl && fb.cpl && c.cpl > fb.cpl * 1.5 ? " ruim" : ""}`}>
+                        {c.cpl ? brl(c.cpl) : "sem lead"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          )}
+        </Sec>
+
         {/* 1 · quantos chegaram — e quantos você pode usar */}
         <Sec title="Quantos leads chegaram" tag={<span className="dim">{periodo.rotulo}</span>}>
           <div className="an-box an-ent">
