@@ -168,7 +168,11 @@ export function useDisparar(managerId: string | undefined) {
         wabaId: c.waba_id, phoneNumberId: c.phone_number_id,
         status: c.status, quality: c.quality, tier: c.tier,
         coexistence: c.coexistence, ownerId: c.owner_id, onboardedEm: c.onboarded_at,
-        novo: c.onboarded_at ? horas(c.onboarded_at) / 24 < 30 : false,
+        // Qualidade medida = tem historico = nao e novo, por mais recente que
+        // seja a data. Chamar de "novo" um numero GREEN que trabalha ha semanas
+        // faz o aviso de aquecimento perder o sentido onde ele importa.
+        novo: (c.quality ?? 'UNKNOWN') === 'UNKNOWN'
+          && (c.onboarded_at ? horas(c.onboarded_at) / 24 < 30 : false),
         tetoHoje: tetoDoDia(c.onboarded_at, c.tier),
       });
       // A minha: a que eu conectei E que está ativa. Sem o `is_active` a tela

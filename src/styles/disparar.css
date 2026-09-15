@@ -128,3 +128,9 @@
 @media(max-width:1180px){
   .mgr10.disparar .bm{grid-template-columns:1fr}
 }
+
+/* Nada nesta tela pode empurrar a pagina para o lado: o painel inteiro rola
+   na vertical, e barra horizontal aqui e sempre defeito, nunca recurso. */
+.mgr10.disparar .box{max-width:100%;overflow-x:auto}
+.mgr10.disparar .bm{grid-template-columns:minmax(0,1fr) minmax(300px,360px)}
+@media(max-width:1280px){ .mgr10.disparar .bm{grid-template-columns:1fr} }
