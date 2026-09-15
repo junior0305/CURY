@@ -10,6 +10,7 @@ import {
   Flame, BarChart3, Users, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -190,19 +191,26 @@ function TabSemana({ teams, role }: { teams: Team[]; role: string }) {
   const [saving, setSaving]   = useState(false);
 
   const save = async (teamId: string) => {
-    setSaving(true);
     const target = parseInt(draft, 10);
-    if (isNaN(target)) { setSaving(false); return; }
+    if (isNaN(target)) { toast.error("Escreva um número."); return; }
+    setSaving(true);
     const existing = goals.find(g => g.team_id === teamId);
-    if (existing) {
-      await supabase.from("team_goals").update({ sales_target: target }).eq("id", existing.id);
-    } else {
-      await supabase.from("team_goals").insert({
-        team_id: teamId, goal_type: "weekly", week_start: weekStr,
-        month: monthStr, sales_target: target,
-      });
-    }
+    const nome = teams.find(t => t.id === teamId)?.name ?? "a equipe";
+    // O erro do PostgREST vinha sendo descartado nas duas funções: falha de
+    // permissão ou de rede passava calada e o admin achava que tinha salvado.
+    const { error } = existing
+      ? await supabase.from("team_goals").update({ sales_target: target }).eq("id", existing.id)
+      : await supabase.from("team_goals").insert({
+          team_id: teamId, goal_type: "weekly", week_start: weekStr,
+          month: monthStr, sales_target: target,
+        });
     setSaving(false);
+    if (error) { toast.error(`Não consegui salvar: ${error.message}`); return; }
+    // Zero não é meta: o painel do gerente trata como "não cadastrada" e cai
+    // para a do mês. Dizer isso aqui evita a meta que some sem explicação.
+    toast.success(target === 0
+      ? `${nome} ficou sem meta semanal — o painel dela vai usar a meta do mês.`
+      : `${nome}: ${target} venda${target === 1 ? "" : "s"} nesta semana.`);
     setEditing(null);
     refresh();
   };
@@ -324,18 +332,19 @@ function TabMes({ teams }: { teams: Team[] }) {
   const [saving, setSaving]   = useState(false);
 
   const save = async (teamId: string) => {
-    setSaving(true);
     const target = parseInt(draft, 10);
-    if (isNaN(target)) { setSaving(false); return; }
+    if (isNaN(target)) { toast.error("Escreva um número."); return; }
+    setSaving(true);
     const existing = goals.find(g => g.team_id === teamId);
-    if (existing) {
-      await supabase.from("team_goals").update({ sales_target: target }).eq("id", existing.id);
-    } else {
-      await supabase.from("team_goals").insert({
-        team_id: teamId, goal_type: "monthly", month: monthStr, sales_target: target,
-      });
-    }
+    const nome = teams.find(t => t.id === teamId)?.name ?? "a equipe";
+    const { error } = existing
+      ? await supabase.from("team_goals").update({ sales_target: target }).eq("id", existing.id)
+      : await supabase.from("team_goals").insert({
+          team_id: teamId, goal_type: "monthly", month: monthStr, sales_target: target,
+        });
     setSaving(false);
+    if (error) { toast.error(`Não consegui salvar: ${error.message}`); return; }
+    toast.success(`${nome}: ${target} venda${target === 1 ? "" : "s"} no mês.`);
     setEditing(null);
     refresh();
   };
