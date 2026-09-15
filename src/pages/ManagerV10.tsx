@@ -19,25 +19,26 @@ import { useManagerV10, diasUteisRestantes, type V10Lead } from "@/hooks/useMana
 import { useCruzamentoCury } from "@/hooks/useCruzamentoCury";
 import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/components/manager-v10/ui";
 import TempoReal from "@/components/manager-v10/TempoReal";
+import TimeTab from "@/components/manager-v10/TimeTab";
 import AchadosCury from "@/components/manager-v10/AchadosCury";
 import "@/styles/manager-v10.css";
 
-type View = "hoje" | "time" | "aovivo";
+type View = "tempo" | "time";
 
 // Quatro portas, não sete. Coach, Liga, Análise e Pool foram feitos pra uma
 // operação que está parada — continuam em /manager/coach etc. e voltam pra cá
 // quando houver uso. Modo que não é usado não é recurso, é ruído.
+// Ordem do dia do gerente (Junior, 15/09): o "Hoje" saiu — Tempo real responde
+// o que ele respondia, com dado que se mede sozinho.
 const VIEWS: { v: View; label: string; path: string }[] = [
-  { v: "hoje", label: "Hoje", path: "M3 12l9-8 9 8M5 10v10h14V10" },
-  { v: "time", label: "Time", path: "M2.5 20c0-3.6 2.9-5.6 6.5-5.6s6.5 2 6.5 5.6M17 5.5a3 3 0 0 1 0 5.6M18.5 14.6c2 .7 3 2.4 3 5.4" },
-  // Ao vivo: o que a operação FEZ hoje, medido na Cury. É a única métrica do
-  // painel que não depende de alguém marcar alguma coisa aqui dentro.
-  { v: "aovivo", label: "Tempo real", path: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3.5 2" },
+  { v: "tempo", label: "Tempo real", path: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3.5 2" },
+  { v: "time",  label: "Time",       path: "M2.5 20c0-3.6 2.9-5.6 6.5-5.6s6.5 2 6.5 5.6M17 5.5a3 3 0 0 1 0 5.6M18.5 14.6c2 .7 3 2.4 3 5.4" },
 ];
 
 // "WhatsApp" e "Campanhas" eram duas portas pra mesma coisa — mandar mensagem.
 // Viraram uma só, com as etapas (conexão, template, disparo, conversas) dentro.
 const LINKS: { to: string; label: string; path: string }[] = [
+  { to: "/manager/anuncios", label: "Anúncios", path: "M3 17l5-6 4 3 5-8M14 6h4v4" },
   { to: "/manager/whatsapp", label: "Disparar", path: "M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-5.7A8.4 8.4 0 1 1 21 11.5z" },
 ];
 
@@ -74,7 +75,7 @@ export default function ManagerV10() {
   // porque ninguém registra visita no Comandra — duas 'visitas' diferentes
   // na mesma tela era o pior defeito da aba.
   const { data: cruz } = useCruzamentoCury(userId);
-  const [view, setView] = useState<View>("hoje");
+  const [view, setView] = useState<View>("tempo");
 
   useEffect(loadFonts, []);
 
@@ -225,7 +226,7 @@ export default function ManagerV10() {
           <button key={it.v} className={`tab${view === it.v ? " on" : ""}`} onClick={() => setView(it.v)}>
             <span className="tab-w">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d={it.path} /></svg>
-              {it.v === "hoje" && calc.doDia.parados > 0
+              {it.v === "tempo" && calc.doDia.parados > 0
                 ? <i className="badge">{calc.doDia.parados}</i> : null}
             </span>
             <span>{it.label}</span>
@@ -242,173 +243,11 @@ export default function ManagerV10() {
       </nav>
 
       <main className="shell">
-        {view === "hoje" ? (
-          <section className="view">
-            <div className="hero">
-              <div className="tag">Vou bater a meta?</div>
-              <div className="hero-k">
-                <div className="hero-n">{calc.metaMes ? calc.projecao : "—"}</div>
-                <div className="hero-of">{calc.metaMes ? `de ${calc.metaMes}` : "sem meta no mês"}</div>
-              </div>
-              <p className="hero-say">
-                {calc.metaMes ? (
-                  bateu
-                    ? <>No ritmo de hoje você fecha o mês <b>acima da meta</b>. {calc.vendas} venda{calc.vendas === 1 ? "" : "s"} até agora.</>
-                    : <>No ritmo de hoje você fecha em <span className="bad">{calc.projecao}</span>. Faltam <b>{calc.faltam}</b> em <b>{calc.restantes} dia{calc.restantes === 1 ? "" : "s"} útil{calc.restantes === 1 ? "" : "eis"}</b>.</>
-                ) : (
-                  <>Ninguém fechou meta mensal pra esta equipe. Sem meta, o painel vira relatório — e relatório não cobra ninguém.</>
-                )}
-              </p>
-              {calc.metaMes ? (
-                <Pace
-                  donePct={(calc.vendas / calc.metaMes) * 100}
-                  needPct={100}
-                  left={`${calc.vendas} feitas`}
-                  right={`meta ${calc.metaMes}`}
-                  say={<>Pra bater, são <b>{calc.porDia.toFixed(1)} venda/dia útil</b> daqui até o fim do mês.</>}
-                />
-              ) : null}
-            </div>
-
-            <Sec title="O dia até agora" tag="desde 00h">
-              <ScoreRow six>
-                <Cell label="Entraram"     value={calc.doDia.entraram} />
-                <Cell label="Responderam"  value={calc.doDia.responderam} />
-                <Cell label="Corretor tocou" value={calc.doDia.tocados} />
-                <Cell label="Parados"      value={calc.doDia.parados} tone={calc.doDia.parados > 0 ? "alert" : undefined} sub="quente sem resposta" />
-                <Cell label="Sem corretor" value={calc.doDia.semCorretor} tone={calc.doDia.semCorretor > 0 ? "alert" : undefined} />
-                <Cell label="Online agora" value={`${calc.doDia.online}/${data.brokers.length}`} tone={calc.doDia.online > 0 ? "good" : undefined} />
-              </ScoreRow>
-            </Sec>
-
-            <Sec
-              title="Do lead até a visita"
-              tag="onde o dinheiro para"
-              sub={<>Cada degrau mostra quantos <b>sobraram</b> do degrau anterior. O degrau em vermelho é onde você perde gente que <b>já tinha dito sim</b> — é o mais barato de recuperar, porque o convencimento já foi feito.</>}
-            >
-              <Panel>
-                <Funnel steps={calc.passos.map((p, i) => ({ ...p, drop: i === calc.pior }))} />
-              </Panel>
-              <p className="sec-sub" style={{ marginTop: "var(--s2)" }}>
-                <b>Visita</b> e <b>venda</b> vêm do app da Cury (atendimento e venda
-                registrados no plantão), não do que foi digitado aqui. É o mesmo número
-                que aparece em Ao vivo e em Time.
-              </p>
-            </Sec>
-
-            <Sec
-              title="Cresço ou aperto?"
-              tag="carga do time"
-              sub={<>Todo corretor cai em um dos três grupos. Isso responde a pergunta de escala sem conta nenhuma: <b>só faz sentido comprar mais lead se tiver gente no primeiro grupo</b>.</>}
-            >
-              <div className="buckets">
-                {[
-                  { k: "motor",  t: "Tem folga",     l: calc.folga,  s: "aguenta mais lead hoje" },
-                  { k: "",       t: "No limite",     l: calc.cheio,  s: "carteira cheia e viva" },
-                  { k: "queima", t: "Queimando",     l: calc.queima, s: "carteira demais ou sumido há 3 dias" },
-                ].map((b) => (
-                  <div key={b.t} className={`bk ${b.k}`}>
-                    <div className="bk-h">
-                      <span className="bk-n">{b.l.length}</span>
-                      <b>{b.t}</b>
-                      <span className="bk-s">{b.s}</span>
-                    </div>
-                    <div className="bk-list">
-                      {b.l.length === 0
-                        ? <div className="blank" style={{ padding: "var(--s3) var(--s2)" }}>ninguém aqui</div>
-                        : b.l.map((c) => (
-                            <div key={c.id} className="bk-row">
-                              <span className={`dot ${c.online ? "on" : "off"}`} />
-                              <span className="nm">{c.nome}</span>
-                              <span className="nb">{c.n}</span>
-                            </div>
-                          ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <Panel style={{ marginTop: "var(--s2)" }}>
-                <div className="move">
-                  <p className="move-say">
-                    {calc.folga.length === 0
-                      ? <>Ninguém tem folga. <b className="hot">Comprar mais lead agora é queimar dinheiro</b> — o gargalo é gente, não volume.</>
-                      : <>Você tem <b>{calc.folga.length} corretor{calc.folga.length === 1 ? "" : "es"}</b> com folga. Dá pra aumentar volume sem contratar.</>}
-                  </p>
-                  <p className="move-why">
-                    Folga = menos de 15 leads ativos e visto nos últimos 3 dias. Queimando =
-                    mais de 35 ativos, ou sumido há mais de 3 dias com carteira na mão.
-                  </p>
-                </div>
-              </Panel>
-            </Sec>
-          </section>
-        ) : view === "time" ? (
-          <section className="view">
-            <Sec
-              title="Quem dá dinheiro, quem custa"
-              tag="no mês"
-              sub={<>Cada corretor recebeu leads que <b>foram pagos</b>. A coluna <b>saldo</b> é o que ele devolveu em comissão menos o que os leads dele custaram. Verde sustenta a operação; vermelho é lead pago virando nada.</>}
-            >
-              <Tbl
-                cols="minmax(140px,1.6fr) 62px 62px 62px 62px 62px 96px 104px"
-                head={["Corretor", "Leads", "Resp", "Plantão", "Visitas", "Vendas", "Custo", "Saldo"]}
-              >
-                {calc.porCorretor.length === 0 ? (
-                  <Blank title="Nenhum corretor nesta equipe" />
-                ) : calc.porCorretor.map((c) => (
-                  <Tr key={c.id} cols="minmax(140px,1.6fr) 62px 62px 62px 62px 62px 96px 104px">
-                    <span className="nmc">
-                      <span className={`dot ${c.online ? "on" : "off"}`} />
-                      <b>{c.nome}</b>
-                    </span>
-                    <span className="num">{c.recebidos}</span>
-                    <span className="num">{c.respPct === null ? "—" : `${Math.round(c.respPct)}%`}</span>
-                    <span className="num">{cruz?.porProfile.get(c.id)?.diasDePlantao || "—"}</span>
-                    <span className="num">{cruz?.porProfile.get(c.id)?.visitas || "—"}</span>
-                    <span className="num">{c.vendas}</span>
-                    <span className="num">{brl(c.custo)}</span>
-                    <span className={`num saldo ${c.saldo >= 0 ? "pos" : "neg"}`}>{brl(c.saldo)}</span>
-                  </Tr>
-                ))}
-              </Tbl>
-              <Panel style={{ marginTop: "var(--s2)" }}>
-                <div className="move">
-                  <p className="move-say">
-                    {(() => {
-                      const neg = calc.porCorretor.filter((c) => c.saldo < 0);
-                      const perda = neg.reduce((a, c) => a + c.saldo, 0);
-                      return neg.length === 0
-                        ? <>Todo mundo do time está <b className="win">se pagando</b> neste mês.</>
-                        : <><b className="hot">{neg.length} corretor{neg.length === 1 ? "" : "es"}</b> {neg.length === 1 ? "está" : "estão"} custando mais do que devolvendo — <b className="hot">{brl(Math.abs(perda))}</b> em lead pago que não virou venda.</>;
-                    })()}
-                  </p>
-                  <p className="move-why">
-                    Custo por lead <b>{brl(data.dinheiro.custoLead)}</b>{" "}
-                    {data.dinheiro.custoLeadFonte === "meta"
-                      ? <>— real, do gasto da conta {data.dinheiro.equipeAds ?? ""} no Meta
-                          ({brl(data.dinheiro.custoLeadJanela.gasto)} ÷ {data.dinheiro.custoLeadJanela.leads} leads desde {data.dinheiro.custoLeadJanela.desde.split("-").reverse().slice(0, 2).join("/")}).</>
-                      : <>— <b>estimado</b>: esta equipe não tem gasto registrado no Meta, então o saldo abaixo é uma ordem de grandeza, não um número.</>}
-                    {" "}Comissão do corretor <b>{brl(data.dinheiro.comissaoCorretor)}</b> por venda
-                    ({data.dinheiro.pctCorretor}% de {brl(data.dinheiro.ticket)}). A sua, como gerente,
-                    é <b>{brl(data.dinheiro.comissaoGerente)}</b> — {brl(calc.vendas * data.dinheiro.comissaoGerente)} no mês até agora.
-                  </p>
-                </div>
-              </Panel>
-              <AchadosCury
-                cruz={cruz}
-                time={calc.porCorretor.map((c) => ({
-                  profileId: c.id, nome: c.nome,
-                  recebidos: c.recebidos, carteira: c.carteira,
-                  vendas: c.vendas, saldo: c.saldo,
-                  custoLead: data.dinheiro.custoLead,
-                  horasSemEntrar: c.horasSemEntrar, chip: c.chip,
-                }))}
-              />
-            </Sec>
-          </section>
-        ) : view === "aovivo" ? (
+        {view === "tempo" ? (
           <TempoReal managerId={userId} />
-        ) : null}
+        ) : (
+          <TimeTab managerId={userId} />
+        )}
       </main>
     </div>
   );
