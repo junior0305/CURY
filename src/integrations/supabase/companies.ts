@@ -1,12 +1,14 @@
+// Um ambiente só: São Paulo.
+//
+// São José dos Campos saiu de operação. Ficava aqui como segunda opção e era o
+// PADRÃO de quem nunca escolheu — navegador novo, cache limpo, usuário novo
+// caíam num banco morto e achavam que o Comandra não funcionava.
+//
+// A forma de dicionário continua porque o resto do código consulta por id, e
+// porque um dia pode haver outra praça. O que mudou é que a lista tem um item
+// e o padrão não depende de escolha de ninguém.
+
 export const COMPANIES = {
-  sjc: {
-    id: 'sjc',
-    name: 'São José dos Campos',
-    shortName: 'SJC',
-    color: 'indigo',
-    url: 'https://dcimeuefnhaiemrfiklj.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRjaW1ldWVmbmhhaWVtcmZpa2xqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNzgyNzIsImV4cCI6MjA4Njk1NDI3Mn0.Y0DOXDbrPVzVw41f9oONjsz8ggwDYi3wZ71iPR0GCqs',
-  },
   sp: {
     id: 'sp',
     name: 'São Paulo',
@@ -25,17 +27,15 @@ export type CompanyId = keyof typeof COMPANIES;
 const STORAGE_KEY = 'arena_company';
 
 export function getSelectedCompanyId(): CompanyId {
+  // Quem tem 'sjc' guardado do tempo em que havia duas praças cai aqui e é
+  // devolvido para 'sp' sem precisar limpar nada no navegador.
   const stored = localStorage.getItem(STORAGE_KEY) as CompanyId | null;
-  return stored && COMPANIES[stored] ? stored : 'sjc';
+  return stored && COMPANIES[stored] ? stored : 'sp';
 }
 
 export function setSelectedCompany(id: CompanyId) {
-  // Respeita o lock: se não-SUPERINTENDENT logou, a empresa fica travada
   const locked = localStorage.getItem('arena_company_locked') as CompanyId | null;
-  if (locked && COMPANIES[locked]) {
-    console.warn(`[CompanySelector] Troca bloqueada — usuário travado em "${locked}"`);
-    return;
-  }
+  if (locked && COMPANIES[locked]) return;
   localStorage.setItem(STORAGE_KEY, id);
   window.location.reload();
 }
@@ -43,3 +43,6 @@ export function setSelectedCompany(id: CompanyId) {
 export function getSelectedCompany() {
   return COMPANIES[getSelectedCompanyId()];
 }
+
+/** Há mais de uma praça para escolher? Hoje não — o seletor some sozinho. */
+export const TEM_ESCOLHA = Object.keys(COMPANIES).length > 1;

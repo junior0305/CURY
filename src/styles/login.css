@@ -1,0 +1,121 @@
+/* ══════════════════════════════════════════════════════════════════════
+   LOGIN — a porta da frente.
+   Escopado em `.lg` para não encostar no Tailwind do resto do app.
+
+   Mesma família visual do painel do gerente (Archivo + JetBrains Mono,
+   azul uma vez, o resto tinta e papel). A tela de entrada era de outro
+   sistema — "Arena de Vendas", roxo, itálico, ícone de espadas — e a
+   pessoa entrava num produto que não parecia o mesmo da tela anterior.
+
+   Escura de propósito, e por isso sem variante clara: é a única tela do
+   app vista antes de qualquer preferência ser carregada, e o lobo da
+   marca vive em fundo escuro.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.lg{
+  --fundo:#080E1C; --cartao:#111927; --afundado:#18212F;
+  --linha:rgba(150,180,235,.15); --fio:rgba(150,180,235,.08);
+  --tinta:#E9EFFA; --tinta-2:#9FB0CC; --tinta-3:#6C7D9C;
+  --azul:#6C9BF5; --azul-ar:rgba(108,155,245,.14);
+  --ruim:#FF6E9C; --ruim-ar:rgba(255,110,156,.13);
+  --bom:#3FCF96;
+
+  min-height:100vh; display:grid; place-items:center; padding:24px;
+  background:var(--fundo); color:var(--tinta);
+  font-family:Archivo,ui-sans-serif,system-ui,sans-serif;
+  font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  position:relative; overflow:hidden;
+}
+
+/* O brilho atrás do lobo. É o único ornamento da tela — vem dos olhos do
+   ícone, não de uma decoração inventada. */
+.lg::before{
+  content:""; position:absolute; top:-18%; left:50%; transform:translateX(-50%);
+  width:min(760px,130vw); aspect-ratio:1; border-radius:50%;
+  background:radial-gradient(circle,rgba(108,155,245,.16) 0%,transparent 62%);
+  pointer-events:none;
+}
+
+.lg-cartao{
+  position:relative; z-index:1; width:100%; max-width:392px;
+  background:var(--cartao); border:1px solid var(--linha); border-radius:18px;
+  padding:34px 30px 28px;
+  box-shadow:0 1px 2px rgba(0,0,0,.4),0 26px 60px -28px rgba(0,0,0,.9);
+}
+
+.lg-marca{display:flex; flex-direction:column; align-items:center; text-align:center; margin-bottom:26px}
+.lg-marca img{width:78px; height:78px; display:block}
+.lg-marca b{display:block; font-size:25px; font-weight:800; letter-spacing:-.04em; margin-top:10px}
+.lg-marca span{display:block; font-size:13.5px; color:var(--tinta-3); margin-top:5px}
+
+.lg-campo{display:flex; flex-direction:column; gap:7px; margin-bottom:15px}
+.lg-campo label{
+  font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-size:10.5px; font-weight:500; letter-spacing:.15em; text-transform:uppercase;
+  color:var(--tinta-3);
+}
+.lg-campo input{
+  border:1px solid var(--linha); background:var(--afundado); color:var(--tinta);
+  border-radius:11px; padding:13px 14px; font:400 15.5px Archivo,sans-serif; width:100%;
+  transition:border-color .14s, background .14s;
+}
+.lg-campo input::placeholder{color:var(--tinta-3)}
+.lg-campo input:focus{outline:2px solid var(--azul); outline-offset:-1px; background:var(--cartao)}
+.lg-campo input:disabled{opacity:.5}
+
+/* Mostrar a senha: quem digita no celular, em pé num estande, erra e não vê
+   onde errou. */
+.lg-senha{position:relative}
+.lg-senha input{padding-right:52px}
+.lg-olho{
+  position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  width:38px; height:38px; display:grid; place-items:center; border:0; background:none;
+  color:var(--tinta-3); cursor:pointer; border-radius:9px;
+}
+.lg-olho:hover{color:var(--tinta); background:var(--fio)}
+.lg-olho svg{width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8}
+
+.lg-entrar{
+  width:100%; margin-top:8px; border:0; border-radius:11px; cursor:pointer;
+  background:var(--azul); color:#06101F; padding:14px;
+  font:700 14.5px Archivo,sans-serif; letter-spacing:-.01em;
+  transition:filter .14s, transform .09s;
+}
+.lg-entrar:hover:not(:disabled){filter:brightness(1.08)}
+.lg-entrar:active:not(:disabled){transform:scale(.99)}
+.lg-entrar:disabled{opacity:.55; cursor:default}
+
+.lg-erro{
+  display:flex; gap:10px; align-items:flex-start;
+  background:var(--ruim-ar); border-radius:11px; padding:12px 14px; margin-bottom:15px;
+  font-size:13.5px; line-height:1.5; color:var(--tinta-2);
+}
+.lg-erro svg{width:16px; height:16px; flex:none; margin-top:2px; fill:none; stroke:var(--ruim); stroke-width:2}
+.lg-erro b{color:var(--ruim); font-weight:700}
+
+.lg-ok{
+  background:rgba(63,207,150,.13); border-radius:11px; padding:12px 14px; margin-bottom:15px;
+  font-size:13.5px; line-height:1.5; color:var(--tinta-2);
+}
+.lg-ok b{color:var(--bom); font-weight:700}
+
+.lg-pe{
+  margin-top:18px; padding-top:16px; border-top:1px solid var(--fio);
+  display:flex; justify-content:center;
+}
+.lg-link{
+  background:none; border:0; cursor:pointer; padding:4px;
+  font:500 13px Archivo,sans-serif; color:var(--tinta-3);
+}
+.lg-link:hover{color:var(--azul)}
+.lg-link:disabled{opacity:.5; cursor:default}
+
+.lg :focus-visible{outline:2px solid var(--azul); outline-offset:2px; border-radius:8px}
+
+@media (prefers-reduced-motion:reduce){
+  .lg *{transition-duration:.01ms !important; animation-duration:.01ms !important}
+}
+@media (max-width:420px){
+  .lg{padding:16px}
+  .lg-cartao{padding:28px 20px 22px}
+}

@@ -606,7 +606,11 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
    e faziam tudo parecer encolhido. Os blocos de texto corrido continuam
    limitados por `max-width` proprio em ch, entao alargar aqui nao estica
    linha de leitura — so os cartoes e as tabelas, que ganham com isso. */
-.mgr10 .shell2{min-width:0;padding:18px 30px 90px;max-width:1680px;width:100%}
+.mgr10 .shell2{min-width:0;width:100%;max-width:2200px;
+  /* Respiro proporcional: 30px num notebook, mais folga num monitor grande,
+     sem virar margem gigante. A largura em si acompanha a tela — o teto de
+     2200px existe só para a linha da tabela nao virar um metro em ultrawide. */
+  padding:18px clamp(16px,2.2vw,44px) 90px}
 .mgr10 .top2{display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:20px}
 .mgr10 .top2 h1{font-size:22px;font-weight:700;letter-spacing:-.022em}
 .mgr10 .top2 p{margin-top:2px;font-size:12.5px;color:var(--ink-3)}

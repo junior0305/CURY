@@ -1,4 +1,4 @@
-import { COMPANIES, CompanyId, getSelectedCompanyId, setSelectedCompany } from '@/integrations/supabase/companies';
+import { COMPANIES, CompanyId, TEM_ESCOLHA, getSelectedCompanyId, setSelectedCompany } from '@/integrations/supabase/companies';
 import { Building2 } from 'lucide-react';
 
 interface CompanySelectorProps {
@@ -8,6 +8,10 @@ interface CompanySelectorProps {
 
 export function CompanySelector({ compact = false }: CompanySelectorProps) {
   const selected = getSelectedCompanyId();
+
+  // Com uma praça só não há o que escolher — mostrar um seletor de um item é
+  // pedir para a pessoa tomar uma decisão que não existe.
+  if (!TEM_ESCOLHA) return null;
 
   if (compact) {
     return (
