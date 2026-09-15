@@ -171,9 +171,12 @@ export function useDisparar(managerId: string | undefined) {
         novo: c.onboarded_at ? horas(c.onboarded_at) / 24 < 30 : false,
         tetoHoje: tetoDoDia(c.onboarded_at, c.tier),
       });
-      // a minha: a que eu conectei, senão a da casa (sem dono)
-      const minha = cfgs.find((c) => c.owner_id === managerId)
-        ?? cfgs.find((c) => !c.owner_id && c.is_active !== false) ?? null;
+      // A minha: a que eu conectei E que está ativa. Sem o `is_active` a tela
+      // dizia "conectado e liberado para enviar" mostrando uma configuração
+      // desativada — o pior tipo de erro, o que afirma o contrário do que é.
+      const ativa = (c: any) => c.is_active !== false && c.status !== 'pendente';
+      const minha = cfgs.find((c) => c.owner_id === managerId && ativa(c))
+        ?? cfgs.find((c) => !c.owner_id && ativa(c)) ?? null;
 
       const numeros = time.map((b: any) => ({
         nome: nomePor.get(b.id) ?? "—", profileId: b.id,

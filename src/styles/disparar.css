@@ -114,3 +114,17 @@
 .mgr10.disparar .novo-t
 .mgr10.disparar .disp{grid-template-columns:1fr;gap:20px}.mgr10.disparar .f2{grid-template-columns:1fr}.mgr10.disparar .tplr{grid-template-columns:1fr auto;row-gap:8px}.mgr10.disparar .tplr .prev{grid-column:1/-1}
 }
+
+/* O cartao da direita ficou apertado quando virou lista de numeros — ele nasceu
+   para um botao de conectar, nao para uma tabela. Larga um pouco e a lista
+   dentro dele perde a coluna que nao cabia. */
+.mgr10.disparar .bm{grid-template-columns:minmax(0,1fr) minmax(320px,380px)}
+.mgr10.disparar .bm-nova .bml{grid-template-columns:32px minmax(0,1fr) auto;gap:10px;
+  padding:10px 0;font-size:13px}
+.mgr10.disparar .bm-nova .bml .qual{display:none}
+.mgr10.disparar .bm-nova .bml b{font-size:13.5px}
+.mgr10.disparar .bm-nova .bml i{font-size:11.5px}
+.mgr10.disparar .bm-nova .f input{font-size:14px}
+@media(max-width:1180px){
+  .mgr10.disparar .bm{grid-template-columns:1fr}
+}
