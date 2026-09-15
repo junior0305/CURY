@@ -73,8 +73,8 @@ export function useAnuncios(managerId: string | undefined, dias = 30) {
 
       const [leadsRes, snapRes, capiRes, curyRes, gestorRes, plantaoRes] = await Promise.all([
         supabase.from("leads")
-          .select("created_at,geo_status,fb_campaign,product,last_lead_response_at,source")
-          .eq("manager_id", managerId!).gte("created_at", deAntes),
+          .select("created_at,geo_status,fb_campaign,product,last_lead_response_at,source,manager_id")
+          .gte("created_at", deAntes),
         supabase.from("capi_effect_snapshots")
           .select("snapshot_date,equipe,gasto,leads_fb,cpl,pct_resposta")
           .order("snapshot_date", { ascending: false }).limit(60),
@@ -89,7 +89,16 @@ export function useAnuncios(managerId: string | undefined, dias = 30) {
         supabase.from("profiles").select("id").eq("manager_id", managerId!).eq("role", "BROKER"),
       ]);
 
-      const leads = (leadsRes.data ?? []) as any[];
+      const todos = (leadsRes.data ?? []) as any[];
+
+      // ⚠️ Lead bloqueado pelo geo-guard perde o corretor E o gerente: o trigger
+      // zera broker_id e o manager_id fica nulo. Filtrar por gerente nunca
+      // acharia nenhum. A dona é a CAMPANHA — EQ_DUDU, DUDU_ZS etc.
+      const minhaCampanha = (c: string | null) =>
+        !!c && c.toUpperCase().includes(meuNome.toUpperCase());
+      const meu = (l: any) => l.manager_id === managerId || minhaCampanha(l.fb_campaign);
+
+      const leads = todos.filter(meu);
       const doPeriodo = leads.filter((l) => (l.created_at ?? "") >= de);
 
       const bloqueados = doPeriodo.filter((l) => l.geo_status === "fora_regiao").length;
