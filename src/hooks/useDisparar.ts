@@ -284,6 +284,8 @@ export interface NumeroCasa {
   verificado: boolean;
   donoId: string | null;
   donoLabel: string | null;
+  /** o número da empresa, que atende quem ainda não tem o próprio */
+  compartilhado: boolean;
 }
 
 export function useNumerosCasa(habilitado: boolean) {
@@ -302,6 +304,7 @@ export function useNumerosCasa(habilitado: boolean) {
         phone_number_id: n.phone_number_id, numero: n.numero, nome: n.nome,
         qualidade: n.qualidade, status: n.status, teto: n.teto,
         verificado: n.verificado, donoId: n.dono_id, donoLabel: n.dono_label,
+        compartilhado: !!n.compartilhado,
       }));
     },
   });

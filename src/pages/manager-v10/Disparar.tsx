@@ -433,13 +433,14 @@ export default function Disparar() {
                       com o próprio limite e a própria cobrança.</p>
                     <div className="bm-lista" style={{ textAlign: "left", marginTop: 12 }}>
                       {numerosCasa.map((n) => {
-                        const livre = !n.donoId;
+                        const livre = !n.donoId && !n.compartilhado;
                         return (
                           <div className="bml" key={n.phone_number_id}>
                             <span className="av">{ini(n.nome ?? "?")}</span>
                             <span>
                               <b>{n.numero}</b>
-                              <i>{n.donoId ? (n.donoLabel ?? "de outra pessoa")
+                              <i>{n.compartilhado ? "da empresa — atende quem não tem o próprio"
+                                 : n.donoId ? (n.donoLabel ?? "de outra pessoa")
                                  : n.nome ?? "livre"}</i>
                             </span>
                             <span className="qual">{(n.qualidade ?? "—").toLowerCase()}</span>
@@ -451,7 +452,7 @@ export default function Disparar() {
                                 </button>
                               ) : (
                                 <span style={{ fontSize: "12px", color: "var(--ink-3)" }}>
-                                  ocupado
+                                  {n.compartilhado ? "compartilhado" : "ocupado"}
                                 </span>
                               )}
                             </span>
