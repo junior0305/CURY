@@ -328,6 +328,9 @@ export async function criarTemplate(t: {
   name: string; body_text: string; category: string; language?: string;
   header_type?: string; header_image_url?: string | null;
   footer_text?: string | null; buttons?: any[]; variables?: string[];
+  /** de quem é o número — sem isto o template nasce na conta da casa e o
+   *  disparo pelo número do gerente falha por template inexistente */
+  owner_id?: string;
 }) {
   const { data, error } = await supabase.functions.invoke("wa-template", { body: t });
   if (error) throw error;
@@ -339,7 +342,8 @@ export async function mandarMensagem(
   threadId: string, telefone: string, texto: string, sentBy: string,
 ) {
   const { data, error } = await supabase.functions.invoke("wa-sender", {
-    body: { to: telefone, text: texto, thread_id: threadId, sent_by: sentBy },
+    body: { to: telefone, text: texto, thread_id: threadId, sent_by: sentBy,
+            owner_id: sentBy },
   });
   if (error) throw error;
   // O wa-sender devolve 200 com `error` no corpo quando recusa (janela fechada,

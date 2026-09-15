@@ -170,7 +170,7 @@ export default function Disparar() {
         header_type: img ? "IMAGE" : "NONE", header_image_url: img,
         footer_text: tRod || null,
         buttons: [b1, b2].filter(Boolean).map((t) => ({ type: "QUICK_REPLY", text: t })),
-        variables: vars,
+        variables: vars, owner_id: userId,
       });
       setEmAnalise(true);
       toast.success("Mandada para a Meta. O resultado aparece na lista acima.");
