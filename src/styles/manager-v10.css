@@ -334,8 +334,25 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
   .mgr10 .pv-d-in{padding-left:15px}}
 
 /* ── meta da semana: a pergunta, virada em ordem do dia ───────────────── */
+/* a meta ocupa a primeira coluna da fileira; os três números dividem o resto */
+.mgr10 .tr-pulso{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,.55fr));
+  gap:10px;align-items:stretch}
+.mgr10 .tr-kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--lift);padding:var(--s2) 18px;display:flex;flex-direction:column}
+.mgr10 .tr-kpi .tag{font-size:10px;display:block}
+.mgr10 .tr-kpi b{display:block;font-family:"JetBrains Mono",monospace;font-size:34px;font-weight:800;
+  letter-spacing:-.045em;line-height:1;margin-top:11px;font-variant-numeric:tabular-nums}
+.mgr10 .tr-kpi b.win{color:var(--good)} .mgr10 .tr-kpi b.hot{color:var(--red)}
+.mgr10 .tr-kpi i{display:block;font-style:normal;font-size:12.5px;color:var(--ink-3);
+  margin-top:auto;padding-top:12px;line-height:1.4}
+.mgr10 .tr-kpi i em{font-style:normal;font-family:"JetBrains Mono",monospace;font-weight:700}
+.mgr10 .tr-kpi i em.win{color:var(--good)}
+@media(max-width:980px){.mgr10 .tr-pulso{grid-template-columns:repeat(3,1fr)}
+  .mgr10 .tr-pulso .ms{grid-column:1/-1}}
+@media(max-width:620px){.mgr10 .tr-pulso{grid-template-columns:repeat(2,1fr)}}
+
 .mgr10 .ms{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
-  box-shadow:var(--lift);padding:var(--s2) 18px;margin-bottom:var(--s2)}
+  box-shadow:var(--lift);padding:var(--s2) 18px;display:flex;flex-direction:column}
 .mgr10 .ms .tag{font-size:10px;display:block}
 .mgr10 .ms-k{display:flex;align-items:baseline;gap:10px;margin-top:9px;flex-wrap:wrap}
 .mgr10 .ms-n{font-size:34px;font-weight:800;letter-spacing:-.045em;line-height:1}

@@ -18,7 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTempoReal, definirRecebimento, status,
          type Pessoa, type Nivel, type Origem } from "@/hooks/useTempoReal";
-import { Sec, Panel, ScoreRow, Cell, Blank } from "@/components/manager-v10/ui";
+import { Sec, Panel, Blank } from "@/components/manager-v10/ui";
 import MetaSemana from "@/components/manager-v10/MetaSemana";
 import FunilOrigem from "@/components/manager-v10/FunilOrigem";
 import PrecisaDeVoce from "@/components/manager-v10/PrecisaDeVoce";
@@ -128,18 +128,26 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
         tag={hora ? <span className="dim">atualizado {hora}</span> : null}
         sub="Ponto, atendimento, venda e lead perdido vêm do app da Cury — é o que a operação fez, não o que foi digitado aqui."
       >
-        <MetaSemana managerId={managerId} gerenteCuryId={data.gerenteCuryId} />
-        <ScoreRow>
-          <Cell label="No plantão" value={totais.plantao}
-                sub={`${totais.online} com o Comandra aberto · ${gente.length} no time`} />
-          <Cell label="Atendimentos" value={totais.atendimentos}
-                tone={totais.atendimentos > 0 ? "good" : "alert"} sub="hoje" />
-          <Cell label="Vendas" value={totais.vendas}
-                tone={totais.vendas > 0 ? "good" : undefined} sub="hoje" />
-          <Cell label="Leads perdidos" value={totais.perdidos}
-                tone={totais.perdidos > 0 ? "alert" : undefined}
-                sub="expiraram sem atendimento" />
-        </ScoreRow>
+        {/* A meta é um card na MESMA fileira dos números, não um bloco acima:
+            ela é a pergunta e eles são o estado — lado a lado a leitura é uma só. */}
+        <div className="tr-pulso">
+          <MetaSemana managerId={managerId} gerenteCuryId={data.gerenteCuryId} />
+          <div className="tr-kpi">
+            <span className="tag">No plantão</span>
+            <b>{totais.plantao}</b>
+            <i><em className="win">{totais.online}</em> online agora · {gente.length} no time</i>
+          </div>
+          <div className="tr-kpi">
+            <span className="tag">Atendimentos</span>
+            <b className={totais.atendimentos > 0 ? "win" : ""}>{totais.atendimentos}</b>
+            <i>hoje</i>
+          </div>
+          <div className="tr-kpi">
+            <span className="tag">Leads perdidos</span>
+            <b className={totais.perdidos > 0 ? "hot" : ""}>{totais.perdidos}</b>
+            <i>expiraram sem atendimento</i>
+          </div>
+        </div>
       </Sec>
 
       <FunilOrigem managerId={managerId} gerenteCuryId={data.gerenteCuryId} />
