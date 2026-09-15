@@ -13,10 +13,13 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface CampanhaFb {
+  id: string;
   nome: string;
   gasto: number;
   leads: number;
   cpl: number | null;
+  /** quantos desta campanha chegaram no Comandra */
+  chegaram: number;
 }
 
 export interface ContaFacebook {
@@ -48,9 +51,20 @@ export function useContaFacebook(
         semConta: true, gasto: 0, leads: 0, cpl: null, impressoes: 0,
         ativas: 0, campanhas: [], saldo: null, prePago: false,
       };
-      const { data, error } = await supabase.functions.invoke("fb-conta-gerente", {
-        body: { owner_id: managerId, de: janela.de, ate: janela.ate },
-      });
+      // As duas pontas, em paralelo: o que o Facebook cobrou e o que chegou aqui.
+      const [{ data, error }, chegouRes] = await Promise.all([
+        supabase.functions.invoke("fb-conta-gerente", {
+          body: { owner_id: managerId, de: janela.de, ate: janela.ate },
+        }),
+        supabase.from("leads").select("fb_campaign_id")
+          .gte("created_at", janela.de).lte("created_at", janela.ate + "T23:59:59")
+          .not("fb_campaign_id", "is", null),
+      ]);
+      const chegaramPor = new Map<string, number>();
+      for (const l of (((chegouRes as any).data ?? []) as any[])) {
+        const k = String(l.fb_campaign_id);
+        chegaramPor.set(k, (chegaramPor.get(k) ?? 0) + 1);
+      }
       if (error) return { ...vazio, motivo: error.message };
       const d = data as any;
       if (d?.error) return { ...vazio, motivo: d.error };
@@ -59,7 +73,10 @@ export function useContaFacebook(
         semConta: false, conta: d.conta,
         gasto: d.gasto ?? 0, leads: d.leads ?? 0, cpl: d.cpl ?? null,
         impressoes: d.impressoes ?? 0, ativas: d.ativas ?? 0,
-        campanhas: d.campanhas ?? [], saldo: d.saldo ?? null,
+        campanhas: (d.campanhas ?? []).map((c: any) => ({
+          ...c, chegaram: chegaramPor.get(String(c.id)) ?? 0,
+        })),
+        saldo: d.saldo ?? null,
         prePago: !!d.prePago,
       };
     },

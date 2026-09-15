@@ -126,14 +126,20 @@ export default function Anuncios() {
 
               {fb.campanhas.length ? (
                 <div className="an-campfb">
+                  <div className="an-cfb cab">
+                    <b>campanha</b><span>gasto</span><span>Facebook</span>
+                    <span>chegaram</span><span>por lead</span>
+                  </div>
                   {fb.campanhas.slice(0, 8).map((c) => (
-                    <div className="an-cfb" key={c.nome}>
+                    <div className="an-cfb" key={c.id ?? c.nome}>
                       <b>{c.nome}</b>
                       <span className="mono">{brl(c.gasto)}</span>
-                      <span className="mono">{c.leads} lead{c.leads === 1 ? "" : "s"}</span>
-                      <span className={`mono${c.cpl && fb.cpl && c.cpl > fb.cpl * 1.5 ? " ruim" : ""}`}>
-                        {c.cpl ? brl(c.cpl) : "sem lead"}
+                      <span className="mono">{c.leads} no Face</span>
+                      {/* A conferência campanha a campanha: cobrado × chegado. */}
+                      <span className={`mono${c.leads > c.chegaram ? " ruim" : ""}`}>
+                        {c.chegaram} aqui
                       </span>
+                      <span className="mono">{c.cpl ? brl(c.cpl) : "—"}</span>
                     </div>
                   ))}
                 </div>
