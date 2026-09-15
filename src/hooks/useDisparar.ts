@@ -256,6 +256,70 @@ export function useDisparar(managerId: string | undefined) {
   });
 }
 
+/* ── a conta de WhatsApp da casa ──────────────────────────────────────────
+   Uma conta só, com um número por gerente. O caminho de uma conta por gerente
+   exigia CNPJ, domínio e verificação de negócio de cada um, e travou dias nisso.
+   Na conta da casa, que já é verificada:
+     · o limite de envio é POR NÚMERO (250 cada) e não se divide;
+     · banimento por comportamento atinge o número, não a conta;
+     · a forma de pagamento pode ser por número.                              */
+
+export interface NumeroCasa {
+  phone_number_id: string;
+  numero: string;
+  nome: string | null;
+  qualidade: string | null;
+  status: string | null;
+  teto: string | null;
+  verificado: boolean;
+  donoId: string | null;
+  donoLabel: string | null;
+}
+
+export function useNumerosCasa(habilitado: boolean) {
+  return useQuery<NumeroCasa[]>({
+    queryKey: ["numeros-casa"],
+    enabled: habilitado,
+    staleTime: 2 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("wa-onboard", {
+        body: { action: "listar_casa" },
+      });
+      if (error) throw error;
+      const d = data as any;
+      if (d?.error) throw new Error(d.error);
+      return (d?.numeros ?? []).map((n: any) => ({
+        phone_number_id: n.phone_number_id, numero: n.numero, nome: n.nome,
+        qualidade: n.qualidade, status: n.status, teto: n.teto,
+        verificado: n.verificado, donoId: n.dono_id, donoLabel: n.dono_label,
+      }));
+    },
+  });
+}
+
+/** O gerente fica com um número da conta da casa. Registra e vincula ao login. */
+export async function assumirNumero(phoneNumberId: string, ownerId: string, label: string) {
+  const { data, error } = await supabase.functions.invoke("wa-onboard", {
+    body: { action: "assumir", phone_number_id: phoneNumberId, owner_id: ownerId, label },
+  });
+  if (error) throw error;
+  const d = data as any;
+  if (d?.error) throw new Error(d.error);
+  return d as { ok: boolean; pendencia: string | null };
+}
+
+/** O que o cliente vê ao abrir a conversa: nome, descrição e site. */
+export async function salvarPerfilNumero(phoneNumberId: string, p: {
+  sobre?: string; descricao?: string; site?: string;
+}) {
+  const { data, error } = await supabase.functions.invoke("wa-onboard", {
+    body: { action: "perfil", phone_number_id: phoneNumberId, ...p },
+  });
+  if (error) throw error;
+  if ((data as any)?.error) throw new Error((data as any).error);
+  return data;
+}
+
 /** As mensagens de uma conversa. Só busca quando a conversa está aberta. */
 export function useMensagens(threadId: string | null) {
   return useQuery<Mensagem[]>({

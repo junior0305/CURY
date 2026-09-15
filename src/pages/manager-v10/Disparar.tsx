@@ -24,17 +24,13 @@ import { useTheme } from "@/contexts/ThemeContext";
 import {
   useDisparar, useMensagens, ajustarImagem, cheiraOferta, checarNome,
   criarTemplate, mandarMensagem, dispararCampanha, type Template,
+  useNumerosCasa, assumirNumero,
 } from "@/hooks/useDisparar";
 import { conectarBM, finalizarConexao } from "@/lib/embeddedSignup";
 import { Blank } from "@/components/manager-v10/ui";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import "@/styles/manager-v10.css";
 import "@/styles/disparar.css";
-
-/** Cadastro incorporado da Meta: virar true quando o app for liberado como
- *  provedor de tecnologia. Até lá o caminho existe inteiro no código
- *  (src/lib/embeddedSignup.ts + a edge wa-onboard), só não tem para onde ir. */
-const ES_LIBERADO = false;
 
 type Etapa = "bm" | "tpl" | "disp" | "conv";
 type Destino = "fila" | "escolher";
@@ -182,6 +178,21 @@ export default function Disparar() {
 
   const [disparando, setDisparando] = useState(false);
   const [conectando, setConectando] = useState(false);
+  const { data: numerosCasa, isLoading: carregandoCasa } = useNumerosCasa(!data?.config);
+
+  async function assumir(pid: string, numero: string) {
+    if (!userId) return;
+    setConectando(true);
+    try {
+      const r = await assumirNumero(pid, userId, nomeExib.trim() || numero);
+      if (r.ok) toast.success("Número é seu. Já pode disparar por ele.");
+      else toast.warning(r.pendencia ?? "Vinculado, mas ficou pendência.", { duration: 12000 });
+      qc.invalidateQueries({ queryKey: ["disparar"] });
+      qc.invalidateQueries({ queryKey: ["numeros-casa"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Não consegui.");
+    } finally { setConectando(false); }
+  }
 
   async function conectar() {
     if (!userId) return;
@@ -338,49 +349,58 @@ export default function Disparar() {
                   responde vazio). Enquanto não estiver, esta caixa diz o que é verdade
                   em vez de oferecer um clique que não leva a lugar nenhum — e pedir
                   para o gerente gerar token no Business Manager está fora de questão. */}
-              {ES_LIBERADO ? (
+              {/* Um número por gerente, todos na conta da casa. O caminho de
+                  uma conta por gerente pedia CNPJ, domínio e verificação de
+                  negócio de cada um — e travou dias nisso. Aqui o gerente só
+                  escolhe o número que é dele. */}
               <div className="bm-nova">
-                <b>Conectar o seu próprio número</b>
-                <p>Use a conta da sua equipe e o seu WhatsApp, com o seu dinheiro. Você continua
-                  atendendo no mesmo número.</p>
-                <div className="f" style={{ marginBottom: 10, textAlign: "left" }}>
-                  <label htmlFor="disp-nome">Nome que o cliente vai ver</label>
-                  <input id="disp-nome" autoComplete="off" value={nomeExib}
-                    onChange={(e) => setNomeExib(e.target.value)} placeholder="Cavalcante" />
-                  {nomeCheck ? (
-                    <div className={`nome-v ${nomeCheck.ok ? "ok" : "ruim"}`}>
-                      <svg viewBox="0 0 24 24">
-                        {nomeCheck.ok ? <path d="M20 6L9 17l-5-5" />
-                          : <><circle cx="12" cy="12" r="9" /><path d="M12 8.5v5M12 17h.01" /></>}
-                      </svg>
-                      <div>
-                        {nomeCheck.texto}
-                        {nomeCheck.sugestao ? (
-                          <button className="sug" onClick={() => setNomeExib(nomeCheck.sugestao!)}>
-                            {nomeCheck.sugestao}
-                          </button>
-                        ) : null}
-                      </div>
+                <b>Seu número de disparo</b>
+                {carregandoCasa ? (
+                  <p>Consultando os números da empresa…</p>
+                ) : !numerosCasa?.length ? (
+                  <p>Nenhum número disponível ainda. Peça ao administrador para
+                    adicionar o seu na conta de WhatsApp da empresa.</p>
+                ) : (
+                  <>
+                    <p>Escolha o número que é seu. Cada um dispara pelo próprio,
+                      com o próprio limite e a própria cobrança.</p>
+                    <div className="bm-lista" style={{ textAlign: "left", marginTop: 12 }}>
+                      {numerosCasa.map((n) => {
+                        const livre = !n.donoId;
+                        return (
+                          <div className="bml" key={n.phone_number_id}>
+                            <span className="av">{ini(n.nome ?? "?")}</span>
+                            <span>
+                              <b>{n.numero}</b>
+                              <i>{n.donoId ? (n.donoLabel ?? "de outra pessoa")
+                                 : n.nome ?? "livre"}</i>
+                            </span>
+                            <span className="qual">{(n.qualidade ?? "—").toLowerCase()}</span>
+                            <span>
+                              {livre ? (
+                                <button className="btn sm" disabled={conectando}
+                                  onClick={() => assumir(n.phone_number_id, n.numero)}>
+                                  É o meu
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: "12px", color: "var(--ink-3)" }}>
+                                  ocupado
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ) : null}
-                </div>
-                <button className="btn solid" style={{ width: "100%" }}
-                  disabled={conectando || !nomeExib.trim()} onClick={conectar}>
-                  {conectando ? "Conectando…" : "Conectar com o Facebook"}
-                </button>
+                  </>
+                )}
+                <p style={{ marginTop: 14, fontSize: "12.5px", color: "var(--ink-3)",
+                            lineHeight: 1.55, textAlign: "left" }}>
+                  Não achou o seu? O administrador adiciona o número na conta de
+                  WhatsApp da empresa e você confirma por SMS. Leva cinco minutos
+                  e não pede documento — a empresa já é verificada.
+                </p>
               </div>
-              ) : (
-                <div className="bm-nova" style={{ borderStyle: "solid", borderColor: "var(--line)",
-                  background: "var(--surface-2)" }}>
-                  <b style={{ color: "var(--ink)" }}>Por enquanto todo mundo dispara por este número</b>
-                  <p>Conectar o número da sua própria equipe depende de uma liberação que a Meta
-                    ainda não deu para a gente. Enquanto não sai, os disparos da sua equipe saem
-                    pelo número da empresa — funciona igual, o que muda é de quem é a conta.</p>
-                  <p style={{ marginTop: 10, fontSize: "12.5px", color: "var(--ink-3)" }}>
-                    Você não precisa fazer nada. Quando liberar, o botão aparece aqui.
-                  </p>
-                </div>
-              )}
             </div>
           </div>
 
