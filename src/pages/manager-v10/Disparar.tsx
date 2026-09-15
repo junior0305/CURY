@@ -835,7 +835,7 @@ export default function Disparar() {
   };
 
   return (
-    <div className="mgr10 app2">
+    <div className="mgr10 app2 disparar">
       <RailV10 atual="disparar" sub={data ? `${data.corretores.length} corretores` : undefined}
         mode={mode} toggle={toggle} />
       <main className="shell2">
