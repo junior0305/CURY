@@ -167,6 +167,9 @@ export default function Disparar() {
         footer_text: tRod || null,
         buttons: [b1, b2].filter(Boolean).map((t) => ({ type: "QUICK_REPLY", text: t })),
         variables: vars, owner_id: userId,
+        // A Meta exige um exemplo por variável nomeada. Uso o que o gerente já
+        // preencheu na prévia — é o valor real, melhor que "exemplo".
+        exemplos: Object.fromEntries(vars.map((v) => [v, valores[v] || (v === "nome" ? "Maria" : "exemplo")])),
       });
       setEmAnalise(true);
       toast.success("Mandada para a Meta. O resultado aparece na lista acima.");

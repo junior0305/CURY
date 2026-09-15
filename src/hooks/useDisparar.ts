@@ -392,6 +392,8 @@ export async function criarTemplate(t: {
   name: string; body_text: string; category: string; language?: string;
   header_type?: string; header_image_url?: string | null;
   footer_text?: string | null; buttons?: any[]; variables?: string[];
+  /** um exemplo por variável nomeada — a Meta RECUSA sem isso, e não diz qual faltou */
+  exemplos?: Record<string, string>;
   /** de quem é o número — sem isto o template nasce na conta da casa e o
    *  disparo pelo número do gerente falha por template inexistente */
   owner_id?: string;
