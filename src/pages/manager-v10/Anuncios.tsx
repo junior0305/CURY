@@ -130,9 +130,12 @@ export default function Anuncios() {
                     <b>campanha</b><span>gasto</span><span>Facebook</span>
                     <span>chegaram</span><span>por lead</span>
                   </div>
-                  {fb.campanhas.slice(0, 8).map((c) => (
+                  {/* As ativas primeiro: é sobre elas que se decide hoje. */}
+                  {[...fb.campanhas].sort((a, b) =>
+                    (b.ativa ? 1 : 0) - (a.ativa ? 1 : 0) || b.leads - a.leads
+                  ).slice(0, 12).map((c) => (
                     <div className="an-cfb" key={c.id ?? c.nome}>
-                      <b>{c.nome}</b>
+                      <b>{c.ativa ? <i className="pip-on" title="campanha ativa" /> : null}{c.nome}</b>
                       <span className="mono">{brl(c.gasto)}</span>
                       <span className="mono">{c.leads} no Face</span>
                       {/* A conferência campanha a campanha: cobrado × chegado. */}

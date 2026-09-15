@@ -960,7 +960,12 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
 .mgr10 .an-cfb{display:grid;grid-template-columns:minmax(0,1fr) 100px 92px 86px 92px;gap:var(--s2);
   align-items:center;padding:11px var(--s2);border-bottom:1px solid var(--hair);font-size:13.5px}
 .mgr10 .an-cfb:last-child{border-bottom:0}
-.mgr10 .an-cfb b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mgr10 .an-cfb b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  display:flex;align-items:center;gap:8px}
+/* Ponto verde = campanha no ar. Distinguir ativa de pausada e o que separa
+   "preciso agir" de "historico". */
+.mgr10 .an-cfb .pip-on{width:7px;height:7px;border-radius:50%;background:var(--good);
+  flex:none;box-shadow:0 0 0 3px var(--good-air)}
 .mgr10 .an-cfb span{text-align:right;color:var(--ink-2);font-variant-numeric:tabular-nums}
 .mgr10 .an-cfb span.ruim{color:var(--red);font-weight:700}
 .mgr10 .an-cfb.cab{background:var(--sunk);font-family:"JetBrains Mono",monospace;font-size:10px;

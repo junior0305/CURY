@@ -20,6 +20,7 @@ export interface CampanhaFb {
   cpl: number | null;
   /** quantos desta campanha chegaram no Comandra */
   chegaram: number;
+  ativa: boolean;
 }
 
 export interface ContaFacebook {
