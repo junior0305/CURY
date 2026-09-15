@@ -81,3 +81,48 @@
   .mgr10.pastas .pa-serie{height:104px}
   .mgr10.pastas .pa-d{display:none}
 }
+
+/* ── registro de toque ──────────────────────────────────────────────────
+   O formulário abre DENTRO da linha, ocupando a grade inteira. Abrir num
+   modal tiraria da vista o que o gerente está registrando — e a metade do
+   valor está em ver o telefone e a etapa enquanto escreve. */
+.mgr10.pastas .pa-li.on{background:var(--sunk)}
+.mgr10.pastas .pa-li.vencido{box-shadow:inset 3px 0 0 var(--amber)}
+.mgr10.pastas .pa-li.orfa.vencido{box-shadow:inset 3px 0 0 var(--red)}
+
+.mgr10.pastas .pa-toque{
+  display:block; font-size:12px; color:var(--ink-2); margin-top:3px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.mgr10.pastas .pa-toque em{font-style:normal}
+.mgr10.pastas .pa-toque em.alvo{
+  color:var(--amber); font-weight:700; margin-right:8px;
+}
+.mgr10.pastas .pa-toque em.nota{color:var(--ink-3)}
+
+.mgr10.pastas .pa-form{
+  grid-column:1/-1; display:flex; flex-direction:column; gap:10px;
+  padding:13px 0 4px; margin-top:4px; border-top:1px solid var(--hair);
+}
+.mgr10.pastas .pa-tipos,
+.mgr10.pastas .pa-volta{display:flex; align-items:center; gap:7px; flex-wrap:wrap}
+.mgr10.pastas .pa-volta > span{font-size:12.5px; color:var(--ink-3); margin-right:2px}
+
+.mgr10.pastas .pa-chip{
+  border:1px solid var(--line); background:var(--card); color:var(--ink-2);
+  border-radius:99px; padding:6px 13px; font-size:12.5px; font-weight:600;
+  cursor:pointer; transition:background .13s, border-color .13s, color .13s;
+}
+.mgr10.pastas .pa-chip:hover{border-color:var(--blue); color:var(--blue)}
+.mgr10.pastas .pa-chip.on{background:var(--blue); border-color:var(--blue); color:#fff}
+
+.mgr10.pastas .pa-nota,
+.mgr10.pastas .pa-volta input[type="date"]{
+  border:1px solid var(--line); background:var(--card); color:var(--ink);
+  border-radius:9px; padding:9px 12px; font:400 14px Archivo,sans-serif;
+}
+.mgr10.pastas .pa-nota{width:100%; max-width:560px}
+.mgr10.pastas .pa-volta input[type="date"]{font-size:13px; padding:7px 10px}
+.mgr10.pastas .pa-nota:focus,
+.mgr10.pastas .pa-volta input:focus{outline:2px solid var(--blue); outline-offset:-1px}
+.mgr10.pastas .pa-volta .mini.solid{margin-left:auto}

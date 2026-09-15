@@ -12,8 +12,12 @@
 
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
-import { usePastas, linkWhats, type Parada } from "@/hooks/usePastas";
+import {
+  usePastas, linkWhats, registrarToque, TIPOS_TOQUE, type Parada,
+} from "@/hooks/usePastas";
 import { Sec, Blank, Cell, ScoreRow, Bars } from "@/components/manager-v10/ui";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import "@/styles/manager-v10.css";
@@ -21,6 +25,18 @@ import "@/styles/pastas.css";
 
 const ini = (s: string) => s.trim().slice(0, 2).toUpperCase();
 const ddmm = (iso: string) => iso.slice(8, 10) + "/" + iso.slice(5, 7);
+const hoje = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo",
+  year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const emDias = (n: number) => {
+  const d = new Date(); d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+/** "há 3 dias" — quem lê a fila quer a distância, não a data. */
+const desde = (iso: string) => {
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  return d <= 0 ? "hoje" : d === 1 ? "ontem" : `há ${d} dias`;
+};
+const ROTULO = Object.fromEntries(TIPOS_TOQUE.map((t) => [t.k, t.rotulo]));
 
 type Corte = 30 | 45 | 60;
 
@@ -31,7 +47,36 @@ export default function Pastas() {
   const { data, isLoading } = usePastas(userId);
   const [corte, setCorte] = useState<Corte>(45);
   const [soOrfas, setSoOrfas] = useState(false);
+  const [aberta, setAberta] = useState<string | null>(null);
+  const [tipo, setTipo] = useState<string>("ligou");
+  const [nota, setNota] = useState("");
+  const [voltar, setVoltar] = useState<string>("");
+  const [salvando, setSalvando] = useState(false);
+  const qc = useQueryClient();
   loadFonts();
+
+  function abrir(id: string) {
+    setAberta((v) => (v === id ? null : id));
+    setTipo("ligou"); setNota(""); setVoltar("");
+  }
+
+  async function salvar(p: Parada) {
+    if (!userId) return;
+    setSalvando(true);
+    try {
+      await registrarToque({
+        propostaId: p.id, autorId: userId, tipo,
+        nota, voltarEm: voltar || null,
+      });
+      toast.success(voltar
+        ? `Registrado. Volta para o topo em ${ddmm(voltar)}.`
+        : "Registrado.");
+      setAberta(null);
+      qc.invalidateQueries({ queryKey: ["pastas"] });
+    } catch (e: any) {
+      toast.error(`Não consegui registrar: ${e?.message ?? e}`);
+    } finally { setSalvando(false); }
+  }
 
   const corpo = () => {
     if (isLoading) return <Blank title="Carregando as propostas…" />;
@@ -103,7 +148,7 @@ export default function Pastas() {
         </Sec>
 
         <Sec title="Paradas" tag={`${fila.length} com telefone`}
-          sub="Com o contato do cliente na mão. Você decide: cobrar quem está com ela, ou passar para outro corretor.">
+          sub="Com o contato do cliente na mão. Registre o que fez — quem tem retorno marcado para hoje sobe para o topo, e quem nunca foi tocado vem antes de quem já foi.">
           <div className="pa-filtros">
             <div className="seg">
               {([30, 45, 60] as Corte[]).map((c) => (
@@ -121,7 +166,7 @@ export default function Pastas() {
               {fila.slice(0, 80).map((p) => {
                 const wa = linkWhats(p.telefone, p.cliente);
                 return (
-                  <div className={`pa-li${p.orfa ? " orfa" : ""}`} key={p.id}>
+                  <div className={`pa-li${p.orfa ? " orfa" : ""}${p.vencido ? " vencido" : ""}${aberta === p.id ? " on" : ""}`} key={p.id}>
                     <span className="pa-av">{ini(p.cliente ?? "?")}</span>
                     <div className="pa-b">
                       <b>{p.cliente ?? "sem nome"}</b>
@@ -131,16 +176,60 @@ export default function Pastas() {
                         {p.orfa ? <em className="ruim">corretor saiu</em> : (p.corretor ?? "sem corretor")}
                         {p.semDocumento ? <><em className="sep">·</em><em className="ruim">sem documento</em></> : null}
                       </span>
+                      {/* O que já foi feito. Sem esta linha a fila volta idêntica
+                          amanhã e o gerente refaz o mesmo trabalho. */}
+                      {p.toque ? (
+                        <span className="pa-toque">
+                          {p.vencido ? <em className="alvo">voltar hoje</em> : null}
+                          {ROTULO[p.toque.tipo] ?? p.toque.tipo} {desde(p.toque.quando)}
+                          {p.toque.autor ? ` · ${p.toque.autor}` : ""}
+                          {p.toque.nota ? <em className="nota"> — {p.toque.nota}</em> : null}
+                        </span>
+                      ) : null}
                     </div>
                     <span className="pa-dias mono">{p.dias}d</span>
                     <span className="pa-tel mono">{p.telefone}</span>
                     <div className="acts">
                       {wa ? (
                         <a className="mini key" href={wa} target="_blank" rel="noreferrer">
-                          Chamar no WhatsApp
+                          WhatsApp
                         </a>
                       ) : null}
+                      <button className="mini" onClick={() => abrir(p.id)}>
+                        {aberta === p.id ? "fechar" : "Registrar"}
+                      </button>
                     </div>
+
+                    {aberta === p.id ? (
+                      <div className="pa-form">
+                        <div className="pa-tipos">
+                          {TIPOS_TOQUE.map((t) => (
+                            <button key={t.k} className={`pa-chip${tipo === t.k ? " on" : ""}`}
+                              onClick={() => setTipo(t.k)}>{t.rotulo}</button>
+                          ))}
+                        </div>
+                        <input className="pa-nota" value={nota} maxLength={180}
+                          placeholder="o que aconteceu (opcional)"
+                          onChange={(e) => setNota(e.target.value)} />
+                        <div className="pa-volta">
+                          <span>Voltar em</span>
+                          {[
+                            ["amanhã", emDias(1)],
+                            ["3 dias", emDias(3)],
+                            ["1 semana", emDias(7)],
+                          ].map(([rot, val]) => (
+                            <button key={rot} className={`pa-chip${voltar === val ? " on" : ""}`}
+                              onClick={() => setVoltar(voltar === val ? "" : val)}>{rot}</button>
+                          ))}
+                          <input type="date" value={voltar} min={hoje()}
+                            onChange={(e) => setVoltar(e.target.value)} />
+                          <button className="mini solid" disabled={salvando}
+                            onClick={() => salvar(p)}>
+                            {salvando ? "salvando…" : "Registrar"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

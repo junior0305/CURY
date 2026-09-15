@@ -38,6 +38,24 @@ export const ETAPAS = [
 
 const PERDIDAS = ["Venda Perdida", "Em Distrato", "Distratado"];
 
+/** O que o gerente já fez nesta proposta. */
+export interface Toque {
+  tipo: string;
+  nota: string | null;
+  voltarEm: string | null;
+  quando: string;
+  autor: string | null;
+}
+
+export const TIPOS_TOQUE: { k: string; rotulo: string }[] = [
+  { k: "ligou", rotulo: "Liguei" },
+  { k: "whatsapp", rotulo: "Mandei mensagem" },
+  { k: "sem_resposta", rotulo: "Não respondeu" },
+  { k: "documento", rotulo: "Cobrei documento" },
+  { k: "passou", rotulo: "Passei para outro" },
+  { k: "resolvido", rotulo: "Resolvido" },
+];
+
 export interface Parada {
   id: string;
   nome: string;
@@ -47,6 +65,9 @@ export interface Parada {
   corretor: string | null;
   dias: number;
   semDocumento: boolean;
+  toque: Toque | null;
+  /** o retorno combinado venceu — sobe para o topo da fila */
+  vencido: boolean;
   /** o corretor saiu da empresa — a proposta não anda sozinha */
   orfa: boolean;
 }
@@ -91,17 +112,23 @@ export function usePastas(managerId: string | undefined) {
       const inicioMes = hoje.slice(0, 8) + "01";
       const de90 = diaSP(new Date(Date.now() - 90 * 86_400_000));
 
-      const [movRes, propRes] = await Promise.all([
+      const [movRes, propRes, toqueRes] = await Promise.all([
         supabase.from("salesforce_movimentos")
           .select("dia,para").eq("gerente_apelido", apelido)
           .eq("para", "Montagem de Pasta").gte("dia", de90),
         supabase.from("salesforce_propostas")
           .select("sf_id,nome,status,corretor_apelido,cliente_nome,cliente_telefone,status_desde,documentos_entregues")
           .eq("gerente_apelido", apelido),
+        supabase.from("proposta_ultimo_toque").select("*"),
       ]);
 
       const mov = ((movRes as any).data ?? []) as any[];
       const props = ((propRes as any).data ?? []) as any[];
+      const toques = new Map<string, Toque>(
+        (((toqueRes as any).data ?? []) as any[]).map((t) => [t.sf_proposta_id, {
+          tipo: t.tipo, nota: t.nota, voltarEm: t.voltar_em,
+          quando: t.created_at, autor: t.autor_nome || null,
+        }]));
 
       const porDiaMap = new Map<string, number>();
       for (const m of mov) porDiaMap.set(m.dia, (porDiaMap.get(m.dia) ?? 0) + 1);
@@ -137,11 +164,21 @@ export function usePastas(managerId: string | undefined) {
           cliente: p.cliente_nome, telefone: p.cliente_telefone,
           corretor: p.corretor_apelido, dias: dias(p.status_desde),
           semDocumento: p.documentos_entregues !== true,
+          toque: toques.get(p.sf_id) ?? null,
+          vencido: !!toques.get(p.sf_id)?.voltarEm && toques.get(p.sf_id)!.voltarEm! <= hoje,
           // O Salesforce marca o corretor desligado com "Z - INATIVO" no apelido.
           // Sem isso o gerente cobra alguém que não trabalha mais aqui.
           orfa: /^\s*Z\s*-\s*INATIVO/i.test(p.corretor_apelido ?? ""),
         }))
-        .sort((a, b) => b.dias - a.dias);
+        // Ordem que o dia pede: o retorno combinado que venceu vem primeiro,
+        // depois quem nunca foi tocado, e só então o mais velho. Ordenar só
+        // por idade faria a lista mostrar todo dia as mesmas de dois anos.
+        .sort((a, b) => {
+          if (a.vencido !== b.vencido) return a.vencido ? -1 : 1;
+          const at = !!a.toque, bt = !!b.toque;
+          if (at !== bt) return at ? 1 : -1;
+          return b.dias - a.dias;
+        });
 
       return {
         apelido,
@@ -156,6 +193,19 @@ export function usePastas(managerId: string | undefined) {
       };
     },
   });
+}
+
+/** Grava o que foi feito. Não escreve no Salesforce de propósito: o Comandra
+ *  não é dono daquele dado e não deve mexer no processo de contrato da Cury. */
+export async function registrarToque(t: {
+  propostaId: string; autorId: string; tipo: string;
+  nota?: string | null; voltarEm?: string | null;
+}) {
+  const { error } = await supabase.from("proposta_toques").insert({
+    sf_proposta_id: t.propostaId, autor_id: t.autorId, tipo: t.tipo,
+    nota: t.nota?.trim() || null, voltar_em: t.voltarEm || null,
+  });
+  if (error) throw error;
 }
 
 /** Link de WhatsApp para o gerente retomar o cliente na hora. */
