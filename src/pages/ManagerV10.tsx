@@ -20,6 +20,7 @@ import { useCruzamentoCury } from "@/hooks/useCruzamentoCury";
 import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/components/manager-v10/ui";
 import TempoReal from "@/components/manager-v10/TempoReal";
 import TimeTab from "@/components/manager-v10/TimeTab";
+import { RailV10 } from "@/components/manager-v10/RailV10";
 import AchadosCury from "@/components/manager-v10/AchadosCury";
 import "@/styles/manager-v10.css";
 
@@ -28,19 +29,9 @@ type View = "tempo" | "time";
 // Quatro portas, não sete. Coach, Liga, Análise e Pool foram feitos pra uma
 // operação que está parada — continuam em /manager/coach etc. e voltam pra cá
 // quando houver uso. Modo que não é usado não é recurso, é ruído.
-// Ordem do dia do gerente (Junior, 15/09): o "Hoje" saiu — Tempo real responde
-// o que ele respondia, com dado que se mede sozinho.
-const VIEWS: { v: View; label: string; path: string }[] = [
-  { v: "tempo", label: "Tempo real", path: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3.5 2" },
-  { v: "time",  label: "Time",       path: "M2.5 20c0-3.6 2.9-5.6 6.5-5.6s6.5 2 6.5 5.6M17 5.5a3 3 0 0 1 0 5.6M18.5 14.6c2 .7 3 2.4 3 5.4" },
-];
 
 // "WhatsApp" e "Campanhas" eram duas portas pra mesma coisa — mandar mensagem.
 // Viraram uma só, com as etapas (conexão, template, disparo, conversas) dentro.
-const LINKS: { to: string; label: string; path: string }[] = [
-  { to: "/manager/anuncios", label: "Anúncios", path: "M3 17l5-6 4 3 5-8M14 6h4v4" },
-  { to: "/manager/whatsapp", label: "Disparar", path: "M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-5.7A8.4 8.4 0 1 1 21 11.5z" },
-];
 
 function loadFonts() {
   if (document.querySelector("link[data-v10-fonts]")) return;
@@ -210,45 +201,16 @@ export default function ManagerV10() {
     <div className="mgr10 app2">
       {/* Menu à esquerda, como nos mockups validados. No topo ele competia com
           o conteúdo e sumia no celular. */}
-      <nav className="rail" aria-label="Seções">
-        <div className="rail-brand">
-          <div className="rail-m">C</div>
-          <div><b>Comandra</b><i>{nome} · {data.brokers.length} corretores</i></div>
-        </div>
-        {VIEWS.map((it) => (
-          <button key={it.v} type="button"
-            className={`railb${view === it.v ? " on" : ""}`}
-            aria-current={view === it.v ? "page" : undefined}
-            onClick={() => setView(it.v)}>
-            <svg viewBox="0 0 24 24"><path d={it.path} /></svg>
-            {it.label}
-            {it.v === "tempo" && calc.doDia.parados > 0
-              ? <i className="pip">{calc.doDia.parados}</i> : null}
-          </button>
-        ))}
-        {LINKS.map((it) => (
-          <a key={it.to} href={it.to}>
-            <svg viewBox="0 0 24 24"><path d={it.path} /></svg>
-            {it.label}
-          </a>
-        ))}
-        <div className="rail-sep" />
-        <a className="soon" aria-disabled="true">
-          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h11M4 18h7" /></svg>Leads
-        </a>
-        <a className="soon" aria-disabled="true">
-          <svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7" /></svg>B.I.
-        </a>
-        <div className="rail-foot">
-          <button className="icobtn" onClick={toggle} title="Alternar tema" aria-label="Alternar tema">
-            {mode === "dark"
-              ? <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
-              : <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>}
-          </button>
-        </div>
-      </nav>
+      <RailV10
+        atual={view}
+        sub={`${nome} · ${data.brokers.length} corretores`}
+        mode={mode}
+        toggle={toggle}
+        onAba={(k) => setView(k as View)}
+        pip={calc.doDia.parados}
+      />
 
-      <main className="shell">
+      <main className="shell2">
         {view === "tempo" ? (
           <TempoReal managerId={userId} />
         ) : (
