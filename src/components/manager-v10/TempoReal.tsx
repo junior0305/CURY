@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { useTempoReal, definirRecebimento, status,
          type Pessoa, type Nivel, type Origem } from "@/hooks/useTempoReal";
 import { Sec, Panel, ScoreRow, Cell, Blank } from "@/components/manager-v10/ui";
+import MetaSemana from "@/components/manager-v10/MetaSemana";
 import FunilOrigem from "@/components/manager-v10/FunilOrigem";
 import PrecisaDeVoce from "@/components/manager-v10/PrecisaDeVoce";
 
@@ -127,6 +128,7 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
         tag={hora ? <span className="dim">atualizado {hora}</span> : null}
         sub="Ponto, atendimento, venda e lead perdido vêm do app da Cury — é o que a operação fez, não o que foi digitado aqui."
       >
+        <MetaSemana managerId={managerId} gerenteCuryId={data.gerenteCuryId} />
         <ScoreRow>
           <Cell label="No plantão" value={totais.plantao}
                 sub={`${totais.online} com o Comandra aberto · ${gente.length} no time`} />

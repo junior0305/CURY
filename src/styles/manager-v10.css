@@ -332,3 +332,21 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
 @media(max-width:900px){.mgr10 .pv-h{grid-template-columns:30px 1fr auto;row-gap:9px}
   .mgr10 .pv-h .mini{grid-column:2/-1;justify-self:start}
   .mgr10 .pv-d-in{padding-left:15px}}
+
+/* ── meta da semana: a pergunta, virada em ordem do dia ───────────────── */
+.mgr10 .ms{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--lift);padding:var(--s2) 18px;margin-bottom:var(--s2)}
+.mgr10 .ms .tag{font-size:10px;display:block}
+.mgr10 .ms-k{display:flex;align-items:baseline;gap:10px;margin-top:9px;flex-wrap:wrap}
+.mgr10 .ms-n{font-size:34px;font-weight:800;letter-spacing:-.045em;line-height:1}
+.mgr10 .ms-of{font-size:14px;color:var(--ink-3);font-weight:500}
+.mgr10 .ms-bar{height:5px;border-radius:99px;background:var(--sunk);overflow:hidden;
+  margin-top:12px;max-width:420px}
+.mgr10 .ms-bar i{display:block;height:100%;border-radius:99px;background:var(--blue);
+  transition:width .6s cubic-bezier(.22,1,.36,1)}
+.mgr10 .ms-say{margin-top:12px;font-size:14.5px;line-height:1.55;color:var(--ink-2);max-width:68ch}
+.mgr10 .ms-say b{color:var(--ink);font-weight:700}
+.mgr10 .ms-say b.win{color:var(--good)}
+.mgr10 .ms-nota{margin-top:9px;font-size:12.5px;line-height:1.55;color:var(--ink-3);max-width:70ch}
+.mgr10 .ms-nota .dim{color:var(--ink-3)}
+@media(max-width:600px){.mgr10 .ms{padding:var(--s2) 14px}.mgr10 .ms-n{font-size:30px}}
