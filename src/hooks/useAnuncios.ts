@@ -55,13 +55,16 @@ const diaSP = (d = new Date()) =>
 const menos = (n: number) => diaSP(new Date(Date.now() - n * 86_400_000));
 const brl = (n: number) => "R$ " + n.toFixed(2).replace(".", ",");
 
-export function useAnuncios(managerId: string | undefined, dias = 30) {
+export function useAnuncios(managerId: string | undefined, janela: { de: string; ate: string; dias: number }) {
+  const { de, ate, dias } = janela;
   return useQuery<DadosAnuncios>({
-    queryKey: ["anuncios", managerId, dias],
+    queryKey: ["anuncios", managerId, de, ate],
     enabled: !!managerId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const de = menos(dias), deAntes = menos(dias * 2);
+      // o período anterior tem o mesmo tamanho, para a comparação ser justa
+      const deAntes = diaSP(new Date(new Date(de + "T12:00:00Z").getTime() - dias * 86_400_000));
+      const fim = ate + "T23:59:59";
 
       const { data: perfil } = await supabase.from("profiles")
         .select("first_name,team_id").eq("id", managerId!).maybeSingle();
@@ -82,7 +85,7 @@ export function useAnuncios(managerId: string | undefined, dias = 30) {
           .select("event_name,status,created_at").order("created_at", { ascending: false }).limit(600),
         gerenteCuryId
           ? supabase.from("cury_metricas_diarias").select("atendimentos,vendas")
-              .eq("escopo", "corretor").eq("gerente_cury_id", gerenteCuryId).gte("data", de)
+              .eq("escopo", "corretor").eq("gerente_cury_id", gerenteCuryId).gte("data", de).lte("data", ate)
           : Promise.resolve({ data: [] as any[] }),
         supabase.from("system_settings").select("value")
           .eq("key", `gestor_trafego_${managerId}`).maybeSingle(),
@@ -99,7 +102,7 @@ export function useAnuncios(managerId: string | undefined, dias = 30) {
       const meu = (l: any) => l.manager_id === managerId || minhaCampanha(l.fb_campaign);
 
       const leads = todos.filter(meu);
-      const doPeriodo = leads.filter((l) => (l.created_at ?? "") >= de);
+      const doPeriodo = leads.filter((l) => (l.created_at ?? "") >= de && (l.created_at ?? "") <= fim);
 
       const bloqueados = doPeriodo.filter((l) => l.geo_status === "fora_regiao").length;
       const chegaram = doPeriodo.length;
@@ -146,9 +149,12 @@ export function useAnuncios(managerId: string | undefined, dias = 30) {
       const produtos = [...prod.entries()].map(([nome, leads]) => ({ nome, leads, gente: null }))
         .sort((a, b) => b.leads - a.leads).slice(0, 6);
 
-      /* ── entrada por dia ── */
+      /* ── entrada por dia (ou por semana, quando o período é longo) ── */
       const dd = new Map<string, number>();
-      for (let i = dias - 1; i >= 0; i--) dd.set(menos(i), 0);
+      for (let i = dias - 1; i >= 0; i--) {
+        const d = diaSP(new Date(new Date(ate + "T12:00:00Z").getTime() - i * 86_400_000));
+        dd.set(d, 0);
+      }
       for (const l of doPeriodo) {
         const d = (l.created_at ?? "").slice(0, 10);
         if (dd.has(d)) dd.set(d, (dd.get(d) ?? 0) + 1);
@@ -180,6 +186,7 @@ export function useAnuncios(managerId: string | undefined, dias = 30) {
 
       const chegaramAntes = leads.filter((l) =>
         (l.created_at ?? "") >= deAntes && (l.created_at ?? "") < de).length;
+      void menos;
 
       return {
         chegaram, usaveis, bloqueados, responderam, perdidoBloqueio, porDia,

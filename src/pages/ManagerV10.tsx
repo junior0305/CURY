@@ -21,6 +21,7 @@ import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/comp
 import TempoReal from "@/components/manager-v10/TempoReal";
 import TimeTab from "@/components/manager-v10/TimeTab";
 import { RailV10 } from "@/components/manager-v10/RailV10";
+import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import AchadosCury from "@/components/manager-v10/AchadosCury";
 import "@/styles/manager-v10.css";
 
@@ -211,6 +212,12 @@ export default function ManagerV10() {
       />
 
       <main className="shell2">
+        <header className="top2">
+          <div><h1>{view === "tempo" ? "Tempo real" : "Time"}</h1>
+            <p>{view === "tempo" ? "O que a equipe está fazendo agora"
+               : "A estratégia da equipe"}</p></div>
+          <div className="top2-r"><SeletorPeriodo /></div>
+        </header>
         {view === "tempo" ? (
           <TempoReal managerId={userId} />
         ) : (

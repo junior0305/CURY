@@ -16,6 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Sec, Blank } from "@/components/manager-v10/ui";
 import { useTime, assumirMeta, type PessoaTime } from "@/hooks/useTime";
+import { usePeriodo } from "@/hooks/usePeriodo";
 import Briefing from "@/components/manager-v10/Briefing";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 
@@ -23,7 +24,8 @@ const ini = (n: string) => n.trim().slice(0, 2).toUpperCase();
 const um = (n: number | null) => (n == null ? "—" : n.toFixed(1).replace(".", ","));
 
 export default function TimeTab({ managerId }: { managerId: string | undefined }) {
-  const { data, isLoading } = useTime(managerId);
+  const { periodo } = usePeriodo();
+  const { data, isLoading } = useTime(managerId, periodo.dias);
   const { session } = useAuth();
   const qc = useQueryClient();
   const [mu, setMu] = useState<"up" | "down" | null>(null);
@@ -74,7 +76,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
   return (
     <section className="view tm">
       {/* 1 ─ como está o time */}
-      <Sec title="Como está o time" tag={<span className="dim">últimos {data.dias} dias</span>}>
+      <Sec title="Como está o time" tag={<span className="dim">{periodo.rotulo}</span>}>
         <div className="tm-box tm-conc">
           <div>
             <p className="tm-frase">

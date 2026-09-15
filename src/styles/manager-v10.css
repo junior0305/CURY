@@ -718,3 +718,24 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
   .mgr10 .an-avr>span:last-child{justify-self:start}
   .mgr10 .an-cr{grid-template-columns:100px minmax(0,1fr) 84px}
 }
+
+/* ── seletor de período, compartilhado ────────────────────────────────── */
+.mgr10 .per{position:relative}
+.mgr10 .per-chips{display:flex;gap:3px;background:var(--sunk);padding:3px;border-radius:10px;flex-wrap:wrap}
+.mgr10 .per-chips button{color:var(--ink-3);font-size:12.5px;font-weight:500;padding:6px 11px;
+  border-radius:8px;white-space:nowrap;transition:background .13s,color .13s}
+.mgr10 .per-chips button:hover{color:var(--ink)}
+.mgr10 .per-chips button.on{background:var(--card);color:var(--ink);font-weight:600;
+  box-shadow:0 1px 2px rgba(9,12,18,.08)}
+.mgr10 .per-data{position:absolute;right:0;top:calc(100% + 7px);z-index:20;background:var(--card);
+  border:1px solid var(--line);border-radius:12px;box-shadow:var(--lift);padding:14px;
+  display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.mgr10 .per-data label{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.mgr10 .per-data input{border:1px solid var(--line);background:var(--sunk);border-radius:9px;
+  padding:9px 11px;font:400 14px Archivo,sans-serif;color:var(--ink);color-scheme:light dark}
+.mgr10 .per-data input:focus{outline:2px solid var(--blue);outline-offset:-1px;background:var(--card)}
+@media(max-width:1020px){
+  .mgr10 .per-data{right:auto;left:0;width:min(320px,92vw)}
+  .mgr10 .per-chips{font-size:12px}
+}

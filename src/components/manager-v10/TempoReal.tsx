@@ -20,6 +20,8 @@ import { useTempoReal, definirRecebimento, status,
          type Pessoa, type Nivel, type Origem } from "@/hooks/useTempoReal";
 import { Sec, Panel, Blank } from "@/components/manager-v10/ui";
 import MetaSemana from "@/components/manager-v10/MetaSemana";
+import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
+import { usePeriodo } from "@/hooks/usePeriodo";
 import FunilOrigem from "@/components/manager-v10/FunilOrigem";
 import PrecisaDeVoce from "@/components/manager-v10/PrecisaDeVoce";
 
@@ -70,7 +72,9 @@ function Chave({ p, onToggle, ocupado }: {
 }
 
 export default function TempoReal({ managerId }: { managerId: string | undefined }) {
-  const { data, isLoading } = useTempoReal(managerId);
+  const { periodo } = usePeriodo();
+  // Tempo real mostra UM dia — quando o período é um intervalo, o dia é o fim dele.
+  const { data, isLoading } = useTempoReal(managerId, periodo.ate);
   const qc = useQueryClient();
   const [soPlantao, setSoPlantao] = useState(true);
   const [filtro, setFiltro] = useState<Nivel | null>(null);
@@ -124,8 +128,9 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
   return (
     <section className="view tr">
       <Sec
-        title="Hoje, agora"
-        tag={hora ? <span className="dim">atualizado {hora}</span> : null}
+        title={periodo.preset === "hoje" || periodo.ate === new Date().toISOString().slice(0, 10)
+          ? "Hoje, agora" : `O dia ${periodo.ate.split("-").reverse().slice(0, 2).join("/")}`}
+        tag={<span className="dim">{hora ? `atualizado ${hora}` : ""}</span>}
         sub="Ponto, atendimento, venda e lead perdido vêm do app da Cury — é o que a operação fez, não o que foi digitado aqui."
       >
         {/* A meta é um card na MESMA fileira dos números, não um bloco acima:

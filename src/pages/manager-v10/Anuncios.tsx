@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAnuncios, salvarGestor } from "@/hooks/useAnuncios";
 import { Sec, Blank } from "@/components/manager-v10/ui";
+import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
+import { usePeriodo } from "@/hooks/usePeriodo";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import "@/styles/manager-v10.css";
 
@@ -25,7 +27,8 @@ export default function Anuncios() {
   const userId = session?.user?.id;
   const { mode, toggle } = useTheme();
   const qc = useQueryClient();
-  const { data, isLoading } = useAnuncios(userId);
+  const { periodo } = usePeriodo();
+  const { data, isLoading } = useAnuncios(userId, periodo);
   const [aberto, setAberto] = useState<string | null>(null);
   const [texto, setTexto] = useState("");
   const [editando, setEditando] = useState(false);
@@ -40,7 +43,7 @@ export default function Anuncios() {
 
     const { chegaram, usaveis, bloqueados, responderam, perdidoBloqueio, porDia,
             custo, meuCpl, mediaOutros, campanhas, produtos, capi,
-            visitasReais, vendasReais, avisos, gestor, dias } = data;
+            visitasReais, vendasReais, avisos, gestor } = data;
 
     const maxDia = Math.max(1, ...porDia.map((d) => d.n));
     const maxCusto = Math.max(1, ...custo.map((c) => c.cpl));
@@ -59,11 +62,11 @@ export default function Anuncios() {
     return (
       <>
         {/* 1 · quantos chegaram — e quantos você pode usar */}
-        <Sec title="Quantos leads chegaram" tag={<span className="dim">últimos {dias} dias</span>}>
+        <Sec title="Quantos leads chegaram" tag={<span className="dim">{periodo.rotulo}</span>}>
           <div className="an-box an-ent">
             <div>
               <div className="an-n"><b className="mono">{chegaram}</b>
-                <span>leads chegaram nos últimos {dias} dias</span></div>
+                <span>leads chegaram {periodo.rotulo}</span></div>
               <div className="an-corta">
                 <span className="an-ct ok"><b>{usaveis}</b>você pode usar</span>
                 {bloqueados > 0 && (
@@ -87,7 +90,7 @@ export default function Anuncios() {
                      title={`${d.dia}: ${d.n} lead${d.n === 1 ? "" : "s"}`} />
                 ))}
               </div>
-              <div className="an-linha-l"><span>há {dias} dias</span><span>hoje</span></div>
+              <div className="an-linha-l"><span>{periodo.de.split("-").reverse().slice(0,2).join("/")}</span><span>{periodo.ate.split("-").reverse().slice(0,2).join("/")}</span></div>
             </div>
           </div>
         </Sec>
@@ -275,6 +278,7 @@ export default function Anuncios() {
             <h1>Anúncios</h1>
             <p>De onde vem o seu lead e quanto ele custa</p>
           </div>
+          <div className="top2-r"><SeletorPeriodo /></div>
         </header>
         <section className="view an">{corpo()}</section>
       </main>
