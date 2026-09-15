@@ -1,0 +1,83 @@
+/* ══════════════════════════════════════════════════════════════════════
+   ABA PASTAS.
+
+   Escopada em `.mgr10.pastas`, não em `.mgr10`. A folha do disparador já
+   ensinou a lição: doze classes com o mesmo nome das do v10 venciam em
+   todas as telas e o "Precisa de você" apareceu com um cartão em cima do
+   outro. Folha de tela é escopada na tela.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── série por semana ── */
+.mgr10.pastas .pa-serie{
+  display:flex; align-items:flex-end; gap:6px; margin-top:var(--s2);
+  height:130px; padding:0 2px;
+}
+.mgr10.pastas .pa-col{
+  flex:1; min-width:0; display:flex; flex-direction:column; align-items:center;
+  justify-content:flex-end; gap:5px; height:100%;
+}
+.mgr10.pastas .pa-col i{
+  display:block; width:100%; max-width:46px; background:var(--blue-air);
+  border-top:2px solid var(--blue); border-radius:4px 4px 0 0;
+  transition:height .5s cubic-bezier(.22,1,.36,1);
+}
+.mgr10.pastas .pa-n{
+  font-family:"JetBrains Mono",monospace; font-size:12.5px; font-weight:700;
+  font-variant-numeric:tabular-nums; color:var(--ink);
+}
+.mgr10.pastas .pa-d{font-size:10.5px; color:var(--ink-3); white-space:nowrap}
+
+/* ── filtros da fila ── */
+.mgr10.pastas .pa-filtros{
+  display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap;
+  margin-bottom:var(--s2);
+}
+
+/* ── a fila ── */
+.mgr10.pastas .pa-lista{
+  background:var(--card); border:1px solid var(--line); border-radius:var(--r);
+  box-shadow:var(--lift); overflow:hidden;
+}
+.mgr10.pastas .pa-li{
+  display:grid; grid-template-columns:34px minmax(0,1fr) 52px 128px auto;
+  gap:var(--s2); align-items:center; padding:11px var(--s2);
+  border-bottom:1px solid var(--hair); transition:background .14s;
+}
+.mgr10.pastas .pa-li:last-child{border-bottom:0}
+.mgr10.pastas .pa-li:hover{background:var(--sunk)}
+/* Proposta de corretor desligado não anda sozinha — merece marca própria. */
+.mgr10.pastas .pa-li.orfa{box-shadow:inset 3px 0 0 var(--red)}
+
+.mgr10.pastas .pa-av{
+  width:34px; height:34px; border-radius:11px; background:var(--sunk);
+  color:var(--ink-3); display:grid; place-items:center;
+  font-size:12px; font-weight:700;
+}
+.mgr10.pastas .pa-li.orfa .pa-av{background:var(--red-air); color:var(--red)}
+.mgr10.pastas .pa-b{min-width:0}
+.mgr10.pastas .pa-b b{
+  display:block; font-size:14.5px; font-weight:600; letter-spacing:-.015em;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.mgr10.pastas .pa-b span{
+  display:block; font-size:12.5px; color:var(--ink-3); margin-top:2px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.mgr10.pastas .pa-b em{font-style:normal}
+.mgr10.pastas .pa-b em.sep{opacity:.45; margin:0 7px}
+.mgr10.pastas .pa-b em.ruim{color:var(--red); font-weight:600}
+
+.mgr10.pastas .pa-dias{
+  font-size:13px; font-weight:700; color:var(--ink-2); text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+.mgr10.pastas .pa-tel{font-size:12.5px; color:var(--ink-3); white-space:nowrap}
+.mgr10.pastas .pa-li .acts a{text-decoration:none}
+
+@media(max-width:900px){
+  .mgr10.pastas .pa-li{grid-template-columns:34px minmax(0,1fr) auto; row-gap:8px}
+  .mgr10.pastas .pa-tel{grid-column:2/-1; font-size:13px}
+  .mgr10.pastas .pa-li .acts{grid-column:2/-1}
+  .mgr10.pastas .pa-serie{height:104px}
+  .mgr10.pastas .pa-d{display:none}
+}
