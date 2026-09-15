@@ -31,6 +31,11 @@ import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import "@/styles/manager-v10.css";
 import "@/styles/disparar.css";
 
+/** Cadastro incorporado da Meta: virar true quando o app for liberado como
+ *  provedor de tecnologia. Até lá o caminho existe inteiro no código
+ *  (src/lib/embeddedSignup.ts + a edge wa-onboard), só não tem para onde ir. */
+const ES_LIBERADO = false;
+
 type Etapa = "bm" | "tpl" | "disp" | "conv";
 type Destino = "fila" | "escolher";
 
@@ -328,6 +333,12 @@ export default function Disparar() {
                 )}
               </div>
 
+              {/* O botão de conectar sozinho depende do cadastro incorporado da Meta,
+                  que ainda não está liberado para o nosso app (o endpoint de soluções
+                  responde vazio). Enquanto não estiver, esta caixa diz o que é verdade
+                  em vez de oferecer um clique que não leva a lugar nenhum — e pedir
+                  para o gerente gerar token no Business Manager está fora de questão. */}
+              {ES_LIBERADO ? (
               <div className="bm-nova">
                 <b>Conectar o seu próprio número</b>
                 <p>Use a conta da sua equipe e o seu WhatsApp, com o seu dinheiro. Você continua
@@ -358,6 +369,18 @@ export default function Disparar() {
                   {conectando ? "Conectando…" : "Conectar com o Facebook"}
                 </button>
               </div>
+              ) : (
+                <div className="bm-nova" style={{ borderStyle: "solid", borderColor: "var(--line)",
+                  background: "var(--surface-2)" }}>
+                  <b style={{ color: "var(--ink)" }}>Por enquanto todo mundo dispara por este número</b>
+                  <p>Conectar o número da sua própria equipe depende de uma liberação que a Meta
+                    ainda não deu para a gente. Enquanto não sai, os disparos da sua equipe saem
+                    pelo número da empresa — funciona igual, o que muda é de quem é a conta.</p>
+                  <p style={{ marginTop: 10, fontSize: "12.5px", color: "var(--ink-3)" }}>
+                    Você não precisa fazer nada. Quando liberar, o botão aparece aqui.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
