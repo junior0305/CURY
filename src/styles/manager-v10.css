@@ -764,7 +764,10 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
 .mgr10 .sec{margin-top:32px}
 .mgr10 .sec:first-child{margin-top:0}
 .mgr10 .sec-h{margin-bottom:13px}
-.mgr10 .shell2{max-width:1180px}
+/* A largura do conteudo NAO se define aqui. Esta linha trazia o max-width:1180px
+   do prototipo e vencia a regra de cima por vir depois — foi o que manteve o
+   painel encolhido mesmo depois de eu "soltar" a largura. Uma definicao so,
+   la em .shell2. */
 
 /* O painel herda o cartão do mockup: mesmo raio, mesma sombra, mesmo respiro. */
 .mgr10 .panel{padding:0}
