@@ -5,6 +5,7 @@
 // ordem dos botões, e ela já mudou duas vezes.
 
 import { Link } from "react-router-dom";
+import { useAuth } from "@/components/AuthProvider";
 
 export function loadFonts() {
   if (typeof document === "undefined") return;
@@ -46,6 +47,7 @@ export function RailV10({
   onAba?: (k: Aba) => void;
   pip?: number;
 }) {
+  const { signOut } = useAuth();
   return (
     <nav className="rail" aria-label="Seções">
       <div className="rail-brand">
@@ -83,6 +85,15 @@ export function RailV10({
       </a>
 
       <div className="rail-foot">
+        {/* Sair não existia em tela nenhuma do v10: quem entrava no painel do
+            gerente só saía fechando o navegador — e num computador de estande,
+            compartilhado, isso deixa a sessão do gerente aberta para o próximo. */}
+        <button className="railb sair" onClick={signOut} title="Sair da conta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+            <path d="M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6" />
+          </svg>
+          Sair
+        </button>
         <button className="icobtn" onClick={toggle} title="Alternar tema" aria-label="Alternar tema">
           {mode === "dark"
             ? <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19" /></svg>

@@ -600,7 +600,13 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
   background:var(--red);color:#fff;font:700 10px "JetBrains Mono",monospace;display:grid;
   place-items:center;padding:0 5px;font-style:normal}
 .mgr10 .rail-sep{height:1px;background:var(--hair);margin:9px 5px}
-.mgr10 .rail-foot{margin-top:auto;display:flex;gap:6px;padding:0 4px}
+/* O rodapé do trilho: Sair ocupa a linha, o tema fica do lado. Sair é ação
+   rara mas precisa estar visível — escondê-la num menu é o que fazia o gerente
+   fechar o navegador em vez de sair. */
+.mgr10 .rail-foot{margin-top:auto;display:flex;align-items:center;gap:6px;padding:8px 0 0;
+  border-top:1px solid var(--hair)}
+.mgr10 .rail-foot .railb.sair{flex:1;width:auto}
+.mgr10 .rail-foot .railb.sair:hover{background:var(--red-air);color:var(--red)}
 /* O conteudo acompanha a tela ate 1680px. Os 1240 do prototipo vinham de
    um monitor menor; num monitor largo eles deixavam um terco da tela vazio
    e faziam tudo parecer encolhido. Os blocos de texto corrido continuam
