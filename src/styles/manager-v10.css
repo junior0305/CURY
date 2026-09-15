@@ -361,6 +361,13 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
   margin-top:12px;max-width:420px}
 .mgr10 .ms-bar i{display:block;height:100%;border-radius:99px;background:var(--blue);
   transition:width .6s cubic-bezier(.22,1,.36,1)}
+/* Uma ideia por linha. A frase corrida empilhava cinco numeros e ninguem lia. */
+.mgr10 .ms-linhas{margin-top:13px;display:flex;flex-direction:column;gap:5px}
+.mgr10 .ms-li{font-size:14.5px;line-height:1.5;color:var(--ink-2)}
+.mgr10 .ms-li b{color:var(--ink);font-weight:700;font-family:"JetBrains Mono",monospace;
+  font-variant-numeric:tabular-nums}
+.mgr10 .ms-li.forte{font-size:16px;color:var(--ink)}
+.mgr10 .ms-li b.win{color:var(--good);font-family:Archivo,sans-serif}
 .mgr10 .ms-say{margin-top:12px;font-size:14.5px;line-height:1.55;color:var(--ink-2);max-width:68ch}
 .mgr10 .ms-say b{color:var(--ink);font-weight:700}
 .mgr10 .ms-say b.win{color:var(--good)}

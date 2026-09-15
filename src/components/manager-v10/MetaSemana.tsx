@@ -142,7 +142,6 @@ export default function MetaSemana({
   const faltaMes = alvoMes ? Math.max(0, alvoMes - vendasMes) : 0;
   const pct = alvoMes ? Math.min(100, (vendasMes / alvoMes) * 100) : 0;
 
-  // A cobrança da semana é o que dá para fazer nos dias que sobraram.
   const faltaSem = alvoSemana ? Math.max(0, alvoSemana - vendasSemana) : 0;
   const precisa = Math.ceil(faltaSem * razao);
   const restam = Math.max(0, precisa - atendSemana);
@@ -150,74 +149,82 @@ export default function MetaSemana({
   const r = razao.toFixed(1).replace(".", ",");
   const s = (n: number) => (n === 1 ? "" : "s");
 
+  if (!alvoMes) {
+    return (
+      <div className="ms">
+        <div className="ms-l">
+          <div className="tag">Meta do mês</div>
+          <div className="ms-k">
+            <span className="ms-n mono">—</span>
+            <span className="ms-of">sem meta cadastrada</span>
+          </div>
+          <p className="ms-nota">
+            Sem meta não há cobrança possível: o painel mostra o ritmo, mas não tem
+            contra o que comparar. A meta do mês é cadastrada pelo administrador.
+            {" "}Neste mês a equipe fez <b>{vendasMes}</b> venda{s(vendasMes)} em{" "}
+            <b>{data.atendMes}</b> atendimento{s(data.atendMes)}.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="ms">
       <div className="ms-l">
         <div className="tag">Meta do mês</div>
 
-        {alvoMes ? (
-          <>
-            <div className="ms-k">
-              <span className="ms-n mono">{vendasMes}</span>
-              <span className="ms-of">de {alvoMes} venda{s(alvoMes)} no mês</span>
-            </div>
-            <div className="ms-bar"><i style={{ width: `${pct}%` }} /></div>
+        {/* O número grande é a META, não o quanto já foi feito. Mostrar
+            "2 de 7" fazia o 2 ser lido como placar de vendas realizadas — e
+            quando o dado da Cury atrasa, o gerente vê um número que nao
+            reconhece no lugar mais visível da tela. */}
+        <div className="ms-k">
+          <span className="ms-n mono">{alvoMes}</span>
+          <span className="ms-of">venda{s(alvoMes)} até o fim do mês</span>
+        </div>
 
-            {faltaMes === 0 ? (
-              <p className="ms-say">
-                Meta do mês <b className="win">batida</b>. {vendasMes} venda{s(vendasMes)},
-                e ainda restam <b className="mono">{diasMes}</b> dia{s(diasMes)}.
-              </p>
-            ) : (
-              <p className="ms-say">
-                Faltam <b className="mono">{faltaMes}</b> em <b className="mono">{diasMes}</b> dia{s(diasMes)}.
-                {alvoSemana ? (
-                  <> Nesta semana isso são <b className="mono">{alvoSemana}</b> —
-                    {" "}feita{s(vendasSemana) ? "s" : ""} <b className="mono">{vendasSemana}</b>
-                    {faltaSem > 0 ? <>, faltam <b className="mono">{faltaSem}</b> em{" "}
-                      <b className="mono">{diasSem}</b> dia{s(diasSem)}.</> : <>. Semana resolvida.</>}
-                  </>
-                ) : null}
-                {faltaSem > 0 ? (
-                  <> Sua equipe vende <b>1 a cada {r} atendimentos</b> — para essas{" "}
-                    {faltaSem} precisa de <b className="mono">{precisa}</b>, fez{" "}
-                    <b className="mono">{atendSemana}</b>.
-                    {restam > 0 ? <> Faltam <b className="mono">{restam}</b>, cerca de{" "}
-                      <b className="mono">{porDia}</b> por dia.</> : null}
-                  </>
-                ) : null}
-              </p>
-            )}
+        <div className="ms-bar"><i style={{ width: `${pct}%` }} /></div>
 
-            <p className="ms-nota">
-              {semanaCadastrada
-                ? <>A semana tem meta própria, cadastrada pelo administrador. </>
-                : <>A semana é o que falta no mês repartido pelas semanas que restam. </>}
-              {razaoPropria
-                ? <>A razão é a da sua equipe, medida nos últimos 60 dias. </>
-                : <>Sem vendas suficientes para medir sua equipe: usando a régua da empresa ({RAZAO_EMPRESA.toFixed(1).replace(".", ",")}). </>}
-              {restam > 0
-                ? <span className="dim">Para comparecerem {restam}, agende cerca de {restam * 2} — agendamento não é medido, é a ordem do dia.</span>
-                : null}
-            </p>
-          </>
-        ) : (
-          <>
-            <div className="ms-k">
-              <span className="ms-n mono">{vendasMes}</span>
-              <span className="ms-of">venda{s(vendasMes)} neste mês</span>
-            </div>
-            <p className="ms-say">
-              Sem meta cadastrada para o mês. Sua equipe vende <b>1 a cada {r} atendimentos</b>{" "}
-              e fez <b className="mono">{data.atendMes}</b> até agora — no ritmo, fecha o mês em{" "}
-              <b className="mono">{Math.floor(data.atendMes / razao)}</b>.
-            </p>
-            <p className="ms-nota">
-              Sem meta não há cobrança possível: o painel mostra o ritmo, mas não
-              tem contra o que comparar. A meta do mês é cadastrada pelo administrador.
-            </p>
-          </>
-        )}
+        {/* Uma ideia por linha. A versão anterior empilhava cinco números numa
+            frase só e era ilegível. */}
+        <div className="ms-linhas">
+          {faltaMes === 0 ? (
+            <div className="ms-li forte"><b className="win">Meta batida.</b>{" "}
+              {vendasMes} venda{s(vendasMes)}, e ainda restam {diasMes} dia{s(diasMes)}.</div>
+          ) : (
+            <>
+              <div className="ms-li forte">
+                Faltam <b>{faltaMes}</b> venda{s(faltaMes)} em <b>{diasMes}</b> dia{s(diasMes)}.
+              </div>
+              {alvoSemana && faltaSem > 0 ? (
+                <div className="ms-li">
+                  Esta semana: <b>{faltaSem}</b> venda{s(faltaSem)} —
+                  cerca de <b>{porDia}</b> atendimento{s(porDia)} por dia.
+                </div>
+              ) : alvoSemana ? (
+                <div className="ms-li">Esta semana já está resolvida.</div>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        <p className="ms-nota">
+          {vendasMes > 0
+            ? <>Feita{s(vendasMes) ? "s" : ""} {vendasMes} até agora, com {data.atendMes} atendimento{s(data.atendMes)}. </>
+            : <>Nenhuma venda registrada no mês até agora. </>}
+          {faltaSem > 0
+            ? <>Sua equipe vende 1 a cada {r} atendimentos, então {faltaSem} venda{s(faltaSem)} pede{" "}
+               {precisa} atendimento{s(precisa)} nesta semana — {atendSemana} já {atendSemana === 1 ? "foi feito" : "foram feitos"}. </>
+            : null}
+          {semanaCadastrada
+            ? <>A semana tem meta própria, cadastrada pelo administrador. </>
+            : <>A semana é o que falta no mês repartido pelas semanas que restam. </>}
+          {razaoPropria ? null
+            : <>Sem vendas suficientes para medir sua equipe: régua da empresa ({RAZAO_EMPRESA.toFixed(1).replace(".", ",")}). </>}
+          {restam > 0
+            ? <span className="dim">Para comparecerem {restam}, agende cerca de {restam * 2} — agendamento não é medido, é a ordem do dia.</span>
+            : null}
+        </p>
       </div>
     </div>
   );
