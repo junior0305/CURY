@@ -297,6 +297,44 @@ export function useNumerosCasa(habilitado: boolean) {
   });
 }
 
+/* ── cadastrar o próprio número, sem sair do Comandra ─────────────────────
+   Três passos, e o gerente não abre o painel da Meta em nenhum deles. O token
+   de sistema da empresa tem permissão para adicionar número — foi testado, e a
+   recusa que aparecia era "número em uso", não falta de permissão.          */
+
+export async function adicionarNumero(numero: string, nomeExibicao: string) {
+  const { data, error } = await supabase.functions.invoke("wa-onboard", {
+    body: { action: "adicionar", numero, nome_exibicao: nomeExibicao },
+  });
+  if (error) throw error;
+  const d = data as any;
+  if (d?.error) { const e = new Error(d.error); (e as any).emUso = !!d.em_uso; throw e; }
+  return d as { phone_number_id: string; numero: string };
+}
+
+/** A Meta manda o código. Voz serve para fixo, que não recebe SMS. */
+export async function pedirCodigo(phoneNumberId: string, metodo: "SMS" | "VOICE" = "SMS") {
+  const { data, error } = await supabase.functions.invoke("wa-onboard", {
+    body: { action: "codigo", phone_number_id: phoneNumberId, metodo },
+  });
+  if (error) throw error;
+  if ((data as any)?.error) throw new Error((data as any).error);
+  return data;
+}
+
+export async function confirmarCodigo(
+  phoneNumberId: string, codigo: string, ownerId: string, label: string,
+) {
+  const { data, error } = await supabase.functions.invoke("wa-onboard", {
+    body: { action: "confirmar", phone_number_id: phoneNumberId, codigo,
+            owner_id: ownerId, label },
+  });
+  if (error) throw error;
+  const d = data as any;
+  if (d?.error) throw new Error(d.error);
+  return d as { ok: boolean; pendencia: string | null };
+}
+
 /** O gerente fica com um número da conta da casa. Registra e vincula ao login. */
 export async function assumirNumero(phoneNumberId: string, ownerId: string, label: string) {
   const { data, error } = await supabase.functions.invoke("wa-onboard", {

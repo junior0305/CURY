@@ -24,7 +24,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import {
   useDisparar, useMensagens, ajustarImagem, cheiraOferta, checarNome,
   criarTemplate, mandarMensagem, dispararCampanha, type Template,
-  useNumerosCasa, assumirNumero,
+  useNumerosCasa, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
 } from "@/hooks/useDisparar";
 import { conectarBM, finalizarConexao } from "@/lib/embeddedSignup";
 import { Blank } from "@/components/manager-v10/ui";
@@ -182,6 +182,51 @@ export default function Disparar() {
   const [disparando, setDisparando] = useState(false);
   const [conectando, setConectando] = useState(false);
   const { data: numerosCasa, isLoading: carregandoCasa } = useNumerosCasa(!data?.config);
+
+  // Cadastro do próprio número, em três passos, sem sair daqui.
+  const [novoTel, setNovoTel] = useState("");
+  const [pid, setPid] = useState<string | null>(null);
+  const [codigo, setCodigo] = useState("");
+  const [passo, setPasso] = useState<"numero" | "codigo">("numero");
+
+  async function criarNumero() {
+    if (!nomeExib.trim()) { toast.error("Escreva o nome que o cliente vai ver."); return; }
+    setConectando(true);
+    try {
+      const r = await adicionarNumero(novoTel, nomeExib.trim());
+      setPid(r.phone_number_id);
+      await pedirCodigo(r.phone_number_id, "SMS");
+      setPasso("codigo");
+      toast.success(`Código enviado por SMS para ${r.numero}.`);
+    } catch (e: any) {
+      toast.error(e?.emUso
+        ? "Esse número já está em uso no WhatsApp. Apague a conta dele no celular (ou desconecte da conta antiga) e tente de novo em três minutos."
+        : (e?.message ?? "Não consegui."), { duration: 12000 });
+    } finally { setConectando(false); }
+  }
+
+  async function reenviar(metodo: "SMS" | "VOICE") {
+    if (!pid) return;
+    try {
+      await pedirCodigo(pid, metodo);
+      toast.success(metodo === "VOICE" ? "A Meta vai ligar no número." : "Novo código enviado.");
+    } catch (e: any) { toast.error(e?.message ?? "Não consegui."); }
+  }
+
+  async function confirmar() {
+    if (!pid || !userId) return;
+    setConectando(true);
+    try {
+      const r = await confirmarCodigo(pid, codigo, userId, nomeExib.trim());
+      if (r.ok) toast.success("Número confirmado. Já pode disparar por ele.");
+      else toast.warning(r.pendencia ?? "Confirmado, mas ficou pendência.", { duration: 12000 });
+      setPasso("numero"); setPid(null); setCodigo(""); setNovoTel("");
+      qc.invalidateQueries({ queryKey: ["disparar"] });
+      qc.invalidateQueries({ queryKey: ["numeros-casa"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Código não confere.");
+    } finally { setConectando(false); }
+  }
 
   async function assumir(pid: string, numero: string) {
     if (!userId) return;
@@ -397,12 +442,61 @@ export default function Disparar() {
                     </div>
                   </>
                 )}
-                <p style={{ marginTop: 14, fontSize: "12.5px", color: "var(--ink-3)",
-                            lineHeight: 1.55, textAlign: "left" }}>
-                  Não achou o seu? O administrador adiciona o número na conta de
-                  WhatsApp da empresa e você confirma por SMS. Leva cinco minutos
-                  e não pede documento — a empresa já é verificada.
-                </p>
+                {/* Cadastro do próprio número, aqui dentro. O gerente não abre
+                    o painel da Meta em nenhum passo: o token da empresa tem
+                    permissão para adicionar número, e a empresa já é verificada,
+                    então não há CNPJ nem documento no caminho. */}
+                <div style={{ marginTop: 18, paddingTop: 16,
+                              borderTop: "1px solid var(--hair)", textAlign: "left" }}>
+                  <div className="vars-l">Não achou o seu? Cadastre agora</div>
+
+                  {passo === "numero" ? (
+                    <>
+                      <div className="f" style={{ marginBottom: 10 }}>
+                        <label htmlFor="novo-tel">Seu número, com DDD</label>
+                        <input id="novo-tel" inputMode="numeric" placeholder="11 96809-4368"
+                          value={novoTel} disabled={conectando}
+                          onChange={(e) => setNovoTel(e.target.value)} />
+                      </div>
+                      <button className="btn solid" style={{ width: "100%" }}
+                        disabled={conectando || !novoTel.trim() || !nomeExib.trim()}
+                        onClick={criarNumero}>
+                        {conectando ? "Cadastrando…" : "Receber código por SMS"}
+                      </button>
+                      <p style={{ marginTop: 10, fontSize: "12.5px", color: "var(--ink-3)",
+                                  lineHeight: 1.55 }}>
+                        O número não pode estar em uso no WhatsApp comum. Se estiver,
+                        apague a conta dele no celular antes — em Ajustes, Conta,
+                        Apagar minha conta.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="f" style={{ marginBottom: 10 }}>
+                        <label htmlFor="cod">Código que chegou por SMS</label>
+                        <input id="cod" inputMode="numeric" maxLength={8} placeholder="000000"
+                          value={codigo} disabled={conectando}
+                          onChange={(e) => setCodigo(e.target.value)} />
+                      </div>
+                      <button className="btn solid" style={{ width: "100%" }}
+                        disabled={conectando || codigo.trim().length < 4} onClick={confirmar}>
+                        {conectando ? "Confirmando…" : "Confirmar e ativar"}
+                      </button>
+                      <div style={{ display: "flex", gap: 9, marginTop: 10, flexWrap: "wrap" }}>
+                        <button className="btn sm" onClick={() => reenviar("SMS")}>
+                          Reenviar SMS
+                        </button>
+                        {/* Fixo não recebe SMS — foi o que travou o primeiro número. */}
+                        <button className="btn sm" onClick={() => reenviar("VOICE")}>
+                          Receber por ligação
+                        </button>
+                        <button className="btn sm" onClick={() => { setPasso("numero"); setPid(null); }}>
+                          Trocar o número
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
