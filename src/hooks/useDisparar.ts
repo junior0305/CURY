@@ -80,10 +80,12 @@ export interface Mensagem {
   direcao: "entrada" | "saida";
   texto: string | null;
   quando: string;
-  /** quem mandou, do nosso lado */
-  autor: string | null;
+  /** quem mandou, do nosso lado — nulo quando saiu pelo robô ou pelo corretor */
+  sentBy: string | null;
   ehTemplate: boolean;
 }
+
+export interface Alvo { leadId: string; nome: string | null; telefone: string }
 
 export interface DadosDisparar {
   config: ConfigWA | null;
@@ -92,7 +94,8 @@ export interface DadosDisparar {
   templates: Template[];
   campanhas: Campanha[];
   conversas: Conversa[];
-  publicos: { chave: string; titulo: string; sub: string; n: number }[];
+  /** cada lista já traz as pessoas, porque o disparo insere os alvos um a um */
+  publicos: { chave: string; titulo: string; sub: string; n: number; gente: Alvo[] }[];
   corretores: { id: string; nome: string; online: boolean; carteira: number }[];
   precos: { marketing: number; utility: number };
 }
@@ -141,7 +144,7 @@ export function useDisparar(managerId: string | undefined) {
         supabase.from("whatsapp_threads").select("*")
           .order("last_inbound_at", { ascending: false, nullsFirst: false }).limit(60),
         supabase.from("leads")
-          .select("broker_id,status,last_interaction_at,last_broker_whatsapp_at,created_at,contact_attempts")
+          .select("id,name,phone,broker_id,status,last_interaction_at,last_broker_whatsapp_at,created_at,contact_attempts")
           .eq("manager_id", managerId!),
         supabase.from("system_settings").select("key,value")
           .in("key", ["wa_preco_marketing", "wa_preco_utility"]),
@@ -197,7 +200,13 @@ export function useDisparar(managerId: string | undefined) {
           brokerId: t.assigned_broker_id ?? null, leadId: t.lead_id ?? null,
           ultimaEntrada: t.last_inbound_at, ultimaSaida: t.last_outbound_at,
           esperando: !t.last_outbound_at || t.last_outbound_at < t.last_inbound_at,
-          janelaAberta: horas(t.last_inbound_at) < 24,
+          // `window_open_until` é a conta que o wa-webhook já fez quando a
+          // mensagem chegou. Recalcular aqui daria outro resultado sempre que os
+          // relógios divergissem — e é essa coluna que o wa-sender consulta
+          // para decidir se aceita ou recusa o envio.
+          janelaAberta: t.window_open_until
+            ? new Date(t.window_open_until) > new Date()
+            : horas(t.last_inbound_at) < 24,
           naoLidas: t.unread ?? 0,
         }));
 
@@ -206,17 +215,19 @@ export function useDisparar(managerId: string | undefined) {
       const ativo = (l: any) => !["CONCLUDED", "EXCLUDED", "ABANDONED"].includes(l.status ?? "");
       const parado = (l: any) => l.last_interaction_at ?? l.last_broker_whatsapp_at ?? l.created_at;
       const ativos = leads.filter(ativo);
+      const alvo = (l: any): Alvo => ({ leadId: l.id, nome: l.name ?? null, telefone: l.phone ?? "" });
+      const comTel = (l: any) => !!l.phone;
       const publicos = [
         { chave: "sem15", titulo: "Sem movimento há mais de 15 dias",
           sub: "da carteira do seu time",
-          n: ativos.filter((l) => horas(parado(l)) > 360).length },
+          gente: ativos.filter((l) => comTel(l) && horas(parado(l)) > 360).map(alvo) },
         { chave: "sem7", titulo: "Sem movimento há mais de 7 dias",
           sub: "esfriaram mas são recentes",
-          n: ativos.filter((l) => { const h = horas(parado(l)); return h > 168 && h <= 360; }).length },
+          gente: ativos.filter((l) => { const h = horas(parado(l)); return comTel(l) && h > 168 && h <= 360; }).map(alvo) },
         { chave: "nunca", titulo: "Ninguém nunca falou com eles",
           sub: "leads pagos e intocados",
-          n: ativos.filter((l) => !l.last_broker_whatsapp_at && !l.contact_attempts).length },
-      ].filter((p) => p.n > 0);
+          gente: ativos.filter((l) => comTel(l) && !l.last_broker_whatsapp_at && !l.contact_attempts).map(alvo) },
+      ].map((p) => ({ ...p, n: p.gente.length })).filter((p) => p.n > 0);
 
       const carteiraPor = new Map<string, number>();
       for (const l of ativos) if (l.broker_id)
@@ -257,10 +268,10 @@ export function useMensagens(threadId: string | null) {
       return ((data ?? []) as any[]).map((m) => ({
         id: m.id,
         direcao: m.direction === "inbound" ? "entrada" : "saida",
-        texto: m.body ?? m.text ?? m.content ?? null,
+        texto: m.body ?? null,
         quando: m.created_at,
-        autor: m.sent_by_name ?? m.author ?? null,
-        ehTemplate: !!m.template_id || m.type === "template",
+        sentBy: m.sent_by ?? null,
+        ehTemplate: m.msg_type === "template" || !!m.template_name,
       }));
     },
   });
@@ -324,11 +335,85 @@ export async function criarTemplate(t: {
   return data;
 }
 
-export async function mandarMensagem(threadId: string, telefone: string, texto: string) {
+export async function mandarMensagem(
+  threadId: string, telefone: string, texto: string, sentBy: string,
+) {
   const { data, error } = await supabase.functions.invoke("wa-sender", {
-    body: { to: telefone, text: texto, thread_id: threadId, sent_by: "gerente" },
+    body: { to: telefone, text: texto, thread_id: threadId, sent_by: sentBy },
   });
   if (error) throw error;
-  if ((data as any)?.error) throw new Error((data as any).error);
+  // O wa-sender devolve 200 com `error` no corpo quando recusa (janela fechada,
+  // opt-out): sem olhar o corpo, a tela diria "enviada" e nada teria saído.
+  const d = data as any;
+  if (d?.error) throw new Error(
+    d.error === "window_closed"
+      ? "Passou de 24h desde a última mensagem dele. Só template agora."
+      : String(d.error));
+  if (d?.skipped === "opt_out") throw new Error("Essa pessoa pediu para não receber mais.");
   return data;
+}
+
+/* ── o disparo ────────────────────────────────────────────────────────────
+   Uma fila por gerente, reaproveitada a cada disparo. É ela que o wa-webhook
+   consulta quando alguém responde: sem fila, a resposta não vira lead de
+   ninguém — que é como 44 pessoas responderam e nenhuma foi atendida.        */
+async function filaDoGerente(managerId: string, brokerIds: string[]) {
+  const nome = `DISPARO_${managerId.slice(0, 8).toUpperCase()}`;
+  const { data: existe } = await supabase.from("distribution_queues")
+    .select("id").eq("name", nome).maybeSingle();
+  if (existe) {
+    await supabase.from("distribution_queues")
+      .update({ broker_ids: brokerIds, is_active: true }).eq("id", existe.id);
+    return existe.id as string;
+  }
+  const { data, error } = await supabase.from("distribution_queues").insert({
+    name: nome, match_field: "campanha", match_value: nome,
+    broker_ids: brokerIds, is_active: true, last_assigned_index: 0,
+  }).select("id").single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+export async function dispararCampanha(opts: {
+  managerId: string;
+  nome: string;
+  templateId: string;
+  alvos: { leadId: string; nome: string | null; telefone: string }[];
+  /** valor de cada variável do template; `nome` fica de fora, vem do alvo */
+  vars: Record<string, string>;
+  brokerIds: string[];
+  configId: string | null;
+}) {
+  if (!opts.alvos.length) throw new Error("Nenhuma pessoa na seleção.");
+  const queueId = await filaDoGerente(opts.managerId, opts.brokerIds);
+
+  // Nasce em `draft`: o cron só pega quem está em `sending`, e ninguém deve
+  // começar a disparar com a lista de alvos pela metade.
+  const { data: camp, error } = await supabase.from("whatsapp_campaigns").insert({
+    name: opts.nome, template_id: opts.templateId,
+    audience_source: "csv",            // alvos vão inseridos, não resolvidos
+    audience_count: opts.alvos.length,
+    target_queue_id: queueId, vars: opts.vars,
+    wa_config_id: opts.configId, owner_id: opts.managerId, created_by: opts.managerId,
+    status: "draft", throttle_per_min: 10,
+  }).select("id").single();
+  if (error) throw error;
+
+  const linhas = opts.alvos.map((a) => ({
+    campaign_id: camp.id, phone: a.telefone.replace(/\D/g, ""),
+    name: a.nome, lead_id: a.leadId, status: "pending",
+  }));
+  for (let i = 0; i < linhas.length; i += 500) {
+    const { error: e2 } = await supabase.from("whatsapp_campaign_targets").insert(linhas.slice(i, i + 500));
+    if (e2) throw e2;
+  }
+
+  await supabase.from("whatsapp_campaigns")
+    .update({ status: "sending", approved_by: opts.managerId, approved_at: new Date().toISOString() })
+    .eq("id", camp.id);
+
+  // Empurra o primeiro lote agora; o cron `wa-campaign-runner-tick` (a cada 2
+  // minutos) continua de onde este parar.
+  await supabase.functions.invoke("wa-campaign-runner", { body: { campaign_id: camp.id } });
+  return camp.id as string;
 }

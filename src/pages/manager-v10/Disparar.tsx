@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   useDisparar, useMensagens, ajustarImagem, cheiraOferta, checarNome,
-  criarTemplate, mandarMensagem, type Template,
+  criarTemplate, mandarMensagem, dispararCampanha, type Template,
 } from "@/hooks/useDisparar";
 import { Blank } from "@/components/manager-v10/ui";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
@@ -174,11 +174,39 @@ export default function Disparar() {
     } finally { setEnviando(false); }
   }
 
+  const [disparando, setDisparando] = useState(false);
+
+  async function dispararAgora() {
+    if (!data || !userId || !tplAtivo) return;
+    const gente = data.publicos.filter((p) => pubs.has(p.chave)).flatMap((p) => p.gente);
+    // Uma pessoa pode estar em duas listas; a Meta cobra as duas mensagens.
+    const unicos = [...new Map(gente.map((a) => [a.telefone.replace(/\D/g, ""), a])).values()];
+    const teto = data.config?.tetoHoje ?? unicos.length;
+    const vai = unicos.slice(0, teto);
+    const brokers = destino === "escolher" ? [...marcados] : data.corretores.map((c) => c.id);
+    if (!brokers.length) { toast.error("Escolha pelo menos um corretor para atender."); return; }
+
+    setDisparando(true);
+    try {
+      await dispararCampanha({
+        managerId: userId, templateId: tplAtivo.id,
+        nome: `${tplAtivo.nome} · ${new Date().toLocaleDateString("pt-BR")}`,
+        alvos: vai, vars: valores, brokerIds: brokers,
+        configId: data.config?.id ?? null,
+      });
+      toast.success(`Disparo criado para ${vai.length} pessoas. O primeiro lote já saiu.`);
+      setPubs(new Set());
+      qc.invalidateQueries({ queryKey: ["disparar"] });
+    } catch (e: any) {
+      toast.error(`Não consegui disparar: ${e?.message ?? e}`);
+    } finally { setDisparando(false); }
+  }
+
   async function enviarNaConversa() {
     const c = data?.conversas.find((x) => x.id === thread);
     if (!c || !rascunho.trim()) return;
     try {
-      await mandarMensagem(c.id, c.telefone, rascunho.trim());
+      await mandarMensagem(c.id, c.telefone, rascunho.trim(), userId!);
       setRascunho("");
       toast.success("Enviada. O corretor vê a mensagem marcada como sua.");
       qc.invalidateQueries({ queryKey: ["wa-msgs", c.id] });
@@ -643,9 +671,10 @@ export default function Disparar() {
 
                 <div style={{ display: "flex", gap: 9, marginTop: 16, flexWrap: "wrap" }}>
                   <button className="btn wa" style={{ fontWeight: 700 }}
-                    disabled={!alvos || !tplSel || (destino === "escolher" && !marcados.size)}
-                    onClick={() => toast.info("O motor de disparo ainda está sendo religado — a campanha não foi criada.")}>
-                    Disparar para {Math.min(alvos, cfg?.tetoHoje ?? alvos)} pessoas
+                    disabled={disparando || !alvos || !tplSel || (destino === "escolher" && !marcados.size)}
+                    onClick={dispararAgora}>
+                    {disparando ? "Disparando…"
+                      : `Disparar para ${Math.min(alvos, cfg?.tetoHoje ?? alvos)} pessoas`}
                   </button>
                 </div>
               </div>
@@ -704,10 +733,9 @@ export default function Disparar() {
                               {i === 0 || dia(arr[i - 1].quando) !== dia(m.quando)
                                 ? <div className="dia" key={`d${m.id}`}>{dia(m.quando)}</div> : null}
                               <div key={m.id}
-                                className={`msg ${m.direcao === "entrada" ? "ent" : m.autor === "gerente" ? "ger" : "sai"}${m.ehTemplate ? " tpl" : ""}`}>
-                                {m.autor && m.direcao === "saida"
-                                  ? <span className="quem">{m.autor === "gerente" ? "" : m.autor}</span> : null}
-                                {m.autor === "gerente" ? <span className="marca">você, como gerente</span> : null}
+                                className={`msg ${m.direcao === "entrada" ? "ent" : m.sentBy === userId ? "ger" : "sai"}${m.ehTemplate ? " tpl" : ""}`}>
+                                {m.sentBy === userId
+                                  ? <span className="marca">você, como gerente</span> : null}
                                 {m.texto}
                                 <span className="hora">{hhmm(m.quando)}</span>
                               </div>
