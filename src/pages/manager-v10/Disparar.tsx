@@ -141,6 +141,12 @@ export default function Disparar() {
   const preco = (cat: string) =>
     (cat === "UTILITY" ? data?.precos.utility : data?.precos.marketing) ?? 0.3;
 
+  // Lista própria do gerente, de fora do Comandra. Fica aqui em cima de
+  // propósito: o cálculo de alvos logo abaixo depende dela, e declarar depois
+  // derrubava a tela inteira com "Cannot access before initialization".
+  const [csv, setCsv] = useState<{ leadId: string; nome: string | null; telefone: string }[]>([]);
+  const [csvNome, setCsvNome] = useState("");
+
   const alvos = useMemo(() => {
     if (!data) return 0;
     return data.publicos.filter((p) => pubs.has(p.chave)).reduce((s, p) => s + p.n, 0) + csv.length;
@@ -181,10 +187,6 @@ export default function Disparar() {
   }
 
   const [disparando, setDisparando] = useState(false);
-  // Lista própria do gerente, de fora do Comandra.
-  const [csv, setCsv] = useState<{ leadId: string; nome: string | null; telefone: string }[]>([]);
-  const [csvNome, setCsvNome] = useState("");
-
   async function pegarCsv(f: File | undefined) {
     if (!f) return;
     try {
