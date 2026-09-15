@@ -198,7 +198,7 @@ export default function ManagerV10() {
   if (!userId || isLoading || !data || !calc) {
     return (
       <div className="mgr10">
-        <main className="shell"><div className="blank">carregando o painel…</div></main>
+        <main className="shell2"><div className="blank">carregando o painel…</div></main>
       </div>
     );
   }
@@ -207,39 +207,45 @@ export default function ManagerV10() {
   const bateu = calc.metaMes ? calc.projecao >= calc.metaMes : null;
 
   return (
-    <div className="mgr10">
-      <header className="bar">
-        <div className="bar-in">
-          <div className="mark">Comandra <span>· {nome}</span></div>
-          <div className="bar-r">
-            <button className="icobtn" onClick={toggle} title="Alternar tema" aria-label="Alternar tema">
-              {mode === "dark"
-                ? <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
-                : <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>}
-            </button>
-          </div>
+    <div className="mgr10 app2">
+      {/* Menu à esquerda, como nos mockups validados. No topo ele competia com
+          o conteúdo e sumia no celular. */}
+      <nav className="rail" aria-label="Seções">
+        <div className="rail-brand">
+          <div className="rail-m">C</div>
+          <div><b>Comandra</b><i>{nome} · {data.brokers.length} corretores</i></div>
         </div>
-      </header>
-
-      <nav className="tabs" aria-label="Seções">
         {VIEWS.map((it) => (
-          <button key={it.v} className={`tab${view === it.v ? " on" : ""}`} onClick={() => setView(it.v)}>
-            <span className="tab-w">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d={it.path} /></svg>
-              {it.v === "tempo" && calc.doDia.parados > 0
-                ? <i className="badge">{calc.doDia.parados}</i> : null}
-            </span>
-            <span>{it.label}</span>
+          <button key={it.v} type="button"
+            className={`railb${view === it.v ? " on" : ""}`}
+            aria-current={view === it.v ? "page" : undefined}
+            onClick={() => setView(it.v)}>
+            <svg viewBox="0 0 24 24"><path d={it.path} /></svg>
+            {it.label}
+            {it.v === "tempo" && calc.doDia.parados > 0
+              ? <i className="pip">{calc.doDia.parados}</i> : null}
           </button>
         ))}
         {LINKS.map((it) => (
-          <a key={it.to} href={it.to} className="tab">
-            <span className="tab-w">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d={it.path} /></svg>
-            </span>
-            <span>{it.label}</span>
+          <a key={it.to} href={it.to}>
+            <svg viewBox="0 0 24 24"><path d={it.path} /></svg>
+            {it.label}
           </a>
         ))}
+        <div className="rail-sep" />
+        <a className="soon" aria-disabled="true">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h11M4 18h7" /></svg>Leads
+        </a>
+        <a className="soon" aria-disabled="true">
+          <svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7" /></svg>B.I.
+        </a>
+        <div className="rail-foot">
+          <button className="icobtn" onClick={toggle} title="Alternar tema" aria-label="Alternar tema">
+            {mode === "dark"
+              ? <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+              : <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>}
+          </button>
+        </div>
       </nav>
 
       <main className="shell">
