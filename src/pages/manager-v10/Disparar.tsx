@@ -25,6 +25,7 @@ import {
   useDisparar, useMensagens, ajustarImagem, cheiraOferta, checarNome,
   criarTemplate, mandarMensagem, dispararCampanha, type Template,
 } from "@/hooks/useDisparar";
+import { conectarBM, finalizarConexao } from "@/lib/embeddedSignup";
 import { Blank } from "@/components/manager-v10/ui";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import "@/styles/manager-v10.css";
@@ -175,6 +176,28 @@ export default function Disparar() {
   }
 
   const [disparando, setDisparando] = useState(false);
+  const [conectando, setConectando] = useState(false);
+
+  async function conectar() {
+    if (!userId) return;
+    if (nomeCheck && !nomeCheck.ok) {
+      toast.error("Ajuste o nome de exibição antes — a Meta vai recusar esse.");
+      return;
+    }
+    setConectando(true);
+    try {
+      const conta = await conectarBM();
+      const r = await finalizarConexao(conta, userId, nomeExib.trim());
+      if (r.ok) toast.success("Número conectado e liberado para enviar.");
+      // Conectar pela metade é pior do que não conectar: o gerente acha que
+      // está no ar e o disparo falha depois. O que faltou vai na tela.
+      else toast.warning(r.pendencia ?? "Conectou, mas ficou pendência.", { duration: 12000 });
+      qc.invalidateQueries({ queryKey: ["disparar"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Não consegui conectar.");
+    } finally { setConectando(false); }
+  }
+
 
   async function dispararAgora() {
     if (!data || !userId || !tplAtivo) return;
@@ -331,8 +354,8 @@ export default function Disparar() {
                   ) : null}
                 </div>
                 <button className="btn solid" style={{ width: "100%" }}
-                  onClick={() => toast.info("A conexão com o Facebook ainda está sendo religada (wa-onboard).")}>
-                  Conectar com o Facebook
+                  disabled={conectando || !nomeExib.trim()} onClick={conectar}>
+                  {conectando ? "Conectando…" : "Conectar com o Facebook"}
                 </button>
               </div>
             </div>
