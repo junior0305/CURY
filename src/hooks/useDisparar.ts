@@ -130,6 +130,13 @@ export function useDisparar(managerId: string | undefined) {
     staleTime: 60_000,
     refetchInterval: 2 * 60_000,
     queryFn: async () => {
+      // O status do template muda NA META, não aqui. Sem puxar antes de listar,
+      // o que foi aprovado continua aparecendo como "em análise" para sempre —
+      // e some da lista de disparo, que só aceita aprovado.
+      await supabase.functions.invoke("wa-template", {
+        body: { action: "refresh", owner_id: managerId },
+      }).catch(() => {});
+
       const [cfgRes, timeRes, tplRes, campRes, thrRes, leadsRes, precoRes] = await Promise.all([
         supabase.from("whatsapp_config").select("*"),
         supabase.from("profiles").select("id,first_name,last_name,last_seen_at")
@@ -295,6 +302,28 @@ export function useNumerosCasa(habilitado: boolean) {
       }));
     },
   });
+}
+
+/** Lê um CSV de nome e telefone. Aceita vírgula ou ponto e vírgula, com ou sem
+ *  cabeçalho — o gerente exporta de onde conseguir e não deve ter que arrumar. */
+export function lerCsv(texto: string): { leadId: string; nome: string | null; telefone: string }[] {
+  const linhas = texto.split(/\r?\n/).filter((l) => l.trim());
+  if (!linhas.length) return [];
+  const sep = (linhas[0].match(/;/g)?.length ?? 0) > (linhas[0].match(/,/g)?.length ?? 0) ? ";" : ",";
+  const cab = /nome|name|telefone|phone|celular/i.test(linhas[0]);
+  const fora: { leadId: string; nome: string | null; telefone: string }[] = [];
+  const vistos = new Set<string>();
+  for (const l of linhas.slice(cab ? 1 : 0)) {
+    const p = l.split(sep).map((x) => x.trim().replace(/^"|"$/g, ""));
+    // A coluna do telefone é a que tem dígitos suficientes — não a segunda,
+    // porque metade dos arquivos vem com as colunas trocadas.
+    const tel = p.map((x) => x.replace(/\D/g, "")).find((d) => d.length >= 10);
+    if (!tel || vistos.has(tel)) continue;
+    vistos.add(tel);
+    const nome = p.find((x) => /[a-zA-ZÀ-ÿ]{2,}/.test(x) && x.replace(/\D/g, "").length < 6) ?? null;
+    fora.push({ leadId: "", nome, telefone: tel });
+  }
+  return fora;
 }
 
 /* ── cadastrar o próprio número, sem sair do Comandra ─────────────────────
@@ -509,7 +538,7 @@ export async function dispararCampanha(opts: {
 
   const linhas = opts.alvos.map((a) => ({
     campaign_id: camp.id, phone: a.telefone.replace(/\D/g, ""),
-    name: a.nome, lead_id: a.leadId, status: "pending",
+    name: a.nome, lead_id: a.leadId || null, status: "pending",
   }));
   for (let i = 0; i < linhas.length; i += 500) {
     const { error: e2 } = await supabase.from("whatsapp_campaign_targets").insert(linhas.slice(i, i + 500));

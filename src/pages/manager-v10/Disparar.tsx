@@ -25,6 +25,7 @@ import {
   useDisparar, useMensagens, ajustarImagem, cheiraOferta, checarNome,
   criarTemplate, mandarMensagem, dispararCampanha, type Template,
   useNumerosCasa, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
+  lerCsv,
 } from "@/hooks/useDisparar";
 import { conectarBM, finalizarConexao } from "@/lib/embeddedSignup";
 import { Blank } from "@/components/manager-v10/ui";
@@ -142,8 +143,8 @@ export default function Disparar() {
 
   const alvos = useMemo(() => {
     if (!data) return 0;
-    return data.publicos.filter((p) => pubs.has(p.chave)).reduce((s, p) => s + p.n, 0);
-  }, [data, pubs]);
+    return data.publicos.filter((p) => pubs.has(p.chave)).reduce((s, p) => s + p.n, 0) + csv.length;
+  }, [data, pubs, csv]);
 
   async function pegarImagem(f: File | undefined) {
     if (!f) return;
@@ -180,6 +181,22 @@ export default function Disparar() {
   }
 
   const [disparando, setDisparando] = useState(false);
+  // Lista própria do gerente, de fora do Comandra.
+  const [csv, setCsv] = useState<{ leadId: string; nome: string | null; telefone: string }[]>([]);
+  const [csvNome, setCsvNome] = useState("");
+
+  async function pegarCsv(f: File | undefined) {
+    if (!f) return;
+    try {
+      const linhas = lerCsv(await f.text());
+      if (!linhas.length) {
+        toast.error("Não achei telefone nesse arquivo. Precisa de uma coluna com o número.");
+        return;
+      }
+      setCsv(linhas); setCsvNome(f.name);
+      toast.success(`${linhas.length} pessoas lidas de ${f.name}.`);
+    } catch (e: any) { toast.error(`Não consegui ler: ${e?.message ?? e}`); }
+  }
   const [conectando, setConectando] = useState(false);
   const { data: numerosCasa, isLoading: carregandoCasa } = useNumerosCasa(!data?.config);
 
@@ -265,7 +282,7 @@ export default function Disparar() {
 
   async function dispararAgora() {
     if (!data || !userId || !tplAtivo) return;
-    const gente = data.publicos.filter((p) => pubs.has(p.chave)).flatMap((p) => p.gente);
+    const gente = [...data.publicos.filter((p) => pubs.has(p.chave)).flatMap((p) => p.gente), ...csv];
     // Uma pessoa pode estar em duas listas; a Meta cobra as duas mensagens.
     const unicos = [...new Map(gente.map((a) => [a.telefone.replace(/\D/g, ""), a])).values()];
     const teto = data.config?.tetoHoje ?? unicos.length;
@@ -741,6 +758,35 @@ export default function Disparar() {
                   )) : <p className="vars-n" style={{ margin: 0 }}>Nenhuma lista com gente parada agora.</p>}
                 </div>
 
+                <div className="f" style={{ marginTop: 18 }}>
+                  <label>Ou suba uma lista sua</label>
+                  <label className={`up${csv.length ? " tem" : ""}`} style={{ display: "block" }}>
+                    {csv.length ? (
+                      <div style={{ padding: "10px 4px" }}>
+                        <b>{csv.length} pessoas</b>
+                        <span>{csvNome} — clique para trocar</span>
+                      </div>
+                    ) : (
+                      <>
+                        <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></svg>
+                        <b>Escolher um arquivo CSV</b>
+                        <span>uma coluna com o nome e outra com o telefone</span>
+                      </>
+                    )}
+                    <input type="file" accept=".csv,text/csv,text/plain" hidden
+                      onChange={(e) => pegarCsv(e.target.files?.[0])} />
+                  </label>
+                  {csv.length ? (
+                    <button className="btn sm" style={{ marginTop: 8, alignSelf: "flex-start" }}
+                      onClick={() => { setCsv([]); setCsvNome(""); }}>
+                      Tirar a lista
+                    </button>
+                  ) : (
+                    <small>Aceita vírgula ou ponto e vírgula, com ou sem cabeçalho.
+                      Repetidos são descartados.</small>
+                  )}
+                </div>
+
                 <div className="f">
                   <label htmlFor="d-tpl">Qual mensagem</label>
                   <select id="d-tpl" value={tplSel} onChange={(e) => setTplSel(e.target.value)}>
@@ -751,6 +797,13 @@ export default function Disparar() {
                       </option>
                     ))}
                   </select>
+                  {!d.templates.some((t) => (t.status ?? "").toUpperCase() === "APPROVED") ? (
+                    <small>
+                      {d.templates.length
+                        ? "Nenhuma das suas mensagens foi aprovada ainda. O status vem da Meta e atualiza sozinho — se você acabou de aprovar, recarregue em um minuto."
+                        : "Você ainda não criou nenhuma mensagem. Crie na etapa Mensagens."}
+                    </small>
+                  ) : null}
                 </div>
 
                 {tplAtivo?.variaveis.length ? (
