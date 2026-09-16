@@ -38,8 +38,11 @@ const GRUPOS: Grupo[] = [
       for (const p of gente) if (p.profileId) await trazerParaEquipe(p.profileId);
     } },
   { chave: "desativado", tom: "trav", titulo: "voltaram a trabalhar com cadastro desativado",
-    porque: "Bateram ponto na Cury e o login aqui está desligado — não recebem lead e não contam em nada.",
-    acao: "Reativar" },
+    porque: "Bateram ponto na Cury e o login aqui está desligado — não recebem lead, não contam em nada e não conseguem entrar.",
+    acao: "Reativar e trazer",
+    lote: async (gente) => {
+      for (const p of gente) if (p.profileId) await trazerParaEquipe(p.profileId);
+    } },
   { chave: "rodizio", tom: "trav", titulo: "no plantão e sem receber lead",
     porque: "Vieram trabalhar e o recebimento está desligado.",
     acao: "Ligar recebimento",

@@ -309,25 +309,12 @@ export async function definirRecebimento(profileId: string, receber: boolean) {
 
 /** Traz para a equipe deste gerente quem a Cury já diz que é dele.
  *
- *  O `manager_id` do lead é cópia, gravada na atribuição — trocar o gerente do
- *  corretor não mexe nela. Aqui só os leads VIVOS acompanham: venda fechada
- *  continua contando para a equipe onde foi feita.                           */
+ *  Um gesto só, porque meia-correção aqui é pior que nenhuma: reativar o perfil
+ *  sem tirar o banimento faz a pessoa voltar a contar nos números e a receber
+ *  lead, e continuar sem conseguir entrar. O banimento vive no GoTrue e
+ *  sobrevive à reativação — por isso o trabalho é do banco, não daqui.        */
 export async function trazerParaEquipe(profileId: string) {
-  const { data: eu } = await supabase.auth.getUser();
-  const gerente = eu?.user?.id;
-  if (!gerente) throw new Error("Sessão expirada.");
-
-  const { data: g } = await supabase.from("profiles")
-    .select("team_id").eq("id", gerente).maybeSingle();
-
-  const { error } = await supabase.from("profiles").update({
-    manager_id: gerente,
-    team_id: (g as any)?.team_id ?? null,
-    is_active: true,
-  }).eq("id", profileId);
+  const { data, error } = await supabase.rpc("trazer_para_equipe", { p_profile: profileId });
   if (error) throw error;
-
-  await supabase.from("leads").update({ manager_id: gerente })
-    .eq("broker_id", profileId)
-    .not("status", "in", "(CONCLUDED,ABANDONED,EXCLUDED)");
+  return data as { leads: number; desbanido: boolean };
 }
