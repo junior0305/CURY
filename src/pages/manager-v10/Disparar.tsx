@@ -25,7 +25,7 @@ import {
   useDisparar, useMensagens, ajustarImagem, cheiraOferta, checarNome,
   criarTemplate, mandarMensagem, dispararCampanha, subirImagem, type Template,
   useNumerosCasa, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
-  lerCsv,
+  lerCsv, salvarPerfilNumero,
 } from "@/hooks/useDisparar";
 import { conectarBM, finalizarConexao } from "@/lib/embeddedSignup";
 import { Blank } from "@/components/manager-v10/ui";
@@ -236,6 +236,42 @@ export default function Disparar() {
   const [codigo, setCodigo] = useState("");
   const [passo, setPasso] = useState<"numero" | "codigo">("numero");
 
+  // Foto e recado do número — o que o cliente vê ao abrir a conversa.
+  const [fotoPerfil, setFotoPerfil] = useState<string | null>(null);
+  const [sobre, setSobre] = useState("");
+  const [salvandoPerfil, setSalvandoPerfil] = useState(false);
+
+  async function pegarFoto(f: File | undefined) {
+    if (!f) return;
+    try {
+      // Foto de perfil é quadrada no WhatsApp; o mesmo ajuste do cabeçalho
+      // cortaria as laterais. Aqui vai o arquivo como veio.
+      const r = new FileReader();
+      r.onload = () => setFotoPerfil(String(r.result));
+      r.readAsDataURL(f);
+    } catch (e: any) { toast.error(e?.message ?? "Não consegui ler a imagem."); }
+  }
+
+  async function salvarPerfil() {
+    const cfg = data?.config;
+    if (!cfg || !userId) return;
+    setSalvandoPerfil(true);
+    try {
+      let url: string | null = null;
+      if (fotoPerfil?.startsWith("data:")) {
+        toast.info("Guardando a foto…");
+        url = await subirImagem(fotoPerfil);
+      }
+      await salvarPerfilNumero(cfg.phoneNumberId!, {
+        foto_url: url, sobre: sobre.trim() || undefined, owner_id: userId,
+      });
+      toast.success("Perfil atualizado. Quem abrir a conversa já vê assim.");
+      setFotoPerfil(null);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Não consegui salvar.");
+    } finally { setSalvandoPerfil(false); }
+  }
+
   async function criarNumero() {
     if (!nomeExib.trim()) { toast.error("Escreva o nome que o cliente vai ver."); return; }
     setConectando(true);
@@ -430,6 +466,41 @@ export default function Disparar() {
                       <div>Pode enviar por dia <b>{cfg.tetoHoje.toLocaleString("pt-BR")} conversas</b></div>
                       <div>Conectado em <b>{cfg.onboardedEm ? new Date(cfg.onboardedEm).toLocaleDateString("pt-BR") : "—"}</b></div>
                     </div>
+                    {/* Foto e recado: o que o cliente vê ao abrir a conversa.
+                        Só aparece para quem é dono do número — no compartilhado
+                        da empresa, um gerente mudaria a cara de todos. */}
+                    {cfg.ownerId === userId ? (
+                      <div className="pv-perfil">
+                        <div className="vars-l">A cara do seu número</div>
+                        <div className="pf-linha">
+                          <label className="pf-foto">
+                            {fotoPerfil
+                              ? <img src={fotoPerfil} alt="" />
+                              : <span>escolher<br />foto</span>}
+                            <input type="file" accept="image/*" hidden
+                              onChange={(e) => pegarFoto(e.target.files?.[0])} />
+                          </label>
+                          <div className="f" style={{ flex: 1, marginBottom: 0 }}>
+                            <label htmlFor="sobre">Recado do perfil</label>
+                            <input id="sobre" maxLength={139} value={sobre}
+                              placeholder="Cury — imóveis Minha Casa Minha Vida"
+                              onChange={(e) => setSobre(e.target.value)} />
+                            <small>Aparece embaixo do nome quando o cliente abre a conversa.</small>
+                          </div>
+                        </div>
+                        <button className="btn" style={{ marginTop: 10 }}
+                          disabled={salvandoPerfil || (!fotoPerfil && !sobre.trim())}
+                          onClick={salvarPerfil}>
+                          {salvandoPerfil ? "Salvando…" : "Salvar foto e recado"}
+                        </button>
+                        <p className="vars-n" style={{ marginTop: 10 }}>
+                          O <b>nome</b> que aparece na conversa não muda por aqui: trocar
+                          nome passa por análise da Meta e leva alguns dias. Hoje ele é
+                          o que foi aprovado quando o número entrou.
+                        </p>
+                      </div>
+                    ) : null}
+
                     {cfg.novo ? (
                       <div className="aviso">
                         <svg viewBox="0 0 24 24"><path d="M12 8.5v5M12 17h.01" /><circle cx="12" cy="12" r="9" /></svg>

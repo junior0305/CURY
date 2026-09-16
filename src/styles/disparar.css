@@ -145,3 +145,21 @@
 }
 .mgr10.disparar .pa-chip:hover{border-color:var(--accent);color:var(--accent)}
 .mgr10.disparar .pa-chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ── a cara do numero: foto e recado ──────────────────────────────────────
+   Fica dentro do cartao do numero, nao numa tela a parte: quem esta olhando
+   "o numero que envia" e exatamente quem quer arrumar como ele aparece. */
+.mgr10.disparar .pv-perfil{margin-top:16px;padding-top:14px;border-top:1px solid var(--line-2)}
+.mgr10.disparar .pf-linha{display:flex;gap:14px;align-items:flex-start;margin-top:10px}
+.mgr10.disparar .pf-foto{
+  width:74px;height:74px;flex:none;border-radius:50%;overflow:hidden;cursor:pointer;
+  border:1px dashed var(--line);background:var(--surface-2);
+  display:grid;place-items:center;text-align:center;
+  font-size:11px;line-height:1.3;color:var(--ink-3);transition:border-color .13s;
+}
+.mgr10.disparar .pf-foto:hover{border-color:var(--accent);color:var(--accent)}
+.mgr10.disparar .pf-foto img{width:100%;height:100%;object-fit:cover;display:block}
+@media(max-width:560px){
+  .mgr10.disparar .pf-linha{flex-direction:column}
+  .mgr10.disparar .pf-foto{width:64px;height:64px}
+}

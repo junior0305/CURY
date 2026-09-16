@@ -385,9 +385,13 @@ export async function assumirNumero(phoneNumberId: string, ownerId: string, labe
   return d as { ok: boolean; pendencia: string | null };
 }
 
-/** O que o cliente vê ao abrir a conversa: nome, descrição e site. */
+/** O que o cliente vê ao abrir a conversa: foto, recado e descrição.
+ *  O NOME de exibição não está aqui de propósito — trocar nome passa por
+ *  análise da Meta, e juntar as duas coisas num botão só faria parecer que o
+ *  nome mudou na hora. */
 export async function salvarPerfilNumero(phoneNumberId: string, p: {
   sobre?: string; descricao?: string; site?: string;
+  foto_url?: string | null; owner_id?: string;
 }) {
   const { data, error } = await supabase.functions.invoke("wa-onboard", {
     body: { action: "perfil", phone_number_id: phoneNumberId, ...p },
