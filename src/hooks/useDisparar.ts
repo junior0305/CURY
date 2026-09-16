@@ -446,6 +446,29 @@ export function useMensagens(threadId: string | null) {
 
 /* ────────────────────────────────────────────────────────────── ações */
 
+/** Foto de perfil: quadrada e grande. A Meta recusa abaixo de 192×192 com
+ *  "resolução baixa", e a maioria das fotos que alguém tem à mão no celular
+ *  é retangular — cortar pelo centro é o que ela espera. */
+export function ajustarFoto(file: File): Promise<string> {
+  const L = 640;
+  return new Promise((ok, erro) => {
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement("canvas");
+      cv.width = L; cv.height = L;
+      const ctx = cv.getContext("2d");
+      if (!ctx) { erro(new Error("navegador não deixou ajustar a imagem")); return; }
+      const e = Math.max(L / img.width, L / img.height);
+      const w = img.width * e, h = img.height * e;
+      ctx.drawImage(img, (L - w) / 2, (L - h) / 2, w, h);
+      ok(cv.toDataURL("image/jpeg", 0.92));
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => erro(new Error("não consegui ler essa imagem"));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 /** Corta pelo centro no formato que o WhatsApp mostra (≈1,91:1), sem deformar.
  *  Ninguém vai abrir editor de imagem para disparar. */
 export function ajustarImagem(file: File): Promise<{ dataUrl: string; orig: { w: number; h: number }; mudou: boolean }> {

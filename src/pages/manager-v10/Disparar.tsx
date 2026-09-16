@@ -23,7 +23,8 @@ import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   useDisparar, useMensagens, ajustarImagem, cheiraOferta, checarNome,
-  criarTemplate, mandarMensagem, dispararCampanha, subirImagem, type Template,
+  criarTemplate, mandarMensagem, dispararCampanha, subirImagem, ajustarFoto,
+  type Template,
   useNumerosCasa, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
   lerCsv, salvarPerfilNumero, soltarNumero, removerNumero,
 } from "@/hooks/useDisparar";
@@ -244,11 +245,9 @@ export default function Disparar() {
   async function pegarFoto(f: File | undefined) {
     if (!f) return;
     try {
-      // Foto de perfil é quadrada no WhatsApp; o mesmo ajuste do cabeçalho
-      // cortaria as laterais. Aqui vai o arquivo como veio.
-      const r = new FileReader();
-      r.onload = () => setFotoPerfil(String(r.result));
-      r.readAsDataURL(f);
+      // Quadrada e 640×640: a Meta recusa abaixo de 192×192 dizendo só
+      // "resolução baixa", e quase toda foto de celular é retangular.
+      setFotoPerfil(await ajustarFoto(f));
     } catch (e: any) { toast.error(e?.message ?? "Não consegui ler a imagem."); }
   }
 
