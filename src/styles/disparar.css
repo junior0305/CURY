@@ -349,3 +349,14 @@
 .mgr10.disparar .eq-v{font-size:11.5px;color:var(--ink-3);text-align:right}
 .mgr10.disparar .eqr .on{width:8px;height:8px;border-radius:99px;background:var(--good);
   justify-self:end;margin-right:12px}
+
+/* de qual número sai — e de quem é a conta */
+.mgr10.disparar .sai{border:1px solid var(--line);border-radius:12px;padding:12px 14px;
+  background:var(--surface-2)}
+.mgr10.disparar .sai span{display:block;font:700 10px Archivo,sans-serif;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink-3)}
+.mgr10.disparar .sai b{display:block;font:600 16px "JetBrains Mono",monospace;margin:5px 0 3px}
+.mgr10.disparar .sai i{display:block;font-style:normal;font-size:11.5px;line-height:1.45;
+  color:var(--ink-3)}
+.mgr10.disparar .sai.casa{border-color:var(--warn);background:var(--warn-soft)}
+.mgr10.disparar .sai.casa i{color:var(--warn);font-weight:600}

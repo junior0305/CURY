@@ -643,7 +643,7 @@ export default function Disparar() {
                     não tem o seu, e fechado para quem já resolveu isso — é uma
                     decisão que se toma uma vez. */}
                 <details className="dobra" open={!cfg}>
-                  <summary>{cfg ? "Trocar por outro número da empresa" : "Escolher o meu número"}</summary>
+                  <summary>{cfg ? "Ver os números da conta" : "Escolher o meu número"}</summary>
                   {carregandoCasa ? (
                     <p className="vars-n">Consultando os números da empresa…</p>
                   ) : !numerosCasa?.length ? (
@@ -1467,6 +1467,18 @@ export default function Disparar() {
                 <p className="fone-leg">
                   {tplAtivo ? "É assim que vai chegar." : "Escolha a mensagem para ver a prévia."}
                 </p>
+
+                {/* De qual numero sai, e de quem e a conta. Faltava por completo:
+                    dava para disparar mil mensagens sem saber que estavam saindo
+                    pelo numero compartilhado — ou seja, no cartao da empresa. */}
+                <div className={`sai${cfg && cfg.ownerId !== userId ? " casa" : ""}`}>
+                  <span>Sai pelo número</span>
+                  <b>{cfg?.displayNumber ?? "nenhum"}</b>
+                  <i>{!cfg ? "conecte um número antes de disparar"
+                     : cfg.ownerId === userId
+                       ? "é o seu número — a conta é sua"
+                       : "número compartilhado da empresa — quem paga é a empresa"}</i>
+                </div>
 
                 <div className="conta">
                   <div className="conta-l"><span>Pessoas selecionadas</span><b>{alvos}</b></div>
