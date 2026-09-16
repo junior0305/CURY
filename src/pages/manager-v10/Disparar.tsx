@@ -113,6 +113,8 @@ export default function Disparar() {
   const [sugTipo, setSugTipo] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [emAnalise, setEmAnalise] = useState(false);
+  // Quando preenchido, o formulário está editando esta mensagem, não criando outra.
+  const [editandoId, setEditandoId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   /* ── etapa 3 · disparo ── */
@@ -163,6 +165,16 @@ export default function Disparar() {
     } catch (e: any) { toast.error(e?.message ?? "Não consegui ler essa imagem."); }
   }
 
+  function carregar(t: Template) {
+    setTNome(t.nome); setTTipo(t.categoria); setTCorpo(t.corpo);
+    setTRod(t.rodape ?? "");
+    const bs = (t.botoes ?? []).map((b: any) => b?.text ?? "");
+    setB1(bs[0] ?? ""); setB2(bs[1] ?? "");
+    setImg(t.headerImagem ?? null);
+    setEmAnalise(false);
+    document.querySelector(".novo-t")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   async function mandarPraMeta() {
     if (!tNome.trim() || !tCorpo.trim()) { toast.error("Falta o nome ou o texto."); return; }
     setEnviando(true);
@@ -173,13 +185,17 @@ export default function Disparar() {
         header_type: img ? "IMAGE" : "NONE", header_image_url: img,
         footer_text: tRod || null,
         buttons: [b1, b2].filter(Boolean).map((t) => ({ type: "QUICK_REPLY", text: t })),
-        variables: vars, owner_id: userId,
+        variables: vars, owner_id: userId, meta_template_id: editandoId,
         // A Meta exige um exemplo por variável nomeada. Uso o que o gerente já
         // preencheu na prévia — é o valor real, melhor que "exemplo".
         exemplos: Object.fromEntries(vars.map((v) => [v, valores[v] || (v === "nome" ? "Maria" : "exemplo")])),
       });
       setEmAnalise(true);
-      toast.success("Mandada para a Meta. O resultado aparece na lista acima.");
+      toast.success(editandoId
+        ? "Editada e mandada para análise. Ela sai da lista de disparo até a Meta aprovar de novo."
+        : "Mandada para a Meta. O resultado aparece na lista acima.",
+        { duration: editandoId ? 10000 : 5000 });
+      setEditandoId(null);
       qc.invalidateQueries({ queryKey: ["disparar"] });
     } catch (e: any) {
       toast.error(`A Meta não aceitou: ${e?.message ?? e}`);
@@ -571,13 +587,16 @@ export default function Disparar() {
                       <span className="cat">{t.categoria === "UTILITY" ? "Utilidade" : "Marketing"}</span>
                       <span className="prev">{t.corpo.slice(0, 90)}</span>
                       <span>
-                        <button className="btn sm" onClick={() => {
-                          setTNome(t.nome); setTTipo(t.categoria); setTCorpo(t.corpo);
-                          setTRod(t.rodape ?? "");
-                          const bs = (t.botoes ?? []).map((b: any) => b?.text ?? "");
-                          setB1(bs[0] ?? ""); setB2(bs[1] ?? "");
-                          setImg(t.headerImagem ?? null);
-                        }}>Usar como base</button>
+                        <span style={{ display: "flex", gap: 6 }}>
+                          <button className="btn sm" onClick={() => {
+                            carregar(t); setEditandoId(null); setTNome(t.nome + "_v2");
+                          }}>Copiar</button>
+                          {t.metaId ? (
+                            <button className="btn sm" onClick={() => {
+                              carregar(t); setEditandoId(t.metaId!);
+                            }}>Editar</button>
+                          ) : null}
+                        </span>
                       </span>
                     </div>
                   );
@@ -587,7 +606,15 @@ export default function Disparar() {
           </div>
 
           <div className="sec">
-            <div className="sec-h"><h2>Criar uma mensagem nova</h2></div>
+            <div className="sec-h">
+              <h2>{editandoId ? "Editando uma mensagem aprovada" : "Criar uma mensagem nova"}</h2>
+              {editandoId ? (
+                <button className="btn sm" onClick={() => {
+                  setEditandoId(null); setTNome("nova_mensagem"); setTCorpo("");
+                  setB1(""); setB2(""); setImg(null);
+                }}>Cancelar edição</button>
+              ) : null}
+            </div>
             <div className="box novo-t">
               <div>
                 <div className="ia">
@@ -753,9 +780,22 @@ export default function Disparar() {
                   <small>Aparece em cinza embaixo da mensagem. Serve para o aviso de
                     como sair da lista.</small></div>
 
+                {editandoId ? (
+                  <div className="alerta" style={{ marginBottom: 12 }}>
+                    <svg viewBox="0 0 24 24"><path d="M12 8.5v5M12 17h.01" /><circle cx="12" cy="12" r="9" /></svg>
+                    <div><b>Editar não é de graça.</b> Ao salvar, esta mensagem volta
+                      para análise e <b>não pode ser disparada</b> até a Meta aprovar
+                      de novo — o que leva de minutos a horas. A Meta também limita a
+                      dez edições por mês. Se você tem disparo marcado, é mais seguro
+                      copiar e criar uma nova.</div>
+                  </div>
+                ) : null}
+
                 <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
                   <button className="btn solid" disabled={enviando} onClick={mandarPraMeta}>
-                    {enviando ? "Mandando…" : "Mandar para aprovação da Meta"}
+                    {enviando ? "Mandando…"
+                      : editandoId ? "Salvar e mandar para análise"
+                      : "Mandar para aprovação da Meta"}
                   </button>
                 </div>
                 <p style={{ margin: "12px 0 0", fontSize: "12.5px", color: "var(--ink-3)", lineHeight: 1.55, maxWidth: "58ch" }}>
