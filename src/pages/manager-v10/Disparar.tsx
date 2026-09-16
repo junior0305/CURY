@@ -26,7 +26,7 @@ import {
   criarTemplate, mandarMensagem, dispararCampanha,
   cancelarAgendamento, subirImagem, ajustarFoto,
   type Template,
-  useNumerosCasa, usePainelDisparo, useMeusNumeros, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
+  useNumerosCasa, usePainelDisparo, useMeusNumeros, useContasWA, reivindicarConta, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
   lerCsv, salvarPerfilNumero, soltarNumero, removerNumero, usePerfilNumero,
 } from "@/hooks/useDisparar";
 import { conectarBM, finalizarConexao } from "@/lib/embeddedSignup";
@@ -272,6 +272,36 @@ export default function Disparar() {
   const { data: numerosCasa, isLoading: carregandoCasa } = useNumerosCasa(!data?.config);
   const { data: painel, isLoading: carregandoPainel } = usePainelDisparo(userId, periodo);
   const { data: usoNumeros } = useMeusNumeros(userId, periodo);
+  const { data: contasWA } = useContasWA(etapa === "bm");
+  const [wabaDigitado, setWabaDigitado] = useState("");
+  const [trocarConta, setTrocarConta] = useState(false);
+  const [pegandoConta, setPegandoConta] = useState(false);
+
+  const minhaConta = useMemo(
+    () => (contasWA ?? []).find((c) => c.dono_id === userId) ?? null,
+    [contasWA, userId],
+  );
+  // Livre = do portfólio, sem dono e não é a da empresa. A da empresa nunca
+  // entra: ela atende quem não tem a própria e não pode ter dono.
+  const livres = useMemo(
+    () => (contasWA ?? []).filter((c) => !c.dono_id && !c.da_casa),
+    [contasWA],
+  );
+
+  async function pegarConta(id: string) {
+    if (!userId) return;
+    setPegandoConta(true);
+    try {
+      const r = await reivindicarConta(id, userId);
+      toast.success(`Conta ${r.nome} é sua. Os próximos números entram nela.`);
+      setWabaDigitado(""); setTrocarConta(false);
+      qc.invalidateQueries({ queryKey: ["contas-wa"] });
+      qc.invalidateQueries({ queryKey: ["disparar"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? String(e), { duration: 9000 });
+    } finally { setPegandoConta(false); }
+  }
+
 
   // Cadastro do próprio número, em três passos, sem sair daqui.
   const [novoTel, setNovoTel] = useState("");
@@ -678,6 +708,79 @@ export default function Disparar() {
                     ))}
                   </div>
                 ) : null}
+
+                {/* A conta de WhatsApp do gerente. É ela que carrega o cartão:
+                    número cadastrado daqui para frente nasce dentro dela, e é
+                    por isso que a cobrança cai no cartão certo. */}
+                <details className="dobra" open={!minhaConta}>
+                  <summary>
+                    {minhaConta
+                      ? `Sua conta de WhatsApp — ${minhaConta.nome ?? minhaConta.waba_id}`
+                      : "Sua conta de WhatsApp — ainda não definida"}
+                  </summary>
+
+                  {minhaConta ? (
+                    <>
+                      <p className="vars-n">
+                        Seus números novos entram em <b>{minhaConta.nome}</b>
+                        {" "}(<span className="mono">{minhaConta.waba_id}</span>), e a
+                        cobrança vai para o cartão cadastrado nela. Ninguém mais
+                        enxerga os números dessa conta.
+                      </p>
+                      <button className="btn sm" style={{ marginTop: 10 }}
+                        onClick={() => setTrocarConta((v) => !v)}>
+                        {trocarConta ? "Deixar como está" : "Usar outra conta"}
+                      </button>
+                    </>
+                  ) : (
+                    <p className="vars-n">
+                      Enquanto você não tiver a sua, seus disparos saem pelo
+                      número da empresa — <b>no cartão da empresa</b>. Cole
+                      abaixo o ID da conta que foi criada para você.
+                    </p>
+                  )}
+
+                  {!minhaConta || trocarConta ? (
+                    <>
+                      {livres.length ? (
+                        <div className="bm-lista" style={{ marginTop: 12 }}>
+                          {livres.map((c) => (
+                            <div className="bml" key={c.waba_id}>
+                              <span className="av">{ini(c.nome ?? "?")}</span>
+                              <span>
+                                <b>{c.nome ?? "sem nome"}</b>
+                                <i className="mono">{c.waba_id}</i>
+                              </span>
+                              <span />
+                              <span>
+                                <button className="btn sm" disabled={pegandoConta}
+                                  onClick={() => pegarConta(c.waba_id)}>
+                                  É a minha
+                                </button>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="f" style={{ marginTop: 14, marginBottom: 0 }}>
+                        <label htmlFor="waba-id">Ou cole o ID da conta</label>
+                        <input id="waba-id" inputMode="numeric" value={wabaDigitado}
+                          placeholder="2052396692348923" disabled={pegandoConta}
+                          onChange={(e) => setWabaDigitado(e.target.value)} />
+                        <small>
+                          O ID aparece no Business Manager, em Configurações do
+                          Negócio › Contas do WhatsApp, embaixo do nome da conta.
+                        </small>
+                      </div>
+                      <button className="btn solid" style={{ marginTop: 10 }}
+                        disabled={pegandoConta || !wabaDigitado.trim()}
+                        onClick={() => pegarConta(wabaDigitado)}>
+                        {pegandoConta ? "Conferindo…" : "É a minha conta"}
+                      </button>
+                    </>
+                  ) : null}
+                </details>
 
                 {/* Escolher um número que já existe. Fica aberto para quem ainda
                     não tem o seu, e fechado para quem já resolveu isso — é uma

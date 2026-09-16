@@ -749,3 +749,39 @@ export function useMeusNumeros(ownerId: string | undefined, dias: number) {
     },
   });
 }
+
+/* ── a conta de WhatsApp do gerente ───────────────────────────────────────
+   A WABA é criada à mão no Business Manager — a Graph API não cria — e o cartão
+   é posto lá. O que falta é dizer de QUEM ela é, e isso o próprio gerente faz:
+   cola o ID, o sistema confere que a conta está no portfólio da empresa e que
+   ninguém já pegou. A conferência é o que impede colar o ID de uma conta de
+   fora e passar a disparar por ela.                                          */
+export interface ContaWA {
+  waba_id: string; nome: string | null; situacao: string | null;
+  da_casa: boolean; dono_id: string | null; dono: string | null;
+}
+
+export function useContasWA(ativo: boolean) {
+  return useQuery<ContaWA[]>({
+    queryKey: ["contas-wa"],
+    enabled: ativo,
+    staleTime: 120_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("wa-onboard", {
+        body: { action: "contas" },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      return ((data as any)?.contas ?? []) as ContaWA[];
+    },
+  });
+}
+
+export async function reivindicarConta(wabaId: string, ownerId: string) {
+  const { data, error } = await supabase.functions.invoke("wa-onboard", {
+    body: { action: "reivindicar", waba_id: wabaId.trim(), owner_id: ownerId },
+  });
+  if (error) throw error;
+  if ((data as any)?.error) throw new Error((data as any).error);
+  return data as { waba_id: string; nome: string };
+}
