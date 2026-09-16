@@ -319,6 +319,17 @@ export default function Disparar() {
     const brokers = destino === "escolher" ? [...marcados] : data.corretores.map((c) => c.id);
     if (!brokers.length) { toast.error("Escolha pelo menos um corretor para atender."); return; }
 
+    // Variável em branco não é detalhe: a Meta recusa o envio inteiro, um por
+    // um, e o erro só aparece depois — com a campanha já criada e o gerente
+    // achando que disparou.
+    const vazias = (tplAtivo.variaveis ?? [])
+      .filter((v) => v !== "nome" && !String(valores[v] ?? "").trim());
+    if (vazias.length) {
+      toast.error(`Preencha ${vazias.map((v) => `{{${v}}}`).join(" e ")} antes de disparar — a Meta recusa variável em branco.`,
+        { duration: 9000 });
+      return;
+    }
+
     setDisparando(true);
     try {
       await dispararCampanha({
