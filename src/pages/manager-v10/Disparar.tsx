@@ -702,15 +702,56 @@ export default function Disparar() {
                   ) : null}
                 </div>
 
-                <div className="f"><label htmlFor="t-rod">Rodapé</label>
-                  <input id="t-rod" value={tRod} onChange={(e) => setTRod(e.target.value)} /></div>
+                {/* Os botões estavam soltos no fim do formulário, com nome
+                    técnico e sem dizer o que fazem — o gerente acabava escrevendo
+                    "responda SIM" no texto, que é pior: obriga a pessoa a digitar
+                    e erra na acentuação. */}
+                <div className="vars">
+                  <div className="vars-l">Como a pessoa responde</div>
+                  <p className="vars-n" style={{ marginTop: 0 }}>
+                    Botão é melhor do que pedir para digitar: a pessoa <b>toca</b> e
+                    pronto. E o toque conta como resposta — abre a conversa por 24
+                    horas e o lead cai na mão do corretor. Se deixar em branco, ela
+                    vai ter que escrever, e quem escreve "sim" com acento ou "quero"
+                    não é reconhecido.
+                  </p>
 
-                <div className="f2">
-                  <div className="f"><label htmlFor="b1">Botão 1</label>
-                    <input id="b1" value={b1} onChange={(e) => setB1(e.target.value)} /></div>
-                  <div className="f"><label htmlFor="b2">Botão 2</label>
-                    <input id="b2" value={b2} onChange={(e) => setB2(e.target.value)} /></div>
+                  <div className="pa-tipos" style={{ marginTop: 12 }}>
+                    {[
+                      ["SIM", "NÃO"],
+                      ["Quero continuar", "Não tenho interesse"],
+                      ["Tenho interesse", "Agora não"],
+                    ].map(([a, bb]) => (
+                      <button key={a} type="button"
+                        className={`pa-chip${b1 === a && b2 === bb ? " on" : ""}`}
+                        onClick={() => { setB1(a); setB2(bb); }}>
+                        {a} · {bb}
+                      </button>
+                    ))}
+                    <button type="button" className={`pa-chip${!b1 && !b2 ? " on" : ""}`}
+                      onClick={() => { setB1(""); setB2(""); }}>
+                      sem botão
+                    </button>
+                  </div>
+
+                  <div className="f2" style={{ marginTop: 12 }}>
+                    <div className="f"><label htmlFor="b1">Botão que aceita</label>
+                      <input id="b1" maxLength={25} placeholder="deixe vazio para não ter"
+                        value={b1} onChange={(e) => setB1(e.target.value)} /></div>
+                    <div className="f"><label htmlFor="b2">Botão que recusa</label>
+                      <input id="b2" maxLength={25} placeholder="opcional"
+                        value={b2} onChange={(e) => setB2(e.target.value)} /></div>
+                  </div>
+                  <p className="vars-n" style={{ marginTop: 6 }}>
+                    Até 25 caracteres cada. Quem tocar no <b>segundo</b> entra na lista
+                    de quem não quer receber — é o que protege o seu número.
+                  </p>
                 </div>
+
+                <div className="f"><label htmlFor="t-rod">Rodapé</label>
+                  <input id="t-rod" value={tRod} onChange={(e) => setTRod(e.target.value)} />
+                  <small>Aparece em cinza embaixo da mensagem. Serve para o aviso de
+                    como sair da lista.</small></div>
 
                 <div style={{ display: "flex", gap: 9, flexWrap: "wrap" }}>
                   <button className="btn solid" disabled={enviando} onClick={mandarPraMeta}>

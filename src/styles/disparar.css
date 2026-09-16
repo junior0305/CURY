@@ -134,3 +134,14 @@
 .mgr10.disparar .box{max-width:100%;overflow-x:auto}
 .mgr10.disparar .bm{grid-template-columns:minmax(0,1fr) minmax(300px,360px)}
 @media(max-width:1280px){ .mgr10.disparar .bm{grid-template-columns:1fr} }
+
+/* Os chips de escolha rapida vieram da aba Pastas — mesmo componente, mesma
+   ideia: escolher o comum com um toque e ajustar so quando precisar. */
+.mgr10.disparar .pa-tipos{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.mgr10.disparar .pa-chip{
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-2);
+  border-radius:99px;padding:6px 13px;font-size:12.5px;font-weight:600;
+  cursor:pointer;transition:background .13s,border-color .13s,color .13s;
+}
+.mgr10.disparar .pa-chip:hover{border-color:var(--accent);color:var(--accent)}
+.mgr10.disparar .pa-chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
