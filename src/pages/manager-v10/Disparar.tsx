@@ -40,6 +40,10 @@ type Etapa = "bm" | "tpl" | "disp" | "conv";
 type Destino = "fila" | "escolher";
 
 const brl = (n: number) => "R$ " + n.toFixed(2).replace(".", ",");
+/** Preço POR MENSAGEM: com duas casas, R$0,0350 vira "R$0,04" — que é
+ *  exatamente o arredondamento que fez a conta ficar 14% maior. */
+const brlUn = (n: number) =>
+  "R$ " + n.toFixed(n < 0.1 ? 4 : 2).replace(".", ",");
 /** Fracao em cima do degrau anterior. Zero em cima de zero e "—", nao 0%:
  *  0% diz que ninguem leu, "—" diz que nao houve o que ler. */
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) + "%" : "—");
@@ -1215,7 +1219,7 @@ export default function Disparar() {
                           ? "Aprovada pela Meta como Utilidade"
                           : "Aprovada pela Meta como Marketing"}>
                         {t.categoria === "UTILITY" ? "Utilidade" : "Marketing"}
-                        {" · "}{brl(preco(t.categoria))}
+                        {" · "}{brlUn(preco(t.categoria))}
                       </span>
                       <span className="prev">{t.corpo.slice(0, 90)}</span>
                       <span>
@@ -1263,7 +1267,7 @@ export default function Disparar() {
                         <b className="mono">{t.nome}</b>
                         <span className={`cat-b ${(t.categoria ?? "").toLowerCase()}`}>
                           {t.categoria === "UTILITY" ? "Utilidade" : "Marketing"}
-                          {" · "}{brl(preco(t.categoria))}
+                          {" · "}{brlUn(preco(t.categoria))}
                         </span>
                       </div>
                       <p className="ct-c">{t.corpo}</p>
@@ -1288,7 +1292,7 @@ export default function Disparar() {
                         <div className="ct-av">
                           Você pediu <b>{t.categoria_pedida === "UTILITY" ? "Utilidade" : "Marketing"}</b> e
                           a Meta aprovou como <b>{t.categoria === "UTILITY" ? "Utilidade" : "Marketing"}</b>.
-                          O preço que vale é o da aprovação: <b>{brl(preco(t.categoria))}</b> por mensagem.
+                          O preço que vale é o da aprovação: <b>{brlUn(preco(t.categoria))}</b> por mensagem.
                         </div>
                       ) : null}
                       {cheiro.length ? (
@@ -1427,7 +1431,7 @@ export default function Disparar() {
                       <div>
                         <b>Isto tira a mensagem de Utilidade: {cheiros.join(", ")}.</b>{" "}
                         A Meta reclassifica pelo conteúdo e cobra como Marketing —
-                        {" "}{brl(d.precos.marketing)} em vez de {brl(d.precos.utility)} por
+                        {" "}{brlUn(d.precos.marketing)} em vez de {brlUn(d.precos.utility)} por
                         mensagem, mais de nove vezes. Utilidade é retomar o que a
                         pessoa já pediu, sem anunciar nada novo.
                       </div>
@@ -1765,7 +1769,7 @@ export default function Disparar() {
                 <div className="conta">
                   <div className="conta-l"><span>Pessoas selecionadas</span><b>{alvos}</b></div>
                   <div className="conta-l"><span>Preço por mensagem</span>
-                    <b>{brl(preco(tplAtivo?.categoria ?? "MARKETING"))}</b></div>
+                    <b>{brlUn(preco(tplAtivo?.categoria ?? "MARKETING"))}</b></div>
                   {cfgEnvio && alvos > cfgEnvio.tetoHoje ? (
                     <div className="conta-l"><span>Teto de hoje neste número</span><b>{cfgEnvio.tetoHoje}</b></div>
                   ) : null}
@@ -1820,9 +1824,9 @@ export default function Disparar() {
                 {tplAtivo?.categoria === "MARKETING" ? (
                   <div className="aviso">
                     <svg viewBox="0 0 24 24"><path d="M12 8.5v5M12 17h.01" /><circle cx="12" cy="12" r="9" /></svg>
-                    <div>Esta é <b>Marketing</b>, {brl(d.precos.marketing)} por mensagem.
+                    <div>Esta é <b>Marketing</b>, {brlUn(d.precos.marketing)} por mensagem.
                       Se for aviso de verdade — e não oferta — refazer como Utilidade
-                      custa {brl(d.precos.utility)} e economiza{" "}
+                      custa {brlUn(d.precos.utility)} e economiza{" "}
                       <b>{brl((d.precos.marketing - d.precos.utility) * Math.min(alvos, cfg?.tetoHoje ?? alvos))}</b> neste disparo.</div>
                   </div>
                 ) : null}
