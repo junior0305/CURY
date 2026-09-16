@@ -229,3 +229,52 @@
    corpo da mensagem rola dentro do aparelho e o resto cabe. */
 .mgr10.disparar .lado .fone-corpo{max-height:clamp(180px,26vh,300px);overflow-y:auto}
 .mgr10.disparar .lado .fone-leg{margin:6px 0 0}
+
+/* ── aba "Seu número" ──────────────────────────────────────────────────
+   Mesma divisão da aba Disparar: a esquerda configura, a direita mostra o
+   que decide. Aqui o que decide é quanto se pode enviar hoje — e o cartão
+   do WhatsApp, que é literalmente o que o cliente vê antes de responder e
+   que antes se editava sem nenhuma prévia. */
+.mgr10.disparar .bm{align-items:start}
+.mgr10.disparar .lado .teto{border:1px solid var(--line);border-radius:14px;
+  padding:16px 18px;background:var(--surface-2)}
+.mgr10.disparar .lado .teto span{display:block;font:700 10.5px Archivo,sans-serif;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
+.mgr10.disparar .lado .teto b{display:block;font:700 38px/1.05 Archivo,sans-serif;
+  letter-spacing:-.03em;color:var(--ink);margin:6px 0 4px;
+  font-variant-numeric:tabular-nums}
+.mgr10.disparar .lado .teto i{display:block;font-style:normal;font-size:12px;
+  line-height:1.5;color:var(--ink-3)}
+
+/* o cartão de contato */
+.mgr10.disparar .cartao{border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  background:var(--surface);text-align:center;padding:0 16px 18px}
+.mgr10.disparar .ct-cap{height:62px;margin:0 -16px 0;background:var(--wa-bolha)}
+.mgr10.disparar .ct-foto{width:78px;height:78px;border-radius:99px;margin:-39px auto 10px;
+  border:3px solid var(--surface);background:var(--surface-3);overflow:hidden;
+  display:grid;place-items:center}
+.mgr10.disparar .ct-foto img{width:100%;height:100%;object-fit:cover}
+.mgr10.disparar .ct-foto span{font:700 22px Archivo,sans-serif;color:var(--ink-3)}
+.mgr10.disparar .cartao b{display:block;font-size:16px;font-weight:700;letter-spacing:-.015em}
+.mgr10.disparar .cartao i{display:block;font-style:normal;font-size:13px;line-height:1.5;
+  color:var(--ink-2);margin-top:4px}
+.mgr10.disparar .ct-num{display:block;font:500 13px "JetBrains Mono",monospace;
+  color:var(--ink-3);margin-top:9px}
+.mgr10.disparar .ct-sel{display:inline-block;margin-top:10px;font:700 10px Archivo,sans-serif;
+  letter-spacing:.07em;text-transform:uppercase;padding:4px 10px;border-radius:99px;
+  background:var(--good-soft);color:var(--good)}
+.mgr10.disparar .cartao.vazio{padding-top:22px;opacity:.7}
+.mgr10.disparar .cartao.vazio .ct-foto{margin:0 auto 10px}
+
+/* dobras: caminho de uma vez na vida não ocupa a tela para sempre */
+.mgr10.disparar .dobra{border:1px solid var(--line);border-radius:12px;
+  padding:0 14px;margin-top:14px}
+.mgr10.disparar .dobra summary{cursor:pointer;padding:12px 0;list-style:none;
+  font:600 13px Archivo,sans-serif;color:var(--ink-2)}
+.mgr10.disparar .dobra summary::-webkit-details-marker{display:none}
+.mgr10.disparar .dobra summary::before{content:"›";display:inline-block;margin-right:9px;
+  transition:.15s;color:var(--ink-3)}
+.mgr10.disparar .dobra[open] summary::before{transform:rotate(90deg)}
+.mgr10.disparar .dobra[open]{padding-bottom:14px}
+.mgr10.disparar .dobra.perigo summary{color:var(--ink-3)}
+.mgr10.disparar .dobra.perigo[open]{border-color:var(--crit)}

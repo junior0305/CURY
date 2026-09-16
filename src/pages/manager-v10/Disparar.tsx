@@ -564,6 +564,7 @@ export default function Disparar() {
           <div className="sec">
             <div className="sec-h"><h2>O número que envia</h2></div>
             <div className="box bm">
+              {/* ── esquerda: o que se configura ── */}
               <div>
                 {cfg ? (
                   <>
@@ -571,16 +572,10 @@ export default function Disparar() {
                       <div className="bm-ic"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg></div>
                       <div>
                         <b>Conectado e liberado para enviar</b>
-                        <span>{cfg.label ?? "—"} · verificado pela Meta</span>
+                        <span>{cfg.displayNumber ?? "—"} · verificado pela Meta</span>
                       </div>
                     </div>
-                    <div className="bm-l">
-                      <div>Número <b>{cfg.displayNumber ?? "—"}</b></div>
-                      <div>Conta de negócios <b>{cfg.wabaId ?? "—"}</b></div>
-                      <div>Qualidade do número <b><span className="qual">{(cfg.quality ?? "—").toLowerCase()}</span></b></div>
-                      <div>Pode enviar por dia <b>{cfg.tetoHoje.toLocaleString("pt-BR")} conversas</b></div>
-                      <div>Conectado em <b>{cfg.onboardedEm ? new Date(cfg.onboardedEm).toLocaleDateString("pt-BR") : "—"}</b></div>
-                    </div>
+
                     {/* Foto e recado: o que o cliente vê ao abrir a conversa.
                         Só aparece para quem é dono do número — no compartilhado
                         da empresa, um gerente mudaria a cara de todos. */}
@@ -604,60 +599,25 @@ export default function Disparar() {
                             <small>Aparece embaixo do nome quando o cliente abre a conversa.</small>
                           </div>
                         </div>
-                        <button className="btn" style={{ marginTop: 10 }}
+                        <button className="btn solid" style={{ marginTop: 12 }}
                           disabled={salvandoPerfil || (!fotoPerfil && !sobre.trim())}
                           onClick={salvarPerfil}>
                           {salvandoPerfil ? "Salvando…" : "Salvar foto e recado"}
                         </button>
                         <p className="vars-n" style={{ marginTop: 10 }}>
-                          O <b>nome</b> que aparece na conversa não muda por aqui: trocar
-                          nome passa por análise da Meta e leva alguns dias. Hoje ele é
-                          o que foi aprovado quando o número entrou.
+                          O <b>nome</b> não muda por aqui: trocar nome passa por análise
+                          da Meta e leva alguns dias. Hoje ele é o que foi aprovado
+                          quando o número entrou.
                         </p>
-
-                        {/* Duas saídas de propriedades bem diferentes, e por isso
-                            separadas: soltar tem volta, apagar não tem. */}
-                        {!confirmaSoltar ? (
-                          <button className="btn sm" style={{ marginTop: 6 }}
-                            onClick={() => setConfirmaSoltar(true)}>
-                            Não quero mais este número
-                          </button>
-                        ) : (
-                          <div className="alerta" style={{ marginTop: 10, flexDirection: "column", alignItems: "stretch" }}>
-                            <div><b>O que você quer fazer?</b></div>
-                            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                              <button className="btn sm" disabled={salvandoPerfil}
-                                onClick={() => soltar(false)}>
-                                Soltar — fica na empresa, sem dono
-                              </button>
-                              <button className="btn sm" disabled={salvandoPerfil}
-                                style={{ borderColor: "var(--crit)", color: "var(--crit)" }}
-                                onClick={() => soltar(true)}>
-                                Apagar da conta — sem volta
-                              </button>
-                              <button className="btn sm" onClick={() => setConfirmaSoltar(false)}>
-                                Cancelar
-                              </button>
-                            </div>
-                            <p className="vars-n" style={{ marginTop: 10 }}>
-                              <b>Soltar</b> devolve o número para a empresa e você pode
-                              reassumir depois. <b>Apagar</b> tira da conta na Meta:
-                              recolocar é cadastro novo, com SMS de novo, e a reputação
-                              do número recomeça do zero.
-                            </p>
-                          </div>
-                        )}
                       </div>
-                    ) : null}
-
-                    {cfg.novo ? (
-                      <div className="aviso">
-                        <svg viewBox="0 0 24 24"><path d="M12 8.5v5M12 17h.01" /><circle cx="12" cy="12" r="9" /></svg>
-                        <div>Número novo. A Meta libera <b>{cfg.tetoHoje}</b> conversas por dia e
-                          sobe o limite sozinha conforme as pessoas respondem bem. Disparar mil de
-                          uma vez não acelera nada — derruba a qualidade e o número é restringido.</div>
-                      </div>
-                    ) : null}
+                    ) : (
+                      <p className="vars-n">
+                        Este número é <b>da empresa</b> e atende quem ainda não tem o
+                        próprio. Foto, recado e nome valem para todo mundo que usa ele —
+                        por isso não se muda por aqui. Cadastre o seu abaixo para ter
+                        cara e limite próprios.
+                      </p>
+                    )}
                   </>
                 ) : (
                   <div className="bm-h">
@@ -666,76 +626,71 @@ export default function Disparar() {
                     </div>
                     <div>
                       <b>Nenhum número conectado ainda</b>
-                      <span>sem isso não dá para disparar — conecte ao lado</span>
+                      <span>sem isso não dá para disparar — escolha ou cadastre abaixo</span>
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* O botão de conectar sozinho depende do cadastro incorporado da Meta,
-                  que ainda não está liberado para o nosso app (o endpoint de soluções
-                  responde vazio). Enquanto não estiver, esta caixa diz o que é verdade
-                  em vez de oferecer um clique que não leva a lugar nenhum — e pedir
-                  para o gerente gerar token no Business Manager está fora de questão. */}
-              {/* Um número por gerente, todos na conta da casa. O caminho de
-                  uma conta por gerente pedia CNPJ, domínio e verificação de
-                  negócio de cada um — e travou dias nisso. Aqui o gerente só
-                  escolhe o número que é dele. */}
-              <div className="bm-nova">
-                <b>Seu número de disparo</b>
-                {carregandoCasa ? (
-                  <p>Consultando os números da empresa…</p>
-                ) : !numerosCasa?.length ? (
-                  <p>Nenhum número disponível ainda. Peça ao administrador para
-                    adicionar o seu na conta de WhatsApp da empresa.</p>
-                ) : (
-                  <>
-                    <p>Escolha o número que é seu. Cada um dispara pelo próprio,
-                      com o próprio limite e a própria cobrança.</p>
-                    <div className="bm-lista" style={{ textAlign: "left", marginTop: 12 }}>
-                      {numerosCasa.map((n) => {
-                        const livre = !n.donoId && !n.compartilhado;
-                        return (
-                          <div className="bml" key={n.phone_number_id}>
-                            <span className="av">{ini(n.nome ?? "?")}</span>
-                            <span>
-                              <b>{n.numero}</b>
-                              <i>{n.compartilhado ? "da empresa — atende quem não tem o próprio"
-                                 : n.donoId ? (n.donoLabel ?? "de outra pessoa")
-                                 : n.nome ?? "livre"}</i>
-                            </span>
-                            <span className="qual">{(n.qualidade ?? "—").toLowerCase()}</span>
-                            <span>
-                              {livre ? (
-                                <button className="btn sm" disabled={conectando}
-                                  onClick={() => assumir(n.phone_number_id, n.numero)}>
-                                  É o meu
-                                </button>
-                              ) : (
-                                <span style={{ fontSize: "12px", color: "var(--ink-3)" }}>
-                                  {n.compartilhado ? "compartilhado" : "ocupado"}
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-                {/* Cadastro do próprio número, aqui dentro. O gerente não abre
-                    o painel da Meta em nenhum passo: o token da empresa tem
-                    permissão para adicionar número, e a empresa já é verificada,
-                    então não há CNPJ nem documento no caminho. */}
-                <div style={{ marginTop: 18, paddingTop: 16,
-                              borderTop: "1px solid var(--hair)", textAlign: "left" }}>
-                  <div className="vars-l">Não achou o seu? Cadastre agora</div>
+                {/* Escolher um número que já existe. Fica aberto para quem ainda
+                    não tem o seu, e fechado para quem já resolveu isso — é uma
+                    decisão que se toma uma vez. */}
+                <details className="dobra" open={!cfg}>
+                  <summary>{cfg ? "Trocar por outro número da empresa" : "Escolher o meu número"}</summary>
+                  {carregandoCasa ? (
+                    <p className="vars-n">Consultando os números da empresa…</p>
+                  ) : !numerosCasa?.length ? (
+                    <p className="vars-n">Nenhum número disponível ainda. Peça ao
+                      administrador para adicionar o seu na conta de WhatsApp da empresa.</p>
+                  ) : (
+                    <>
+                      <p className="vars-n">Cada um dispara pelo próprio, com o próprio
+                        limite e a própria cobrança.</p>
+                      <div className="bm-lista">
+                        {numerosCasa.map((n) => {
+                          const livre = !n.donoId && !n.compartilhado;
+                          return (
+                            <div className="bml" key={n.phone_number_id}>
+                              <span className="av">{ini(n.nome ?? "?")}</span>
+                              <span>
+                                <b>{n.numero}</b>
+                                <i>{n.compartilhado ? "da empresa — atende quem não tem o próprio"
+                                   : n.donoId ? (n.donoLabel ?? "de outra pessoa")
+                                   : n.nome ?? "livre"}</i>
+                              </span>
+                              <span className="qual">{(n.qualidade ?? "—").toLowerCase()}</span>
+                              <span>
+                                {livre ? (
+                                  <button className="btn sm" disabled={conectando}
+                                    onClick={() => assumir(n.phone_number_id, n.numero)}>
+                                    É o meu
+                                  </button>
+                                ) : (
+                                  <span style={{ fontSize: "12px", color: "var(--ink-3)" }}>
+                                    {n.compartilhado ? "compartilhado" : "ocupado"}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </details>
+
+                {/* Cadastro do próprio número, aqui dentro. O gerente não abre o
+                    painel da Meta em nenhum passo: o token da empresa tem permissão
+                    para adicionar número e a empresa já é verificada, então não há
+                    CNPJ nem documento no caminho. É um caminho de uma vez na vida —
+                    aberto quando falta número, fechado depois. */}
+                <details className="dobra" open={!cfg || passo === "codigo"}>
+                  <summary>Cadastrar um número novo</summary>
 
                   {passo === "numero" ? (
                     <>
-                      {/* O campo do nome sumiu junto com o botão antigo do
-                          Facebook e o cadastro ficou impossível: o botão exigia
-                          um nome que não tinha onde digitar. */}
+                      {/* O campo do nome sumiu junto com o botão antigo do Facebook e
+                          o cadastro ficou impossível: o botão exigia um nome que não
+                          tinha onde digitar. */}
                       <div className="f" style={{ marginBottom: 10 }}>
                         <label htmlFor="disp-nome">Nome que o cliente vai ver</label>
                         <input id="disp-nome" autoComplete="off" value={nomeExib}
@@ -771,8 +726,7 @@ export default function Disparar() {
                         onClick={criarNumero}>
                         {conectando ? "Cadastrando…" : "Receber código por SMS"}
                       </button>
-                      <p style={{ marginTop: 10, fontSize: "12.5px", color: "var(--ink-3)",
-                                  lineHeight: 1.55 }}>
+                      <p className="vars-n" style={{ marginTop: 10 }}>
                         O número não pode estar em uso no WhatsApp comum. Se estiver,
                         apague a conta dele no celular antes — em Ajustes, Conta,
                         Apagar minha conta.
@@ -791,20 +745,93 @@ export default function Disparar() {
                         {conectando ? "Confirmando…" : "Confirmar e ativar"}
                       </button>
                       <div style={{ display: "flex", gap: 9, marginTop: 10, flexWrap: "wrap" }}>
-                        <button className="btn sm" onClick={() => reenviar("SMS")}>
-                          Reenviar SMS
-                        </button>
+                        <button className="btn sm" onClick={() => reenviar("SMS")}>Reenviar SMS</button>
                         {/* Fixo não recebe SMS — foi o que travou o primeiro número. */}
-                        <button className="btn sm" onClick={() => reenviar("VOICE")}>
-                          Receber por ligação
-                        </button>
+                        <button className="btn sm" onClick={() => reenviar("VOICE")}>Receber por ligação</button>
                         <button className="btn sm" onClick={() => { setPasso("numero"); setPid(null); }}>
                           Trocar o número
                         </button>
                       </div>
                     </>
                   )}
-                </div>
+                </details>
+
+                {/* Sair do número mora sozinho, no fim e fechado: estava lado a
+                    lado com "Salvar foto e recado", e apagar da conta na Meta não
+                    tem volta. Peso de risco igual para ações de risco oposto é
+                    como se aperta o botão errado. */}
+                {cfg && cfg.ownerId === userId ? (
+                  <details className="dobra perigo">
+                    <summary>Encerrar este número</summary>
+                    <p className="vars-n">
+                      <b>Soltar</b> devolve o número para a empresa e você pode reassumir
+                      depois. <b>Apagar</b> tira da conta na Meta: recolocar é cadastro
+                      novo, com SMS de novo, e a reputação do número recomeça do zero.
+                    </p>
+                    <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                      <button className="btn sm" disabled={salvandoPerfil}
+                        onClick={() => soltar(false)}>
+                        Soltar — fica na empresa, sem dono
+                      </button>
+                      <button className="btn sm" disabled={salvandoPerfil}
+                        style={{ borderColor: "var(--crit)", color: "var(--crit)" }}
+                        onClick={() => soltar(true)}>
+                        Apagar da conta — sem volta
+                      </button>
+                    </div>
+                  </details>
+                ) : null}
+              </div>
+
+              {/* ── direita: o que decide, e o que o cliente vê ── */}
+              <div className="lado">
+                {cfg ? (
+                  <>
+                    <div className="teto">
+                      <span>Pode enviar hoje</span>
+                      <b>{cfg.tetoHoje.toLocaleString("pt-BR")}</b>
+                      <i>conversas · sobe sozinho conforme as pessoas respondem bem</i>
+                    </div>
+
+                    {/* O cartão do WhatsApp: é exatamente o que o cliente vê antes
+                        de decidir se responde. Foto e recado sao editados a duas
+                        colunas daqui e nao tinham nenhuma previa. */}
+                    <div className="cartao">
+                      <div className="ct-cap" />
+                      <div className="ct-foto">
+                        {fotoPerfil ? <img src={fotoPerfil} alt="" />
+                          : perfilAtual?.foto ? <img src={perfilAtual.foto} alt="" />
+                          : <span>{ini(cfg.label ?? "CV")}</span>}
+                      </div>
+                      <b>{cfg.label ?? "—"}</b>
+                      <i>{sobre || perfilAtual?.sobre || "sem recado ainda"}</i>
+                      <span className="ct-num">{cfg.displayNumber ?? "—"}</span>
+                      <span className="ct-sel">conta comercial</span>
+                    </div>
+                    <p className="fone-leg">É assim que o cliente te vê.</p>
+
+                    <div className="bm-l">
+                      <div>Qualidade <b><span className="qual">{(cfg.quality ?? "—").toLowerCase()}</span></b></div>
+                      <div>Conectado em <b>{cfg.onboardedEm
+                        ? new Date(cfg.onboardedEm).toLocaleDateString("pt-BR") : "—"}</b></div>
+                      <div>Conta de negócios <b>{cfg.wabaId ?? "—"}</b></div>
+                    </div>
+
+                    {cfg.novo ? (
+                      <div className="aviso">
+                        <svg viewBox="0 0 24 24"><path d="M12 8.5v5M12 17h.01" /><circle cx="12" cy="12" r="9" /></svg>
+                        <div>Número novo. Disparar mil de uma vez não acelera nada —
+                          derruba a qualidade e o número é restringido.</div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="cartao vazio">
+                    <div className="ct-foto"><span>?</span></div>
+                    <b>Sem número</b>
+                    <i>escolha ou cadastre ao lado para ver como o cliente te vê</i>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -813,14 +840,6 @@ export default function Disparar() {
             <div className="sec-h"><h2>Números da sua equipe</h2><span>cada um dispara pelo seu</span></div>
             <div className="box">
               <div className="bm-lista">
-                {cfg ? (
-                  <div className="bml">
-                    <span className="av">{ini(cfg.label ?? "CV")}</span>
-                    <span><b>{cfg.label ?? "—"}</b><i>{cfg.displayNumber ?? "—"}</i></span>
-                    <span className="qual">{(cfg.quality ?? "—").toLowerCase()}</span>
-                    <span />
-                  </div>
-                ) : null}
                 {d.numeros.map((n) => (
                   <div className="bml" key={n.profileId}>
                     <span className="av">{ini(n.nome)}</span>
@@ -831,7 +850,7 @@ export default function Disparar() {
                     <span />
                   </div>
                 ))}
-                {!d.numeros.length && !cfg ? (
+                {!d.numeros.length ? (
                   <p className="vars-n" style={{ margin: 0 }}>Nenhum número na equipe ainda.</p>
                 ) : null}
               </div>
