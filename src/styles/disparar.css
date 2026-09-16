@@ -222,3 +222,10 @@
   .mgr10.disparar .disp{grid-template-columns:minmax(0,1fr)}
   .mgr10.disparar .lado{position:static}
 }
+
+/* Numa tela de 660px de altura o celular sozinho ocupa quase tudo e empurrava
+   o custo e o botão para fora da coluna fixa — que era justamente o que ela
+   existia para manter à vista. Aqui a prévia é conferência, não vitrine: o
+   corpo da mensagem rola dentro do aparelho e o resto cabe. */
+.mgr10.disparar .lado .fone-corpo{max-height:clamp(180px,26vh,300px);overflow-y:auto}
+.mgr10.disparar .lado .fone-leg{margin:6px 0 0}
