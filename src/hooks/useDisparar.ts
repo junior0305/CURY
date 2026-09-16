@@ -444,6 +444,20 @@ export function ajustarImagem(file: File): Promise<{ dataUrl: string; orig: { w:
   });
 }
 
+/** A imagem precisa de um endereço público antes de ir para a Meta: ela baixa
+ *  o arquivo para aprovar o template, e depois busca de novo a cada disparo.
+ *  Arquivo do computador não serve — some no instante em que a aba fecha. */
+export async function subirImagem(dataUrl: string): Promise<string> {
+  const bin = await (await fetch(dataUrl)).blob();
+  const nome = `template/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+  const { error } = await supabase.storage.from("wa-media")
+    .upload(nome, bin, { contentType: "image/jpeg", upsert: false });
+  if (error) throw new Error(`Não consegui guardar a imagem: ${error.message}`);
+  const { data } = supabase.storage.from("wa-media").getPublicUrl(nome);
+  if (!data?.publicUrl) throw new Error("A imagem subiu mas não consegui o endereço dela.");
+  return data.publicUrl;
+}
+
 /** Palavras que fazem o classificador da Meta ler como oferta. Avisar antes é
  *  melhor que descobrir na reclassificação, quando já se pagou marketing. */
 const CHEIRO_OFERTA = [

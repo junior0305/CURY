@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   useDisparar, useMensagens, ajustarImagem, cheiraOferta, checarNome,
-  criarTemplate, mandarMensagem, dispararCampanha, type Template,
+  criarTemplate, mandarMensagem, dispararCampanha, subirImagem, type Template,
   useNumerosCasa, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
   lerCsv,
 } from "@/hooks/useDisparar";
@@ -179,10 +179,18 @@ export default function Disparar() {
     if (!tNome.trim() || !tCorpo.trim()) { toast.error("Falta o nome ou o texto."); return; }
     setEnviando(true);
     try {
-      await criarTemplate({
+      // A imagem sai do navegador antes de qualquer coisa: a Meta precisa
+      // baixá-la para aprovar, e o arquivo do computador não existe para ela.
+      let imagem = img;
+      if (img && img.startsWith("data:")) {
+        toast.info("Guardando a imagem…");
+        imagem = await subirImagem(img);
+        setImg(imagem);
+      }
+      const r = await criarTemplate({
         name: tNome.trim().toLowerCase().replace(/[^\w]+/g, "_"),
         body_text: tCorpo, category: tTipo, language: "pt_BR",
-        header_type: img ? "IMAGE" : "NONE", header_image_url: img,
+        header_type: imagem ? "IMAGE" : "NONE", header_image_url: imagem,
         footer_text: tRod || null,
         buttons: [b1, b2].filter(Boolean).map((t) => ({ type: "QUICK_REPLY", text: t })),
         variables: vars, owner_id: userId, meta_template_id: editandoId,
@@ -191,6 +199,9 @@ export default function Disparar() {
         exemplos: Object.fromEntries(vars.map((v) => [v, valores[v] || (v === "nome" ? "Maria" : "exemplo")])),
       });
       setEmAnalise(true);
+      // A imagem pode falhar sozinha sem derrubar o template. Quando falha, o
+      // gerente PRECISA saber — senão manda achando que vai com foto.
+      if ((r as any)?.aviso) toast.warning((r as any).aviso, { duration: 12000 });
       toast.success(editandoId
         ? "Editada e mandada para análise. Ela sai da lista de disparo até a Meta aprovar de novo."
         : "Mandada para a Meta. O resultado aparece na lista acima.",
