@@ -613,6 +613,8 @@ export async function dispararCampanha(opts: {
   vars: Record<string, string>;
   brokerIds: string[];
   configId: string | null;
+  /** imagem DESTE disparo — a Meta trata o topo como variável */
+  imagem?: string | null;
 }) {
   if (!opts.alvos.length) throw new Error("Nenhuma pessoa na seleção.");
   const queueId = await filaDoGerente(opts.managerId, opts.brokerIds);
@@ -624,6 +626,7 @@ export async function dispararCampanha(opts: {
     audience_source: "csv",            // alvos vão inseridos, não resolvidos
     audience_count: opts.alvos.length,
     target_queue_id: queueId, vars: opts.vars,
+    header_image_url: opts.imagem || null,
     wa_config_id: opts.configId, owner_id: opts.managerId, created_by: opts.managerId,
     status: "draft", throttle_per_min: 10,
   }).select("id").single();

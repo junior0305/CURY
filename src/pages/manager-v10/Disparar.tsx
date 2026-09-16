@@ -150,6 +150,21 @@ export default function Disparar() {
   // derrubava a tela inteira com "Cannot access before initialization".
   const [csv, setCsv] = useState<{ leadId: string; nome: string | null; telefone: string }[]>([]);
   const [csvNome, setCsvNome] = useState("");
+  // Imagem DESTE disparo. Fica aqui e não no template porque a Meta trata o
+  // topo como variável: o template declara que tem imagem, a foto muda a cada
+  // envio. E porque voltar duas telas para trocar a foto é trabalho à toa.
+  const [imgDisparo, setImgDisparo] = useState<string | null>(null);
+
+  async function pegarImagemDisparo(f: File | undefined) {
+    if (!f) return;
+    try {
+      const r = await ajustarImagem(f);
+      setImgDisparo(r.dataUrl);
+      toast.success(r.mudou
+        ? `Ajustada para 1125 × 590 — a sua tinha ${r.orig.w} × ${r.orig.h}.`
+        : "Imagem no formato certo.");
+    } catch (e: any) { toast.error(e?.message ?? "Não consegui ler a imagem."); }
+  }
 
   const alvos = useMemo(() => {
     if (!data) return 0;
@@ -391,14 +406,25 @@ export default function Disparar() {
 
     setDisparando(true);
     try {
+      // A imagem precisa de endereço público: a Meta busca o arquivo a cada
+      // envio, e o que está no navegador não existe para ela. Vale numa
+      // variável local — o estado do React não muda na mesma linha, e usá-lo
+      // aqui mandaria a imagem antiga.
+      let urlImagem = imgDisparo;
+      if (urlImagem?.startsWith("data:")) {
+        toast.info("Guardando a imagem…");
+        urlImagem = await subirImagem(urlImagem);
+        setImgDisparo(urlImagem);
+      }
       await dispararCampanha({
         managerId: userId, templateId: tplAtivo.id,
         nome: `${tplAtivo.nome} · ${new Date().toLocaleDateString("pt-BR")}`,
         alvos: vai, vars: valores, brokerIds: brokers,
         configId: data.config?.id ?? null,
+        imagem: urlImagem,
       });
       toast.success(`Disparo criado para ${vai.length} pessoas. O primeiro lote já saiu.`);
-      setPubs(new Set());
+      setPubs(new Set()); setImgDisparo(null);
       qc.invalidateQueries({ queryKey: ["disparar"] });
     } catch (e: any) {
       toast.error(`Não consegui disparar: ${e?.message ?? e}`);
@@ -417,8 +443,18 @@ export default function Disparar() {
   }
 
   /* ── o celular ── */
-  const Fone = ({ nome }: { nome: string }) => {
-    const corpo = tCorpo.replace(/\{\{\s*([\wÀ-ÿ]+)\s*\}\}/g, (_, v) =>
+  // A prévia recebe O QUE mostrar. Antes lia sempre o rascunho da criação, e
+  // na etapa de disparo exibia um texto que não era o da mensagem escolhida —
+  // o gerente conferia uma coisa e mandava outra.
+  const Fone = ({ nome, texto, rodape, botoes, imagem }: {
+    nome: string; texto?: string; rodape?: string | null;
+    botoes?: string[]; imagem?: string | null;
+  }) => {
+    const txt = texto ?? tCorpo;
+    const rod = rodape !== undefined ? rodape : tRod;
+    const bts = botoes ?? [b1, b2];
+    const foto = imagem !== undefined ? imagem : img;
+    const corpo = txt.replace(/\{\{\s*([\wÀ-ÿ]+)\s*\}\}/g, (_, v) =>
       // `nome` vem do arquivo; o resto mostra o próprio nome entre colchetes
       // enquanto estiver vazio, para ficar claro que ali falta conteúdo.
       v === "nome" ? nome : (valores[v]?.trim() || `[${v}]`));
@@ -430,13 +466,13 @@ export default function Disparar() {
         </div>
         <div className="fone-corpo">
           <div className="bolha">
-            {img ? <img src={img} alt="" /> : <div className="semimg">sem imagem</div>}
+            {foto ? <img src={foto} alt="" /> : <div className="semimg">sem imagem</div>}
             <p>{corpo}</p>
-            {tRod ? <span className="rod">{tRod}</span> : null}
+            {rod ? <span className="rod">{rod}</span> : null}
             <span className="hora">14:32</span>
           </div>
           <div className="bolha-bt">
-            {[b1, b2].filter(Boolean).map((b) => <div className="bt" key={b}>{b}</div>)}
+            {bts.filter(Boolean).map((b) => <div className="bt" key={b}>{b}</div>)}
           </div>
         </div>
       </div>
@@ -1092,6 +1128,32 @@ export default function Disparar() {
                   </div>
                 ) : null}
 
+                {/* A imagem fica AQUI, não na criação: a Meta trata o topo como
+                    variável, e voltar duas telas para trocar a foto do disparo é
+                    trabalho à toa. Só aparece se a mensagem escolhida tiver
+                    imagem declarada. */}
+                {tplAtivo && (tplAtivo.headerTipo === "IMAGE" || tplAtivo.headerImagem) ? (
+                  <div className="f" style={{ marginTop: 18 }}>
+                    <label>Imagem deste disparo</label>
+                    <label className={`up${imgDisparo || tplAtivo.headerImagem ? " tem" : ""}`}
+                      style={{ display: "block" }}>
+                      {imgDisparo ? <img src={imgDisparo} alt="" />
+                        : tplAtivo.headerImagem ? <img src={tplAtivo.headerImagem} alt="" />
+                        : (<>
+                            <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></svg>
+                            <b>Escolher a foto</b>
+                            <span>do seu computador</span>
+                          </>)}
+                      <input type="file" accept="image/*" hidden
+                        onChange={(e) => pegarImagemDisparo(e.target.files?.[0])} />
+                    </label>
+                    <small>
+                      {imgDisparo ? "Clique para trocar. Vai ajustada para 1125 × 590."
+                        : "Clique para trocar a foto só neste disparo — a mensagem continua a mesma e não volta para aprovação."}
+                    </small>
+                  </div>
+                ) : null}
+
                 <div className="f" style={{ marginTop: 18 }}>
                   <label>Quem atende quem responder</label>
                   <div className="dest">
@@ -1162,8 +1224,14 @@ export default function Disparar() {
               </div>
 
               <div>
-                <Fone nome="Maria" />
-                <p className="fone-leg">Prévia com o nome de uma pessoa de verdade da lista.</p>
+                <Fone nome="Maria"
+                  texto={tplAtivo?.corpo}
+                  rodape={tplAtivo?.rodape}
+                  botoes={(tplAtivo?.botoes ?? []).map((b: any) => b?.text ?? "")}
+                  imagem={imgDisparo ?? tplAtivo?.headerImagem ?? null} />
+                <p className="fone-leg">
+                  {tplAtivo ? "É assim que vai chegar." : "Escolha a mensagem para ver a prévia."}
+                </p>
               </div>
             </div>
           </div>
