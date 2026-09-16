@@ -120,10 +120,11 @@ export default function Disparar() {
   /* ── etapa 3 · disparo ── */
   const [pubs, setPubs] = useState<Set<string>>(new Set());
   const [tplSel, setTplSel] = useState<string>("");
-  const [valores, setValores] = useState<Record<string, string>>({
-    quando: "março", empreendimento: "Cidade Lapa — Perdizes",
-    informacao: "A condição que você consultou continua disponível.",
-  });
+  // Começa VAZIO. Antes vinha com exemplos meus ("Cidade Lapa — Perdizes",
+  // "março") e a prévia do celular exibia isso como se fosse escolha do
+  // gerente — que é o jeito mais silencioso de mandar a coisa errada para o
+  // cliente. Variável só tem conteúdo depois que alguém escreve.
+  const [valores, setValores] = useState<Record<string, string>>({});
   const [destino, setDestino] = useState<Destino>("fila");
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
 
@@ -360,7 +361,9 @@ export default function Disparar() {
   /* ── o celular ── */
   const Fone = ({ nome }: { nome: string }) => {
     const corpo = tCorpo.replace(/\{\{\s*([\wÀ-ÿ]+)\s*\}\}/g, (_, v) =>
-      v === "nome" ? nome : (valores[v] || `[${v}]`));
+      // `nome` vem do arquivo; o resto mostra o próprio nome entre colchetes
+      // enquanto estiver vazio, para ficar claro que ali falta conteúdo.
+      v === "nome" ? nome : (valores[v]?.trim() || `[${v}]`));
     return (
       <div className="fone">
         <div className="fone-top">
@@ -924,7 +927,10 @@ export default function Disparar() {
                             vem do arquivo — coluna <b className="mono">nome</b>
                           </span>
                         ) : (
-                          <input value={valores[v] ?? ""} placeholder="o que entra aqui"
+                          <input value={valores[v] ?? ""}
+                            placeholder={`o que entra no lugar de {{${v}}}`}
+                            style={!String(valores[v] ?? "").trim()
+                              ? { borderColor: "var(--warn)" } : undefined}
                             onChange={(e) => setValores((s) => ({ ...s, [v]: e.target.value }))} />
                         )}
                       </div>
