@@ -57,6 +57,8 @@ export interface Campanha {
   falhas: number;
   custo: number | null;
   criadaEm: string | null;
+  /** hora marcada, quando a campanha está agendada */
+  marcadaPara: string | null;
 }
 
 export interface Conversa {
@@ -143,7 +145,7 @@ export function useDisparar(managerId: string | undefined) {
           .eq("manager_id", managerId!).eq("role", "BROKER"),
         supabase.from("whatsapp_templates").select("*").order("created_at", { ascending: false }),
         supabase.from("whatsapp_campaigns")
-          .select("id,name,status,audience_count,sent_count,delivered_count,read_count,reply_count,failed_count,cost_total,created_at")
+          .select("id,name,status,audience_count,sent_count,delivered_count,read_count,reply_count,failed_count,cost_total,created_at,scheduled_at")
           .order("created_at", { ascending: false }).limit(15),
         // `select("*")` de propósito: o esquema do disparador foi crescendo por
         // migração e nem todo ambiente tem as mesmas colunas — listar uma que
@@ -202,7 +204,7 @@ export function useDisparar(managerId: string | undefined) {
         alvos: c.audience_count ?? 0, enviadas: c.sent_count ?? 0,
         entregues: c.delivered_count ?? 0, lidas: c.read_count ?? 0,
         respostas: c.reply_count ?? 0, falhas: c.failed_count ?? 0,
-        custo: c.cost_total, criadaEm: c.created_at,
+        custo: c.cost_total, criadaEm: c.created_at, marcadaPara: c.scheduled_at,
       }));
 
       /* ── conversas ── */
@@ -617,6 +619,8 @@ export async function dispararCampanha(opts: {
   configId: string | null;
   /** imagem DESTE disparo — a Meta trata o topo como variável */
   imagem?: string | null;
+  /** quando soltar, em ISO. Vazio ou no passado = agora. */
+  quando?: string | null;
 }) {
   if (!opts.alvos.length) throw new Error("Nenhuma pessoa na seleção.");
   const queueId = await filaDoGerente(opts.managerId, opts.brokerIds);
@@ -643,12 +647,32 @@ export async function dispararCampanha(opts: {
     if (e2) throw e2;
   }
 
-  await supabase.from("whatsapp_campaigns")
-    .update({ status: "sending", approved_by: opts.managerId, approved_at: new Date().toISOString() })
-    .eq("id", camp.id);
+  // Agendada nasce em `scheduled` e fica parada: o runner só pega `sending`.
+  // É ele que a promove na hora marcada — e é lá, no motor, que a janela das
+  // 19:30 é garantida, porque o cron continua uma lista grande por horas
+  // depois que esta tela já foi fechada.
+  const depois = opts.quando && new Date(opts.quando).getTime() > Date.now() + 30_000;
+
+  await supabase.from("whatsapp_campaigns").update({
+    status: depois ? "scheduled" : "sending",
+    scheduled_at: depois ? opts.quando : null,
+    approved_by: opts.managerId, approved_at: new Date().toISOString(),
+  }).eq("id", camp.id);
 
   // Empurra o primeiro lote agora; o cron `wa-campaign-runner-tick` (a cada 2
-  // minutos) continua de onde este parar.
-  await supabase.functions.invoke("wa-campaign-runner", { body: { campaign_id: camp.id } });
+  // minutos) continua de onde este parar. Agendada não empurra nada.
+  if (!depois) {
+    await supabase.functions.invoke("wa-campaign-runner", { body: { campaign_id: camp.id } });
+  }
   return camp.id as string;
+}
+
+
+/** Desmarca um disparo agendado. Só mexe no que ainda não começou — campanha
+ *  em `sending` já tem mensagem na rua e cancelar ali seria mentira. */
+export async function cancelarAgendamento(campanhaId: string) {
+  const { error } = await supabase.from("whatsapp_campaigns")
+    .update({ status: "canceled", scheduled_at: null })
+    .eq("id", campanhaId).eq("status", "scheduled");
+  if (error) throw error;
 }

@@ -23,7 +23,8 @@ import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   useDisparar, useMensagens, ajustarImagem, cheiraOferta, checarNome,
-  criarTemplate, mandarMensagem, dispararCampanha, subirImagem, ajustarFoto,
+  criarTemplate, mandarMensagem, dispararCampanha,
+  cancelarAgendamento, subirImagem, ajustarFoto,
   type Template,
   useNumerosCasa, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
   lerCsv, salvarPerfilNumero, soltarNumero, removerNumero, usePerfilNumero,
@@ -148,6 +149,15 @@ export default function Disparar() {
   // Lista própria do gerente, de fora do Comandra. Fica aqui em cima de
   // propósito: o cálculo de alvos logo abaixo depende dela, e declarar depois
   // derrubava a tela inteira com "Cannot access before initialization".
+  /* ── quando soltar ──────────────────────────────────────────────────
+     A Meta nao proibe mandar as 22h; quem proibe e o destinatario, que
+     denuncia — e denuncia derruba o numero. Por isso o corte das 19:30 e
+     duro, e existe tambem no motor: esta tela pode estar fechada quando o
+     cron continuar uma lista grande.                                      */
+  const [quando, setQuando] = useState<"agora" | "depois">("agora");
+  const [dia, setDia] = useState(() => new Date().toISOString().slice(0, 10));
+  const [hora, setHora] = useState("09:00");
+
   const [csv, setCsv] = useState<{ leadId: string; nome: string | null; telefone: string }[]>([]);
   const [csvNome, setCsvNome] = useState("");
   // Imagem DESTE disparo. Fica aqui e não no template porque a Meta trata o
@@ -384,6 +394,43 @@ export default function Disparar() {
   }
 
 
+  /* ── a janela ─────────────────────────────────────────────────────────
+     08:00 as 19:30, horario de Sao Paulo. Escrito aqui E no runner de
+     proposito: aqui para o gerente ver antes de clicar, la para valer
+     mesmo com esta tela fechada.                                          */
+  const ABRE = "08:00", FECHA = "19:30";
+  const marcado = useMemo(() => {
+    if (quando !== "depois") return null;
+    const t = new Date(`${dia}T${hora}:00`);
+    return isNaN(t.getTime()) ? null : t;
+  }, [quando, dia, hora]);
+
+  const problemaDaHora = useMemo(() => {
+    if (quando !== "depois") return null;
+    if (!marcado) return "Escolha o dia e a hora.";
+    const [hf, mf] = FECHA.split(":").map(Number);
+    const [ha] = ABRE.split(":").map(Number);
+    const h = marcado.getHours(), m = marcado.getMinutes();
+    if (h < ha) return `Cedo demais. O disparo comeca as ${ABRE}.`;
+    if (h > hf || (h === hf && m > mf)) return `Tarde demais. O ultimo horario e ${FECHA}.`;
+    if (marcado.getTime() < Date.now() + 60_000) return "Esse horario ja passou.";
+    return null;
+  }, [quando, marcado]);
+
+  const agendados = useMemo(
+    () => (data?.campanhas ?? []).filter((c) => c.status === "scheduled" && c.marcadaPara)
+      .sort((a, b) => (a.marcadaPara! < b.marcadaPara! ? -1 : 1)),
+    [data?.campanhas],
+  );
+
+  async function desmarcar(id: string) {
+    try {
+      await cancelarAgendamento(id);
+      toast.success("Disparo desmarcado.");
+      qc.invalidateQueries({ queryKey: ["disparar"] });
+    } catch (e: any) { toast.error(`Nao consegui desmarcar: ${e?.message ?? e}`); }
+  }
+
   async function dispararAgora() {
     if (!data || !userId || !tplAtivo) return;
     const gente = [...data.publicos.filter((p) => pubs.has(p.chave)).flatMap((p) => p.gente), ...csv];
@@ -405,6 +452,8 @@ export default function Disparar() {
       return;
     }
 
+    if (problemaDaHora) { toast.error(problemaDaHora); return; }
+
     setDisparando(true);
     try {
       // A imagem precisa de endereço público: a Meta busca o arquivo a cada
@@ -423,8 +472,11 @@ export default function Disparar() {
         alvos: vai, vars: valores, brokerIds: brokers,
         configId: data.config?.id ?? null,
         imagem: urlImagem,
+        quando: marcado ? marcado.toISOString() : null,
       });
-      toast.success(`Disparo criado para ${vai.length} pessoas. O primeiro lote já saiu.`);
+      toast.success(marcado
+        ? `Marcado para ${marcado.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} — ${vai.length} pessoas. Da para desmarcar ate la.`
+        : `Disparo criado para ${vai.length} pessoas. O primeiro lote ja saiu.`);
       setPubs(new Set()); setImgDisparo(null);
       qc.invalidateQueries({ queryKey: ["disparar"] });
     } catch (e: any) {
@@ -1231,16 +1283,22 @@ export default function Disparar() {
                     </div>
                   ) : null}
                 </div>
+              </div>
 
-                <div className="fluxo">
-                  <div className="fluxo-p"><i>1</i><div>A pessoa responde a mensagem.</div></div>
-                  <div className="fluxo-p"><i>2</i><div>O sistema <b>cria o lead</b> com a etiqueta
-                    <b> levantou a mão no disparo</b> e entrega para quem você escolheu acima.</div></div>
-                  <div className="fluxo-p"><i>3</i><div>O corretor <b>recebe no WhatsApp</b> o aviso
-                    com nome, telefone e o link da conversa — igual ao aviso de lead de anúncio.</div></div>
-                  <div className="fluxo-p"><i>4</i><div>O lead aparece no painel dele como qualquer
-                    outro, e a conversa fica aqui em <b>Respostas</b>, onde você pode entrar.</div></div>
-                </div>
+              {/* A decisão mora toda aqui e acompanha a rolagem: prévia, conta
+                  e botão. Antes a conta fechava a coluna da esquerda — o número
+                  que decide se vale disparar só aparecia depois de rolar tudo, e
+                  a prévia saía da tela justo enquanto se preenchia a variável
+                  que ela mostra. */}
+              <div className="lado">
+                <Fone nome="Maria"
+                  texto={tplAtivo?.corpo}
+                  rodape={tplAtivo?.rodape}
+                  botoes={(tplAtivo?.botoes ?? []).map((b: any) => b?.text ?? "")}
+                  imagem={imgDisparo ?? tplAtivo?.headerImagem ?? null} />
+                <p className="fone-leg">
+                  {tplAtivo ? "É assim que vai chegar." : "Escolha a mensagem para ver a prévia."}
+                </p>
 
                 <div className="conta">
                   <div className="conta-l"><span>Pessoas selecionadas</span><b>{alvos}</b></div>
@@ -1253,33 +1311,90 @@ export default function Disparar() {
                     <b>{brl(Math.min(alvos, cfg?.tetoHoje ?? alvos) * preco(tplAtivo?.categoria ?? "MARKETING"))}</b></div>
                 </div>
 
-                <div className="aviso">
-                  <svg viewBox="0 0 24 24"><path d="M12 8.5v5M12 17h.01" /><circle cx="12" cy="12" r="9" /></svg>
-                  <div>Marketing custa <b>{brl(d.precos.marketing)}</b> e Utilidade <b>{brl(d.precos.utility)}</b>.
-                    Se a mensagem for um aviso de verdade — e não oferta — vale refazer como
-                    Utilidade e economizar quase quatro vezes.</div>
+                <div className="quando">
+                  <div className="qw-tabs">
+                    <button className={quando === "agora" ? "on" : ""}
+                      onClick={() => setQuando("agora")}>Agora</button>
+                    <button className={quando === "depois" ? "on" : ""}
+                      onClick={() => setQuando("depois")}>Marcar dia e hora</button>
+                  </div>
+                  {quando === "depois" ? (
+                    <>
+                      <div className="qw-campos">
+                        <input type="date" value={dia} min={new Date().toISOString().slice(0, 10)}
+                          onChange={(e) => setDia(e.target.value)} />
+                        <input type="time" value={hora} min={ABRE} max={FECHA} step={300}
+                          onChange={(e) => setHora(e.target.value)} />
+                      </div>
+                      {problemaDaHora
+                        ? <p className="qw-erro">{problemaDaHora}</p>
+                        : <p className="qw-ok">
+                            Sai {marcado?.toLocaleString("pt-BR", {
+                              weekday: "short", day: "2-digit", month: "2-digit",
+                              hour: "2-digit", minute: "2-digit" })}. Dá para desmarcar até lá.
+                          </p>}
+                    </>
+                  ) : (
+                    <p className="qw-nota">
+                      Disparo só sai entre <b>{ABRE}</b> e <b>{FECHA}</b>. Fora
+                      disso o sistema segura e retoma na manhã seguinte — mensagem
+                      à noite vira denúncia, e denúncia derruba o número.
+                    </p>
+                  )}
                 </div>
 
-                <div style={{ display: "flex", gap: 9, marginTop: 16, flexWrap: "wrap" }}>
-                  <button className="btn wa" style={{ fontWeight: 700 }}
-                    disabled={disparando || !alvos || !tplSel || (destino === "escolher" && !marcados.size)}
-                    onClick={dispararAgora}>
-                    {disparando ? "Disparando…"
+                <button className="btn wa go"
+                  disabled={disparando || !alvos || !tplSel || !!problemaDaHora
+                    || (destino === "escolher" && !marcados.size)}
+                  onClick={dispararAgora}>
+                  {disparando ? "Disparando…"
+                    : quando === "depois"
+                      ? `Marcar para ${Math.min(alvos, cfg?.tetoHoje ?? alvos)} pessoas`
                       : `Disparar para ${Math.min(alvos, cfg?.tetoHoje ?? alvos)} pessoas`}
-                  </button>
+                </button>
+
+                {/* O aviso de preço só quando ele muda alguma coisa: repetido em
+                    mensagem que já é Utilidade, vira ruído e para de ser lido. */}
+                {tplAtivo?.categoria === "MARKETING" ? (
+                  <div className="aviso">
+                    <svg viewBox="0 0 24 24"><path d="M12 8.5v5M12 17h.01" /><circle cx="12" cy="12" r="9" /></svg>
+                    <div>Esta é <b>Marketing</b>, {brl(d.precos.marketing)} por mensagem.
+                      Se for aviso de verdade — e não oferta — refazer como Utilidade
+                      custa {brl(d.precos.utility)} e economiza{" "}
+                      <b>{brl((d.precos.marketing - d.precos.utility) * Math.min(alvos, cfg?.tetoHoje ?? alvos))}</b> neste disparo.</div>
+                  </div>
+                ) : null}
+
+                {agendados.length ? (
+                  <div className="marcados">
+                    <b>Já marcados</b>
+                    {agendados.map((c) => (
+                      <div className="mk" key={c.id}>
+                        <span>
+                          <i>{new Date(c.marcadaPara!).toLocaleString("pt-BR", {
+                            day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</i>
+                          {c.nome} · {c.alvos} pessoas
+                        </span>
+                        <button onClick={() => desmarcar(c.id)}>desmarcar</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                <details className="fluxo-d">
+                  <summary>O que acontece quando a pessoa responder</summary>
+                <div className="fluxo">
+                  <div className="fluxo-p"><i>1</i><div>A pessoa responde a mensagem.</div></div>
+                  <div className="fluxo-p"><i>2</i><div>O sistema <b>cria o lead</b> com a etiqueta
+                    <b> levantou a mão no disparo</b> e entrega para quem você escolheu acima.</div></div>
+                  <div className="fluxo-p"><i>3</i><div>O corretor <b>recebe no WhatsApp</b> o aviso
+                    com nome, telefone e o link da conversa — igual ao aviso de lead de anúncio.</div></div>
+                  <div className="fluxo-p"><i>4</i><div>O lead aparece no painel dele como qualquer
+                    outro, e a conversa fica aqui em <b>Respostas</b>, onde você pode entrar.</div></div>
                 </div>
+                </details>
               </div>
 
-              <div>
-                <Fone nome="Maria"
-                  texto={tplAtivo?.corpo}
-                  rodape={tplAtivo?.rodape}
-                  botoes={(tplAtivo?.botoes ?? []).map((b: any) => b?.text ?? "")}
-                  imagem={imgDisparo ?? tplAtivo?.headerImagem ?? null} />
-                <p className="fone-leg">
-                  {tplAtivo ? "É assim que vai chegar." : "Escolha a mensagem para ver a prévia."}
-                </p>
-              </div>
             </div>
           </div>
         </div>
