@@ -125,7 +125,7 @@
 .mgr10.disparar .bm-nova .bml b{font-size:13.5px}
 .mgr10.disparar .bm-nova .bml i{font-size:11.5px}
 .mgr10.disparar .bm-nova .f input{font-size:14px}
-@media(max-width:1180px){
+@media(max-width:1100px){
   .mgr10.disparar .bm{grid-template-columns:1fr}
 }
 
@@ -133,7 +133,11 @@
    na vertical, e barra horizontal aqui e sempre defeito, nunca recurso. */
 .mgr10.disparar .box{max-width:100%;overflow-x:auto}
 .mgr10.disparar .bm{grid-template-columns:minmax(0,1fr) minmax(300px,360px)}
-@media(max-width:1280px){ .mgr10.disparar .bm{grid-template-columns:1fr} }
+/* Colapsava em 1280px, de quando a direita era so um convite a conectar e
+   perder a coluna nao custava nada. Agora ela e o painel de decisao — limite
+   de hoje e o cartao que o cliente ve — e 1244px, que e a tela do gerente,
+   caia fora do corte por 36 pixels. Mesmo limite da aba Disparar. */
+@media(max-width:1100px){ .mgr10.disparar .bm{grid-template-columns:1fr} }
 
 /* Os chips de escolha rapida vieram da aba Pastas — mesmo componente, mesma
    ideia: escolher o comum com um toque e ajustar so quando precisar. */
@@ -222,6 +226,9 @@
   .mgr10.disparar .disp{grid-template-columns:minmax(0,1fr)}
   .mgr10.disparar .lado{position:static}
 }
+/* Em coluna unica a previa nao precisa mais encolher — ninguem esta olhando
+   dois blocos ao mesmo tempo. */
+@media (max-width:1100px){ .mgr10.disparar .lado .fone-corpo{max-height:none} }
 
 /* Numa tela de 660px de altura o celular sozinho ocupa quase tudo e empurrava
    o custo e o botão para fora da coluna fixa — que era justamente o que ela
