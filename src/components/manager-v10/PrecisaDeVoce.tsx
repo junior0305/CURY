@@ -12,7 +12,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Sec, Panel, Blank } from "@/components/manager-v10/ui";
-import { definirRecebimento, status, type Pessoa } from "@/hooks/useTempoReal";
+import { definirRecebimento, trazerParaEquipe, status, type Pessoa } from "@/hooks/useTempoReal";
 
 interface Grupo {
   chave: string;
@@ -28,6 +28,18 @@ const GRUPOS: Grupo[] = [
   { chave: "semcad", tom: "trav", titulo: "batem ponto e não têm login aqui",
     porque: "Aparecem na Cury e não existem no Comandra — não recebem lead nem entram na cobrança individual.",
     acao: "Criar login" },
+  // Transferência que aconteceu na Cury e não aconteceu aqui. É o caso mais
+  // comum e o mais invisível: a pessoa trabalha para o gerente e some do painel
+  // dele, que passa a cobrar uma equipe menor do que a que tem.
+  { chave: "outraeq", tom: "trav", titulo: "já são seus na Cury e não aqui",
+    porque: "Batem ponto na sua equipe e o cadastro daqui ainda está com outro gerente — não entram no seu rodízio e não aparecem nos seus números.",
+    acao: "Trazer para a equipe",
+    lote: async (gente) => {
+      for (const p of gente) if (p.profileId) await trazerParaEquipe(p.profileId);
+    } },
+  { chave: "desativado", tom: "trav", titulo: "voltaram a trabalhar com cadastro desativado",
+    porque: "Bateram ponto na Cury e o login aqui está desligado — não recebem lead e não contam em nada.",
+    acao: "Reativar" },
   { chave: "rodizio", tom: "trav", titulo: "no plantão e sem receber lead",
     porque: "Vieram trabalhar e o recebimento está desligado.",
     acao: "Ligar recebimento",

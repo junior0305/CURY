@@ -38,6 +38,10 @@ export interface Pessoa {
   fonteRodizio: "plantao" | "gerente" | null;
   carteira: number;
   porOrigem: Record<Origem, number>;
+  /** o que falta acertar no cadastro para esta pessoa contar de verdade */
+  cadastro: "ok" | "sem_cadastro" | "outra_equipe" | "desativado";
+  /** de quem ela é no Comandra hoje, quando não é deste gerente */
+  gerenteAtual: string | null;
   /** na janela de 7 dias */
   diasPlantao: number;
   atendSemana: number;
@@ -77,6 +81,24 @@ function origemDoLead(source: string | null, originalBroker: string | null): Ori
 }
 
 export function status(p: Pessoa): Status {
+  // Cadastro em desacordo vem antes de tudo: enquanto não se acerta, nenhum
+  // outro número dessa pessoa é confiável — ela não recebe lead pelo rodízio,
+  // não tem carteira aqui e o gerente não consegue cobrar nada dela.
+  if (p.cadastro === "sem_cadastro")
+    return { nivel: "trav", rotulo: "Travado", porque: "Trabalha na sua equipe na Cury e não tem login no Comandra.",
+      regra: ["Bateu ponto hoje", "Sem cadastro aqui"], acao: "Criar login", chave: "semcad" };
+
+  if (p.cadastro === "outra_equipe")
+    return { nivel: "trav", rotulo: "Travado",
+      porque: `Já é da sua equipe na Cury, mas aqui ainda consta ${p.gerenteAtual ? "com " + p.gerenteAtual : "com outro gerente"}.`,
+      regra: ["Bateu ponto hoje na sua equipe", "Cadastro em outra equipe aqui",
+              "Não entra no seu rodízio"], acao: "Trazer para a equipe", chave: "outraeq" };
+
+  if (p.cadastro === "desativado")
+    return { nivel: "trav", rotulo: "Travado", porque: "Voltou a trabalhar na Cury e o cadastro aqui está desativado.",
+      regra: ["Bateu ponto hoje", "Cadastro desativado aqui", "Não recebe lead"],
+      acao: "Reativar cadastro", chave: "desativado" };
+
   if (!p.profileId)
     return { nivel: "trav", rotulo: "Travado", porque: "Bate ponto na Cury e não tem login no Comandra.",
       regra: ["Aparece na Cury", "Sem cadastro aqui"], acao: "Criar login", chave: "semcad" };
@@ -177,11 +199,35 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
         sem.set(r.profile_id, s);
       }
 
+      // Quem bate ponto na Cury sob este gerente e NAO aparece no time dele
+      // aqui. Eram tratados só os que não existem no Comandra — e o caso comum
+      // é outro: a pessoa existe, foi transferida na Cury e ninguém mexeu no
+      // cadastro daqui. Ela some do painel, e o gerente conta uma pessoa a
+      // menos no plantão sem saber por quê.
+      const doTime = new Set(time.map((b: any) => b.id));
       const hojePorPerfil = new Map<string, any>();
-      const semCadastro: any[] = [];
+      const foraDoTime: any[] = [];
       for (const h of hoje) {
-        if (h.profile_id) hojePorPerfil.set(h.profile_id, h);
-        else if ((h.checkins ?? 0) > 0) semCadastro.push(h);
+        if (h.profile_id && doTime.has(h.profile_id)) hojePorPerfil.set(h.profile_id, h);
+        else if ((h.checkins ?? 0) > 0) foraDoTime.push(h);
+      }
+
+      // Por que cada um está de fora: existe e é de outro gerente, existe e
+      // está desativado, ou não existe. Cada caso pede uma ação diferente.
+      const idsFora = foraDoTime.map((h) => h.profile_id).filter(Boolean);
+      let perfisFora: any[] = [];
+      if (idsFora.length) {
+        const { data: pf } = await supabase.from("profiles")
+          .select("id,first_name,is_active,manager_id")
+          .in("id", idsFora);
+        perfisFora = pf ?? [];
+      }
+      const gerentesFora = new Map<string, string>();
+      const idsGer = [...new Set(perfisFora.map((p) => p.manager_id).filter(Boolean))];
+      if (idsGer.length) {
+        const { data: gg } = await supabase.from("profiles")
+          .select("id,first_name").in("id", idsGer);
+        for (const g of (gg ?? [])) gerentesFora.set(g.id, g.first_name ?? "—");
       }
 
       const zero = { anuncio: 0, disparo: 0, repescagem: 0, propria: 0 } as Record<Origem, number>;
@@ -206,18 +252,29 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
           fonteRodizio: b.lead_assignment_source ?? null,
           carteira: Object.values(o).reduce((a, n) => a + n, 0),
           porOrigem: o,
+          cadastro: "ok" as const, gerenteAtual: null,
           diasPlantao: s.dias, atendSemana: s.atend, vendasSemana: s.vendas,
         };
       });
 
-      // quem bate ponto na Cury e não existe aqui — o gerente cria o login
-      for (const h of semCadastro) {
+      // Quem trabalhou hoje sob este gerente e está de fora do time aqui. Entra
+      // no painel contando no plantão — porque trabalhou — e marcado com o que
+      // falta acertar. Deixar de fora é o pior dos dois erros: o gerente cobra
+      // uma equipe menor do que a que tem.
+      for (const h of foraDoTime) {
+        const pf = perfisFora.find((p) => p.id === h.profile_id);
+        const cadastro: Pessoa["cadastro"] = !pf ? "sem_cadastro"
+          : pf.is_active === false ? "desativado" : "outra_equipe";
         gente.push({
-          profileId: null, curyId: h.cury_id, nome: h.nome ?? "—", apelido: h.apelido,
+          profileId: h.profile_id ?? null, curyId: h.cury_id,
+          nome: h.nome ?? pf?.first_name ?? "—", apelido: h.apelido,
           ponto: true, checkins: h.checkins ?? 0, pegos: h.ativados ?? 0,
           perdidos: h.expirados ?? 0, atendimentos: h.atendimentos ?? 0, vendas: h.vendas ?? 0,
           online: false, ultimoAcesso: null, recebeLead: false, fonteRodizio: null,
-          carteira: 0, porOrigem: { ...zero }, diasPlantao: 0, atendSemana: 0, vendasSemana: 0,
+          carteira: 0, porOrigem: { ...zero },
+          cadastro,
+          gerenteAtual: pf?.manager_id ? (gerentesFora.get(pf.manager_id) ?? null) : null,
+          diasPlantao: 0, atendSemana: 0, vendasSemana: 0,
         });
       }
 
@@ -248,4 +305,29 @@ export async function definirRecebimento(profileId: string, receber: boolean) {
     lead_assignment_date: receber ? diaSP() : null,
   }).eq("id", profileId);
   if (error) throw error;
+}
+
+/** Traz para a equipe deste gerente quem a Cury já diz que é dele.
+ *
+ *  O `manager_id` do lead é cópia, gravada na atribuição — trocar o gerente do
+ *  corretor não mexe nela. Aqui só os leads VIVOS acompanham: venda fechada
+ *  continua contando para a equipe onde foi feita.                           */
+export async function trazerParaEquipe(profileId: string) {
+  const { data: eu } = await supabase.auth.getUser();
+  const gerente = eu?.user?.id;
+  if (!gerente) throw new Error("Sessão expirada.");
+
+  const { data: g } = await supabase.from("profiles")
+    .select("team_id").eq("id", gerente).maybeSingle();
+
+  const { error } = await supabase.from("profiles").update({
+    manager_id: gerente,
+    team_id: (g as any)?.team_id ?? null,
+    is_active: true,
+  }).eq("id", profileId);
+  if (error) throw error;
+
+  await supabase.from("leads").update({ manager_id: gerente })
+    .eq("broker_id", profileId)
+    .not("status", "in", "(CONCLUDED,ABANDONED,EXCLUDED)");
 }
