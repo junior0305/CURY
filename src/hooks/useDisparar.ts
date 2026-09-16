@@ -700,6 +700,9 @@ export interface PainelDisparo {
                lidas: number; respostas: number; falhas: number; taxa: number }[];
   mensagens: { template: string; enviadas: number; lidas: number;
                respostas: number; taxa: number }[];
+  /** o que foi COBRADO de verdade — e o que a janela de 24h deixou de custar */
+  custo: { gasto: number; cobradas: number; gratuitas: number;
+           sem_retorno: number; economia: number };
   equipe: {
     total: number; online: number; com_numero: number; usam: number;
     lista: { id: string; nome: string; online: boolean; visto: string | null;

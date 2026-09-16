@@ -950,6 +950,22 @@ export default function Disparar() {
                     <b>{painel.envio.em_conversa.toLocaleString("pt-BR")}</b>
                     <i>falaram nas últimas 24h</i>
                   </div>
+                  {/* Custo do que a Meta COBROU, não do que estimamos. Ela manda
+                      a categoria e se foi cobrável; o valor vem da tarifa. */}
+                  <div className="kpi">
+                    <span>Gasto</span>
+                    <b>{brl(painel.custo?.gasto ?? 0)}</b>
+                    <i>{painel.custo?.cobradas ?? 0} cobradas
+                      {painel.custo?.sem_retorno
+                        ? ` · ${painel.custo.sem_retorno} sem retorno da Meta ainda` : ""}</i>
+                  </div>
+                  {painel.custo?.gratuitas ? (
+                    <div className="kpi bom">
+                      <span>Saiu de graça</span>
+                      <b>{painel.custo.gratuitas.toLocaleString("pt-BR")}</b>
+                      <i>economizou {brl(painel.custo.economia)} — janela de 24h aberta</i>
+                    </div>
+                  ) : null}
                 </div>
 
                 {painel.envio.sem_corretor > 0 ? (
