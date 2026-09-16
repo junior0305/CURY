@@ -25,7 +25,7 @@ import {
   useDisparar, useMensagens, ajustarImagem, cheiraOferta, checarNome,
   criarTemplate, mandarMensagem, dispararCampanha, subirImagem, type Template,
   useNumerosCasa, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
-  lerCsv, salvarPerfilNumero,
+  lerCsv, salvarPerfilNumero, soltarNumero, removerNumero,
 } from "@/hooks/useDisparar";
 import { conectarBM, finalizarConexao } from "@/lib/embeddedSignup";
 import { Blank } from "@/components/manager-v10/ui";
@@ -250,6 +250,26 @@ export default function Disparar() {
       r.onload = () => setFotoPerfil(String(r.result));
       r.readAsDataURL(f);
     } catch (e: any) { toast.error(e?.message ?? "Não consegui ler a imagem."); }
+  }
+
+  const [confirmaSoltar, setConfirmaSoltar] = useState(false);
+
+  async function soltar(apagar: boolean) {
+    const cfg = data?.config;
+    if (!cfg?.phoneNumberId || !userId) return;
+    setSalvandoPerfil(true);
+    try {
+      if (apagar) await removerNumero(cfg.phoneNumberId, userId);
+      else await soltarNumero(cfg.phoneNumberId, userId);
+      toast.success(apagar
+        ? "Número apagado da conta da empresa."
+        : "Número solto. Ele continua na conta da empresa, sem dono.");
+      setConfirmaSoltar(false);
+      qc.invalidateQueries({ queryKey: ["disparar"] });
+      qc.invalidateQueries({ queryKey: ["numeros-casa"] });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Não consegui.");
+    } finally { setSalvandoPerfil(false); }
   }
 
   async function salvarPerfil() {
@@ -498,6 +518,39 @@ export default function Disparar() {
                           nome passa por análise da Meta e leva alguns dias. Hoje ele é
                           o que foi aprovado quando o número entrou.
                         </p>
+
+                        {/* Duas saídas de propriedades bem diferentes, e por isso
+                            separadas: soltar tem volta, apagar não tem. */}
+                        {!confirmaSoltar ? (
+                          <button className="btn sm" style={{ marginTop: 6 }}
+                            onClick={() => setConfirmaSoltar(true)}>
+                            Não quero mais este número
+                          </button>
+                        ) : (
+                          <div className="alerta" style={{ marginTop: 10, flexDirection: "column", alignItems: "stretch" }}>
+                            <div><b>O que você quer fazer?</b></div>
+                            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                              <button className="btn sm" disabled={salvandoPerfil}
+                                onClick={() => soltar(false)}>
+                                Soltar — fica na empresa, sem dono
+                              </button>
+                              <button className="btn sm" disabled={salvandoPerfil}
+                                style={{ borderColor: "var(--crit)", color: "var(--crit)" }}
+                                onClick={() => soltar(true)}>
+                                Apagar da conta — sem volta
+                              </button>
+                              <button className="btn sm" onClick={() => setConfirmaSoltar(false)}>
+                                Cancelar
+                              </button>
+                            </div>
+                            <p className="vars-n" style={{ marginTop: 10 }}>
+                              <b>Soltar</b> devolve o número para a empresa e você pode
+                              reassumir depois. <b>Apagar</b> tira da conta na Meta:
+                              recolocar é cadastro novo, com SMS de novo, e a reputação
+                              do número recomeça do zero.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     ) : null}
 

@@ -385,6 +385,28 @@ export async function assumirNumero(phoneNumberId: string, ownerId: string, labe
   return d as { ok: boolean; pendencia: string | null };
 }
 
+/** Solta o número: ele fica na conta da empresa e deixa de ser seu.
+ *  Reversível — é o caso de quem trocou de número ou saiu. */
+export async function soltarNumero(phoneNumberId: string, ownerId: string) {
+  const { data, error } = await supabase.functions.invoke("wa-onboard", {
+    body: { action: "soltar", phone_number_id: phoneNumberId, owner_id: ownerId },
+  });
+  if (error) throw error;
+  if ((data as any)?.error) throw new Error((data as any).error);
+  return data;
+}
+
+/** Apaga o número da conta na Meta. NÃO tem volta: recolocar é cadastro novo,
+ *  com SMS de novo, e a reputação do número recomeça do zero. */
+export async function removerNumero(phoneNumberId: string, ownerId: string) {
+  const { data, error } = await supabase.functions.invoke("wa-onboard", {
+    body: { action: "remover", phone_number_id: phoneNumberId, owner_id: ownerId },
+  });
+  if (error) throw error;
+  if ((data as any)?.error) throw new Error((data as any).error);
+  return data;
+}
+
 /** O que o cliente vê ao abrir a conversa: foto, recado e descrição.
  *  O NOME de exibição não está aqui de propósito — trocar nome passa por
  *  análise da Meta, e juntar as duas coisas num botão só faria parecer que o
