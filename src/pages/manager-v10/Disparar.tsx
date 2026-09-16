@@ -113,7 +113,7 @@ export default function Disparar() {
   const [imgInfo, setImgInfo] = useState<string | null>(null);
   const [sugTipo, setSugTipo] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const [emAnalise, setEmAnalise] = useState(false);
+  const [emAnalise, setEmAnalise] = useState<string | null>(null);
   // Quando preenchido, o formulário está editando esta mensagem, não criando outra.
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -188,7 +188,7 @@ export default function Disparar() {
     const bs = (t.botoes ?? []).map((b: any) => b?.text ?? "");
     setB1(bs[0] ?? ""); setB2(bs[1] ?? "");
     setImg(t.headerImagem ?? null);
-    setEmAnalise(false);
+    setEmAnalise(null);
     document.querySelector(".novo-t")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -204,8 +204,9 @@ export default function Disparar() {
         imagem = await subirImagem(img);
         setImg(imagem);
       }
+      const nomeLimpo = tNome.trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_").slice(0, 60);
       const r = await criarTemplate({
-        name: tNome.trim().toLowerCase().replace(/[^\w]+/g, "_"),
+        name: nomeLimpo,
         body_text: tCorpo, category: tTipo, language: "pt_BR",
         header_type: imagem ? "IMAGE" : "NONE", header_image_url: imagem,
         footer_text: tRod || null,
@@ -215,7 +216,7 @@ export default function Disparar() {
         // preencheu na prévia — é o valor real, melhor que "exemplo".
         exemplos: Object.fromEntries(vars.map((v) => [v, valores[v] || (v === "nome" ? "Maria" : "exemplo")])),
       });
-      setEmAnalise(true);
+      setEmAnalise(nomeLimpo);
       // A imagem pode falhar sozinha sem derrubar o template. Quando falha, o
       // gerente PRECISA saber — senão manda achando que vai com foto.
       if ((r as any)?.aviso) toast.warning((r as any).aviso, { duration: 12000 });
@@ -1018,16 +1019,54 @@ export default function Disparar() {
                   aprovar, a mensagem não pode ser disparada — e você é avisado aqui quando o
                   resultado chegar.
                 </p>
-                {emAnalise ? (
-                  <div className="enviado">
-                    <span className="sp" />
-                    <div>
-                      <b>Mandada para a Meta</b>
-                      <p>Ela está em análise. Assim que houver resposta, ela aparece na lista acima —
-                        e se for recusada, o motivo vem junto com o que precisa mudar.</p>
+                {/* O estado vem da LISTA, que consulta a Meta a cada dois
+                    minutos. Antes era um enfeite: girava para sempre, tivesse a
+                    Meta respondido ou não. */}
+                {emAnalise ? (() => {
+                  const t = d.templates.find((x) => x.nome === emAnalise);
+                  const st = (t?.status ?? "PENDING").toUpperCase();
+                  if (st === "APPROVED") {
+                    return (
+                      <div className="enviado" style={{ background: "var(--good-soft)" }}>
+                        <svg viewBox="0 0 24 24" style={{ width: 19, height: 19, flex: "none",
+                          stroke: "var(--good)", fill: "none", strokeWidth: 2.4, marginTop: 1 }}>
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                        <div>
+                          <b style={{ color: "var(--good)" }}>Aprovada pela Meta</b>
+                          <p>Já pode disparar com ela. Se a categoria mudou, o preço na
+                            etapa de disparo mostra o que vale agora.</p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (st === "REJECTED") {
+                    return (
+                      <div className="enviado" style={{ background: "var(--crit-soft)" }}>
+                        <svg viewBox="0 0 24 24" style={{ width: 19, height: 19, flex: "none",
+                          stroke: "var(--crit)", fill: "none", strokeWidth: 2.2, marginTop: 1 }}>
+                          <circle cx="12" cy="12" r="9" /><path d="M12 8.5v5M12 17h.01" />
+                        </svg>
+                        <div>
+                          <b style={{ color: "var(--crit)" }}>Recusada</b>
+                          <p>O motivo mais comum é texto de oferta em mensagem de
+                            utilidade. Ajuste e mande de novo — ou copie e crie outra.</p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="enviado">
+                      <span className="sp" />
+                      <div>
+                        <b>Em análise na Meta</b>
+                        <p>Esta tela confere sozinha a cada dois minutos e avisa aqui
+                          quando houver resposta. Pode sair da aba — a análise corre
+                          igual, e o resultado fica na lista acima.</p>
+                      </div>
                     </div>
-                  </div>
-                ) : null}
+                  );
+                })() : null}
               </div>
 
               <div>
