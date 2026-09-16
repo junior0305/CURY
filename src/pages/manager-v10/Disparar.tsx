@@ -154,9 +154,13 @@ export default function Disparar() {
      denuncia — e denuncia derruba o numero. Por isso o corte das 19:30 e
      duro, e existe tambem no motor: esta tela pode estar fechada quando o
      cron continuar uma lista grande.                                      */
-  const [quando, setQuando] = useState<"agora" | "depois">("agora");
-  const [dia, setDia] = useState(() => new Date().toISOString().slice(0, 10));
-  const [hora, setHora] = useState("09:00");
+  // `dia` e `hora` NAO servem como nome aqui: ja existem como funcoes de
+  // formatacao no modulo, e um estado com o mesmo nome as apaga dentro do
+  // componente. A aba Respostas chamava `dia(...)` e recebia uma string —
+  // "rt is not a function", tela branca, sem pista nenhuma na interface.
+  const [qwModo, setQwModo] = useState<"agora" | "depois">("agora");
+  const [qwDia, setQwDia] = useState(() => new Date().toISOString().slice(0, 10));
+  const [qwHora, setQwHora] = useState("09:00");
 
   const [csv, setCsv] = useState<{ leadId: string; nome: string | null; telefone: string }[]>([]);
   const [csvNome, setCsvNome] = useState("");
@@ -400,13 +404,13 @@ export default function Disparar() {
      mesmo com esta tela fechada.                                          */
   const ABRE = "08:00", FECHA = "19:30";
   const marcado = useMemo(() => {
-    if (quando !== "depois") return null;
-    const t = new Date(`${dia}T${hora}:00`);
+    if (qwModo !== "depois") return null;
+    const t = new Date(`${qwDia}T${qwHora}:00`);
     return isNaN(t.getTime()) ? null : t;
-  }, [quando, dia, hora]);
+  }, [qwModo, qwDia, qwHora]);
 
   const problemaDaHora = useMemo(() => {
-    if (quando !== "depois") return null;
+    if (qwModo !== "depois") return null;
     if (!marcado) return "Escolha o dia e a hora.";
     const [hf, mf] = FECHA.split(":").map(Number);
     const [ha] = ABRE.split(":").map(Number);
@@ -415,7 +419,7 @@ export default function Disparar() {
     if (h > hf || (h === hf && m > mf)) return `Tarde demais. O ultimo horario e ${FECHA}.`;
     if (marcado.getTime() < Date.now() + 60_000) return "Esse horario ja passou.";
     return null;
-  }, [quando, marcado]);
+  }, [qwModo, marcado]);
 
   const agendados = useMemo(
     () => (data?.campanhas ?? []).filter((c) => c.status === "scheduled" && c.marcadaPara)
@@ -1313,18 +1317,18 @@ export default function Disparar() {
 
                 <div className="quando">
                   <div className="qw-tabs">
-                    <button className={quando === "agora" ? "on" : ""}
-                      onClick={() => setQuando("agora")}>Agora</button>
-                    <button className={quando === "depois" ? "on" : ""}
-                      onClick={() => setQuando("depois")}>Marcar dia e hora</button>
+                    <button className={qwModo === "agora" ? "on" : ""}
+                      onClick={() => setQwModo("agora")}>Agora</button>
+                    <button className={qwModo === "depois" ? "on" : ""}
+                      onClick={() => setQwModo("depois")}>Marcar dia e hora</button>
                   </div>
-                  {quando === "depois" ? (
+                  {qwModo === "depois" ? (
                     <>
                       <div className="qw-campos">
-                        <input type="date" value={dia} min={new Date().toISOString().slice(0, 10)}
-                          onChange={(e) => setDia(e.target.value)} />
-                        <input type="time" value={hora} min={ABRE} max={FECHA} step={300}
-                          onChange={(e) => setHora(e.target.value)} />
+                        <input type="date" value={qwDia} min={new Date().toISOString().slice(0, 10)}
+                          onChange={(e) => setQwDia(e.target.value)} />
+                        <input type="time" value={qwHora} min={ABRE} max={FECHA} step={300}
+                          onChange={(e) => setQwHora(e.target.value)} />
                       </div>
                       {problemaDaHora
                         ? <p className="qw-erro">{problemaDaHora}</p>
@@ -1348,7 +1352,7 @@ export default function Disparar() {
                     || (destino === "escolher" && !marcados.size)}
                   onClick={dispararAgora}>
                   {disparando ? "Disparando…"
-                    : quando === "depois"
+                    : qwModo === "depois"
                       ? `Marcar para ${Math.min(alvos, cfg?.tetoHoje ?? alvos)} pessoas`
                       : `Disparar para ${Math.min(alvos, cfg?.tetoHoje ?? alvos)} pessoas`}
                 </button>
