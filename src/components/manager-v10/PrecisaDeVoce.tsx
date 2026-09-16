@@ -8,9 +8,11 @@
 // Por isso a lista de gente fica acima (para varrer) e esta fila fica aqui
 // embaixo (para agir).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import VincularCorretor from "@/components/manager-v10/VincularCorretor";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { Sec, Panel, Blank } from "@/components/manager-v10/ui";
 import { definirRecebimento, trazerParaEquipe, status, type Pessoa } from "@/hooks/useTempoReal";
 
@@ -26,8 +28,10 @@ interface Grupo {
 
 const GRUPOS: Grupo[] = [
   { chave: "semcad", tom: "trav", titulo: "batem ponto e não têm login aqui",
-    porque: "Aparecem na Cury e não existem no Comandra — não recebem lead nem entram na cobrança individual.",
-    acao: "Criar login" },
+    porque: "Aparecem na Cury e não existem no Comandra — não recebem lead nem entram na cobrança individual. " +
+            "Antes de criar login, confira se já não é alguém daqui com outro nome: a Cury às vezes pede para " +
+            "trocar o apelido depois que o acesso foi criado, e dois cadastros para a mesma pessoa dividem a carteira em duas.",
+    acao: "Conferir um a um" },
   // Transferência que aconteceu na Cury e não aconteceu aqui. É o caso mais
   // comum e o mais invisível: a pessoa trabalha para o gerente e some do painel
   // dele, que passa a cobrar uma equipe menor do que a que tem.
@@ -64,6 +68,11 @@ export default function PrecisaDeVoce({ gente, managerId }: { gente: Pessoa[]; m
   const qc = useQueryClient();
   const [aberto, setAberto] = useState<string | null>(null);
   const [rodando, setRodando] = useState<string | null>(null);
+  // Quem clicou, para o motor conferir o papel — a função roda com chave de
+  // serviço e faria qualquer coisa sem isso.
+  const [quem, setQuem] = useState<string | null>(null);
+  const [vincular, setVincular] = useState<Pessoa | null>(null);
+  useEffect(() => { supabase.auth.getUser().then(({ data }) => setQuem(data?.user?.id ?? null)); }, []);
 
   const blocos = GRUPOS
     .map((g) => ({ g, pessoas: gente.filter((p) => status(p).chave === g.chave) }))
@@ -72,6 +81,7 @@ export default function PrecisaDeVoce({ gente, managerId }: { gente: Pessoa[]; m
   const total = blocos.reduce((a, b) => a + b.pessoas.length, 0);
 
   async function emLote(b: { g: Grupo; pessoas: Pessoa[] }) {
+    if (b.g.chave === "semcad") { setVincular(b.pessoas[0]); return; }
     if (!b.g.lote) { toast.info(`${b.g.acao} — em construção`); return; }
     setRodando(b.g.chave);
     try {
@@ -120,10 +130,18 @@ export default function PrecisaDeVoce({ gente, managerId }: { gente: Pessoa[]; m
                 <p>{g.porque}</p>
                 <div className="pv-nomes">
                   {pessoas.map((p) => (
-                    <span key={p.profileId ?? p.curyId!} className="pv-nome">
-                      {p.apelido ?? p.nome}
-                      <em>{p.ponto ? "no plantão" : "sem ponto"}</em>
-                    </span>
+                    g.chave === "semcad" && p.curyId ? (
+                      <button key={p.curyId} type="button" className="pv-nome cliq"
+                        onClick={() => setVincular(p)}>
+                        {p.apelido ?? p.nome}
+                        <em>conferir</em>
+                      </button>
+                    ) : (
+                      <span key={p.profileId ?? p.curyId!} className="pv-nome">
+                        {p.apelido ?? p.nome}
+                        <em>{p.ponto ? "no plantão" : "sem ponto"}</em>
+                      </span>
+                    )
                   ))}
                 </div>
               </div></div>
@@ -131,6 +149,10 @@ export default function PrecisaDeVoce({ gente, managerId }: { gente: Pessoa[]; m
           ))}
         </div>
       )}
+      {vincular && quem ? (
+        <VincularCorretor pessoa={vincular} managerId={managerId} quem={quem}
+          onFechar={() => setVincular(null)} />
+      ) : null}
     </Sec>
   );
 }
