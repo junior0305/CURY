@@ -1152,6 +1152,14 @@ export default function Disparar() {
                         : "Clique para trocar a foto só neste disparo — a mensagem continua a mesma e não volta para aprovação."}
                     </small>
                   </div>
+                ) : tplAtivo ? (
+                  // Silencio aqui fazia o gerente esperar uma foto que nao
+                  // podia existir: a Meta congela o cabecalho na aprovacao.
+                  <p className="sec-sub" style={{ marginTop: 16 }}>
+                    Esta mensagem não tem imagem. O cabeçalho é definido na
+                    aprovação e não dá para acrescentar depois — para mandar com
+                    foto, crie uma mensagem nova escolhendo imagem no topo.
+                  </p>
                 ) : null}
 
                 <div className="f" style={{ marginTop: 18 }}>
