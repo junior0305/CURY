@@ -637,6 +637,33 @@ export default function Disparar() {
 
                   {passo === "numero" ? (
                     <>
+                      {/* O campo do nome sumiu junto com o botão antigo do
+                          Facebook e o cadastro ficou impossível: o botão exigia
+                          um nome que não tinha onde digitar. */}
+                      <div className="f" style={{ marginBottom: 10 }}>
+                        <label htmlFor="disp-nome">Nome que o cliente vai ver</label>
+                        <input id="disp-nome" autoComplete="off" value={nomeExib}
+                          disabled={conectando} placeholder="Cury — Dudu"
+                          onChange={(e) => setNomeExib(e.target.value)} />
+                        {nomeCheck ? (
+                          <div className={`nome-v ${nomeCheck.ok ? "ok" : "ruim"}`}>
+                            <svg viewBox="0 0 24 24">
+                              {nomeCheck.ok ? <path d="M20 6L9 17l-5-5" />
+                                : <><circle cx="12" cy="12" r="9" /><path d="M12 8.5v5M12 17h.01" /></>}
+                            </svg>
+                            <div>
+                              {nomeCheck.texto}
+                              {nomeCheck.sugestao ? (
+                                <button className="sug" onClick={() => setNomeExib(nomeCheck.sugestao!)}>
+                                  {nomeCheck.sugestao}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : <small>É o nome que aparece na conversa do cliente. A Meta
+                          exige que tenha relação com o negócio.</small>}
+                      </div>
+
                       <div className="f" style={{ marginBottom: 10 }}>
                         <label htmlFor="novo-tel">Seu número, com DDD</label>
                         <input id="novo-tel" inputMode="numeric" placeholder="11 96809-4368"
