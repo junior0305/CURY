@@ -313,8 +313,12 @@ export async function definirRecebimento(profileId: string, receber: boolean) {
  *  sem tirar o banimento faz a pessoa voltar a contar nos números e a receber
  *  lead, e continuar sem conseguir entrar. O banimento vive no GoTrue e
  *  sobrevive à reativação — por isso o trabalho é do banco, não daqui.        */
-export async function trazerParaEquipe(profileId: string) {
-  const { data, error } = await supabase.rpc("trazer_para_equipe", { p_profile: profileId });
+export async function trazerParaEquipe(profileId: string, managerId?: string) {
+  // O destino é o DONO DO PAINEL, não quem clicou: o superintendente abre o
+  // painel dos outros, e sem isto o corretor iria para a equipe dele.
+  const { data, error } = await supabase.rpc("trazer_para_equipe", {
+    p_profile: profileId, p_gerente: managerId ?? null,
+  });
   if (error) throw error;
   return data as { leads: number; desbanido: boolean };
 }

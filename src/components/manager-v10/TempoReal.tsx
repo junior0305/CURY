@@ -252,7 +252,7 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
         </Panel>
       </Sec>
 
-      <PrecisaDeVoce gente={gente} />
+      <PrecisaDeVoce gente={gente} managerId={managerId} />
     </section>
   );
 }

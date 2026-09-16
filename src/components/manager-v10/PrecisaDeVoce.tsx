@@ -21,7 +21,7 @@ interface Grupo {
   acao: string;
   tom: "crit" | "trav" | "warn";
   /** ação em lote — quando existe, o botão do cabeçalho resolve todos */
-  lote?: (gente: Pessoa[]) => Promise<void>;
+  lote?: (gente: Pessoa[], managerId?: string) => Promise<void>;
 }
 
 const GRUPOS: Grupo[] = [
@@ -34,14 +34,14 @@ const GRUPOS: Grupo[] = [
   { chave: "outraeq", tom: "trav", titulo: "já são seus na Cury e não aqui",
     porque: "Batem ponto na sua equipe e o cadastro daqui ainda está com outro gerente — não entram no seu rodízio e não aparecem nos seus números.",
     acao: "Trazer para a equipe",
-    lote: async (gente) => {
-      for (const p of gente) if (p.profileId) await trazerParaEquipe(p.profileId);
+    lote: async (gente, managerId) => {
+      for (const p of gente) if (p.profileId) await trazerParaEquipe(p.profileId, managerId);
     } },
   { chave: "desativado", tom: "trav", titulo: "voltaram a trabalhar com cadastro desativado",
     porque: "Bateram ponto na Cury e o login aqui está desligado — não recebem lead, não contam em nada e não conseguem entrar.",
     acao: "Reativar e trazer",
-    lote: async (gente) => {
-      for (const p of gente) if (p.profileId) await trazerParaEquipe(p.profileId);
+    lote: async (gente, managerId) => {
+      for (const p of gente) if (p.profileId) await trazerParaEquipe(p.profileId, managerId);
     } },
   { chave: "rodizio", tom: "trav", titulo: "no plantão e sem receber lead",
     porque: "Vieram trabalhar e o recebimento está desligado.",
@@ -60,7 +60,7 @@ const GRUPOS: Grupo[] = [
     acao: "Redistribuir" },
 ];
 
-export default function PrecisaDeVoce({ gente }: { gente: Pessoa[] }) {
+export default function PrecisaDeVoce({ gente, managerId }: { gente: Pessoa[]; managerId?: string }) {
   const qc = useQueryClient();
   const [aberto, setAberto] = useState<string | null>(null);
   const [rodando, setRodando] = useState<string | null>(null);
@@ -75,7 +75,7 @@ export default function PrecisaDeVoce({ gente }: { gente: Pessoa[] }) {
     if (!b.g.lote) { toast.info(`${b.g.acao} — em construção`); return; }
     setRodando(b.g.chave);
     try {
-      await b.g.lote(b.pessoas);
+      await b.g.lote(b.pessoas, managerId);
       toast.success(`${b.pessoas.length} resolvido${b.pessoas.length > 1 ? "s" : ""}`);
       qc.invalidateQueries({ queryKey: ["tempo-real"] });
     } catch (e: any) {
