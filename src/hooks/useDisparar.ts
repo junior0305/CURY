@@ -537,13 +537,46 @@ export async function subirImagem(dataUrl: string): Promise<string> {
 
 /** Palavras que fazem o classificador da Meta ler como oferta. Avisar antes é
  *  melhor que descobrir na reclassificação, quando já se pagou marketing. */
-const CHEIRO_OFERTA = [
-  /\bdesconto\b/i, /\bpromo/i, /\boferta\b/i, /\bimperd/i, /\baproveite\b/i,
-  /\bR\$\s?\d/, /\d+\s?%/, /\búltim[ao]s?\s+(dias|vagas|unidades)/i,
-  /\bcorra\b/i, /\bgr[áa]tis\b/i, /\bfeir[ãa]o\b/i, /\bcondi[çc][ãa]o especial\b/i,
+/* ── o que tira a mensagem de Utilidade ───────────────────────────────────
+   Utilidade é dar seguimento a algo que a pessoa já pediu: confirmar, avisar,
+   retomar um cadastro. Marketing é oferecer. A Meta reclassifica pelo CONTEÚDO,
+   e a diferença é de nove vezes no preço — R$0,035 contra R$0,3217.
+
+   Regra, não LLM, de propósito: isto roda a cada tecla enquanto o gerente
+   escreve, e token por tecla mata o projeto.                                 */
+const CHEIRO_OFERTA: { re: RegExp; oque: string }[] = [
+  { re: /\bdesconto\b/i,            oque: "desconto" },
+  { re: /\bpromo\w*/i,              oque: "promoção" },
+  { re: /\boferta\b/i,              oque: "oferta" },
+  { re: /\bimperd\w*/i,             oque: "imperdível" },
+  { re: /\baproveite\b/i,           oque: "aproveite" },
+  { re: /\bR\$\s?\d/,              oque: "preço em reais" },
+  { re: /\d+\s?%/,                  oque: "porcentagem" },
+  { re: /\búltim[ao]s?\s+(dias|vagas|unidades|chance)/i, oque: "últimas unidades / últimos dias" },
+  { re: /\bcorra\b/i,               oque: "corra" },
+  { re: /\bgr[áa]tis\b/i,           oque: "grátis" },
+  { re: /\bfeir[ãa]o\b/i,           oque: "feirão" },
+  { re: /\bcondi[çc][õo]es?\s+especia\w*/i, oque: "condição especial" },
+  { re: /\blan[çc]amento\b/i,       oque: "lançamento" },
+  { re: /\bentrada\s+facilitada\b/i, oque: "entrada facilitada" },
+  { re: /\ba partir de\b/i,         oque: "a partir de" },
+  { re: /\bgarant[ae]\b/i,          oque: "garanta" },
+  { re: /\bnão perc[ae]\b/i,        oque: "não perca" },
+  { re: /\bexclusiv\w*/i,           oque: "exclusivo" },
+  { re: /\bconhe[çc]a\b/i,          oque: "conheça" },
+  { re: /\bvisite\b/i,              oque: "visite" },
+  { re: /\bsubsídio\b|\bsubsidio\b/i, oque: "subsídio" },
+  { re: /\bparcela\w*\s+a partir\b/i, oque: "parcela a partir de" },
 ];
+
 export function cheiraOferta(texto: string) {
-  return CHEIRO_OFERTA.some((r) => r.test(texto));
+  return CHEIRO_OFERTA.some((c) => c.re.test(texto));
+}
+
+/** O que exatamente descaracteriza — para o aviso apontar a palavra, e não
+ *  só dizer "parece marketing", que não ensina nada e não dá o que corrigir. */
+export function acharCheiroOferta(texto: string): string[] {
+  return [...new Set(CHEIRO_OFERTA.filter((c) => c.re.test(texto)).map((c) => c.oque))];
 }
 
 /** A Meta recusa nome de exibição que não tenha relação com o negócio. */
@@ -784,4 +817,53 @@ export async function reivindicarConta(wabaId: string, ownerId: string) {
   if (error) throw error;
   if ((data as any)?.error) throw new Error((data as any).error);
   return data as { waba_id: string; nome: string };
+}
+
+/* ── o catálogo da casa ───────────────────────────────────────────────────
+   Todo template aprovado, de qualquer gerente, com o resultado real. É o
+   resultado que faz o gerente querer copiar — lista sem número é só mais uma
+   lista. Copiar, e não compartilhar: template vive DENTRO de uma conta, e o
+   texto aprovado na conta do Dudu não existe na da Liliane.                 */
+export interface TemplateCasa {
+  id: string; nome: string; corpo: string;
+  rodape: string | null; botoes: any; header_tipo: string | null;
+  header_imagem: string | null; variaveis: any;
+  categoria: string | null; categoria_pedida: string | null;
+  waba: string | null; dono: string; dono_id: string | null;
+  enviadas: number; respostas: number; taxa: number;
+}
+
+export function useTemplatesDaCasa(dias: number, ativo: boolean) {
+  return useQuery<TemplateCasa[]>({
+    queryKey: ["templates-casa", dias],
+    enabled: ativo,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("templates_da_casa", { p_dias: dias });
+      if (error) throw error;
+      return (data ?? []) as TemplateCasa[];
+    },
+  });
+}
+
+/** Copia o texto de outro gerente para a conta de quem está copiando. O nome
+ *  ganha sufixo quando já existe — nome de template é único por conta, e a
+ *  Meta recusa o duplicado com um erro que não diz o motivo. */
+export async function copiarTemplate(t: TemplateCasa, ownerId: string, nomeNovo?: string) {
+  const base = (nomeNovo || t.nome).toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_").slice(0, 46);
+  const vars: string[] = Array.isArray(t.variaveis) ? t.variaveis.map(String) : [];
+  return criarTemplate({
+    name: base,
+    body_text: t.corpo,
+    category: (t.categoria || "MARKETING").toUpperCase(),
+    header_type: t.header_tipo || "NONE",
+    header_image_url: t.header_imagem,
+    footer_text: t.rodape,
+    buttons: Array.isArray(t.botoes) ? t.botoes : [],
+    variables: vars,
+    exemplos: Object.fromEntries(vars.map((v) => [v, "exemplo"])),
+    owner_id: ownerId,
+  });
 }

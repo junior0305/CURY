@@ -22,7 +22,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
-  useDisparar, useMensagens, ajustarImagem, cheiraOferta, checarNome,
+  useDisparar, useMensagens, ajustarImagem, acharCheiroOferta, checarNome,
+  useTemplatesDaCasa, copiarTemplate, type TemplateCasa,
   criarTemplate, mandarMensagem, dispararCampanha,
   cancelarAgendamento, subirImagem, ajustarFoto,
   type Template,
@@ -139,7 +140,13 @@ export default function Disparar() {
   const { data: msgs } = useMensagens(thread);
 
   const vars = useMemo(() => achaVars(tCorpo), [tCorpo]);
-  const alerta = tTipo === "UTILITY" && cheiraOferta(tCorpo);
+  // As palavras exatas, não só "parece marketing": o aviso que não diz o que
+  // corrigir vira um aviso que o gerente aprende a ignorar.
+  const cheiros = useMemo(
+    () => (tTipo === "UTILITY" ? acharCheiroOferta(tCorpo) : []),
+    [tTipo, tCorpo],
+  );
+  const alerta = cheiros.length > 0;
   const nomeCheck = nomeExib.trim() ? checarNome(nomeExib) : null;
 
   const tplAtivo: Template | null =
@@ -273,6 +280,26 @@ export default function Disparar() {
   const { data: painel, isLoading: carregandoPainel } = usePainelDisparo(userId, periodo);
   const { data: usoNumeros } = useMeusNumeros(userId, periodo);
   const { data: contasWA } = useContasWA(etapa === "bm");
+  const { data: tplCasa } = useTemplatesDaCasa(30, etapa === "tpl");
+  const [copiando, setCopiando] = useState<string | null>(null);
+
+  async function copiar(t: TemplateCasa) {
+    if (!userId) return;
+    setCopiando(t.id);
+    try {
+      await copiarTemplate(t, userId);
+      toast.success(
+        `Mensagem copiada para a sua conta e enviada para aprovação da Meta. ` +
+        `Costuma sair rápido porque o texto já foi aprovado antes.`,
+        { duration: 9000 },
+      );
+      qc.invalidateQueries({ queryKey: ["disparar"] });
+      qc.invalidateQueries({ queryKey: ["templates-casa"] });
+    } catch (e: any) {
+      toast.error(`Não consegui copiar: ${e?.message ?? e}`, { duration: 9000 });
+    } finally { setCopiando(null); }
+  }
+
   const [wabaDigitado, setWabaDigitado] = useState("");
   const [trocarConta, setTrocarConta] = useState(false);
   const [pegandoConta, setPegandoConta] = useState(false);
@@ -1179,7 +1206,17 @@ export default function Disparar() {
                     <div className="tplr" key={t.id}>
                       <b>{t.nome}</b>
                       <span className={`st${cls}`}>{rot}</span>
-                      <span className="cat">{t.categoria === "UTILITY" ? "Utilidade" : "Marketing"}</span>
+                      {/* A categoria que vale é a que a META aprovou, e ela
+                          reclassifica pelo conteúdo. Mostrar o preço junto é o
+                          que impede o gerente achar que paga R$0,035 quando
+                          paga R$0,32 — nove vezes mais. */}
+                      <span className={`cat-b ${(t.categoria ?? "").toLowerCase()}`}
+                        title={t.categoria === "UTILITY"
+                          ? "Aprovada pela Meta como Utilidade"
+                          : "Aprovada pela Meta como Marketing"}>
+                        {t.categoria === "UTILITY" ? "Utilidade" : "Marketing"}
+                        {" · "}{brl(preco(t.categoria))}
+                      </span>
                       <span className="prev">{t.corpo.slice(0, 90)}</span>
                       <span>
                         <span style={{ display: "flex", gap: 6 }}>
@@ -1197,6 +1234,76 @@ export default function Disparar() {
                   );
                 }) : <p className="vars-n" style={{ margin: 0 }}>Nenhuma mensagem ainda. Crie a primeira abaixo.</p>}
               </div>
+            </div>
+          </div>
+
+            {/* ── mensagens da equipe ──────────────────────────────────────
+            Texto campeão de um gerente serve para todos — e é o resultado
+            que faz querer copiar, não a lista. Copiar, e não compartilhar:
+            template vive DENTRO de uma conta, e o aprovado na conta do Dudu
+            não existe na da Liliane; a Meta recusa o envio. */}
+          <div className="sec">
+            <div className="sec-h">
+            <h2>Mensagens da equipe</h2>
+            <span>o que está funcionando com os outros gerentes</span>
+            </div>
+            <div className="box">
+            {!tplCasa?.length ? (
+              <p className="vars-n" style={{ margin: 0 }}>
+                Nenhuma mensagem aprovada na casa ainda.</p>
+            ) : (
+              <div className="cat">
+                {tplCasa.filter((t) => t.dono_id !== userId).slice(0, 12).map((t) => {
+                  const cheiro = t.categoria === "UTILITY" ? acharCheiroOferta(t.corpo) : [];
+                  const trocada = t.categoria_pedida
+                    && t.categoria_pedida.toUpperCase() !== (t.categoria ?? "").toUpperCase();
+                  return (
+                    <div className="ct-i" key={t.id}>
+                      <div className="ct-h">
+                        <b className="mono">{t.nome}</b>
+                        <span className={`cat-b ${(t.categoria ?? "").toLowerCase()}`}>
+                          {t.categoria === "UTILITY" ? "Utilidade" : "Marketing"}
+                          {" · "}{brl(preco(t.categoria))}
+                        </span>
+                      </div>
+                      <p className="ct-c">{t.corpo}</p>
+                      <div className="ct-f">
+                        <span>de <b>{t.dono}</b></span>
+                        {t.enviadas ? (
+                          <span className="ct-r">
+                            <b>{t.taxa}%</b> responderam
+                            <i>{t.enviadas} enviadas</i>
+                          </span>
+                        ) : <span className="ct-r"><i>ainda sem envio</i></span>}
+                        <button className="btn sm" disabled={copiando === t.id}
+                          onClick={() => copiar(t)}>
+                          {copiando === t.id ? "Copiando…" : "Usar esta"}
+                        </button>
+                      </div>
+
+                      {/* A Meta RECLASSIFICA pelo conteúdo. Quem pediu
+                          utilidade e recebeu marketing paga nove vezes mais
+                          sem saber — este é o aviso que evita isso. */}
+                      {trocada ? (
+                        <div className="ct-av">
+                          Você pediu <b>{t.categoria_pedida === "UTILITY" ? "Utilidade" : "Marketing"}</b> e
+                          a Meta aprovou como <b>{t.categoria === "UTILITY" ? "Utilidade" : "Marketing"}</b>.
+                          O preço que vale é o da aprovação: <b>{brl(preco(t.categoria))}</b> por mensagem.
+                        </div>
+                      ) : null}
+                      {cheiro.length ? (
+                        <div className="ct-av">
+                          Aprovada como Utilidade, mas o texto tem{" "}
+                          <b>{cheiro.join(", ")}</b>. Se você ajustar e reenviar,
+                          a Meta pode reclassificar como Marketing — de {brl(d.precos.utility)}
+                          {" "}para {brl(d.precos.marketing)} por mensagem.
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             </div>
           </div>
 
@@ -1317,9 +1424,13 @@ export default function Disparar() {
                   {alerta ? (
                     <div className="alerta">
                       <svg viewBox="0 0 24 24"><path d="M12 8.5v5M12 17h.01" /><circle cx="12" cy="12" r="9" /></svg>
-                      <div><b>Esse texto tem cara de oferta.</b> A Meta reclassifica sozinha e cobra
-                        como marketing do mesmo jeito — você fica com o risco e sem a economia.
-                        Utilidade é retomar o que a pessoa pediu, sem anunciar nada novo.</div>
+                      <div>
+                        <b>Isto tira a mensagem de Utilidade: {cheiros.join(", ")}.</b>{" "}
+                        A Meta reclassifica pelo conteúdo e cobra como Marketing —
+                        {" "}{brl(d.precos.marketing)} em vez de {brl(d.precos.utility)} por
+                        mensagem, mais de nove vezes. Utilidade é retomar o que a
+                        pessoa já pediu, sem anunciar nada novo.
+                      </div>
                     </div>
                   ) : null}
                 </div>
