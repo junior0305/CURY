@@ -26,7 +26,7 @@ import {
   criarTemplate, mandarMensagem, dispararCampanha,
   cancelarAgendamento, subirImagem, ajustarFoto,
   type Template,
-  useNumerosCasa, usePainelDisparo, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
+  useNumerosCasa, usePainelDisparo, useMeusNumeros, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
   lerCsv, salvarPerfilNumero, soltarNumero, removerNumero, usePerfilNumero,
 } from "@/hooks/useDisparar";
 import { conectarBM, finalizarConexao } from "@/lib/embeddedSignup";
@@ -161,6 +161,9 @@ export default function Disparar() {
   // formatacao no modulo, e um estado com o mesmo nome as apaga dentro do
   // componente. A aba Respostas chamava `dia(...)` e recebia uma string —
   // "rt is not a function", tela branca, sem pista nenhuma na interface.
+  // Com vários números, qual deles envia. Vazio = o padrão.
+  const [numEnvio, setNumEnvio] = useState<string>("");
+
   // Dia, semana e mês no mesmo botão: o gerente compara o disparo de ontem
   // com o ritmo do mês, e é a comparação que diz se melhorou.
   const [periodo, setPeriodo] = useState(7);
@@ -268,6 +271,7 @@ export default function Disparar() {
   const [conectando, setConectando] = useState(false);
   const { data: numerosCasa, isLoading: carregandoCasa } = useNumerosCasa(!data?.config);
   const { data: painel, isLoading: carregandoPainel } = usePainelDisparo(userId, periodo);
+  const { data: usoNumeros } = useMeusNumeros(userId, periodo);
 
   // Cadastro do próprio número, em três passos, sem sair daqui.
   const [novoTel, setNovoTel] = useState("");
@@ -410,6 +414,14 @@ export default function Disparar() {
      08:00 as 19:30, horario de Sao Paulo. Escrito aqui E no runner de
      proposito: aqui para o gerente ver antes de clicar, la para valer
      mesmo com esta tela fechada.                                          */
+  // O número que vai enviar de fato: o escolhido, senão o padrão. Tudo na tela
+  // de disparo lê daqui — teto, custo e o aviso de conta da empresa — para não
+  // acontecer de a tela mostrar um número e a mensagem sair por outro.
+  const cfgEnvio = useMemo(
+    () => (data?.meusNumeros ?? []).find((n) => n.id === numEnvio) ?? data?.config ?? null,
+    [numEnvio, data?.meusNumeros, data?.config],
+  );
+
   const ABRE = "08:00", FECHA = "19:30";
   const marcado = useMemo(() => {
     if (qwModo !== "depois") return null;
@@ -482,7 +494,7 @@ export default function Disparar() {
         managerId: userId, templateId: tplAtivo.id,
         nome: `${tplAtivo.nome} · ${new Date().toLocaleDateString("pt-BR")}`,
         alvos: vai, vars: valores, brokerIds: brokers,
-        configId: data.config?.id ?? null,
+        configId: cfgEnvio?.id ?? data.config?.id ?? null,
         imagem: urlImagem,
         quando: marcado ? marcado.toISOString() : null,
       });
@@ -638,6 +650,34 @@ export default function Disparar() {
                     </div>
                   </div>
                 )}
+
+                {/* Todos os números dele, não só o padrão. Com WABA própria por
+                    gerente e vários telefones dentro, saber "quantos ativos" e
+                    "quanto cada um já mandou" é a pergunta do dia — e o teto e a
+                    qualidade são de cada número, nunca da soma. */}
+                {(usoNumeros?.length ?? 0) > 1 ? (
+                  <div className="meus">
+                    <div className="vars-l">
+                      Seus números — {usoNumeros!.length} ativos
+                    </div>
+                    {usoNumeros!.map((n) => (
+                      <div className="mn" key={n.config_id}>
+                        <span>
+                          <b className="mono">{n.numero}</b>
+                          <i>{n.nome ?? "sem nome"}
+                            {n.waba ? ` · conta ${String(n.waba).slice(-6)}` : ""}</i>
+                        </span>
+                        <span className={`qual q-${(n.qualidade ?? "").toLowerCase()}`}>
+                          {(n.qualidade ?? "—").toLowerCase()}
+                        </span>
+                        <span className="mn-u">
+                          <b>{n.hoje}</b> hoje
+                          <i>{n.enviadas} no período{n.falhas ? ` · ${n.falhas} recusadas` : ""}</i>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
 
                 {/* Escolher um número que já existe. Fica aberto para quem ainda
                     não tem o seu, e fechado para quem já resolveu isso — é uma
@@ -1471,11 +1511,23 @@ export default function Disparar() {
                 {/* De qual numero sai, e de quem e a conta. Faltava por completo:
                     dava para disparar mil mensagens sem saber que estavam saindo
                     pelo numero compartilhado — ou seja, no cartao da empresa. */}
-                <div className={`sai${cfg && cfg.ownerId !== userId ? " casa" : ""}`}>
+                <div className={`sai${cfgEnvio && cfgEnvio.ownerId !== userId ? " casa" : ""}`}>
                   <span>Sai pelo número</span>
-                  <b>{cfg?.displayNumber ?? "nenhum"}</b>
-                  <i>{!cfg ? "conecte um número antes de disparar"
-                     : cfg.ownerId === userId
+                  {d.meusNumeros.length > 1 ? (
+                    <select className="sai-sel" value={cfgEnvio?.id ?? ""}
+                      onChange={(e) => setNumEnvio(e.target.value)}>
+                      {d.meusNumeros.map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.displayNumber} — {n.label ?? "sem nome"}
+                          {n.quality ? ` · ${n.quality.toLowerCase()}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <b>{cfgEnvio?.displayNumber ?? "nenhum"}</b>
+                  )}
+                  <i>{!cfgEnvio ? "conecte um número antes de disparar"
+                     : cfgEnvio.ownerId === userId
                        ? "é o seu número — a conta é sua"
                        : "número compartilhado da empresa — quem paga é a empresa"}</i>
                 </div>
@@ -1484,11 +1536,11 @@ export default function Disparar() {
                   <div className="conta-l"><span>Pessoas selecionadas</span><b>{alvos}</b></div>
                   <div className="conta-l"><span>Preço por mensagem</span>
                     <b>{brl(preco(tplAtivo?.categoria ?? "MARKETING"))}</b></div>
-                  {cfg && alvos > cfg.tetoHoje ? (
-                    <div className="conta-l"><span>Teto de hoje neste número</span><b>{cfg.tetoHoje}</b></div>
+                  {cfgEnvio && alvos > cfgEnvio.tetoHoje ? (
+                    <div className="conta-l"><span>Teto de hoje neste número</span><b>{cfgEnvio.tetoHoje}</b></div>
                   ) : null}
                   <div className="conta-l conta-t"><span>Vai custar</span>
-                    <b>{brl(Math.min(alvos, cfg?.tetoHoje ?? alvos) * preco(tplAtivo?.categoria ?? "MARKETING"))}</b></div>
+                    <b>{brl(Math.min(alvos, cfgEnvio?.tetoHoje ?? alvos) * preco(tplAtivo?.categoria ?? "MARKETING"))}</b></div>
                 </div>
 
                 <div className="quando">
@@ -1529,8 +1581,8 @@ export default function Disparar() {
                   onClick={dispararAgora}>
                   {disparando ? "Disparando…"
                     : qwModo === "depois"
-                      ? `Marcar para ${Math.min(alvos, cfg?.tetoHoje ?? alvos)} pessoas`
-                      : `Disparar para ${Math.min(alvos, cfg?.tetoHoje ?? alvos)} pessoas`}
+                      ? `Marcar para ${Math.min(alvos, cfgEnvio?.tetoHoje ?? alvos)} pessoas`
+                      : `Disparar para ${Math.min(alvos, cfgEnvio?.tetoHoje ?? alvos)} pessoas`}
                 </button>
 
                 {/* O aviso de preço só quando ele muda alguma coisa: repetido em

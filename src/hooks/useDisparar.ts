@@ -90,7 +90,10 @@ export interface Mensagem {
 export interface Alvo { leadId: string; nome: string | null; telefone: string }
 
 export interface DadosDisparar {
+  /** o número padrão — o primeiro dele, ou o da empresa quando não tem nenhum */
   config: ConfigWA | null;
+  /** todos os números dele. Vazio = usa o compartilhado da empresa. */
+  meusNumeros: ConfigWA[];
   /** os números da equipe, incluindo quem ainda não conectou */
   numeros: { nome: string; profileId: string; config: ConfigWA | null }[];
   templates: Template[];
@@ -181,8 +184,12 @@ export function useDisparar(managerId: string | undefined) {
       // dizia "conectado e liberado para enviar" mostrando uma configuração
       // desativada — o pior tipo de erro, o que afirma o contrário do que é.
       const ativa = (c: any) => c.is_active !== false && c.status !== 'pendente';
-      const minha = cfgs.find((c) => c.owner_id === managerId && ativa(c))
-        ?? cfgs.find((c) => !c.owner_id && ativa(c)) ?? null;
+      // Um gerente pode ter VÁRIOS números — WABA própria com N telefones
+      // dentro. `config` continua sendo o padrão (o primeiro), para o resto da
+      // tela não mudar; `meusNumeros` é a lista de onde ele escolhe na hora do
+      // disparo. Sem a lista, escolher número seria escolher entre um.
+      const meus = cfgs.filter((c) => c.owner_id === managerId && ativa(c));
+      const minha = meus[0] ?? cfgs.find((c) => !c.owner_id && ativa(c)) ?? null;
 
       const numeros = time.map((b: any) => ({
         nome: nomePor.get(b.id) ?? "—", profileId: b.id,
@@ -260,6 +267,7 @@ export function useDisparar(managerId: string | undefined) {
 
       return {
         config: minha ? monta(minha) : null,
+        meusNumeros: meus.map(monta),
         numeros, templates, campanhas, conversas, publicos,
         corretores: time.map((b: any) => ({
           id: b.id, nome: nomePor.get(b.id) ?? "—",
@@ -710,6 +718,31 @@ export function usePainelDisparo(managerId: string | undefined, dias: number) {
       });
       if (error) throw error;
       return data as PainelDisparo;
+    },
+  });
+}
+
+/* ── uso por número ───────────────────────────────────────────────────────
+   Com vários números por gerente, o total da equipe não serve para nada: o
+   teto, a qualidade e a conta são de cada número separadamente.            */
+export interface UsoNumero {
+  config_id: string; numero: string; nome: string | null;
+  qualidade: string | null; waba: string | null; situacao: string | null;
+  visto_em: string | null;
+  enviadas: number; entregues: number; falhas: number; hoje: number;
+}
+
+export function useMeusNumeros(ownerId: string | undefined, dias: number) {
+  return useQuery<UsoNumero[]>({
+    queryKey: ["meus-numeros", ownerId, dias],
+    enabled: !!ownerId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("meus_numeros_uso", {
+        p_owner: ownerId, p_dias: dias,
+      });
+      if (error) throw error;
+      return (data ?? []) as UsoNumero[];
     },
   });
 }
