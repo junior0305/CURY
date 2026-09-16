@@ -597,7 +597,9 @@ async function filaDoGerente(managerId: string, brokerIds: string[]) {
     return existe.id as string;
   }
   const { data, error } = await supabase.from("distribution_queues").insert({
-    name: nome, match_field: "campanha", match_value: nome,
+    // "campaign", em ingles: e a chave que o incoming-lead conhece. Escrito
+    // "campanha" a fila nunca casava, o lead caia no FALLBACK e nascia sem dono.
+    name: nome, match_field: "campaign", match_value: nome,
     broker_ids: brokerIds, is_active: true, last_assigned_index: 0,
   }).select("id").single();
   if (error) throw error;
