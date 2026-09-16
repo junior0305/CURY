@@ -385,6 +385,24 @@ export async function assumirNumero(phoneNumberId: string, ownerId: string, labe
   return d as { ok: boolean; pendencia: string | null };
 }
 
+/** O perfil que está no ar agora. Sem isso a tela limpa o campo depois de
+ *  salvar e parece que nada aconteceu — quando na verdade salvou. */
+export function usePerfilNumero(phoneNumberId: string | null | undefined, ownerId?: string) {
+  return useQuery<{ foto: string | null; sobre: string | null }>({
+    queryKey: ["perfil-numero", phoneNumberId],
+    enabled: !!phoneNumberId && !!ownerId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("wa-onboard", {
+        body: { action: "perfil", phone_number_id: phoneNumberId, owner_id: ownerId },
+      });
+      if (error) return { foto: null, sobre: null };
+      const p = (data as any)?.perfil;
+      return { foto: p?.profile_picture_url ?? null, sobre: p?.about ?? null };
+    },
+  });
+}
+
 /** Solta o número: ele fica na conta da empresa e deixa de ser seu.
  *  Reversível — é o caso de quem trocou de número ou saiu. */
 export async function soltarNumero(phoneNumberId: string, ownerId: string) {

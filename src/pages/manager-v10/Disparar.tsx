@@ -26,7 +26,7 @@ import {
   criarTemplate, mandarMensagem, dispararCampanha, subirImagem, ajustarFoto,
   type Template,
   useNumerosCasa, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
-  lerCsv, salvarPerfilNumero, soltarNumero, removerNumero,
+  lerCsv, salvarPerfilNumero, soltarNumero, removerNumero, usePerfilNumero,
 } from "@/hooks/useDisparar";
 import { conectarBM, finalizarConexao } from "@/lib/embeddedSignup";
 import { Blank } from "@/components/manager-v10/ui";
@@ -241,6 +241,8 @@ export default function Disparar() {
   const [fotoPerfil, setFotoPerfil] = useState<string | null>(null);
   const [sobre, setSobre] = useState("");
   const [salvandoPerfil, setSalvandoPerfil] = useState(false);
+  const { data: perfilAtual } = usePerfilNumero(
+    data?.config?.ownerId === userId ? data?.config?.phoneNumberId : null, userId);
 
   async function pegarFoto(f: File | undefined) {
     if (!f) return;
@@ -286,6 +288,7 @@ export default function Disparar() {
       });
       toast.success("Perfil atualizado. Quem abrir a conversa já vê assim.");
       setFotoPerfil(null);
+      qc.invalidateQueries({ queryKey: ["perfil-numero"] });
     } catch (e: any) {
       toast.error(e?.message ?? "Não consegui salvar.");
     } finally { setSalvandoPerfil(false); }
@@ -493,15 +496,16 @@ export default function Disparar() {
                         <div className="vars-l">A cara do seu número</div>
                         <div className="pf-linha">
                           <label className="pf-foto">
-                            {fotoPerfil
-                              ? <img src={fotoPerfil} alt="" />
+                            {fotoPerfil ? <img src={fotoPerfil} alt="" />
+                              : perfilAtual?.foto ? <img src={perfilAtual.foto} alt="" />
                               : <span>escolher<br />foto</span>}
                             <input type="file" accept="image/*" hidden
                               onChange={(e) => pegarFoto(e.target.files?.[0])} />
                           </label>
                           <div className="f" style={{ flex: 1, marginBottom: 0 }}>
                             <label htmlFor="sobre">Recado do perfil</label>
-                            <input id="sobre" maxLength={139} value={sobre}
+                            <input id="sobre" maxLength={139}
+                              value={sobre || perfilAtual?.sobre || ""}
                               placeholder="Cury — imóveis Minha Casa Minha Vida"
                               onChange={(e) => setSobre(e.target.value)} />
                             <small>Aparece embaixo do nome quando o cliente abre a conversa.</small>
