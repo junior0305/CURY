@@ -26,7 +26,7 @@ import {
   criarTemplate, mandarMensagem, dispararCampanha,
   cancelarAgendamento, subirImagem, ajustarFoto,
   type Template,
-  useNumerosCasa, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
+  useNumerosCasa, usePainelDisparo, assumirNumero, adicionarNumero, pedirCodigo, confirmarCodigo,
   lerCsv, salvarPerfilNumero, soltarNumero, removerNumero, usePerfilNumero,
 } from "@/hooks/useDisparar";
 import { conectarBM, finalizarConexao } from "@/lib/embeddedSignup";
@@ -39,6 +39,9 @@ type Etapa = "bm" | "tpl" | "disp" | "conv";
 type Destino = "fila" | "escolher";
 
 const brl = (n: number) => "R$ " + n.toFixed(2).replace(".", ",");
+/** Fracao em cima do degrau anterior. Zero em cima de zero e "—", nao 0%:
+ *  0% diz que ninguem leu, "—" diz que nao houve o que ler. */
+const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) + "%" : "—");
 const ini = (s: string) => s.trim().slice(0, 2).toUpperCase();
 const hhmm = (iso: string) =>
   new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -158,6 +161,10 @@ export default function Disparar() {
   // formatacao no modulo, e um estado com o mesmo nome as apaga dentro do
   // componente. A aba Respostas chamava `dia(...)` e recebia uma string —
   // "rt is not a function", tela branca, sem pista nenhuma na interface.
+  // Dia, semana e mês no mesmo botão: o gerente compara o disparo de ontem
+  // com o ritmo do mês, e é a comparação que diz se melhorou.
+  const [periodo, setPeriodo] = useState(7);
+
   const [qwModo, setQwModo] = useState<"agora" | "depois">("agora");
   const [qwDia, setQwDia] = useState(() => new Date().toISOString().slice(0, 10));
   const [qwHora, setQwHora] = useState("09:00");
@@ -260,6 +267,7 @@ export default function Disparar() {
   }
   const [conectando, setConectando] = useState(false);
   const { data: numerosCasa, isLoading: carregandoCasa } = useNumerosCasa(!data?.config);
+  const { data: painel, isLoading: carregandoPainel } = usePainelDisparo(userId, periodo);
 
   // Cadastro do próprio número, em três passos, sem sair daqui.
   const [novoTel, setNovoTel] = useState("");
@@ -643,18 +651,28 @@ export default function Disparar() {
                       administrador para adicionar o seu na conta de WhatsApp da empresa.</p>
                   ) : (
                     <>
-                      <p className="vars-n">Cada um dispara pelo próprio, com o próprio
-                        limite e a própria cobrança.</p>
+                      {/* Faltava a frase mais importante da tela: TODOS estes
+                          numeros sao da conta da empresa. Sem ela, "compartilhado"
+                          e "de outra pessoa" pareciam contas diferentes, e nao da
+                          para saber qual numero dispara por onde. */}
+                      <p className="vars-n">
+                        Todos estes números são da <b>conta de WhatsApp da empresa</b>
+                        {cfg?.wabaId ? <> (<span className="mono">{cfg.wabaId}</span>)</> : null}.
+                        Ninguém aqui usa conta própria — cada um dispara pelo seu
+                        número, com o próprio limite e a própria cobrança.
+                      </p>
                       <div className="bm-lista">
                         {numerosCasa.map((n) => {
                           const livre = !n.donoId && !n.compartilhado;
+                          const meu = n.donoId === userId;
                           return (
-                            <div className="bml" key={n.phone_number_id}>
+                            <div className={`bml${meu ? " meu" : ""}`} key={n.phone_number_id}>
                               <span className="av">{ini(n.nome ?? "?")}</span>
                               <span>
                                 <b>{n.numero}</b>
-                                <i>{n.compartilhado ? "da empresa — atende quem não tem o próprio"
-                                   : n.donoId ? (n.donoLabel ?? "de outra pessoa")
+                                <i>{meu ? "este é o seu"
+                                   : n.compartilhado ? "da empresa — atende quem não tem o próprio"
+                                   : n.donoId ? `de ${n.donoLabel ?? "outra pessoa"}`
                                    : n.nome ?? "livre"}</i>
                               </span>
                               <span className="qual">{(n.qualidade ?? "—").toLowerCase()}</span>
@@ -665,8 +683,9 @@ export default function Disparar() {
                                     É o meu
                                   </button>
                                 ) : (
-                                  <span style={{ fontSize: "12px", color: "var(--ink-3)" }}>
-                                    {n.compartilhado ? "compartilhado" : "ocupado"}
+                                  <span className="mk-tag">
+                                    {meu ? "em uso por você"
+                                      : n.compartilhado ? "compartilhado" : "de outra pessoa"}
                                   </span>
                                 )}
                               </span>
@@ -836,25 +855,151 @@ export default function Disparar() {
             </div>
           </div>
 
+          {/* ── o painel ─────────────────────────────────────────────────
+              Era uma lista de números, um por corretor. Com 40 corretores é
+              rolagem, e rolagem não responde pergunta nenhuma. Aqui estão as
+              perguntas: saiu quanto, chegou, foi lido, quem respondeu, qual
+              campanha e qual texto funcionaram, e quem da equipe usa isto. */}
           <div className="sec">
-            <div className="sec-h"><h2>Números da sua equipe</h2><span>cada um dispara pelo seu</span></div>
-            <div className="box">
-              <div className="bm-lista">
-                {d.numeros.map((n) => (
-                  <div className="bml" key={n.profileId}>
-                    <span className="av">{ini(n.nome)}</span>
-                    <span><b>{n.nome}</b><i>{n.config?.displayNumber ?? "ainda não conectou"}</i></span>
-                    {n.config
-                      ? <span className="qual">{(n.config.quality ?? "—").toLowerCase()}</span>
-                      : <span style={{ fontSize: "12.5px", color: "var(--ink-3)" }}>sem número</span>}
-                    <span />
-                  </div>
+            <div className="sec-h">
+              <h2>Como está indo</h2>
+              <div className="per">
+                {([[1, "Hoje"], [7, "Semana"], [30, "Mês"]] as [number, string][]).map(([n, r]) => (
+                  <button key={n} className={periodo === n ? "on" : ""}
+                    onClick={() => setPeriodo(n)}>{r}</button>
                 ))}
-                {!d.numeros.length ? (
-                  <p className="vars-n" style={{ margin: 0 }}>Nenhum número na equipe ainda.</p>
-                ) : null}
               </div>
             </div>
+
+            {!painel ? (
+              <div className="box"><p className="vars-n" style={{ margin: 0 }}>
+                {carregandoPainel ? "Somando…" : "Sem dado neste período."}</p></div>
+            ) : (
+              <>
+                {/* O funil de um disparo: saiu → chegou → foi lido → respondeu.
+                    Cada degrau só faz sentido ao lado do anterior, por isso
+                    ficam juntos e cada um mostra a fração do que veio antes. */}
+                <div className="kpis">
+                  <div className="kpi">
+                    <span>Enviadas</span>
+                    <b>{painel.envio.enviadas.toLocaleString("pt-BR")}</b>
+                    <i>mensagens que saíram</i>
+                  </div>
+                  <div className="kpi">
+                    <span>Entregues</span>
+                    <b>{painel.envio.entregues.toLocaleString("pt-BR")}</b>
+                    <i>{pct(painel.envio.entregues, painel.envio.enviadas)} do que saiu</i>
+                  </div>
+                  <div className="kpi">
+                    <span>Lidas</span>
+                    <b>{painel.envio.lidas.toLocaleString("pt-BR")}</b>
+                    <i>{pct(painel.envio.lidas, painel.envio.entregues)} de quem recebeu</i>
+                  </div>
+                  <div className="kpi bom">
+                    <span>Responderam</span>
+                    <b>{painel.envio.responderam.toLocaleString("pt-BR")}</b>
+                    <i>{pct(painel.envio.responderam, painel.envio.enviadas)} — é o que vira lead</i>
+                  </div>
+                  <div className={`kpi${painel.envio.falhas ? " ruim" : ""}`}>
+                    <span>Recusadas</span>
+                    <b>{painel.envio.falhas.toLocaleString("pt-BR")}</b>
+                    <i>{painel.envio.falhas ? "número errado ou fora do WhatsApp" : "nenhuma"}</i>
+                  </div>
+                  <div className="kpi">
+                    <span>Em conversa agora</span>
+                    <b>{painel.envio.em_conversa.toLocaleString("pt-BR")}</b>
+                    <i>falaram nas últimas 24h</i>
+                  </div>
+                </div>
+
+                {painel.envio.sem_corretor > 0 ? (
+                  <div className="alerta" style={{ marginTop: 12 }}>
+                    <b>{painel.envio.sem_corretor}</b>&nbsp;pessoas responderam e estão
+                    sem corretor. Responderam e ninguém falou com elas.
+                  </div>
+                ) : null}
+
+                <div className="duo">
+                  {/* Campanha responde "qual disparo valeu". O público muda a
+                      cada uma, então a taxa é do disparo inteiro — não do texto. */}
+                  <details className="dobra" open>
+                    <summary>Campanhas — da que mais fez responder</summary>
+                    {!painel.campanhas.length ? (
+                      <p className="vars-n">Nenhuma campanha com envio neste período.</p>
+                    ) : (
+                      <div className="rank">
+                        {painel.campanhas.slice(0, 8).map((c) => (
+                          <div className="rk" key={c.id}>
+                            <span className="rk-n">
+                              <b>{c.nome}</b>
+                              <i>{c.enviadas} enviadas · {c.lidas} lidas
+                                {c.falhas ? ` · ${c.falhas} recusadas` : ""}</i>
+                            </span>
+                            <span className="rk-b">
+                              <s style={{ width: `${Math.min(100, c.taxa * 4)}%` }} />
+                            </span>
+                            <span className="rk-v">{c.taxa}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </details>
+
+                  {/* Mensagem responde "qual texto funciona". Agrupa o mesmo
+                      template usado em campanhas diferentes — o público muda,
+                      o texto não, e é só assim que dá para comparar. */}
+                  <details className="dobra" open>
+                    <summary>Mensagens — qual texto é mais respondido</summary>
+                    {!painel.mensagens.length ? (
+                      <p className="vars-n">Ainda não há texto com envio suficiente
+                        para comparar (a partir de 5 envios).</p>
+                    ) : (
+                      <div className="rank">
+                        {painel.mensagens.slice(0, 8).map((m) => (
+                          <div className="rk" key={m.template}>
+                            <span className="rk-n">
+                              <b className="mono">{m.template}</b>
+                              <i>{m.enviadas} enviadas · {m.respostas} responderam</i>
+                            </span>
+                            <span className="rk-b">
+                              <s style={{ width: `${Math.min(100, m.taxa * 4)}%` }} />
+                            </span>
+                            <span className="rk-v">{m.taxa}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </details>
+                </div>
+
+                {/* Adoção. Ferramenta que ninguém abre não existe — e este é o
+                    número que o gerente precisa ver antes de cobrar resultado. */}
+                <details className="dobra">
+                  <summary>
+                    Equipe — {painel.equipe.usam} de {painel.equipe.total} dispararam
+                    {painel.equipe.online ? ` · ${painel.equipe.online} online agora` : ""}
+                  </summary>
+                  <div className="eq">
+                    {painel.equipe.lista.map((b) => (
+                      <div className={`eqr${b.campanhas ? " usa" : ""}`} key={b.id}>
+                        <span className="av">{ini(b.nome)}</span>
+                        <span>
+                          <b>{b.nome}</b>
+                          <i>{b.numero ?? "sem número próprio"}</i>
+                        </span>
+                        <span className="eq-u">
+                          {b.campanhas
+                            ? `${b.campanhas} ${b.campanhas === 1 ? "disparo" : "disparos"} · ${b.enviadas} mensagens`
+                            : "não disparou"}
+                        </span>
+                        {b.online ? <span className="on" title="online agora" />
+                          : <span className="eq-v">{b.visto ? dia(b.visto) : "nunca entrou"}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </>
+            )}
           </div>
         </div>
 

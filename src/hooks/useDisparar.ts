@@ -676,3 +676,40 @@ export async function cancelarAgendamento(campanhaId: string) {
     .eq("id", campanhaId).eq("status", "scheduled");
   if (error) throw error;
 }
+
+/* ── o painel do disparador ───────────────────────────────────────────────
+   Substitui a lista crua de números da equipe. Com 40 corretores a lista vira
+   rolagem, e rolagem não responde pergunta nenhuma. O recorte de tempo é o
+   mesmo para tudo: comparar campanha de ontem com mensagem do mês é o jeito
+   mais fácil de tirar a conclusão errada.                                   */
+export interface PainelDisparo {
+  dias: number;
+  envio: {
+    enviadas: number; entregues: number; lidas: number; falhas: number;
+    recebidas: number; responderam: number; em_conversa: number; sem_corretor: number;
+  };
+  campanhas: { id: string; nome: string; quando: string; enviadas: number;
+               lidas: number; respostas: number; falhas: number; taxa: number }[];
+  mensagens: { template: string; enviadas: number; lidas: number;
+               respostas: number; taxa: number }[];
+  equipe: {
+    total: number; online: number; com_numero: number; usam: number;
+    lista: { id: string; nome: string; online: boolean; visto: string | null;
+             numero: string | null; campanhas: number; enviadas: number }[];
+  };
+}
+
+export function usePainelDisparo(managerId: string | undefined, dias: number) {
+  return useQuery<PainelDisparo>({
+    queryKey: ["painel-disparo", managerId, dias],
+    enabled: !!managerId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("disparador_painel", {
+        p_manager: managerId, p_dias: dias,
+      });
+      if (error) throw error;
+      return data as PainelDisparo;
+    },
+  });
+}

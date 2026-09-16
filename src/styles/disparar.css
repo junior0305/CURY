@@ -285,3 +285,67 @@
 .mgr10.disparar .dobra[open]{padding-bottom:14px}
 .mgr10.disparar .dobra.perigo summary{color:var(--ink-3)}
 .mgr10.disparar .dobra.perigo[open]{border-color:var(--crit)}
+
+.mgr10.disparar .bml.meu{background:var(--accent-soft);border-radius:10px;
+  padding-left:10px;padding-right:10px}
+.mgr10.disparar .bml.meu b{color:var(--accent)}
+.mgr10.disparar .mk-tag{font:600 11px Archivo,sans-serif;letter-spacing:.04em;
+  color:var(--ink-3);white-space:nowrap}
+.mgr10.disparar .mono{font-family:"JetBrains Mono",monospace;font-size:12px}
+
+/* ── o painel do disparador ────────────────────────────────────────────
+   Substitui a lista de números da equipe: com 40 corretores aquilo era
+   rolagem, e rolagem não responde pergunta nenhuma. */
+.mgr10.disparar .per{display:flex;gap:2px;background:var(--surface-2);padding:3px;
+  border-radius:9px}
+.mgr10.disparar .per button{border:0;background:transparent;color:var(--ink-3);cursor:pointer;
+  font:600 12px Archivo,sans-serif;padding:6px 12px;border-radius:7px;transition:.13s}
+.mgr10.disparar .per button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+
+.mgr10.disparar .kpis{display:grid;gap:12px;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.mgr10.disparar .kpi{background:var(--surface);border:1px solid var(--line);
+  border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
+.mgr10.disparar .kpi span{display:block;font:700 10px Archivo,sans-serif;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink-3)}
+.mgr10.disparar .kpi b{display:block;font:700 30px/1.05 Archivo,sans-serif;letter-spacing:-.03em;
+  margin:7px 0 3px;font-variant-numeric:tabular-nums}
+.mgr10.disparar .kpi i{display:block;font-style:normal;font-size:11.5px;line-height:1.45;
+  color:var(--ink-3)}
+.mgr10.disparar .kpi.bom b{color:var(--good)}
+.mgr10.disparar .kpi.ruim b{color:var(--warn)}
+
+.mgr10.disparar .duo{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+  margin-top:14px}
+.mgr10.disparar .duo .dobra{margin-top:0}
+
+/* ranking: a barra existe para comparar de relance, o número para conferir */
+.mgr10.disparar .rank{display:flex;flex-direction:column;gap:2px}
+.mgr10.disparar .rk{display:grid;grid-template-columns:minmax(0,1fr) 84px 46px;gap:12px;
+  align-items:center;padding:10px 0;border-top:1px solid var(--line-2)}
+.mgr10.disparar .rk:first-child{border-top:0}
+.mgr10.disparar .rk-n b{display:block;font-size:13.5px;font-weight:600;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.mgr10.disparar .rk-n i{display:block;font-style:normal;font-size:11.5px;color:var(--ink-3);
+  margin-top:2px}
+.mgr10.disparar .rk-b{height:6px;border-radius:99px;background:var(--surface-3);overflow:hidden}
+.mgr10.disparar .rk-b s{display:block;height:100%;background:var(--accent);text-decoration:none}
+.mgr10.disparar .rk-v{text-align:right;font:700 13px "JetBrains Mono",monospace;
+  font-variant-numeric:tabular-nums}
+
+/* equipe: quem usa em cima, quem nunca abriu embaixo */
+.mgr10.disparar .eq{display:flex;flex-direction:column;gap:2px}
+.mgr10.disparar .eqr{display:grid;grid-template-columns:34px minmax(0,1fr) auto 70px;gap:12px;
+  align-items:center;padding:10px 0;border-top:1px solid var(--line-2);font-size:13.5px}
+.mgr10.disparar .eqr:first-child{border-top:0}
+.mgr10.disparar .eqr .av{width:34px;height:34px;border-radius:10px;background:var(--surface-2);
+  color:var(--ink-3);display:grid;place-items:center;font:700 11.5px Archivo,sans-serif}
+.mgr10.disparar .eqr b{font-weight:600;display:block}
+.mgr10.disparar .eqr i{font-style:normal;font-size:11.5px;color:var(--ink-3);display:block;
+  margin-top:2px}
+.mgr10.disparar .eqr.usa .av{background:var(--good-soft);color:var(--good)}
+.mgr10.disparar .eq-u{font-size:12px;color:var(--ink-3);white-space:nowrap}
+.mgr10.disparar .eqr.usa .eq-u{color:var(--good);font-weight:600}
+.mgr10.disparar .eq-v{font-size:11.5px;color:var(--ink-3);text-align:right}
+.mgr10.disparar .eqr .on{width:8px;height:8px;border-radius:99px;background:var(--good);
+  justify-self:end;margin-right:12px}
