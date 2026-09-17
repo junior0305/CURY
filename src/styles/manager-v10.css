@@ -1083,3 +1083,21 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
 .mgr10 .odr-m.corretor{align-self:flex-end;background:#dcf8c6;color:#08361c}
 .mgr10 .odr-m.corretor i{color:#417a52}
 .mgr10 .odr-m.ia{align-self:flex-end;background:var(--blue-air);color:var(--ink-2)}
+
+/* passar/distribuir o lead — escolha de corretor dentro do drawer */
+.mgr10 .odr-passar{border:1px solid var(--line);background:var(--card);color:var(--ink-2);cursor:pointer;
+  border-radius:8px;padding:6px 11px;font:600 12px Archivo,sans-serif;white-space:nowrap}
+.mgr10 .odr-passar:hover{border-color:var(--blue);color:var(--blue)}
+.mgr10 .odr-passar:disabled{opacity:.45;cursor:default}
+.mgr10 .odr-esc{grid-column:1/-1;margin-top:10px;padding:12px;border-radius:11px;
+  background:var(--sunk);border:1px solid var(--hair)}
+.mgr10 .odr-esc-t{display:block;font:700 10.5px Archivo,sans-serif;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--ink-3);margin-bottom:9px}
+.mgr10 .odr-esc-l{display:flex;flex-wrap:wrap;gap:7px}
+.mgr10 .odr-esc-c{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink);cursor:pointer;border-radius:8px;
+  padding:7px 11px;font:600 12.5px Archivo,sans-serif}
+.mgr10 .odr-esc-c:hover{border-color:var(--blue);color:var(--blue)}
+.mgr10 .odr-esc-c.atual{opacity:.5;cursor:default}
+.mgr10 .odr-esc-c:disabled{cursor:default}
+.mgr10 .odr-on{width:7px;height:7px;border-radius:99px;background:var(--good);flex:none}

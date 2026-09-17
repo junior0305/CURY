@@ -446,6 +446,7 @@ export default function Leads() {
             leads={d.origem.leads[origAberta]}
             verConversa={d.verConversa}
             quem={userId}
+            corretores={d.corretores.map((c) => ({ id: c.id, nome: c.nome, online: c.online }))}
             onFechar={() => setOrigAberta(null)}
           />
         ) : null}

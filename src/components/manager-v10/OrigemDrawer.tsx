@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useConversaLead, cobrarCorretor,
+import { useConversaLead, cobrarCorretor, redistribuir,
          type LeadDetalhe, type Situacao } from "@/hooks/useLeads";
 
 const SITUACAO: Record<Situacao, { rot: string; tom: string; dica: string }> = {
@@ -30,15 +30,31 @@ function Olho() {
 }
 
 export default function OrigemDrawer({
-  titulo, leads, verConversa, quem, onFechar,
+  titulo, leads, verConversa, quem, corretores, onFechar,
 }: {
-  titulo: string; leads: LeadDetalhe[]; verConversa: boolean;
-  quem: string; onFechar: () => void;
+  titulo: string; leads: LeadDetalhe[]; verConversa: boolean; quem: string;
+  corretores: { id: string; nome: string; online: boolean }[];
+  onFechar: () => void;
 }) {
   const qc = useQueryClient();
   const [espiando, setEspiando] = useState<LeadDetalhe | null>(null);
   const [cobrando, setCobrando] = useState<string | null>(null);
+  const [distribuindo, setDistribuindo] = useState<LeadDetalhe | null>(null);
+  const [salvandoDist, setSalvandoDist] = useState(false);
   const { data: msgs, isLoading: carregandoMsgs } = useConversaLead(espiando?.id ?? null);
+
+  async function passarPara(l: LeadDetalhe, brokerId: string) {
+    setSalvandoDist(true);
+    try {
+      await redistribuir([l.id], [brokerId], quem);
+      const nome = corretores.find((c) => c.id === brokerId)?.nome ?? "o corretor";
+      toast.success(`${l.nome ?? l.telefone} passou para ${nome}.`);
+      setDistribuindo(null);
+      qc.invalidateQueries({ queryKey: ["aba-leads"] });
+    } catch (e: any) {
+      toast.error(`Não consegui distribuir: ${e?.message ?? e}`, { duration: 8000 });
+    } finally { setSalvandoDist(false); }
+  }
 
   async function cobrar(l: LeadDetalhe) {
     setCobrando(l.id);
@@ -81,6 +97,11 @@ export default function OrigemDrawer({
                         <Olho />
                       </button>
                     ) : null}
+                    <button className="odr-passar" disabled={salvandoDist}
+                      onClick={() => setDistribuindo(distribuindo?.id === l.id ? null : l)}
+                      title="Passar este lead para outro corretor que você escolher">
+                      {l.brokerId ? "Passar" : "Distribuir"}
+                    </button>
                     <button className="odr-cobrar" disabled={cobrando === l.id || !l.brokerId}
                       onClick={() => cobrar(l)}
                       title={l.brokerId
@@ -89,6 +110,22 @@ export default function OrigemDrawer({
                       {cobrando === l.id ? "…" : "Cobrar"}
                     </button>
                   </span>
+                  {distribuindo?.id === l.id ? (
+                    <div className="odr-esc">
+                      <span className="odr-esc-t">Passar para quem?</span>
+                      <div className="odr-esc-l">
+                        {corretores.map((c) => (
+                          <button key={c.id} className={`odr-esc-c${c.id === l.brokerId ? " atual" : ""}`}
+                            disabled={salvandoDist || c.id === l.brokerId}
+                            onClick={() => passarPara(l, c.id)}
+                            title={c.id === l.brokerId ? "Já é o corretor deste lead" : ""}>
+                            {c.online ? <i className="odr-on" /> : null}
+                            {c.nome}{c.id === l.brokerId ? " · atual" : ""}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
