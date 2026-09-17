@@ -38,6 +38,18 @@ export interface Fila {
   disparo?: { qtd: number; custo: number };
 }
 
+export type Situacao = "conversando" | "esperando" | "primeiro_toque" | "boas_vindas" | "parado";
+
+export interface LeadDetalhe {
+  id: string;
+  nome: string | null;
+  telefone: string | null;
+  corretor: string | null;
+  brokerId: string | null;
+  situacao: Situacao;
+  dias: number;
+}
+
 export interface DadosLeads {
   chegaram: number;
   encaminhados: number;
@@ -46,7 +58,12 @@ export interface DadosLeads {
   /** de onde vieram os que chegaram no período — o card do topo */
   origem: { anuncio: number; app: number; disparo: number; proprio: number;
             redes: { facebook: number; google: number; tiktok: number };
-            hoje: { anuncio: number; app: number; disparo: number; proprio: number } };
+            hoje: { anuncio: number; app: number; disparo: number; proprio: number };
+            /** os leads de cada origem, para abrir o card e ver um por um */
+            leads: { anuncio: LeadDetalhe[]; app: LeadDetalhe[];
+                     disparo: LeadDetalhe[]; proprio: LeadDetalhe[] } };
+  /** o gerente pode espiar a conversa corretor↔cliente? (system_settings) */
+  verConversa: boolean;
   conversa: { perguntouSemResposta: number; nuncaFalaram: number;
               falouSemResposta: number; emAndamento: number };
   filas: Fila[];
@@ -125,6 +142,10 @@ export function useLeads(managerId: string | undefined,
       const fim = ate + "T23:59:59";
       const hoje = diaSP();
 
+      const { data: cfgVer } = await supabase.from("system_settings")
+        .select("value").eq("key", "manager_ver_conversa").maybeSingle();
+      const verConversa = String((cfgVer as any)?.value ?? "true").replace(/"/g, "") === "true";
+
       const { data: perfil } = await supabase.from("profiles")
         .select("first_name").eq("id", managerId!).maybeSingle();
       const meuNome = (perfil as any)?.first_name ?? "";
@@ -133,7 +154,7 @@ export function useLeads(managerId: string | undefined,
         .select("cury_id").eq("escopo", "gerente").eq("profile_id", managerId!).maybeSingle();
       const gerenteCuryId = (euCury as any)?.cury_id ?? null;
 
-      const [timeRes, leadsRes, todosRes, curyRes, campRes, thrRes, poolRes] = await Promise.all([
+      const [timeRes, leadsRes, todosRes, curyRes, campRes, thrRes, poolRes, welcRes] = await Promise.all([
         supabase.from("profiles")
           .select("id,first_name,last_name,last_seen_at").eq("manager_id", managerId!).eq("role", "BROKER"),
         supabase.from("leads")
@@ -155,6 +176,11 @@ export function useLeads(managerId: string | undefined,
           .select("id,phone,contact_name,lead_id,last_inbound_at,last_outbound_at,assigned_broker_id")
           .not("last_inbound_at", "is", null).order("last_inbound_at", { ascending: false }).limit(300),
         supabase.rpc("get_pool_stats"),
+        // boas-vindas que o sistema mandou sozinho — para saber, por lead, se
+        // o primeiro contato foi automático ou se ninguém falou ainda.
+        supabase.from("automation_logs")
+          .select("entity_id").eq("entity_type", "welcome").eq("status", "success")
+          .gte("executed_at", de),
       ]);
 
       const time = (timeRes.data ?? []) as any[];
@@ -177,16 +203,48 @@ export function useLeads(managerId: string | undefined,
         (l.fb_campaign ?? "").toUpperCase().includes(meuNome.toUpperCase()));
       const chegaram = doPeriodo.length + bloq.length;
 
+      // Boas-vindas que o sistema mandou sozinho, por lead. É o que separa
+      // "ninguém falou" de "o robô falou mas o corretor não".
+      const teveWelcome = new Set<string>(
+        ((welcRes as any).data ?? []).map((w: any) => w.entity_id).filter(Boolean));
+
+      // A situação de um lead: dos dois lados conversando até parado no escuro.
+      // Sai só do que o lead já carrega — nada de mais uma volta ao banco.
+      const situacaoDe = (l: any): Situacao => {
+        const toque = l.last_broker_whatsapp_at;
+        const resp = l.last_lead_response_at;
+        if (resp && toque) {
+          // se a última foi do cliente, ele está esperando; senão, andando
+          return resp > toque ? "esperando" : "conversando";
+        }
+        if (resp && !toque) return "esperando";      // respondeu o disparo/robô, corretor mudo
+        if (toque) return "primeiro_toque";          // corretor falou, cliente ainda não
+        if (teveWelcome.has(l.id)) return "boas_vindas";  // só o robô falou
+        return "parado";                             // ninguém falou
+      };
+
       // De onde vieram — o card do topo. Conta o período e, à parte, os de hoje.
       const origem = { anuncio: 0, app: 0, disparo: 0, proprio: 0,
         redes: { facebook: 0, google: 0, tiktok: 0 },
-        hoje: { anuncio: 0, app: 0, disparo: 0, proprio: 0 } };
+        hoje: { anuncio: 0, app: 0, disparo: 0, proprio: 0 },
+        leads: { anuncio: [] as LeadDetalhe[], app: [] as LeadDetalhe[],
+                 disparo: [] as LeadDetalhe[], proprio: [] as LeadDetalhe[] } };
       for (const l of doPeriodo) {
         const { origem: o, rede } = origemLead(l);
         origem[o] += 1;
         if (rede) origem.redes[rede] += 1;
         if ((l.created_at ?? "").slice(0, 10) === hoje) origem.hoje[o] += 1;
+        origem.leads[o].push({
+          id: l.id, nome: l.name, telefone: l.phone,
+          corretor: l.broker_id ? (nomePor.get(l.broker_id) ?? "—") : null,
+          brokerId: l.broker_id ?? null, situacao: situacaoDe(l), dias: dias(l.created_at),
+        });
       }
+      // ordena cada lista pelo que precisa de ação primeiro
+      const ordem: Record<Situacao, number> = {
+        esperando: 0, parado: 1, boas_vindas: 2, primeiro_toque: 3, conversando: 4 };
+      for (const k of ["anuncio", "app", "disparo", "proprio"] as const)
+        origem.leads[k].sort((a, b) => ordem[a.situacao] - ordem[b.situacao]);
       // Lead barrado pelo geo é anúncio que a Cury não deixou entrar.
       origem.anuncio += bloq.length;
       origem.redes.facebook += bloq.length;
@@ -309,7 +367,7 @@ export function useLeads(managerId: string | undefined,
       })).sort((a, b) => a.nome.localeCompare(b.nome));
 
       return {
-        chegaram, encaminhados, perdidos: bloq.length, origem,
+        chegaram, encaminhados, perdidos: bloq.length, origem, verConversa,
         chegaramHoje: meus.filter((l) => (l.created_at ?? "").slice(0, 10) === hoje).length,
         conversa: {
           perguntouSemResposta: respSemVolta.length, nuncaFalaram: nuncaFalaram.length,
@@ -356,4 +414,48 @@ export async function descartar(leadIds: string[], motivo = "DESCARTE_GERENTE") 
   const { error } = await supabase.from("leads")
     .update({ status: "EXCLUDED", lost_reason: motivo }).in("id", leadIds);
   if (error) throw error;
+}
+
+/* ── espiar a conversa corretor↔cliente ───────────────────────────────────
+   O ícone de olho no lead. A conversa do corretor vive no WhatsApp dele
+   (Evolution → ia_messages), amarrada ao lead por ia_conversations.lead_id.
+   Leitura, nunca envio: o gerente confere, não fala pelo chip do corretor.  */
+export interface MsgConversa {
+  id: string; de: "cliente" | "corretor" | "ia"; texto: string; quando: string;
+}
+
+export function useConversaLead(leadId: string | null) {
+  return useQuery<MsgConversa[]>({
+    queryKey: ["conversa-lead", leadId],
+    enabled: !!leadId,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data: convs } = await supabase.from("ia_conversations")
+        .select("id").eq("lead_id", leadId!);
+      const ids = (convs ?? []).map((c: any) => c.id);
+      if (!ids.length) return [];
+      const { data: msgs } = await supabase.from("ia_messages")
+        .select("id,message_text,direction,sender_type,created_at")
+        .in("conversation_id", ids)
+        .order("created_at", { ascending: true }).limit(200);
+      return (msgs ?? []).map((m: any) => ({
+        id: m.id,
+        de: m.direction === "incoming" ? "cliente"
+          : m.sender_type === "ia" ? "ia" : "corretor",
+        texto: m.message_text ?? "",
+        quando: m.created_at,
+      })) as MsgConversa[];
+    },
+  });
+}
+
+/** Cobra o corretor — empurrão pelo WhatsApp (chip do gerente, fallback Junior)
+ *  mais o aviso no painel dele. `quem` é o dono do painel/logado. */
+export async function cobrarCorretor(leadId: string, quem: string) {
+  const { data, error } = await supabase.functions.invoke("cobrar-corretor", {
+    body: { lead_id: leadId, quem },
+  });
+  if (error) throw error;
+  if ((data as any)?.error) throw new Error((data as any).error);
+  return data as { avisado_no_whats: boolean; corretor: string };
 }

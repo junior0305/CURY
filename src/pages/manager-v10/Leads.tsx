@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLeads, redistribuir, descartar, type LeadLinha } from "@/hooks/useLeads";
+import OrigemDrawer from "@/components/manager-v10/OrigemDrawer";
 import { usePeriodo } from "@/hooks/usePeriodo";
 import { Sec, Blank } from "@/components/manager-v10/ui";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
@@ -35,6 +36,7 @@ export default function Leads() {
   const [modo, setModo] = useState<Modo>("online");
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   const [salvando, setSalvando] = useState(false);
+  const [origAberta, setOrigAberta] = useState<null | "anuncio" | "app" | "disparo" | "proprio">(null);
 
   loadFonts();
 
@@ -97,7 +99,9 @@ export default function Leads() {
               ["disparo", "Disparo", "WhatsApp oficial", d.origem.disparo, d.origem.hoje.disparo],
               ["proprio", "Próprio", "repescagem e manual", d.origem.proprio, d.origem.hoje.proprio],
             ] as [string, string, string, number, number][]).map(([k, titulo, sub, n, hoje]) => (
-              <div className={`or-c or-${k}`} key={k}>
+              <button className={`or-c or-${k}`} key={k} type="button"
+                onClick={() => n > 0 && setOrigAberta(k as any)}
+                title={n > 0 ? "Abrir e ver os leads um a um" : "Nenhum lead nesta origem"}>
                 <span className="or-t">{titulo}</span>
                 <b className="mono">{n}</b>
                 <i>{sub}</i>
@@ -114,7 +118,7 @@ export default function Leads() {
                 ) : k === "anuncio" && d.origem.anuncio > 0 ? (
                   <div className="or-rede"><span>tudo Facebook</span></div>
                 ) : null}
-              </div>
+              </button>
             ))}
           </div>
           {d.origem.app === 0 && d.origem.anuncio + d.origem.disparo > 0 ? (
@@ -434,6 +438,17 @@ export default function Leads() {
             </div>
           </>
         )}
+
+        {origAberta && userId ? (
+          <OrigemDrawer
+            titulo={{ anuncio: "Leads de anúncio", app: "Leads do app da Cury",
+                      disparo: "Leads de disparo", proprio: "Leads próprios" }[origAberta]}
+            leads={d.origem.leads[origAberta]}
+            verConversa={d.verConversa}
+            quem={userId}
+            onFechar={() => setOrigAberta(null)}
+          />
+        ) : null}
       </>
     );
   };
