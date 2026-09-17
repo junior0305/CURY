@@ -142,7 +142,8 @@ export function useDisparar(managerId: string | undefined) {
         body: { action: "refresh", owner_id: managerId },
       }).catch(() => {});
 
-      const [cfgRes, timeRes, tplRes, campRes, thrRes, leadsRes, precoRes] = await Promise.all([
+      const de15 = new Date(Date.now() - 15 * 86_400_000).toISOString();
+      const [cfgRes, timeRes, tplRes, campRes, thrRes, leadsRes, precoRes, jaRes] = await Promise.all([
         supabase.from("whatsapp_config").select("*"),
         supabase.from("profiles").select("id,first_name,last_name,last_seen_at")
           .eq("manager_id", managerId!).eq("role", "BROKER"),
@@ -160,6 +161,11 @@ export function useDisparar(managerId: string | undefined) {
           .eq("manager_id", managerId!),
         supabase.from("system_settings").select("key,value")
           .in("key", ["wa_preco_marketing", "wa_preco_utility"]),
+        // Quem JA recebeu disparo nos ultimos 15 dias — para nao reaparecer nas
+        // listas de "sem movimento". Sem isto o gerente ve os mesmos 276 depois
+        // de ja ter mandado, e reenvia por cima.
+        supabase.from("whatsapp_campaign_targets").select("phone")
+          .eq("status", "sent").gte("created_at", de15),
       ]);
 
       const time = (timeRes.data ?? []) as any[];
@@ -234,12 +240,18 @@ export function useDisparar(managerId: string | undefined) {
         }));
 
       /* ── públicos, iguais aos da aba Leads ── */
+      // Telefone que ja levou disparo nos ultimos 15 dias sai de todas as listas
+      // de reativacao — senao o gerente ve o mesmo lote e dispara em cima.
+      const jaDisparado = new Set(
+        ((jaRes.data ?? []) as any[]).map((t) => String(t.phone ?? "").replace(/\D/g, ""))
+          .filter(Boolean));
+      const soDigitos = (t: string) => String(t ?? "").replace(/\D/g, "");
       const leads = (leadsRes.data ?? []) as any[];
       const ativo = (l: any) => !["CONCLUDED", "EXCLUDED", "ABANDONED"].includes(l.status ?? "");
       const parado = (l: any) => l.last_interaction_at ?? l.last_broker_whatsapp_at ?? l.created_at;
       const ativos = leads.filter(ativo);
       const alvo = (l: any): Alvo => ({ leadId: l.id, nome: l.name ?? null, telefone: l.phone ?? "" });
-      const comTel = (l: any) => !!l.phone;
+      const comTel = (l: any) => !!l.phone && !jaDisparado.has(soDigitos(l.phone));
       const publicos = [
         { chave: "sem15", titulo: "Sem movimento há mais de 15 dias",
           sub: "da carteira do seu time",
@@ -662,6 +674,8 @@ export async function dispararCampanha(opts: {
   imagem?: string | null;
   /** quando soltar, em ISO. Vazio ou no passado = agora. */
   quando?: string | null;
+  /** o gerente escolheu os corretores na mão — manda para eles, sem filtrar chip */
+  manual?: boolean;
 }) {
   if (!opts.alvos.length) throw new Error("Nenhuma pessoa na seleção.");
   const queueId = await filaDoGerente(opts.managerId, opts.brokerIds);
@@ -675,6 +689,7 @@ export async function dispararCampanha(opts: {
     target_queue_id: queueId, vars: opts.vars,
     header_image_url: opts.imagem || null,
     wa_config_id: opts.configId, owner_id: opts.managerId, created_by: opts.managerId,
+    brokers_manuais: opts.manual === true,
     status: "draft", throttle_per_min: 10,
   }).select("id").single();
   if (error) throw error;

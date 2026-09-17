@@ -555,6 +555,9 @@ export default function Disparar() {
         managerId: userId, templateId: tplAtivo.id,
         nome: `${tplAtivo.nome} · ${new Date().toLocaleDateString("pt-BR")}`,
         alvos: vai, vars: valores, brokerIds: brokers,
+        // "escolher" = escolha manual: o motor manda para esses corretores sem
+        // filtrar chip/roleta. "fila" segue o rodizio normal.
+        manual: destino === "escolher",
         configId: cfgEnvio?.id ?? data.config?.id ?? null,
         imagem: urlImagem,
         quando: marcado ? marcado.toISOString() : null,
