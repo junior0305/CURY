@@ -686,7 +686,12 @@ export async function dispararCampanha(opts: {
     name: opts.nome, template_id: opts.templateId,
     audience_source: "csv",            // alvos vão inseridos, não resolvidos
     audience_count: opts.alvos.length,
-    target_queue_id: queueId, vars: opts.vars,
+    target_queue_id: queueId,
+    // A lista de corretores CONGELADA nesta campanha. A fila e compartilhada e
+    // reescrita pelo disparo seguinte; isto garante que a resposta tardia va
+    // para quem foi escolhido NESTE disparo.
+    broker_ids: opts.brokerIds,
+    vars: opts.vars,
     header_image_url: opts.imagem || null,
     wa_config_id: opts.configId, owner_id: opts.managerId, created_by: opts.managerId,
     brokers_manuais: opts.manual === true,
