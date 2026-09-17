@@ -87,6 +87,45 @@ export default function Leads() {
 
     return (
       <>
+        {/* 0 · de onde vem o lead — o card do topo */}
+        <Sec title="De onde vem o lead"
+             tag={<span className="dim">{periodo.rotulo} · {d.chegaram} no total</span>}>
+          <div className="orig">
+            {([
+              ["anuncio", "Anúncio", "pago no Meta / Google", d.origem.anuncio, d.origem.hoje.anuncio],
+              ["app", "App da Cury", "lead do plantão", d.origem.app, d.origem.hoje.app],
+              ["disparo", "Disparo", "WhatsApp oficial", d.origem.disparo, d.origem.hoje.disparo],
+              ["proprio", "Próprio", "repescagem e manual", d.origem.proprio, d.origem.hoje.proprio],
+            ] as [string, string, string, number, number][]).map(([k, titulo, sub, n, hoje]) => (
+              <div className={`or-c or-${k}`} key={k}>
+                <span className="or-t">{titulo}</span>
+                <b className="mono">{n}</b>
+                <i>{sub}</i>
+                {hoje ? <em className="or-h">+{hoje} hoje</em> : null}
+                {/* Dentro de anúncio, a rede — só aparece quando há mais de
+                    uma, senão "100% Facebook" é ruído. Hoje só o Facebook
+                    chega; Google e TikTok já têm lugar para quando entrarem. */}
+                {k === "anuncio" && (d.origem.redes.google + d.origem.redes.tiktok) > 0 ? (
+                  <div className="or-rede">
+                    {d.origem.redes.facebook ? <span>Facebook {d.origem.redes.facebook}</span> : null}
+                    {d.origem.redes.google ? <span>Google {d.origem.redes.google}</span> : null}
+                    {d.origem.redes.tiktok ? <span>TikTok {d.origem.redes.tiktok}</span> : null}
+                  </div>
+                ) : k === "anuncio" && d.origem.anuncio > 0 ? (
+                  <div className="or-rede"><span>tudo Facebook</span></div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          {d.origem.app === 0 && d.origem.anuncio + d.origem.disparo > 0 ? (
+            <p className="ld-say">
+              O lead do <b>app da Cury</b> ainda não entra no Comandra — o corretor
+              atende esse fora daqui. Quando ligarmos, ele aparece neste card e cai
+              na conta do corretor como qualquer outro.
+            </p>
+          ) : null}
+        </Sec>
+
         {/* 1 · o caminho do lead */}
         <Sec title="O caminho do lead"
              tag={<span className="dim">{periodo.rotulo} · {d.chegaramHoje} chegou hoje</span>}>

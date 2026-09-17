@@ -59,6 +59,46 @@ export interface DadosLeads {
   periodo: { de: string; ate: string; rotulo: string };
 }
 
+/* ── de onde veio o lead ───────────────────────────────────────────────
+   Quatro origens que o gerente reconhece: anúncio, app da Cury, disparo e
+   próprio. Dentro de anúncio, a rede — hoje só Facebook chega pelo Make, mas
+   a estrutura já separa Google e TikTok para quando entrarem, em vez de somar
+   tudo em "anúncio" e ter que refazer depois.
+
+   O sinal é o `source` gravado na entrada. `fb_campaign`/tag ajudam a apartar
+   disparo de anúncio, que hoje compartilham o mesmo source `facebook_make`. */
+export type OrigemLead = "anuncio" | "app" | "disparo" | "proprio";
+export type Rede = "facebook" | "google" | "tiktok" | null;
+
+export function origemLead(l: { source?: string | null; fb_campaign?: string | null;
+                                tag?: string | null; original_broker_id?: string | null }):
+                                { origem: OrigemLead; rede: Rede } {
+  const src = (l.source ?? "").toLowerCase();
+  const tag = (l.fb_campaign ?? l.tag ?? "").toUpperCase();
+
+  // disparo primeiro: hoje ele chega com source facebook_make e só a tag
+  // DISPARO_ o distingue do anúncio de verdade.
+  if (src === "wa_oficial" || src === "campaign" || tag.startsWith("DISPARO")) {
+    return { origem: "disparo", rede: null };
+  }
+  // app da Cury: lead que a Cury distribui no plantão (ainda a ligar na entrada)
+  if (src === "app_cury" || src === "cury" || src === "cury_app") {
+    return { origem: "app", rede: null };
+  }
+  // anúncio pago, com a rede quando dá para saber
+  if (src.startsWith("facebook") || src.startsWith("fb") || src === "instagram" || src === "ig") {
+    return { origem: "anuncio", rede: "facebook" };
+  }
+  if (src.startsWith("google") || src === "gads" || src === "adwords") {
+    return { origem: "anuncio", rede: "google" };
+  }
+  if (src.startsWith("tiktok") || src === "tt") {
+    return { origem: "anuncio", rede: "tiktok" };
+  }
+  // repescagem, secretária, corretor, manual, cold_pool → trabalho próprio
+  return { origem: "proprio", rede: null };
+}
+
 const diaSP = (d = new Date()) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo",
     year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
@@ -251,7 +291,7 @@ export function useLeads(managerId: string | undefined,
       })).sort((a, b) => a.nome.localeCompare(b.nome));
 
       return {
-        chegaram, encaminhados, perdidos: bloq.length,
+        chegaram, encaminhados, perdidos: bloq.length, origem,
         chegaramHoje: meus.filter((l) => (l.created_at ?? "").slice(0, 10) === hoje).length,
         conversa: {
           perguntouSemResposta: respSemVolta.length, nuncaFalaram: nuncaFalaram.length,
