@@ -43,6 +43,10 @@ export interface DadosLeads {
   encaminhados: number;
   perdidos: number;
   chegaramHoje: number;
+  /** de onde vieram os que chegaram no período — o card do topo */
+  origem: { anuncio: number; app: number; disparo: number; proprio: number;
+            redes: { facebook: number; google: number; tiktok: number };
+            hoje: { anuncio: number; app: number; disparo: number; proprio: number } };
   conversa: { perguntouSemResposta: number; nuncaFalaram: number;
               falouSemResposta: number; emAndamento: number };
   filas: Fila[];
@@ -133,7 +137,7 @@ export function useLeads(managerId: string | undefined,
         supabase.from("profiles")
           .select("id,first_name,last_name,last_seen_at").eq("manager_id", managerId!).eq("role", "BROKER"),
         supabase.from("leads")
-          .select("id,name,phone,status,broker_id,created_at,last_lead_response_at,last_broker_whatsapp_at,last_interaction_at,contact_attempts,lost_reason,fb_campaign,source,negotiating_since")
+          .select("id,name,phone,status,broker_id,created_at,last_lead_response_at,last_broker_whatsapp_at,last_interaction_at,contact_attempts,lost_reason,fb_campaign,tag,source,original_broker_id,negotiating_since")
           .eq("manager_id", managerId!),
         // os bloqueados perdem o gerente — a dona é a campanha
         supabase.from("leads").select("geo_status,fb_campaign,created_at")
@@ -172,6 +176,20 @@ export function useLeads(managerId: string | undefined,
       const bloq = ((todosRes as any).data ?? []).filter((l: any) =>
         (l.fb_campaign ?? "").toUpperCase().includes(meuNome.toUpperCase()));
       const chegaram = doPeriodo.length + bloq.length;
+
+      // De onde vieram — o card do topo. Conta o período e, à parte, os de hoje.
+      const origem = { anuncio: 0, app: 0, disparo: 0, proprio: 0,
+        redes: { facebook: 0, google: 0, tiktok: 0 },
+        hoje: { anuncio: 0, app: 0, disparo: 0, proprio: 0 } };
+      for (const l of doPeriodo) {
+        const { origem: o, rede } = origemLead(l);
+        origem[o] += 1;
+        if (rede) origem.redes[rede] += 1;
+        if ((l.created_at ?? "").slice(0, 10) === hoje) origem.hoje[o] += 1;
+      }
+      // Lead barrado pelo geo é anúncio que a Cury não deixou entrar.
+      origem.anuncio += bloq.length;
+      origem.redes.facebook += bloq.length;
       const encaminhados = doPeriodo.filter((l) => l.broker_id).length;
 
       /* ── onde a conversa está ── */
