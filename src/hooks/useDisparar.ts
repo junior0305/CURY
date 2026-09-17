@@ -680,10 +680,18 @@ export async function dispararCampanha(opts: {
   if (!opts.alvos.length) throw new Error("Nenhuma pessoa na seleção.");
   const queueId = await filaDoGerente(opts.managerId, opts.brokerIds);
 
+  // Nome com o GERENTE no fim: "simulacao · 17/09 · Liliane". Sem isso, dois
+  // gerentes disparando o mesmo template criam campanhas de nome idêntico e
+  // ninguém sabe qual é de quem no acompanhamento.
+  const { data: ger } = await supabase.from("profiles")
+    .select("first_name").eq("id", opts.managerId).maybeSingle();
+  const nomeCampanha = (ger as any)?.first_name
+    ? `${opts.nome} · ${(ger as any).first_name}` : opts.nome;
+
   // Nasce em `draft`: o cron só pega quem está em `sending`, e ninguém deve
   // começar a disparar com a lista de alvos pela metade.
   const { data: camp, error } = await supabase.from("whatsapp_campaigns").insert({
-    name: opts.nome, template_id: opts.templateId,
+    name: nomeCampanha, template_id: opts.templateId,
     audience_source: "csv",            // alvos vão inseridos, não resolvidos
     audience_count: opts.alvos.length,
     target_queue_id: queueId,
