@@ -103,7 +103,8 @@ const ProtectedBrokerRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, role, loading, mustChangePassword } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" />;
-  if (role === "ADMIN" || role === "SUPERINTENDENT") return <Navigate to="/admin" />;
+  if (role === "SUPERINTENDENT") return <Navigate to="/super" />;
+  if (role === "ADMIN") return <Navigate to="/admin" />;
   if (role === "MANAGER") return <Navigate to="/manager" />;
   if (role === "SECRETARY") return <Navigate to="/secretaria" />;
   if (mustChangePassword) return <Navigate to="/force-password-change" replace />;
@@ -114,7 +115,8 @@ const ProtectedSecretaryRoute = ({ children }: { children: React.ReactNode }) =>
   const { session, role, loading, mustChangePassword } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" />;
-  if (role === "ADMIN" || role === "SUPERINTENDENT") return <Navigate to="/admin" />;
+  if (role === "SUPERINTENDENT") return <Navigate to="/super" />;
+  if (role === "ADMIN") return <Navigate to="/admin" />;
   if (role === "MANAGER") return <Navigate to="/manager" />;
   if (role !== "SECRETARY") return <Navigate to="/dashboard" />;
   if (mustChangePassword) return <Navigate to="/force-password-change" replace />;

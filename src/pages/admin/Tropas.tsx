@@ -49,7 +49,7 @@ interface Team {
   name: string;
 }
 
-type Tab = "users" | "bots" | "settings";
+type Tab = "users" | "hierarquia" | "bots" | "settings";
 
 export default function Tropas() {
   const { toast } = useToast();
@@ -136,7 +136,7 @@ export default function Tropas() {
   const loadManagers = async () => {
     const { data } = await supabase
       .from("profiles")
-      .select("id, email, first_name, full_name")
+      .select("id, email, first_name, full_name, role")
       .in("role", ["MANAGER", "ADMIN", "SUPERINTENDENT"])
       .eq("is_active", true)
       .order("email");
@@ -434,6 +434,41 @@ export default function Tropas() {
     });
   }, [users, userSearch, filterTeamId]);
 
+  // Dropdown de gestor ciente do nível: cada papel só pode pendurar em quem está
+  // acima dele. Assim a hierarquia nasce certa (Corretor→Gerente→Super→Diretoria).
+  const R = (formData.role || "").toUpperCase();
+  const gestorLabel =
+    R === "SUPERINTENDENT" ? "Diretoria / Admin" :
+    R === "MANAGER"        ? "Superintendente" :
+    R === "BROKER"         ? "Gerente" : "Gestor";
+  const gestorOptions = useMemo(() => {
+    const acima: Record<string, string[]> = {
+      SUPERINTENDENT: ["ADMIN"],
+      MANAGER:        ["SUPERINTENDENT", "ADMIN"],
+      BROKER:         ["MANAGER"],
+    };
+    const permitido = acima[R];
+    if (!permitido) return [];
+    return managers.filter(m => permitido.includes((m.role || "").toUpperCase()));
+  }, [managers, R]);
+
+  // Organograma: Diretoria/Admin → Superintendente → Gerente → Corretor, montado
+  // a partir de manager_id. Cada nível conta quem está pendurado nele.
+  const organograma = useMemo(() => {
+    const ativos = users.filter(u => u.is_active);
+    const byRole = (r: string) => ativos.filter(u => (u.role || "").toUpperCase() === r);
+    const nome = (u: Profile) => u.first_name || u.full_name || u.email;
+    const admins = byRole("ADMIN");
+    const supers = byRole("SUPERINTENDENT");
+    const gerentes = byRole("MANAGER");
+    const corretores = byRole("BROKER");
+    const corretoresDe = (mgrId: string) => corretores.filter(c => c.manager_id === mgrId);
+    const gerentesDe = (supId: string) => gerentes.filter(g => g.manager_id === supId);
+    const superIds = new Set(supers.map(s => s.id));
+    const gerentesSemSuper = gerentes.filter(g => !g.manager_id || !superIds.has(g.manager_id));
+    return { admins, supers, gerentes, corretores, corretoresDe, gerentesDe, gerentesSemSuper, nome };
+  }, [users]);
+
   const openCreate = () => {
     resetForm();
     setModalOpen(true);
@@ -482,6 +517,9 @@ export default function Tropas() {
         <button onClick={() => setTab("users")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "users" ? "bg-blue-900/40 text-blue-300 border border-blue-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
           <Users className="w-4 h-4" /> Usuários
           <span className="text-xs bg-slate-700 rounded px-1.5">{users.filter(u => u.is_active).length}</span>
+        </button>
+        <button onClick={() => setTab("hierarquia")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "hierarquia" ? "bg-indigo-900/40 text-indigo-300 border border-indigo-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
+          <Building className="w-4 h-4" /> Hierarquia
         </button>
         <button onClick={() => setTab("bots")} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${tab === "bots" ? "bg-purple-900/40 text-purple-300 border border-purple-500/30" : "text-gray-500 hover:text-gray-300 border border-transparent"}`}>
           <Bot className="w-4 h-4" /> Bots
@@ -626,6 +664,74 @@ export default function Tropas() {
             </Card>
           ))}
         </div>
+        </div>
+      ) : tab === "hierarquia" ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-gray-400 text-sm">
+              Organograma da operação — <span className="text-indigo-300 font-bold">{organograma.supers.length}</span> super ·
+              <span className="text-blue-300 font-bold"> {organograma.gerentes.length}</span> gerentes ·
+              <span className="text-green-300 font-bold"> {organograma.corretores.length}</span> corretores
+            </p>
+            <Button onClick={openCreate} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold">
+              <Plus className="w-4 h-4 mr-1" /> Cadastrar
+            </Button>
+          </div>
+
+          {/* DIRETORIA / ADMIN */}
+          {organograma.admins.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {organograma.admins.map(a => (
+                <span key={a.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-900/30 border border-amber-500/30 text-amber-200 text-sm font-bold">
+                  <Shield className="w-3.5 h-3.5" /> {organograma.nome(a)} <span className="text-amber-400/70 text-xs">· Diretoria</span>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* SUPERINTENDENTES → GERENTES → CORRETORES */}
+          {organograma.supers.map(sup => (
+            <div key={sup.id} className="rounded-xl border border-indigo-500/30 bg-indigo-900/10 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Building className="w-4 h-4 text-indigo-300" />
+                <span className="text-indigo-200 font-black text-base">{organograma.nome(sup)}</span>
+                <span className="text-xs text-indigo-400/70 font-bold">SUPERINTENDENTE</span>
+                <span className="ml-auto text-xs text-gray-400">{organograma.gerentesDe(sup.id).length} gerente(s)</span>
+              </div>
+              <div className="space-y-2 pl-4 border-l-2 border-indigo-500/20">
+                {organograma.gerentesDe(sup.id).length === 0 ? (
+                  <p className="text-gray-500 text-xs italic">Nenhum gerente pendurado. Cadastre um gerente e escolha este superintendente como gestor.</p>
+                ) : organograma.gerentesDe(sup.id).map(g => (
+                  <div key={g.id} className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-900/30 border border-blue-500/30 text-blue-200 text-sm font-bold">
+                      <UserCheck className="w-3.5 h-3.5" /> {organograma.nome(g)}
+                    </span>
+                    <span className="text-xs text-gray-500">{organograma.corretoresDe(g.id).length} corretor(es)</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {/* GERENTES SEM SUPERINTENDENTE */}
+          {organograma.gerentesSemSuper.length > 0 && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-900/10 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="w-4 h-4 text-amber-300" />
+                <span className="text-amber-200 font-bold text-sm">Gerentes sem superintendente</span>
+                <span className="ml-auto text-xs text-gray-400">{organograma.gerentesSemSuper.length}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {organograma.gerentesSemSuper.map(g => (
+                  <span key={g.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-900/20 border border-blue-500/20 text-blue-200 text-sm font-bold">
+                    <UserCheck className="w-3.5 h-3.5" /> {organograma.nome(g)}
+                    <span className="text-xs text-gray-500">· {organograma.corretoresDe(g.id).length} corretor(es)</span>
+                  </span>
+                ))}
+              </div>
+              <p className="text-[11px] text-amber-400/70 mt-2">Edite cada um e escolha um superintendente como gestor para completar a hierarquia.</p>
+            </div>
+          )}
         </div>
       ) : tab === "bots" ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -894,20 +1000,27 @@ export default function Tropas() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label className="text-gray-400 text-xs uppercase">Manager</Label>
-                <Select value={formData.manager_id || "none"} onValueChange={value => setFormData({ ...formData, manager_id: value === "none" ? null : value })}>
-                  <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-gray-600">
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {managers.map(mgr => (
-                      <SelectItem key={mgr.id} value={mgr.id}>{mgr.first_name || mgr.email}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {R !== "ADMIN" && (
+                <div>
+                  <Label className="text-gray-400 text-xs uppercase">{gestorLabel}</Label>
+                  <Select value={formData.manager_id || "none"} onValueChange={value => setFormData({ ...formData, manager_id: value === "none" ? null : value })}>
+                    <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-gray-600">
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {gestorOptions.map(mgr => (
+                        <SelectItem key={mgr.id} value={mgr.id}>{mgr.first_name || mgr.email}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {gestorOptions.length === 0 && (
+                    <p className="text-[11px] text-amber-400/80 mt-1">
+                      Cadastre um {gestorLabel.toLowerCase()} antes para poder pendurar aqui.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {(formData.role === 'BROKER' || formData.role === 'MANAGER') && (
