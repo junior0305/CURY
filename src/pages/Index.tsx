@@ -13,6 +13,7 @@ const Index = () => {
   if (role === "SECRETARY") return <Navigate to="/secretaria" replace />;
   if (role === "MANAGER") return <Navigate to="/manager" replace />;
   if (role === "SUPERINTENDENT") return <Navigate to="/super" replace />;
+  if (role === "DIRECTOR") return <Navigate to="/admin" replace />;
   if (role === "ADMIN") return <Navigate to="/admin" replace />;
   return <Navigate to="/dashboard" replace />;
 };

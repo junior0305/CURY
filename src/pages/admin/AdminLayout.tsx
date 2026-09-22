@@ -209,6 +209,7 @@ function SubTabs({
 
 const ROLE_LABELS: Record<string, { label: string }> = {
   ADMIN:          { label: "Admin" },
+  DIRECTOR:       { label: "Diretor" },
   SUPERINTENDENT: { label: "Superintendente" },
   MANAGER:        { label: "Gerente" },
 };
@@ -219,15 +220,17 @@ function AdminLayoutInner() {
   const { role, user, signOut } = useAuth();
   const { t } = useTheme();
   const normalizedRole = role?.toUpperCase() ?? "";
+  // Diretor ainda nao tem painel proprio: enxerga o /admin como um superintendente.
+  const gateRole = normalizedRole === "DIRECTOR" ? "SUPERINTENDENT" : normalizedRole;
 
-  const visibleGroups = GROUPS.filter(g => g.roles.includes(normalizedRole));
+  const visibleGroups = GROUPS.filter(g => g.roles.includes(gateRole));
   const [activeGroup, setActiveGroup] = useState<string>(visibleGroups[0]?.value ?? "cockpit");
 
   const defaultSub = (gv: string) => {
     const g = GROUPS.find(g => g.value === gv);
     if (!g || "single" in g) return gv;
     if (!("subtabs" in g)) return gv;
-    return g.subtabs.find(s => s.roles.includes(normalizedRole))?.value ?? g.subtabs[0].value;
+    return g.subtabs.find(s => s.roles.includes(gateRole))?.value ?? g.subtabs[0].value;
   };
 
   const [activeSub, setActiveSub] = useState<string>(defaultSub(visibleGroups[0]?.value ?? "cockpit"));
@@ -435,7 +438,7 @@ function AdminLayoutInner() {
           <SubTabs activeSub={activeSub} onChangeSub={setActiveSub} items={[
             { v: "anuncios-fb", l: "Anúncios",    roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "wpp-oficial", l: "WPP Oficial", roles: ["ADMIN","SUPERINTENDENT"] },
-          ]} role={normalizedRole}>
+          ]} role={gateRole}>
             <TabsContent value="anuncios-fb" className="p-0"><Anuncios /></TabsContent>
             <TabsContent value="wpp-oficial" className="p-0"><WppOficial /></TabsContent>
           </SubTabs>
@@ -446,7 +449,7 @@ function AdminLayoutInner() {
             { v: "tropas",      l: "Tropas",      roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
             { v: "equipes",     l: "Equipes",     roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
             { v: "comunicados", l: "Comunicados", roles: ["ADMIN","SUPERINTENDENT"] },
-          ]} role={normalizedRole}>
+          ]} role={gateRole}>
             <TabsContent value="tropas"><Tropas /></TabsContent>
             <TabsContent value="equipes"><Equipes /></TabsContent>
             <TabsContent value="comunicados" className="p-6"><Comunicados /></TabsContent>
@@ -459,7 +462,7 @@ function AdminLayoutInner() {
             { v: "filas",       l: "Filas",  roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "rework",      l: "Rework", roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "logs",        l: "Logs",   roles: ["ADMIN","SUPERINTENDENT","MANAGER"] },
-          ]} role={normalizedRole}>
+          ]} role={gateRole}>
             <TabsContent value="saude-leads" className="p-0"><SaudeLeads /></TabsContent>
             <TabsContent value="filas" className="p-4"><LeadDistribution /></TabsContent>
             <TabsContent value="rework"><Rework /></TabsContent>
@@ -475,7 +478,7 @@ function AdminLayoutInner() {
             { v: "cold-pool",   l: "Pool Frio",   roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "replicacao",  l: "Replicação",  roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "central-ia",  l: "Central IA",  roles: ["ADMIN","SUPERINTENDENT"] },
-          ]} role={normalizedRole}>
+          ]} role={gateRole}>
             <TabsContent value="ia-builder" className="p-6"><IaBuilder /></TabsContent>
             <TabsContent value="agentes" className="p-6"><Agentes /></TabsContent>
             <TabsContent value="prospeccao" className="p-6"><Prospeccao /></TabsContent>
@@ -492,7 +495,7 @@ function AdminLayoutInner() {
             { v: "webhooks", l: "Webhooks",     roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "sons",     l: "Arena Sonora", roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "monitor",  l: "Sistema",      roles: ["ADMIN","SUPERINTENDENT"] },
-          ]} role={normalizedRole}>
+          ]} role={gateRole}>
             <TabsContent value="webhooks"><Webhooks /></TabsContent>
             <TabsContent value="sons" className="p-6"><AudioSettings /></TabsContent>
             <TabsContent value="monitor" className="p-6"><SistemaControl /></TabsContent>
@@ -506,7 +509,7 @@ function AdminLayoutInner() {
             { v: "economia",     l: "Economia",     roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "premios",      l: "Prêmios",      roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "regras",       l: "Regras",       roles: ["ADMIN","SUPERINTENDENT"] },
-          ]} role={normalizedRole}>
+          ]} role={gateRole}>
             <TabsContent value="metas" className="p-0"><Metas /></TabsContent>
             <TabsContent value="lancamentos" className="p-6"><Lancamentos /></TabsContent>
             <TabsContent value="economia"><Economia /></TabsContent>

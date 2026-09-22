@@ -1,4 +1,4 @@
-export type UserRole = 'SUPERINTENDENT' | 'MANAGER' | 'BROKER' | 'ADMIN';
+export type UserRole = 'DIRECTOR' | 'SUPERINTENDENT' | 'MANAGER' | 'BROKER' | 'ADMIN';
 
 export interface Team {
   id: string;

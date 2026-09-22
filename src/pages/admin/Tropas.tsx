@@ -137,7 +137,7 @@ export default function Tropas() {
     const { data } = await supabase
       .from("profiles")
       .select("id, email, first_name, full_name, role")
-      .in("role", ["MANAGER", "ADMIN", "SUPERINTENDENT"])
+      .in("role", ["MANAGER", "ADMIN", "SUPERINTENDENT", "DIRECTOR"])
       .eq("is_active", true)
       .order("email");
     if (data) setManagers(data);
@@ -438,13 +438,15 @@ export default function Tropas() {
   // acima dele. Assim a hierarquia nasce certa (Corretor→Gerente→Super→Diretoria).
   const R = (formData.role || "").toUpperCase();
   const gestorLabel =
-    R === "SUPERINTENDENT" ? "Diretoria / Admin" :
+    R === "DIRECTOR"       ? "Admin" :
+    R === "SUPERINTENDENT" ? "Diretor" :
     R === "MANAGER"        ? "Superintendente" :
     R === "BROKER"         ? "Gerente" : "Gestor";
   const gestorOptions = useMemo(() => {
     const acima: Record<string, string[]> = {
-      SUPERINTENDENT: ["ADMIN"],
-      MANAGER:        ["SUPERINTENDENT", "ADMIN"],
+      DIRECTOR:       ["ADMIN"],
+      SUPERINTENDENT: ["DIRECTOR"],
+      MANAGER:        ["SUPERINTENDENT"],
       BROKER:         ["MANAGER"],
     };
     const permitido = acima[R];
@@ -459,15 +461,42 @@ export default function Tropas() {
     const byRole = (r: string) => ativos.filter(u => (u.role || "").toUpperCase() === r);
     const nome = (u: Profile) => u.first_name || u.full_name || u.email;
     const admins = byRole("ADMIN");
+    const diretores = byRole("DIRECTOR");
     const supers = byRole("SUPERINTENDENT");
     const gerentes = byRole("MANAGER");
     const corretores = byRole("BROKER");
     const corretoresDe = (mgrId: string) => corretores.filter(c => c.manager_id === mgrId);
     const gerentesDe = (supId: string) => gerentes.filter(g => g.manager_id === supId);
+    const supersDe = (dirId: string) => supers.filter(s => s.manager_id === dirId);
     const superIds = new Set(supers.map(s => s.id));
+    const diretorIds = new Set(diretores.map(d => d.id));
     const gerentesSemSuper = gerentes.filter(g => !g.manager_id || !superIds.has(g.manager_id));
-    return { admins, supers, gerentes, corretores, corretoresDe, gerentesDe, gerentesSemSuper, nome };
+    const supersSemDiretor = supers.filter(s => !s.manager_id || !diretorIds.has(s.manager_id));
+    return { admins, diretores, supers, gerentes, corretores, corretoresDe, gerentesDe, supersDe, gerentesSemSuper, supersSemDiretor, nome };
   }, [users]);
+
+  const renderSuperBlock = (sup: Profile) => (
+    <div key={sup.id} className="rounded-xl border border-indigo-500/30 bg-indigo-900/10 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Building className="w-4 h-4 text-indigo-300" />
+        <span className="text-indigo-200 font-black text-base">{organograma.nome(sup)}</span>
+        <span className="text-xs text-indigo-400/70 font-bold">SUPERINTENDENTE</span>
+        <span className="ml-auto text-xs text-gray-400">{organograma.gerentesDe(sup.id).length} gerente(s)</span>
+      </div>
+      <div className="space-y-2 pl-4 border-l-2 border-indigo-500/20">
+        {organograma.gerentesDe(sup.id).length === 0 ? (
+          <p className="text-gray-500 text-xs italic">Nenhum gerente pendurado. Cadastre um gerente e escolha este superintendente como gestor.</p>
+        ) : organograma.gerentesDe(sup.id).map(g => (
+          <div key={g.id} className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-900/30 border border-blue-500/30 text-blue-200 text-sm font-bold">
+              <UserCheck className="w-3.5 h-3.5" /> {organograma.nome(g)}
+            </span>
+            <span className="text-xs text-gray-500">{organograma.corretoresDe(g.id).length} corretor(es)</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   const openCreate = () => {
     resetForm();
@@ -477,6 +506,7 @@ export default function Tropas() {
   const getRoleBadge = (role: string) => {
     const styles = {
       ADMIN: { bg: "bg-red-900/40", text: "text-red-300", border: "border-red-500/30", label: "Admin" },
+      DIRECTOR: { bg: "bg-amber-900/40", text: "text-amber-300", border: "border-amber-500/30", label: "Diretor" },
       SUPERINTENDENT: { bg: "bg-purple-900/40", text: "text-purple-300", border: "border-purple-500/30", label: "Super" },
       MANAGER: { bg: "bg-blue-900/40", text: "text-blue-300", border: "border-blue-500/30", label: "Manager" },
       BROKER: { bg: "bg-green-900/40", text: "text-green-300", border: "border-green-500/30", label: "Corretor" },
@@ -669,7 +699,8 @@ export default function Tropas() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-gray-400 text-sm">
-              Organograma da operação — <span className="text-indigo-300 font-bold">{organograma.supers.length}</span> super ·
+              Organograma da operação — <span className="text-amber-300 font-bold">{organograma.diretores.length}</span> diretor(es) ·
+              <span className="text-indigo-300 font-bold"> {organograma.supers.length}</span> super ·
               <span className="text-blue-300 font-bold"> {organograma.gerentes.length}</span> gerentes ·
               <span className="text-green-300 font-bold"> {organograma.corretores.length}</span> corretores
             </p>
@@ -678,40 +709,43 @@ export default function Tropas() {
             </Button>
           </div>
 
-          {/* DIRETORIA / ADMIN */}
+          {/* ADMIN (topo) */}
           {organograma.admins.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {organograma.admins.map(a => (
-                <span key={a.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-900/30 border border-amber-500/30 text-amber-200 text-sm font-bold">
-                  <Shield className="w-3.5 h-3.5" /> {organograma.nome(a)} <span className="text-amber-400/70 text-xs">· Diretoria</span>
+                <span key={a.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-900/30 border border-red-500/30 text-red-200 text-sm font-bold">
+                  <Shield className="w-3.5 h-3.5" /> {organograma.nome(a)} <span className="text-red-400/70 text-xs">· Admin</span>
                 </span>
               ))}
             </div>
           )}
 
-          {/* SUPERINTENDENTES → GERENTES → CORRETORES */}
-          {organograma.supers.map(sup => (
-            <div key={sup.id} className="rounded-xl border border-indigo-500/30 bg-indigo-900/10 p-4">
+          {/* DIRETORES → SUPERINTENDENTES → GERENTES → CORRETORES */}
+          {organograma.diretores.map(dir => (
+            <div key={dir.id} className="rounded-xl border border-amber-500/40 bg-amber-900/10 p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Building className="w-4 h-4 text-indigo-300" />
-                <span className="text-indigo-200 font-black text-base">{organograma.nome(sup)}</span>
-                <span className="text-xs text-indigo-400/70 font-bold">SUPERINTENDENTE</span>
-                <span className="ml-auto text-xs text-gray-400">{organograma.gerentesDe(sup.id).length} gerente(s)</span>
+                <Shield className="w-4 h-4 text-amber-300" />
+                <span className="text-amber-200 font-black text-lg">{organograma.nome(dir)}</span>
+                <span className="text-xs text-amber-400/70 font-bold">DIRETOR</span>
+                <span className="ml-auto text-xs text-gray-400">{organograma.supersDe(dir.id).length} superintendente(s)</span>
               </div>
-              <div className="space-y-2 pl-4 border-l-2 border-indigo-500/20">
-                {organograma.gerentesDe(sup.id).length === 0 ? (
-                  <p className="text-gray-500 text-xs italic">Nenhum gerente pendurado. Cadastre um gerente e escolha este superintendente como gestor.</p>
-                ) : organograma.gerentesDe(sup.id).map(g => (
-                  <div key={g.id} className="flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-900/30 border border-blue-500/30 text-blue-200 text-sm font-bold">
-                      <UserCheck className="w-3.5 h-3.5" /> {organograma.nome(g)}
-                    </span>
-                    <span className="text-xs text-gray-500">{organograma.corretoresDe(g.id).length} corretor(es)</span>
-                  </div>
-                ))}
+              <div className="space-y-3 pl-4 border-l-2 border-amber-500/20">
+                {organograma.supersDe(dir.id).length === 0 ? (
+                  <p className="text-gray-500 text-xs italic">Nenhum superintendente pendurado. Cadastre um super e escolha este diretor como gestor.</p>
+                ) : organograma.supersDe(dir.id).map(sup => renderSuperBlock(sup))}
               </div>
             </div>
           ))}
+
+          {/* SUPERINTENDENTES SEM DIRETOR */}
+          {organograma.supersSemDiretor.length > 0 && (
+            <div className="space-y-3">
+              {organograma.diretores.length > 0 && (
+                <p className="text-amber-400/70 text-xs font-bold uppercase tracking-wide">Superintendentes sem diretor</p>
+              )}
+              {organograma.supersSemDiretor.map(sup => renderSuperBlock(sup))}
+            </div>
+          )}
 
           {/* GERENTES SEM SUPERINTENDENTE */}
           {organograma.gerentesSemSuper.length > 0 && (
@@ -977,6 +1011,7 @@ export default function Tropas() {
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-gray-600">
   <SelectItem value="ADMIN">Admin</SelectItem>
+  <SelectItem value="DIRECTOR">Diretor</SelectItem>
   <SelectItem value="SUPERINTENDENT">Super</SelectItem>
   <SelectItem value="MANAGER">Manager</SelectItem>
   <SelectItem value="BROKER">Corretor</SelectItem>

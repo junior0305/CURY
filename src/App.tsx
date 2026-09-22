@@ -66,7 +66,7 @@ const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   if (loading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" />;
   if (role === "SECRETARY") return <Navigate to="/secretaria" />;
-  if (role !== "SUPERINTENDENT" && role !== "ADMIN") {
+  if (role !== "SUPERINTENDENT" && role !== "ADMIN" && role !== "DIRECTOR") {
     if (role === "MANAGER") return <Navigate to="/manager" />;
     return <Navigate to="/dashboard" />;
   }
@@ -80,7 +80,7 @@ const ProtectedManagerRoute = ({ children }: { children: React.ReactNode }) => {
   // Super/admin PODEM entrar no painel do gerente — e o drill-down do painel
   // do superintendente (/manager?manager=<id>). So corretor/secretaria caem fora.
   if (role === "SECRETARY") return <Navigate to="/secretaria" />;
-  if (role !== "MANAGER" && role !== "SUPERINTENDENT" && role !== "ADMIN")
+  if (role !== "MANAGER" && role !== "SUPERINTENDENT" && role !== "ADMIN" && role !== "DIRECTOR")
     return <Navigate to="/dashboard" />;
   if (mustChangePassword) return <Navigate to="/force-password-change" replace />;
   return <WhatsAppGatekeeper>{children}</WhatsAppGatekeeper>;
@@ -92,7 +92,7 @@ const ProtectedSuperRoute = ({ children }: { children: React.ReactNode }) => {
   if (loading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" />;
   if (role === "SECRETARY") return <Navigate to="/secretaria" />;
-  if (role !== "SUPERINTENDENT" && role !== "ADMIN") {
+  if (role !== "SUPERINTENDENT" && role !== "ADMIN" && role !== "DIRECTOR") {
     if (role === "MANAGER") return <Navigate to="/manager" />;
     return <Navigate to="/dashboard" />;
   }
