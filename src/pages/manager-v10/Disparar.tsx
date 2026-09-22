@@ -18,6 +18,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -100,7 +101,7 @@ const TIPOS = [
 
 export default function Disparar() {
   const { session } = useAuth();
-  const userId = session?.user?.id;
+  const userId = useEffectiveManagerId() ?? session?.user?.id;
   const { mode, toggle } = useTheme();
   const qc = useQueryClient();
   const { data, isLoading } = useDisparar(userId);

@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -23,7 +24,7 @@ type Modo = "online" | "plantao" | "escolher";
 
 export default function Leads() {
   const { session } = useAuth();
-  const userId = session?.user?.id;
+  const userId = useEffectiveManagerId() ?? session?.user?.id;
   const { mode, toggle } = useTheme();
   const { periodo } = usePeriodo();
   const qc = useQueryClient();

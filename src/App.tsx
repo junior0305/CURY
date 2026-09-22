@@ -21,6 +21,7 @@ import ManagerDashboard from "./pages/ManagerDashboard";
 import ManagerV2 from "./pages/ManagerV2";
 import ManagerV3 from "./pages/ManagerV3";
 import ManagerV10 from "./pages/ManagerV10";
+import Superintendente from "./pages/Superintendente";
 import AnunciosV10 from "./pages/manager-v10/Anuncios";
 import LeadsV10 from "./pages/manager-v10/Leads";
 import DispararV10 from "./pages/manager-v10/Disparar";
@@ -76,11 +77,26 @@ const ProtectedManagerRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, role, loading, mustChangePassword } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" />;
-  if (role === "ADMIN" || role === "SUPERINTENDENT") return <Navigate to="/admin" />;
+  // Super/admin PODEM entrar no painel do gerente — e o drill-down do painel
+  // do superintendente (/manager?manager=<id>). So corretor/secretaria caem fora.
   if (role === "SECRETARY") return <Navigate to="/secretaria" />;
-  if (role !== "MANAGER") return <Navigate to="/dashboard" />;
+  if (role !== "MANAGER" && role !== "SUPERINTENDENT" && role !== "ADMIN")
+    return <Navigate to="/dashboard" />;
   if (mustChangePassword) return <Navigate to="/force-password-change" replace />;
   return <WhatsAppGatekeeper>{children}</WhatsAppGatekeeper>;
+};
+
+// Painel do superintendente (e admin): a visao de cima, com drill nos gerentes.
+const ProtectedSuperRoute = ({ children }: { children: React.ReactNode }) => {
+  const { session, role, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!session) return <Navigate to="/login" />;
+  if (role === "SECRETARY") return <Navigate to="/secretaria" />;
+  if (role !== "SUPERINTENDENT" && role !== "ADMIN") {
+    if (role === "MANAGER") return <Navigate to="/manager" />;
+    return <Navigate to="/dashboard" />;
+  }
+  return <>{children}</>;
 };
 
 const ProtectedBrokerRoute = ({ children }: { children: React.ReactNode }) => {
@@ -124,6 +140,7 @@ const App = () => (
             {/* /manager = v2 completo + console Jarvis no topo (escolha do gerente). /manager-v3 = experimento overview. /manager-v1 = antigo. */}
             {/* O painel do gerente agora é o v10. O v2 fica em /manager-v2 como
                 volta rápida — trocar estas duas linhas reverte. */}
+            <Route path="/super" element={<ProtectedSuperRoute><Superintendente /></ProtectedSuperRoute>} />
             <Route path="/manager" element={<ProtectedManagerRoute><ManagerV10 /></ProtectedManagerRoute>} />
             <Route path="/manager-v1" element={<ProtectedManagerRoute><ManagerDashboard /></ProtectedManagerRoute>} />
             <Route path="/manager-v3" element={<ProtectedManagerRoute><ManagerV3 /></ProtectedManagerRoute>} />

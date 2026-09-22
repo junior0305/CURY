@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useManagerV10, diasUteisRestantes, type V10Lead } from "@/hooks/useManagerV10";
 import { useCruzamentoCury } from "@/hooks/useCruzamentoCury";
@@ -60,7 +61,8 @@ function quenteParado(l: V10Lead) {
 
 export default function ManagerV10() {
   const { session } = useAuth();
-  const userId = session?.user?.id;
+  // super/admin podem abrir o painel de um gerente via ?manager=<id>
+  const userId = useEffectiveManagerId() ?? session?.user?.id;
   const { mode, toggle } = useTheme();
   const { data, isLoading } = useManagerV10(userId);
   // Visita real vem da Cury. A coluna antiga lia `leads` e dava sempre zero,
