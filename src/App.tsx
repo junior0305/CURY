@@ -17,6 +17,7 @@ import Dashboard from "./pages/Dashboard"; // mantido como backup
 import DashboardWolf from "./pages/DashboardWolf";
 import DashboardFoco from "./pages/DashboardFoco";
 import Atender from "./pages/Atender";
+import CorretorPainel from "./pages/CorretorPainel";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import ManagerV2 from "./pages/ManagerV2";
 import ManagerV3 from "./pages/ManagerV3";
@@ -137,6 +138,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
             <Route path="/atender" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
+            <Route path="/painel" element={<ProtectedBrokerRoute><CorretorPainel /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-classico" element={<ProtectedBrokerRoute><DashboardFoco /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-wolf" element={<ProtectedBrokerRoute><DashboardWolf /></ProtectedBrokerRoute>} />
             {/* /manager = v2 completo + console Jarvis no topo (escolha do gerente). /manager-v3 = experimento overview. /manager-v1 = antigo. */}
