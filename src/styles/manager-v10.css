@@ -24,7 +24,7 @@
 --paper:#F4F7FC; --card:#FFFFFF; --sunk:#EDF2FA; --sunk-2:#E1E9F6;
   --line:rgba(23,53,110,.13); --hair:rgba(23,53,110,.07);
   --ink:#0B1B36; --ink-2:#44557A; --ink-3:#7F8EAB;
-  --blue:#1D4ED8; --blue-air:rgba(29,78,216,.10);
+  --blue:#0D9488; --blue-air:rgba(13,148,136,.10);
   --red:#C8265C;  --red-air:rgba(200,38,92,.11);
   --amber:#B4690E; --amber-air:rgba(180,105,14,.12);
   --good:#0E8A5F; --good-air:rgba(14,138,95,.12);
@@ -39,7 +39,7 @@ html[data-theme="dark"] .mgr10{
 --paper:#080E1C; --card:#111927; --sunk:#18212F; --sunk-2:#212C3E;
   --line:rgba(150,180,235,.15); --hair:rgba(150,180,235,.07);
   --ink:#E9EFFA; --ink-2:#9FB0CC; --ink-3:#6C7D9C;
-  --blue:#6C9BF5; --blue-air:rgba(108,155,245,.15);
+  --blue:#14B8A6; --blue-air:rgba(20,184,166,.15);
   --red:#FF6E9C;  --red-air:rgba(255,110,156,.14);
   --amber:#E0A34A; --amber-air:rgba(224,163,74,.14);
   --good:#3FCF96; --good-air:rgba(63,207,150,.14);
@@ -588,32 +588,31 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
    No topo ele competia com o conteúdo e sumia no celular; à esquerda fica
    sempre visível e o conteúdo ganha a largura inteira da leitura.
    ══════════════════════════════════════════════════════════════════════ */
-.mgr10.app2{display:grid;grid-template-columns:198px 1fr;min-height:100vh;padding-bottom:0}
-.mgr10 .rail{border-right:1px solid var(--line);background:var(--card);padding:16px 11px;
-  display:flex;flex-direction:column;gap:2px;position:sticky;top:0;height:100vh}
-.mgr10 .rail-brand{display:flex;align-items:center;gap:9px;padding:4px 9px 16px}
-.mgr10 .rail-m{width:27px;height:27px;border-radius:9px;display:grid;place-items:center;
-  background:var(--blue);color:#fff;font-weight:800;font-size:13px}
-.mgr10 .rail-brand b{font-size:14.5px;font-weight:700;letter-spacing:-.01em;display:block}
-.mgr10 .rail-brand i{font-style:normal;font-size:11px;color:var(--ink-3)}
-.mgr10 .rail a,.mgr10 .rail button.railb{display:flex;align-items:center;gap:10px;padding:8px 11px;
-  border-radius:9px;color:var(--ink-2);font-size:13.5px;font-weight:500;width:100%;text-align:left;
-  transition:background .13s,color .13s;position:relative;text-decoration:none}
-.mgr10 .rail a:hover,.mgr10 .rail button.railb:hover{background:var(--sunk);color:var(--ink)}
-.mgr10 .rail .on{background:var(--blue-air);color:var(--blue);font-weight:600}
-.mgr10 .rail svg{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7}
+/* Rail estilo cpv2 (do painel do corretor): barra navy estreita, ícone em cima
+   + rótulo pequeno, pílula teal na aba ativa. Mesmo design dos dois painéis. */
+.mgr10.app2{display:grid;grid-template-columns:76px 1fr;min-height:100vh;padding-bottom:0}
+.mgr10 .rail{background:#0f172a;padding:16px 8px;display:flex;flex-direction:column;
+  align-items:center;gap:8px;position:sticky;top:0;height:100vh}
+.mgr10 .rail-brand{display:flex;flex-direction:column;align-items:center;padding:0 0 14px}
+.mgr10 .rail-brand>div:not(.rail-m){display:none}
+.mgr10 .rail-m{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
+  background:var(--blue);color:#fff;font-weight:900;font-size:17px;box-shadow:0 4px 14px rgba(13,148,136,.4)}
+.mgr10 .rail a,.mgr10 .rail button.railb{position:relative;width:56px;padding:9px 0 7px;
+  border-radius:12px;color:#94a3b8;display:flex;flex-direction:column;align-items:center;gap:4px;
+  font-size:10px;font-weight:600;text-align:center;text-decoration:none;transition:background .13s,color .13s}
+.mgr10 .rail a:hover,.mgr10 .rail button.railb:hover{color:#fff;background:rgba(255,255,255,.06)}
+.mgr10 .rail .on{color:#fff;background:rgba(20,184,166,.22);font-weight:700}
+.mgr10 .rail .on::before{content:"";position:absolute;left:-8px;top:12px;bottom:12px;width:4px;
+  border-radius:0 4px 4px 0;background:var(--blue)}
+.mgr10 .rail svg{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7}
 .mgr10 .rail .soon{opacity:.42;pointer-events:none}
-.mgr10 .rail .pip{position:absolute;right:10px;min-width:17px;height:17px;border-radius:99px;
-  background:var(--red);color:#fff;font:700 10px "JetBrains Mono",monospace;display:grid;
-  place-items:center;padding:0 5px;font-style:normal}
-.mgr10 .rail-sep{height:1px;background:var(--hair);margin:9px 5px}
-/* O rodapé do trilho: Sair ocupa a linha, o tema fica do lado. Sair é ação
-   rara mas precisa estar visível — escondê-la num menu é o que fazia o gerente
-   fechar o navegador em vez de sair. */
-.mgr10 .rail-foot{margin-top:auto;display:flex;align-items:center;gap:6px;padding:8px 0 0;
-  border-top:1px solid var(--hair)}
-.mgr10 .rail-foot .railb.sair{flex:1;width:auto}
-.mgr10 .rail-foot .railb.sair:hover{background:var(--red-air);color:var(--red)}
+.mgr10 .rail .pip{position:absolute;top:4px;right:8px;min-width:17px;height:17px;border-radius:99px;
+  background:var(--blue);color:#fff;font:800 10px "JetBrains Mono",monospace;display:grid;
+  place-items:center;padding:0 4px;font-style:normal;border:2px solid #0f172a}
+.mgr10 .rail-sep{height:1px;background:rgba(255,255,255,.1);width:60%;margin:6px auto}
+.mgr10 .rail-foot{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0 0}
+.mgr10 .rail-foot .railb.sair{width:56px}
+.mgr10 .rail-foot .railb.sair:hover{background:rgba(239,68,68,.2);color:#fff}
 /* O conteudo acompanha a tela ate 1680px. Os 1240 do prototipo vinham de
    um monitor menor; num monitor largo eles deixavam um terco da tela vazio
    e faziam tudo parecer encolhido. Os blocos de texto corrido continuam
@@ -631,8 +630,8 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
 @media(max-width:1020px){
   .mgr10.app2{grid-template-columns:1fr}
   .mgr10 .rail{position:sticky;top:0;z-index:30;height:auto;flex-direction:row;overflow-x:auto;
-    padding:9px;border-right:0;border-bottom:1px solid var(--line);
-    background:color-mix(in srgb,var(--card) 92%,transparent);backdrop-filter:blur(12px)}
+    padding:8px 9px;border-right:0;background:#0f172a;justify-content:space-around}
+  .mgr10 .rail .on::before{display:none}
   .mgr10 .rail-brand,.mgr10 .rail-sep,.mgr10 .rail-foot{display:none}
   .mgr10 .rail a,.mgr10 .rail button.railb{width:auto;white-space:nowrap}
   .mgr10 .rail .pip{position:static;margin-left:4px}
