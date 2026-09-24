@@ -40,6 +40,22 @@ const rendaNum = (l?: Lead | null) => {
   return digits ? parseInt(digits, 10) : 0;
 };
 
+// Limpa o nome da região do pool: tira nome de equipe/prefixo de campanha e
+// expande códigos de zona. Ex.: "EQ_DATTI_ZS" → "Zona Sul", "GIORGE_JAGUARE" → "Jaguare".
+// (Carrão/Jaguaré são também bairros — não entram na lista de equipes.)
+const EQUIPES = ["DATTI", "DUDU", "DUDALINA", "GIORGE", "LILIANE", "JAPA", "BACANA", "LUCIENE", "NOBILE", "ULLY", "ULLLY", "KENOBI"];
+const PREFIXOS = ["EQ", "CR", "DISPARO", "FEIRAO", "OFERTA ATIVA", "OFERTA"];
+function limparRegiao(raw?: string | null): string {
+  if (!raw || !raw.trim()) return "Sem área";
+  let t = raw.trim();
+  for (const p of PREFIXOS) t = t.replace(new RegExp(`^${p}[ _-]+`, "i"), "");
+  for (const e of EQUIPES) t = t.replace(new RegExp(`\\b${e}\\b[ _-]*`, "gi"), "");
+  t = t.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  t = t.replace(/\bZS\b/i, "Zona Sul").replace(/\bZO\b/i, "Zona Oeste").replace(/\bZN\b/i, "Zona Norte").replace(/\bZL\b/i, "Zona Leste");
+  if (!t || /^(facebook|mcmv|\dqtos?.*)$/i.test(t)) return "Geral";
+  return t.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 // ── simulador MCMV (ESTIMATIVA client-side; não é cálculo oficial da Caixa) ──
 function simular(renda: number, fgts: number) {
   const faixa = renda <= 2640 ? 1 : renda <= 4400 ? 2 : 3;
@@ -191,23 +207,37 @@ const CorretorPainel = () => {
   };
   const docsCount = DOCS.filter((d) => docsDB[d.key]).length;
 
-  // ── PESCAR (pool cold_contacts): 15/dia, sem trava de chip, devolve em 48h ──
-  const { data: pescaInfo = { hoje: 0, disponiveis: 0 } } = useQuery({
-    queryKey: ["pescaInfo"], enabled: mode === "pescar" && !!user, refetchInterval: 20000,
+  // ── PESCAR (pool cold_contacts): escolha por REGIÃO, 15/dia, devolve em 48h ──
+  const [regiaoSel, setRegiaoSel] = useState<string>(""); // "" = todas as regiões
+  const { data: areasRaw = [] } = useQuery<{ tag: string; n: number }[]>({
+    queryKey: ["poolAreas"], enabled: mode === "pescar", staleTime: 60000,
+    queryFn: async () => { const { data } = await supabase.rpc("pool_areas"); return (data as any) || []; },
+  });
+  const regioes = useMemo(() => {
+    const m = new Map<string, { label: string; count: number; tags: string[] }>();
+    for (const a of areasRaw) {
+      const label = limparRegiao(a.tag);
+      const cur = m.get(label) || { label, count: 0, tags: [] };
+      cur.count += Number(a.n) || 0; cur.tags.push(a.tag); m.set(label, cur);
+    }
+    return [...m.values()].sort((x, y) => y.count - x.count);
+  }, [areasRaw]);
+  const regiaoAtual = regioes.find((r) => r.label === regiaoSel) || null;
+  const totalPool = regioes.reduce((s, r) => s + r.count, 0);
+
+  const { data: pescaHoje = 0 } = useQuery<number>({
+    queryKey: ["pescaHoje"], enabled: mode === "pescar" && !!user, refetchInterval: 20000,
     queryFn: async () => {
       const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-      const [hoje, disp] = await Promise.all([
-        supabase.from("cold_contacts").select("id", { count: "exact", head: true }).eq("claimed_by", user!.id).gte("claimed_at", since),
-        supabase.from("cold_contacts").select("id", { count: "exact", head: true }).eq("status", "available"),
-      ]);
-      return { hoje: hoje.count || 0, disponiveis: disp.count || 0 };
+      const { count } = await supabase.from("cold_contacts").select("id", { count: "exact", head: true }).eq("claimed_by", user!.id).gte("claimed_at", since);
+      return count || 0;
     },
   });
   const { data: meusPescados = [] } = useQuery<any[]>({
     queryKey: ["meusPescados"], enabled: mode === "pescar" && !!user, refetchInterval: 20000,
     queryFn: async () => {
       const { data } = await supabase.from("cold_contacts")
-        .select("id, name, phone, claimed_at")
+        .select("id, name, phone, tag, claimed_at")
         .eq("claimed_by", user!.id).eq("status", "claimed").is("promoted_to_lead_id", null)
         .order("claimed_at", { ascending: false });
       return data || [];
@@ -218,13 +248,16 @@ const CorretorPainel = () => {
     if (!user || pescando) return;
     setPescando(true);
     try {
-      const { data: avail } = await supabase.from("cold_contacts").select("id").eq("status", "available").limit(1);
-      if (!avail?.length) { toast.error("Sem leads no pool agora."); return; }
+      let q = supabase.from("cold_contacts").select("id").eq("status", "available");
+      if (regiaoAtual) q = q.in("tag", regiaoAtual.tags);
+      const { data: avail } = await q.limit(1);
+      if (!avail?.length) { toast.error(regiaoAtual ? `Sem leads em ${regiaoAtual.label} agora.` : "Sem leads no pool agora."); return; }
       const { error } = await supabase.rpc("claim_cold_contact", { p_broker_id: user.id, p_contact_id: avail[0].id });
       if (error) { toast.error((error as any).details || error.message || "Não consegui pescar."); return; }
       toast.success("🎣 Lead pescado! Chame no seu WhatsApp.");
       qc.invalidateQueries({ queryKey: ["meusPescados"] });
-      qc.invalidateQueries({ queryKey: ["pescaInfo"] });
+      qc.invalidateQueries({ queryKey: ["pescaHoje"] });
+      qc.invalidateQueries({ queryKey: ["poolAreas"] });
     } catch (e: any) { toast.error(e?.message || "Erro ao pescar."); }
     finally { setPescando(false); }
   };
@@ -234,7 +267,7 @@ const CorretorPainel = () => {
       if (error) { toast.error(error.message); return; }
       toast.success("✅ Virou lead seu — não volta ao pool.");
       qc.invalidateQueries({ queryKey: ["meusPescados"] });
-      qc.invalidateQueries({ queryKey: ["pescaInfo"] });
+      qc.invalidateQueries({ queryKey: ["pescaHoje"] });
       qc.invalidateQueries({ queryKey: ["painelLeads"] });
     } catch (e: any) { toast.error(e?.message); }
   };
@@ -480,14 +513,21 @@ const CorretorPainel = () => {
                     <p className="lead-sub">Pegue leads do pool da equipe. Até 15 por dia. Sem WhatsApp conectado obrigatório — você fala pelo seu WhatsApp pessoal.</p>
                   </div>
                 </div>
-                <div className="kpi-strip" style={{ marginTop: 12 }}>
-                  <div><div className="kpi-label">Pescados hoje</div><div className="kpi-num">{pescaInfo.hoje}/15</div></div>
-                  <div><div className="kpi-label">No pool agora</div><div className="kpi-num" style={{ color: "var(--accent)" }}>{pescaInfo.disponiveis}</div></div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--faint)", textTransform: "uppercase", letterSpacing: ".05em", margin: "14px 0 6px" }}>Escolha a região do pool</div>
+                <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                  <span className={`q-tag${!regiaoSel ? " on" : ""}`} onClick={() => setRegiaoSel("")}>Todas ({totalPool})</span>
+                  {regioes.map((r) => (
+                    <span key={r.label} className={`q-tag${regiaoSel === r.label ? " on" : ""}`} onClick={() => setRegiaoSel(r.label)}>{r.label} ({r.count})</span>
+                  ))}
+                </div>
+                <div className="kpi-strip" style={{ marginTop: 14 }}>
+                  <div><div className="kpi-label">Pescados hoje</div><div className="kpi-num">{pescaHoje}/15</div></div>
+                  <div><div className="kpi-label">{regiaoAtual ? regiaoAtual.label : "No pool"}</div><div className="kpi-num" style={{ color: "var(--accent)" }}>{regiaoAtual ? regiaoAtual.count : totalPool}</div></div>
                   <div><div className="kpi-label">Trabalhando</div><div className="kpi-num">{meusPescados.length}</div></div>
                 </div>
                 <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 14, height: 46, fontSize: 15 }}
-                  disabled={pescando || pescaInfo.hoje >= 15} onClick={pescarProximo}>
-                  {pescaInfo.hoje >= 15 ? "Limite de 15 hoje atingido" : pescando ? "Pescando…" : "🎣 Pescar próximo lead"}
+                  disabled={pescando || pescaHoje >= 15} onClick={pescarProximo}>
+                  {pescaHoje >= 15 ? "Limite de 15 hoje atingido" : pescando ? "Pescando…" : regiaoAtual ? `🎣 Pescar em ${regiaoAtual.label}` : "🎣 Pescar próximo lead"}
                 </button>
               </div>
 
@@ -502,7 +542,7 @@ const CorretorPainel = () => {
                       <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "11px 0", borderBottom: "1px solid var(--border)" }}>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontWeight: 700, fontSize: 14 }}>{c.name || "Sem nome"}</div>
-                          <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{c.phone}</div>
+                          <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{c.phone} · <b style={{ color: "var(--accent)" }}>{limparRegiao(c.tag)}</b></div>
                         </div>
                         <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                           <a className="btn-ghost" href={waLink(c.phone)} target="_blank" rel="noreferrer">💬 Chamar</a>
