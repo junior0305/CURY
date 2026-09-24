@@ -187,6 +187,54 @@ const CorretorPainel = () => {
   };
   const docsCount = DOCS.filter((d) => docsDB[d.key]).length;
 
+  // ── PESCAR (pool cold_contacts): 15/dia, sem trava de chip, devolve em 48h ──
+  const { data: pescaInfo = { hoje: 0, disponiveis: 0 } } = useQuery({
+    queryKey: ["pescaInfo"], enabled: mode === "pescar" && !!user, refetchInterval: 20000,
+    queryFn: async () => {
+      const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const [hoje, disp] = await Promise.all([
+        supabase.from("cold_contacts").select("id", { count: "exact", head: true }).eq("claimed_by", user!.id).gte("claimed_at", since),
+        supabase.from("cold_contacts").select("id", { count: "exact", head: true }).eq("status", "available"),
+      ]);
+      return { hoje: hoje.count || 0, disponiveis: disp.count || 0 };
+    },
+  });
+  const { data: meusPescados = [] } = useQuery<any[]>({
+    queryKey: ["meusPescados"], enabled: mode === "pescar" && !!user, refetchInterval: 20000,
+    queryFn: async () => {
+      const { data } = await supabase.from("cold_contacts")
+        .select("id, name, phone, claimed_at")
+        .eq("claimed_by", user!.id).eq("status", "claimed").is("promoted_to_lead_id", null)
+        .order("claimed_at", { ascending: false });
+      return data || [];
+    },
+  });
+  const [pescando, setPescando] = useState(false);
+  const pescarProximo = async () => {
+    if (!user || pescando) return;
+    setPescando(true);
+    try {
+      const { data: avail } = await supabase.from("cold_contacts").select("id").eq("status", "available").limit(1);
+      if (!avail?.length) { toast.error("Sem leads no pool agora."); return; }
+      const { error } = await supabase.rpc("claim_cold_contact", { p_broker_id: user.id, p_contact_id: avail[0].id });
+      if (error) { toast.error((error as any).details || error.message || "Não consegui pescar."); return; }
+      toast.success("🎣 Lead pescado! Chame no seu WhatsApp.");
+      qc.invalidateQueries({ queryKey: ["meusPescados"] });
+      qc.invalidateQueries({ queryKey: ["pescaInfo"] });
+    } catch (e: any) { toast.error(e?.message || "Erro ao pescar."); }
+    finally { setPescando(false); }
+  };
+  const marcarRespondeu = async (id: string) => {
+    try {
+      const { error } = await supabase.rpc("promote_cold_to_lead", { p_contact_id: id });
+      if (error) { toast.error(error.message); return; }
+      toast.success("✅ Virou lead seu — não volta ao pool.");
+      qc.invalidateQueries({ queryKey: ["meusPescados"] });
+      qc.invalidateQueries({ queryKey: ["pescaInfo"] });
+      qc.invalidateQueries({ queryKey: ["painelLeads"] });
+    } catch (e: any) { toast.error(e?.message); }
+  };
+
   const facts = sel ? [
     ["Renda Informada", fmtRenda(sel.rendaDeclarada)],
     ["Tipo de Trabalho", sel.tipoTrabalho ? TIPO_TRABALHO_LABEL[sel.tipoTrabalho] : "—"],
@@ -425,12 +473,41 @@ const CorretorPainel = () => {
                   <div>
                     <span className="l-badge urgent">🎣 Bolsa de oportunidades</span>
                     <h2 className="lead-title" style={{ marginTop: 6 }}>Pescar leads frios</h2>
-                    <p className="lead-sub">Leads sem atendimento recente que voltaram ao bolsão da equipe. A ligação com o pool ainda será conectada.</p>
+                    <p className="lead-sub">Pegue leads do pool da equipe. Até 15 por dia. Sem WhatsApp conectado obrigatório — você fala pelo seu WhatsApp pessoal.</p>
                   </div>
                 </div>
-                <div className="script-list" style={{ marginTop: 12, color: "var(--muted)", fontSize: 13 }}>
-                  Em breve: escolher e puxar leads do pool para sua fila.
+                <div className="kpi-strip" style={{ marginTop: 12 }}>
+                  <div><div className="kpi-label">Pescados hoje</div><div className="kpi-num">{pescaInfo.hoje}/15</div></div>
+                  <div><div className="kpi-label">No pool agora</div><div className="kpi-num" style={{ color: "var(--accent)" }}>{pescaInfo.disponiveis}</div></div>
+                  <div><div className="kpi-label">Trabalhando</div><div className="kpi-num">{meusPescados.length}</div></div>
                 </div>
+                <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 14, height: 46, fontSize: 15 }}
+                  disabled={pescando || pescaInfo.hoje >= 15} onClick={pescarProximo}>
+                  {pescaInfo.hoje >= 15 ? "Limite de 15 hoje atingido" : pescando ? "Pescando…" : "🎣 Pescar próximo lead"}
+                </button>
+              </div>
+
+              <div className="card" style={{ marginTop: 12 }}>
+                <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>Seus leads pescados</div>
+                <div style={{ fontSize: 12, color: "var(--faint)", marginBottom: 10 }}>Marque "respondeu" ao dar sinal de vida — sem resposta em 48h o lead volta ao pool.</div>
+                {meusPescados.length === 0 ? (
+                  <div style={{ color: "var(--muted)", fontSize: 13, padding: "8px 0" }}>Nenhum lead pescado ainda. Toque em "Pescar próximo lead".</div>
+                ) : (
+                  <div>
+                    {meusPescados.map((c) => (
+                      <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "11px 0", borderBottom: "1px solid var(--border)" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>{c.name || "Sem nome"}</div>
+                          <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{c.phone}</div>
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                          <a className="btn-ghost" href={waLink(c.phone)} target="_blank" rel="noreferrer">💬 Chamar</a>
+                          <button className="btn-primary" onClick={() => marcarRespondeu(c.id)}>✅ Respondeu</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
