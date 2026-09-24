@@ -110,6 +110,7 @@ export interface Lead {
   leadTemperature: LeadTemperature;    // Calculado pelo banco — só populado em IN_PROGRESS
   temperatureUpdatedAt: string | null; // Última atualização da temperatura
   source: LeadSource;                  // Origem: funil, prospecção, manual etc.
+  fbCampaign?: string | null;          // Campanha (casa com distribution_queues.match_value → region)
   // Rastro da Ana (SDR). No SJC ana_qualified_at pode não existir → vem null.
   anaContactedAt: string | null;       // Ana abordou o lead
   anaQualifiedAt: string | null;       // Ana QUALIFICOU o lead (🥇 ouro)

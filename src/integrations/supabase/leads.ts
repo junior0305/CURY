@@ -33,6 +33,7 @@ const mapLeadFromDB = (l: any): Lead => ({
   leadTemperature:    (l.lead_temperature ?? null) as LeadTemperature,
   temperatureUpdatedAt: l.temperature_updated_at ?? null,
   source:             (l.source ?? null) as LeadSource,
+  fbCampaign:         l.fb_campaign ?? null,
   anaContactedAt:     l.ana_contacted_at ?? null,
   anaQualifiedAt:     l.ana_qualified_at ?? null,
   handoffReason:      l.ana_qualified_at ? 'ana_gold' : (l.ana_contacted_at ? 'ana_cold' : null),

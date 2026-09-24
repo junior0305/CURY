@@ -126,15 +126,72 @@ const CorretorPainel = () => {
     },
   });
 
-  // ── quick tags e ações locais (não persistem — UI) ──────────────────────────
-  const [tags, setTags] = useState<Record<string, boolean>>({ "2dorms": true, fgts: true, renda: false, spc: false });
-  const toggleTag = (k: string) => setTags((t) => ({ ...t, [k]: !t[k] }));
+  // ── REGIÃO: mapa campanha → região das filas (distribution_queues.match_value → region) ──
+  const { data: regionByCampaign = {} } = useQuery<Record<string, string>>({
+    queryKey: ["queueRegions"],
+    queryFn: async () => {
+      const { data } = await supabase.from("distribution_queues").select("match_value, region").not("region", "is", null);
+      const m: Record<string, string> = {};
+      (data || []).forEach((q: any) => { if (q.match_value && q.region) m[q.match_value] = q.region; });
+      return m;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const regiaoDe = (l?: Lead | null) => (l?.fbCampaign ? regionByCampaign[l.fbCampaign] : "") || "";
+
+  // ── ETIQUETAS (persistidas em lead_etiquetas) ───────────────────────────────
+  const { data: etiquetasDB = [] } = useQuery<string[]>({
+    queryKey: ["etiquetas", sel?.id],
+    enabled: !!sel?.id,
+    queryFn: async () => {
+      const { data } = await supabase.from("lead_etiquetas").select("etiqueta").eq("lead_id", sel!.id);
+      return (data || []).map((r: any) => r.etiqueta);
+    },
+  });
+  const hasTag = (k: string) => etiquetasDB.includes(k);
+  const toggleTag = async (k: string) => {
+    if (!sel) return;
+    try {
+      if (etiquetasDB.includes(k)) await supabase.from("lead_etiquetas").delete().eq("lead_id", sel.id).eq("etiqueta", k);
+      else await supabase.from("lead_etiquetas").insert({ lead_id: sel.id, etiqueta: k, broker_id: user?.id });
+      qc.invalidateQueries({ queryKey: ["etiquetas", sel.id] });
+    } catch { toast.error("Não consegui salvar a etiqueta"); }
+  };
+
+  // ── DOCUMENTOS (Pasta, persistidos em lead_documentos) ──────────────────────
+  const DOCS = [
+    { key: "rg",       icon: "🪪", title: "RG / CNH" },
+    { key: "fgts",     icon: "🏦", title: "Extrato FGTS" },
+    { key: "holerite", icon: "📄", title: "Holerite" },
+    { key: "endereco", icon: "🏠", title: "Comprovante de endereço" },
+  ];
+  const { data: docsDB = {} } = useQuery<Record<string, boolean>>({
+    queryKey: ["documentos", sel?.id],
+    enabled: !!sel?.id,
+    queryFn: async () => {
+      const { data } = await supabase.from("lead_documentos").select("documento, entregue").eq("lead_id", sel!.id);
+      const m: Record<string, boolean> = {};
+      (data || []).forEach((r: any) => { m[r.documento] = r.entregue; });
+      return m;
+    },
+  });
+  const toggleDoc = async (key: string) => {
+    if (!sel) return;
+    try {
+      await supabase.from("lead_documentos").upsert(
+        { lead_id: sel.id, documento: key, entregue: !docsDB[key], broker_id: user?.id, updated_at: new Date().toISOString() },
+        { onConflict: "lead_id,documento" },
+      );
+      qc.invalidateQueries({ queryKey: ["documentos", sel.id] });
+    } catch { toast.error("Não consegui salvar o documento"); }
+  };
+  const docsCount = DOCS.filter((d) => docsDB[d.key]).length;
 
   const facts = sel ? [
     ["Renda Informada", fmtRenda(sel.rendaDeclarada)],
     ["Tipo de Trabalho", sel.tipoTrabalho ? TIPO_TRABALHO_LABEL[sel.tipoTrabalho] : "—"],
-    ["Região de Interesse", (sel as any).regiao || (sel as any).region || "—"],
-    ["Campanha / Origem", (sel as any).campanha || sel.product || sel.source || "—"],
+    ["Região de Interesse", regiaoDe(sel) || "—"],
+    ["Campanha / Origem", sel.fbCampaign || sel.product || sel.source || "—"],
   ] : [];
 
   const badgeFor = (l: Lead) => {
@@ -193,7 +250,7 @@ const CorretorPainel = () => {
                     <div key={l.id} className={`lead-row${sel?.id === l.id ? " selected" : ""}`} onClick={() => { setSelId(l.id); setMobileDetail(true); }}>
                       <div>
                         <div className="l-name">{l.name}</div>
-                        <div className="l-meta">{[l.tipoTrabalho && TIPO_TRABALHO_LABEL[l.tipoTrabalho], fmtRenda(l.rendaDeclarada) !== "—" ? fmtRenda(l.rendaDeclarada) : null, (l as any).regiao].filter(Boolean).join(" · ") || l.phone}</div>
+                        <div className="l-meta">{[l.tipoTrabalho && TIPO_TRABALHO_LABEL[l.tipoTrabalho], fmtRenda(l.rendaDeclarada) !== "—" ? fmtRenda(l.rendaDeclarada) : null, regiaoDe(l) || null].filter(Boolean).join(" · ") || l.phone}</div>
                       </div>
                       <span className={b.cls}>{b.txt}</span>
                     </div>
@@ -248,10 +305,10 @@ const CorretorPainel = () => {
                       </div>
                       <div className="convo-log-area">
                         <div className="quick-tags">
-                          <span className={`q-tag${tags["2dorms"] ? " on" : ""}`} onClick={() => toggleTag("2dorms")}>{tags["2dorms"] ? "✓" : "+"} Quer 2 dorms</span>
-                          <span className={`q-tag${tags.fgts ? " on" : ""}`} onClick={() => toggleTag("fgts")}>{tags.fgts ? "✓" : "+"} Usa FGTS</span>
-                          <span className={`q-tag${tags.renda ? " on" : ""}`} onClick={() => toggleTag("renda")}>{tags.renda ? "✓" : "+"} Compõe renda</span>
-                          <span className={`q-tag${tags.spc ? " on" : ""}`} onClick={() => toggleTag("spc")}>{tags.spc ? "✓" : "+"} Restrição SPC</span>
+                          <span className={`q-tag${hasTag("2dorms") ? " on" : ""}`} onClick={() => toggleTag("2dorms")}>{hasTag("2dorms") ? "✓" : "+"} Quer 2 dorms</span>
+                          <span className={`q-tag${hasTag("fgts") ? " on" : ""}`} onClick={() => toggleTag("fgts")}>{hasTag("fgts") ? "✓" : "+"} Usa FGTS</span>
+                          <span className={`q-tag${hasTag("renda") ? " on" : ""}`} onClick={() => toggleTag("renda")}>{hasTag("renda") ? "✓" : "+"} Compõe renda</span>
+                          <span className={`q-tag${hasTag("spc") ? " on" : ""}`} onClick={() => toggleTag("spc")}>{hasTag("spc") ? "✓" : "+"} Restrição SPC</span>
                         </div>
                         <div className="note-input-row">
                           <input className="note-input" placeholder="Resumo do que conversaram…" value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveNote()} />
@@ -272,7 +329,7 @@ const CorretorPainel = () => {
                     <div className="card">
                       <div className="tool-tabs">
                         <button className={`tool-tab${tool === "sim" ? " active" : ""}`} onClick={() => setTool("sim")}>🧮 Simulador + Projetos</button>
-                        <button className={`tool-tab${tool === "doc" ? " active" : ""}`} onClick={() => setTool("doc")}>📁 Pasta</button>
+                        <button className={`tool-tab${tool === "doc" ? " active" : ""}`} onClick={() => setTool("doc")}>📁 Pasta ({docsCount}/{DOCS.length})</button>
                         <button className={`tool-tab${tool === "msg" ? " active" : ""}`} onClick={() => setTool("msg")}>💬 Mensagens</button>
                       </div>
 
@@ -303,9 +360,15 @@ const CorretorPainel = () => {
 
                       {tool === "doc" && (
                         <div className="docs-list">
-                          {["🪪 RG / CNH", "🏦 Extrato FGTS", "📄 Holerite", "🏠 Comprovante de endereço"].map((d) => (
-                            <div className="doc-item" key={d}><div className="doc-left"><span>{d.split(" ")[0]}</span><div><div className="doc-title">{d.slice(2)}</div><div className="doc-desc">Marcar quando receber</div></div></div><span className="doc-tag">+ marcar</span></div>
-                          ))}
+                          {DOCS.map((d) => {
+                            const ok = !!docsDB[d.key];
+                            return (
+                              <div className="doc-item" key={d.key} onClick={() => toggleDoc(d.key)} style={{ cursor: "pointer" }}>
+                                <div className="doc-left"><span>{d.icon}</span><div><div className="doc-title">{d.title}</div><div className="doc-desc">{ok ? "Recebido ✓" : "Marcar quando receber"}</div></div></div>
+                                <span className="doc-tag" style={ok ? { color: "var(--accent)", borderColor: "var(--accent)", fontWeight: 700 } : undefined}>{ok ? "✓ recebido" : "+ marcar"}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
 
