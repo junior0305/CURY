@@ -299,8 +299,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             navigate('/manager', { replace: true });
           }
         } else {
-          // BROKER e outros -> dashboard
-          if (path !== '/dashboard' && path !== '/dashboard-wolf') {
+          // BROKER e outros -> dashboard. Whitelist das telas do corretor
+          // (inclui /painel, o novo painel, senão a sessão joga de volta pro /dashboard).
+          const BROKER_ALLOWED = ['/dashboard', '/dashboard-wolf', '/dashboard-classico', '/atender', '/painel'];
+          if (!BROKER_ALLOWED.includes(path)) {
             navigate('/dashboard', { replace: true });
           }
         }
