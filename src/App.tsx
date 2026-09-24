@@ -136,9 +136,11 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/dashboard" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
-            <Route path="/atender" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
+            {/* Painel do corretor: o CorretorPainel (fiel ao mockup) é o principal.
+                O Atender antigo fica em /atender como rollback rápido. */}
+            <Route path="/dashboard" element={<ProtectedBrokerRoute><CorretorPainel /></ProtectedBrokerRoute>} />
             <Route path="/painel" element={<ProtectedBrokerRoute><CorretorPainel /></ProtectedBrokerRoute>} />
+            <Route path="/atender" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-classico" element={<ProtectedBrokerRoute><DashboardFoco /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-wolf" element={<ProtectedBrokerRoute><DashboardWolf /></ProtectedBrokerRoute>} />
             {/* /manager = v2 completo + console Jarvis no topo (escolha do gerente). /manager-v3 = experimento overview. /manager-v1 = antigo. */}

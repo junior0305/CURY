@@ -28,6 +28,12 @@ const STAGES: [LeadStatus, string][] = [
 const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
 const initials = (name: string) => name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 const firstName = (name: string) => (name || "").trim().split(/\s+/)[0] || "cliente";
+// Renda vem crua do formulário do Facebook (ex.: "r$_1.621,00_a_r$_4.700,00").
+// Limpa underscores e normaliza "r$" → "R$" para exibição.
+const fmtRenda = (v?: string | null) => {
+  if (!v) return "—";
+  return String(v).replace(/_/g, " ").replace(/r\$/gi, "R$").replace(/\s+/g, " ").trim();
+};
 const rendaNum = (l?: Lead | null) => {
   if (!l?.rendaDeclarada) return 0;
   const digits = String(l.rendaDeclarada).replace(/[^\d]/g, "");
@@ -125,7 +131,7 @@ const CorretorPainel = () => {
   const toggleTag = (k: string) => setTags((t) => ({ ...t, [k]: !t[k] }));
 
   const facts = sel ? [
-    ["Renda Informada", sel.rendaDeclarada || "—"],
+    ["Renda Informada", fmtRenda(sel.rendaDeclarada)],
     ["Tipo de Trabalho", sel.tipoTrabalho ? TIPO_TRABALHO_LABEL[sel.tipoTrabalho] : "—"],
     ["Região de Interesse", (sel as any).regiao || (sel as any).region || "—"],
     ["Campanha / Origem", (sel as any).campanha || sel.product || sel.source || "—"],
@@ -187,7 +193,7 @@ const CorretorPainel = () => {
                     <div key={l.id} className={`lead-row${sel?.id === l.id ? " selected" : ""}`} onClick={() => { setSelId(l.id); setMobileDetail(true); }}>
                       <div>
                         <div className="l-name">{l.name}</div>
-                        <div className="l-meta">{[l.tipoTrabalho && TIPO_TRABALHO_LABEL[l.tipoTrabalho], l.rendaDeclarada, (l as any).regiao].filter(Boolean).join(" · ") || l.phone}</div>
+                        <div className="l-meta">{[l.tipoTrabalho && TIPO_TRABALHO_LABEL[l.tipoTrabalho], fmtRenda(l.rendaDeclarada) !== "—" ? fmtRenda(l.rendaDeclarada) : null, (l as any).regiao].filter(Boolean).join(" · ") || l.phone}</div>
                       </div>
                       <span className={b.cls}>{b.txt}</span>
                     </div>
