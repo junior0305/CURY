@@ -21,7 +21,7 @@ import {
 
 const SJC_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRjaW1ldWVmbmhhaWVtcmZpa2xqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEzNzgyNzIsImV4cCI6MjA4Njk1NDI3Mn0.Y0DOXDbrPVzVw41f9oONjsz8ggwDYi3wZ71iPR0GCqs";
 
-type Tab = "disparos" | "conversas" | "templates" | "gastos";
+type Tab = "disparos" | "conversas" | "templates" | "gastos" | "atrelar";
 
 const AUDIENCE = [
   { v: "novos", label: "Leads novos (entraram há X dias)" },
@@ -99,6 +99,7 @@ export default function WppOficial() {
         <div className="flex gap-2 mb-6 flex-wrap">
           {([
             ["disparos", "Disparos", Send],
+            ["atrelar", "Atrelar número", Users],
             ["conversas", "Conversas", MessageSquare],
             ["templates", "Templates", FileText],
             ["gastos", "Gastos", DollarSign],
@@ -111,10 +112,82 @@ export default function WppOficial() {
         </div>
 
         {tab === "disparos" && <Disparos />}
+        {tab === "atrelar" && <AtrelarNumeros />}
         {tab === "conversas" && <Conversas />}
         {tab === "templates" && <Templates />}
         {tab === "gastos" && <Gastos />}
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────── ATRELAR NÚMERO → PESSOA ───────────────────────────────
+// Depois de cadastrar a WABA (manual), atrela cada número oficial a uma pessoa
+// (corretor / gerente / super) via whatsapp_config.owner_id. Ter número atrelado
+// = disparo liberado para aquela pessoa (o disparador filtra por owner_id).
+function AtrelarNumeros() {
+  const [nums, setNums] = useState<any[]>([]);
+  const [people, setPeople] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const [{ data: cfg }, { data: pf }] = await Promise.all([
+      supabase.from("whatsapp_config").select("id, label, display_number, phone_number_id, owner_id, is_active, quality").order("created_at"),
+      supabase.from("profiles").select("id, first_name, full_name, email, role").in("role", ["BROKER", "MANAGER", "SUPERINTENDENT"]).eq("is_active", true).order("role").order("email"),
+    ]);
+    setNums(cfg || []); setPeople(pf || []); setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const roleLabel = (r: string) => (r === "BROKER" ? "Corretor" : r === "MANAGER" ? "Gerente" : "Super");
+  const nomePessoa = (p: any) => `${p.first_name || p.full_name || p.email} · ${roleLabel(p.role)}`;
+  const donoDe = (id: string | null) => { const p = people.find((x) => x.id === id); return p ? nomePessoa(p) : null; };
+
+  const atrelar = async (configId: string, ownerId: string | null) => {
+    setSavingId(configId);
+    try {
+      const { error } = await supabase.from("whatsapp_config").update({ owner_id: ownerId }).eq("id", configId);
+      if (error) throw error;
+      toast.success(ownerId ? "Número atrelado — disparo liberado para a pessoa." : "Número desatrelado.");
+      load();
+    } catch (e: any) { toast.error(e.message || "Erro ao atrelar"); }
+    finally { setSavingId(null); }
+  };
+
+  return (
+    <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800">
+      <div className="text-sm text-slate-300 mb-4 leading-relaxed">
+        Atrele cada <b>número oficial (WABA)</b> a uma pessoa — corretor, gerente ou superintendente.
+        Quem tem número atrelado passa a ver o <b>disparador</b>. A WABA é cadastrada manualmente na Meta antes; aqui você só amarra.
+      </div>
+      {loading ? (
+        <div className="text-slate-400 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Carregando…</div>
+      ) : (
+        <div className="space-y-2">
+          {nums.map((n) => (
+            <div key={n.id} className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between bg-slate-800/50 rounded-xl p-3 border border-slate-700">
+              <div className="min-w-0">
+                <div className="font-bold text-white truncate">{n.label || n.display_number || n.phone_number_id}</div>
+                <div className="text-[12px] text-slate-400">
+                  {n.display_number || "—"} · {n.is_active ? "ativo" : "inativo"}{n.quality ? ` · ${n.quality}` : ""}
+                  {n.owner_id ? <span className="text-green-400"> · {donoDe(n.owner_id) || "atrelado"}</span> : <span className="text-amber-400"> · sem dono</span>}
+                </div>
+              </div>
+              <select
+                value={n.owner_id || ""}
+                disabled={savingId === n.id}
+                onChange={(e) => atrelar(n.id, e.target.value || null)}
+                className="bg-slate-900 border border-slate-600 rounded-lg text-white text-sm px-3 py-2 min-w-[240px]">
+                <option value="">— sem dono (não libera) —</option>
+                {people.map((p) => <option key={p.id} value={p.id}>{nomePessoa(p)}</option>)}
+              </select>
+            </div>
+          ))}
+          {!nums.length && <div className="text-slate-400 text-sm">Nenhuma WABA cadastrada ainda. Cadastre na Meta e amarre aqui.</div>}
+        </div>
+      )}
     </div>
   );
 }

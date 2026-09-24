@@ -116,15 +116,19 @@ const CorretorPainel = () => {
   useEffect(() => { if (sel) { setRRenda(rendaNum(sel) || 3600); } }, [sel?.id]); // eslint-disable-line
   const sim = simular(rRenda, rFgts);
 
-  // ── DISPARAR: gate real (system_settings.corretor_disparo_enabled) ──────────
-  const { data: dispEnabled = false } = useQuery({
-    queryKey: ["corretorDisparoEnabled"],
+  // ── DISPARAR: liberado quando o corretor tem um NÚMERO OFICIAL atrelado a ele ──
+  // (whatsapp_config.owner_id === corretor). O gerente/super atrela na aba "Atrelar
+  // número" do WPP Oficial, logo após cadastrar a WABA. Sem número → tela de bloqueio.
+  const { data: minhaWaba = null } = useQuery<any>({
+    queryKey: ["minhaWaba", user?.id],
+    enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase.from("system_settings").select("value").eq("key", "corretor_disparo_enabled").maybeSingle();
-      const v = (data as any)?.value;
-      return v === true || v === "true";
+      const { data } = await supabase.from("whatsapp_config")
+        .select("id, label, display_number, is_active").eq("owner_id", user!.id).eq("is_active", true).limit(1);
+      return data?.[0] || null;
     },
   });
+  const dispEnabled = !!minhaWaba;
 
   // ── REGIÃO: mapa campanha → região das filas (distribution_queues.match_value → region) ──
   const { data: regionByCampaign = {} } = useQuery<Record<string, string>>({
