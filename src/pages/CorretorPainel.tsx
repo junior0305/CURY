@@ -43,17 +43,23 @@ const rendaNum = (l?: Lead | null) => {
 // Limpa o nome da região do pool: tira nome de equipe/prefixo de campanha e
 // expande códigos de zona. Ex.: "EQ_DATTI_ZS" → "Zona Sul", "GIORGE_JAGUARE" → "Jaguare".
 // (Carrão/Jaguaré são também bairros — não entram na lista de equipes.)
-const EQUIPES = ["DATTI", "DUDU", "DUDALINA", "GIORGE", "LILIANE", "JAPA", "BACANA", "LUCIENE", "NOBILE", "ULLY", "ULLLY", "KENOBI"];
-const PREFIXOS = ["EQ", "CR", "DISPARO", "FEIRAO", "OFERTA ATIVA", "OFERTA"];
+// tokens de equipe/campanha a remover (não são região)
+const LIXO_TOKENS = new Set([
+  "EQ", "CR", "DISPARO", "FEIRAO", "OFERTA", "ATIVA", "FACEBOOK", "MCMV",
+  "DATTI", "DUDU", "DUDALINA", "GIORGE", "GIORGINA", "LILIANE", "LILI", "JAPA",
+  "BACANA", "LUCIENE", "NOBILE", "ULLY", "ULLLY", "KENOBI", "JORDAN", "ODALYS",
+  "AMSTERDA", "FAVORITA", "CAR", "NEO",
+]);
+const ZONA: Record<string, string> = { ZS: "Zona Sul", ZO: "Zona Oeste", ZN: "Zona Norte", ZL: "Zona Leste" };
 function limparRegiao(raw?: string | null): string {
-  if (!raw || !raw.trim()) return "Sem área";
-  let t = raw.trim();
-  for (const p of PREFIXOS) t = t.replace(new RegExp(`^${p}[ _-]+`, "i"), "");
-  for (const e of EQUIPES) t = t.replace(new RegExp(`\\b${e}\\b[ _-]*`, "gi"), "");
-  t = t.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-  t = t.replace(/\bZS\b/i, "Zona Sul").replace(/\bZO\b/i, "Zona Oeste").replace(/\bZN\b/i, "Zona Norte").replace(/\bZL\b/i, "Zona Leste");
-  if (!t || /^(facebook|mcmv|\dqtos?.*)$/i.test(t)) return "Geral";
-  return t.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  if (!raw || !raw.trim() || /sem.?[aá]rea/i.test(raw)) return "Sem área";
+  let toks = raw.trim().toUpperCase().split(/[_\-\s]+/).filter(Boolean).filter((t) => !LIXO_TOKENS.has(t));
+  if (!toks.length) return "Geral";
+  const parts = toks.map((t) => ZONA[t] || t.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()));
+  let label = parts.join(" ");
+  // tags que são telefone/número ou genéricas → agrupa em "Geral"
+  if (/^\d/.test(label) || /qtos?|qto/i.test(label)) return "Geral";
+  return label;
 }
 
 // ── simulador MCMV (ESTIMATIVA client-side; não é cálculo oficial da Caixa) ──
