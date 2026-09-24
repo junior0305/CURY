@@ -239,43 +239,48 @@ const CorretorPainel = () => {
       return count || 0;
     },
   });
-  const { data: meusPescados = [] } = useQuery<any[]>({
-    queryKey: ["meusPescados"], enabled: mode === "pescar" && !!user, refetchInterval: 20000,
-    queryFn: async () => {
-      const { data } = await supabase.from("cold_contacts")
-        .select("id, name, phone, tag, claimed_at")
-        .eq("claimed_by", user!.id).eq("status", "claimed").is("promoted_to_lead_id", null)
-        .order("claimed_at", { ascending: false });
-      return data || [];
-    },
-  });
-  const [pescando, setPescando] = useState(false);
-  const pescarProximo = async () => {
-    if (!user || pescando) return;
-    setPescando(true);
+
+  // CARROSSEL: um candidato por vez (não pega até "Pegar"). Passar = skip (não volta 7d).
+  const [fila, setFila] = useState<any[]>([]);
+  const [carregandoFila, setCarregandoFila] = useState(false);
+  const [busyCard, setBusyCard] = useState(false);
+  const carregarFila = async () => {
+    if (!user) return;
+    setCarregandoFila(true);
     try {
-      let q = supabase.from("cold_contacts").select("id").eq("status", "available");
+      const { data: skips } = await supabase.from("cold_skip").select("contact_id").eq("broker_id", user.id).gte("skipped_at", new Date(Date.now() - 7 * 864e5).toISOString());
+      const skipIds = new Set((skips || []).map((s: any) => s.contact_id));
+      let q = supabase.from("cold_contacts").select("id, name, phone, tag").eq("status", "available").order("created_at", { ascending: true }).limit(60);
       if (regiaoAtual) q = q.in("tag", regiaoAtual.tags);
-      const { data: avail } = await q.limit(1);
-      if (!avail?.length) { toast.error(regiaoAtual ? `Sem leads em ${regiaoAtual.label} agora.` : "Sem leads no pool agora."); return; }
-      const { error } = await supabase.rpc("claim_cold_contact", { p_broker_id: user.id, p_contact_id: avail[0].id });
-      if (error) { toast.error((error as any).details || error.message || "Não consegui pescar."); return; }
-      toast.success("🎣 Lead pescado! Chame no seu WhatsApp.");
-      qc.invalidateQueries({ queryKey: ["meusPescados"] });
-      qc.invalidateQueries({ queryKey: ["pescaHoje"] });
-      qc.invalidateQueries({ queryKey: ["poolAreas"] });
-    } catch (e: any) { toast.error(e?.message || "Erro ao pescar."); }
-    finally { setPescando(false); }
+      const { data } = await q;
+      setFila(((data as any[]) || []).filter((c) => !skipIds.has(c.id)));
+    } finally { setCarregandoFila(false); }
   };
-  const marcarRespondeu = async (id: string) => {
+  useEffect(() => { if (mode === "pescar" && regioes.length) carregarFila(); }, [mode, regiaoSel, regioes.length]); // eslint-disable-line
+  const atual = fila[0] || null;
+  const proximoCard = () => { if (fila.length <= 1) carregarFila(); else setFila((f) => f.slice(1)); };
+
+  const pegar = async () => {
+    if (!user || !atual || busyCard) return;
+    setBusyCard(true);
     try {
-      const { error } = await supabase.rpc("promote_cold_to_lead", { p_contact_id: id });
-      if (error) { toast.error(error.message); return; }
-      toast.success("✅ Virou lead seu — não volta ao pool.");
-      qc.invalidateQueries({ queryKey: ["meusPescados"] });
+      const { error: e1 } = await supabase.rpc("claim_cold_contact", { p_broker_id: user.id, p_contact_id: atual.id });
+      if (e1) { toast.error((e1 as any).details || e1.message || "Não consegui pegar."); return; }
+      await supabase.rpc("promote_cold_to_lead", { p_contact_id: atual.id });
+      toast.success(`✅ ${firstName(atual.name || "Lead")} é seu! Já está nas suas fichas.`);
       qc.invalidateQueries({ queryKey: ["pescaHoje"] });
       qc.invalidateQueries({ queryKey: ["painelLeads"] });
+      qc.invalidateQueries({ queryKey: ["poolAreas"] });
+      proximoCard();
     } catch (e: any) { toast.error(e?.message); }
+    finally { setBusyCard(false); }
+  };
+  const passar = async () => {
+    if (!user || !atual || busyCard) return;
+    setBusyCard(true);
+    try { await supabase.rpc("skip_cold_contact", { p_broker_id: user.id, p_contact_id: atual.id }); }
+    catch { /* segue */ }
+    finally { proximoCard(); setBusyCard(false); }
   };
 
   const facts = sel ? [
@@ -526,36 +531,34 @@ const CorretorPainel = () => {
                     <span key={r.label} className={`q-tag${regiaoSel === r.label ? " on" : ""}`} onClick={() => setRegiaoSel(r.label)}>{r.label} ({r.count})</span>
                   ))}
                 </div>
-                <div className="kpi-strip" style={{ marginTop: 14 }}>
-                  <div><div className="kpi-label">Pescados hoje</div><div className="kpi-num">{pescaHoje}/15</div></div>
-                  <div><div className="kpi-label">{regiaoAtual ? regiaoAtual.label : "No pool"}</div><div className="kpi-num" style={{ color: "var(--accent)" }}>{regiaoAtual ? regiaoAtual.count : totalPool}</div></div>
-                  <div><div className="kpi-label">Trabalhando</div><div className="kpi-num">{meusPescados.length}</div></div>
-                </div>
-                <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 14, height: 46, fontSize: 15 }}
-                  disabled={pescando || pescaHoje >= 15} onClick={pescarProximo}>
-                  {pescaHoje >= 15 ? "Limite de 15 hoje atingido" : pescando ? "Pescando…" : regiaoAtual ? `🎣 Pescar em ${regiaoAtual.label}` : "🎣 Pescar próximo lead"}
-                </button>
+                <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--muted)" }}>Pescados hoje: <b style={{ color: "var(--accent)" }}>{pescaHoje}/15</b>{regiaoAtual ? <> · {regiaoAtual.label}: <b>{regiaoAtual.count}</b> no pool</> : null}</div>
               </div>
 
+              {/* CARROSSEL: um nome por vez → Pegar ou Passar */}
               <div className="card" style={{ marginTop: 12 }}>
-                <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>Seus leads pescados</div>
-                <div style={{ fontSize: 12, color: "var(--faint)", marginBottom: 10 }}>Marque "respondeu" ao dar sinal de vida — sem resposta em 48h o lead volta ao pool.</div>
-                {meusPescados.length === 0 ? (
-                  <div style={{ color: "var(--muted)", fontSize: 13, padding: "8px 0" }}>Nenhum lead pescado ainda. Toque em "Pescar próximo lead".</div>
+                {pescaHoje >= 15 ? (
+                  <div style={{ textAlign: "center", padding: "32px 12px", color: "var(--muted)" }}>
+                    <div style={{ fontSize: 32 }}>✋</div>
+                    <div style={{ fontWeight: 800, fontSize: 16, marginTop: 8, color: "var(--text)" }}>Limite de 15 hoje atingido</div>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>Trabalha os que você pegou e volta amanhã.</div>
+                  </div>
+                ) : carregandoFila && !atual ? (
+                  <div style={{ textAlign: "center", padding: 32, color: "var(--muted)" }}>Buscando leads…</div>
+                ) : !atual ? (
+                  <div style={{ textAlign: "center", padding: "32px 12px", color: "var(--muted)" }}>
+                    <div style={{ fontSize: 32 }}>🎣</div>
+                    <div style={{ fontWeight: 800, fontSize: 16, marginTop: 8, color: "var(--text)" }}>Acabaram os leads {regiaoAtual ? `em ${regiaoAtual.label}` : "no pool"}</div>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>Escolha outra região acima.</div>
+                  </div>
                 ) : (
-                  <div>
-                    {meusPescados.map((c) => (
-                      <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "11px 0", borderBottom: "1px solid var(--border)" }}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 14 }}>{c.name || "Sem nome"}</div>
-                          <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{c.phone} · <b style={{ color: "var(--accent)" }}>{limparRegiao(c.tag)}</b></div>
-                        </div>
-                        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                          <a className="btn-ghost" href={waLink(c.phone)} target="_blank" rel="noreferrer">💬 Chamar</a>
-                          <button className="btn-primary" onClick={() => marcarRespondeu(c.id)}>✅ Respondeu</button>
-                        </div>
-                      </div>
-                    ))}
+                  <div style={{ textAlign: "center", padding: "12px 8px 4px" }}>
+                    <div style={{ fontSize: 12, color: "var(--faint)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em" }}>Próximo do pool</div>
+                    <div style={{ fontSize: 26, fontWeight: 800, margin: "10px 0 2px", color: "var(--text)" }}>{atual.name || "Sem nome"}</div>
+                    <div style={{ fontSize: 13.5, color: "var(--accent)", fontWeight: 700 }}>{limparRegiao(atual.tag)}</div>
+                    <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+                      <button className="btn-ghost" style={{ flex: 1, height: 48, justifyContent: "center", fontSize: 15 }} disabled={busyCard} onClick={passar}>Passar ›</button>
+                      <button className="btn-primary" style={{ flex: 2, height: 48, justifyContent: "center", fontSize: 15 }} disabled={busyCard} onClick={pegar}>🎣 Pegar — é meu</button>
+                    </div>
                   </div>
                 )}
               </div>
