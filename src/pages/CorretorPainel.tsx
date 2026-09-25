@@ -10,7 +10,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { MessageCircle, Send, Fish, Moon, ArrowLeft } from "lucide-react";
+import { MessageCircle, Send, Fish, Moon, ArrowLeft, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
@@ -74,7 +74,7 @@ function simular(renda: number, fgts: number) {
 }
 
 const CorretorPainel = () => {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const qc = useQueryClient();
   const reduce = useReducedMotion();
 
@@ -319,6 +319,7 @@ const CorretorPainel = () => {
           <div className="rail-footer">
             <div className="ficha-pill"><span>Fichas</span><b>{counts.todos}</b></div>
             <button className="rail-btn" onClick={() => document.documentElement.classList.toggle("dark")} title="Tema"><Moon size={19} /></button>
+            <button className="rail-btn" onClick={() => signOut()} title="Sair da conta"><LogOut size={19} /></button>
             <div className="rail-avatar">{initials((user as any)?.user_metadata?.name || (user as any)?.email || "Eu")}</div>
           </div>
         </nav>
