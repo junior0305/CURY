@@ -593,7 +593,7 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
 /* Casca de altura fixa (igual ao painel do corretor): o rail navy preenche a
    coluna inteira e quem rola é o conteúdo, não a página — assim a tarja navy vai
    sempre até o fim da tela. */
-.mgr10.app2{display:grid;grid-template-columns:76px 1fr;height:100vh;overflow:hidden;padding-bottom:0}
+.mgr10.app2{display:grid;grid-template-columns:76px 1fr;height:100vh;overflow:hidden;padding:0}
 .mgr10 .rail{background:#0f172a;padding:16px 8px;display:flex;flex-direction:column;
   align-items:center;gap:8px;height:100%}
 .mgr10 .rail-brand{display:flex;flex-direction:column;align-items:center;padding:0 0 14px}
