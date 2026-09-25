@@ -590,9 +590,12 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
    ══════════════════════════════════════════════════════════════════════ */
 /* Rail estilo cpv2 (do painel do corretor): barra navy estreita, ícone em cima
    + rótulo pequeno, pílula teal na aba ativa. Mesmo design dos dois painéis. */
-.mgr10.app2{display:grid;grid-template-columns:76px 1fr;min-height:100vh;padding-bottom:0}
+/* Casca de altura fixa (igual ao painel do corretor): o rail navy preenche a
+   coluna inteira e quem rola é o conteúdo, não a página — assim a tarja navy vai
+   sempre até o fim da tela. */
+.mgr10.app2{display:grid;grid-template-columns:76px 1fr;height:100vh;overflow:hidden;padding-bottom:0}
 .mgr10 .rail{background:#0f172a;padding:16px 8px;display:flex;flex-direction:column;
-  align-items:center;gap:8px;position:sticky;top:0;height:100vh}
+  align-items:center;gap:8px;height:100%}
 .mgr10 .rail-brand{display:flex;flex-direction:column;align-items:center;padding:0 0 14px}
 .mgr10 .rail-brand>div:not(.rail-m){display:none}
 .mgr10 .rail-m{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
@@ -618,7 +621,7 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
    e faziam tudo parecer encolhido. Os blocos de texto corrido continuam
    limitados por `max-width` proprio em ch, entao alargar aqui nao estica
    linha de leitura — so os cartoes e as tabelas, que ganham com isso. */
-.mgr10 .shell2{min-width:0;width:100%;max-width:2200px;
+.mgr10 .shell2{min-width:0;width:100%;max-width:2200px;min-height:0;overflow-y:auto;
   /* Respiro proporcional: 30px num notebook, mais folga num monitor grande,
      sem virar margem gigante. A largura em si acompanha a tela — o teto de
      2200px existe só para a linha da tabela nao virar um metro em ultrawide. */
@@ -628,7 +631,7 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
 .mgr10 .top2 p{margin-top:2px;font-size:12.5px;color:var(--ink-3)}
 .mgr10 .top2-r{margin-left:auto;display:flex;align-items:center;gap:8px}
 @media(max-width:1020px){
-  .mgr10.app2{grid-template-columns:1fr}
+  .mgr10.app2{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}
   .mgr10 .rail{position:sticky;top:0;z-index:30;height:auto;flex-direction:row;overflow-x:auto;
     padding:8px 9px;border-right:0;background:#0f172a;justify-content:space-around}
   .mgr10 .rail .on::before{display:none}
