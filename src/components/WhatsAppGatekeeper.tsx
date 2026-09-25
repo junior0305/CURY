@@ -546,7 +546,9 @@ function GkQRCode({
 // ── Main Gatekeeper ───────────────────────────────────────────────────────────
 export function WhatsAppGatekeeper({ children }: { children: React.ReactNode }) {
   const { user, role, loading: authLoading } = useAuth();
-  const { status, qrBase64, errorDetail, refreshing, checkConnection, resetAndRetry } = useBotStatus(user?.id, role);
+  // Corretor NÃO usa mais Evolution — não checa chip nem mostra QR/"conectar".
+  const isBroker = (role || "").toUpperCase() === "BROKER";
+  const { status, qrBase64, errorDetail, refreshing, checkConnection, resetAndRetry } = useBotStatus(isBroker ? undefined : user?.id, role);
   const [showQRModal, setShowQRModal] = useState(false);
   const [nagDismissed, setNagDismissed] = useState(false);
 
@@ -556,6 +558,7 @@ export function WhatsAppGatekeeper({ children }: { children: React.ReactNode }) 
   // aparece no canto quando souber. Evita "corretor preso na tela" se Evolution API
   // estiver lenta.
   if (authLoading) return <GkLoading />;
+  if (isBroker) return <>{children}</>;   // corretor: sem chip, sem QR, sem nag
   if (status === "success") return <GkSuccess />;
 
   const needsConnection =
