@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
 import { useSuperintendenteRollup, type GerenteRollup } from "@/hooks/useSuperintendente";
 import { loadFonts } from "@/components/manager-v10/RailV10";
+import BiTab from "@/components/manager-v10/BiTab";
 import "@/styles/manager-v10.css";
 import "@/styles/superintendente.css";
 
@@ -21,6 +22,7 @@ export default function Superintendente() {
   const superId = session?.user?.id;
   const nav = useNavigate();
   const [dias, setDias] = useState(30);
+  const [aba, setAba] = useState<"consolidado" | "bi">("consolidado");
   const { data, isLoading } = useSuperintendenteRollup(superId, dias);
   loadFonts();
 
@@ -36,13 +38,17 @@ export default function Superintendente() {
             <p>A operação inteira das suas equipes, num lugar só</p>
           </div>
           <div className="sup-per">
-            {PERIODOS.map(([n, r]) => (
+            <button className={aba === "consolidado" ? "on" : ""} onClick={() => setAba("consolidado")}>Consolidado</button>
+            <button className={aba === "bi" ? "on" : ""} onClick={() => setAba("bi")}>B.I.</button>
+            {aba === "consolidado" ? PERIODOS.map(([n, r]) => (
               <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{r}</button>
-            ))}
+            )) : null}
           </div>
         </div>
 
-        {isLoading || !data ? (
+        {aba === "bi" ? (
+          <BiTab scope="super" managerId={superId} />
+        ) : isLoading || !data ? (
           <p className="sup-vazio">Somando as equipes…</p>
         ) : (
           <>

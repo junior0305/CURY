@@ -17,7 +17,7 @@ export function loadFonts() {
   document.head.appendChild(l);
 }
 
-export type Aba = "tempo" | "time" | "leads" | "pastas" | "anuncios" | "disparar";
+export type Aba = "tempo" | "time" | "leads" | "pastas" | "anuncios" | "disparar" | "bi";
 
 export const ICONES: Record<Aba, string> = {
   tempo: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3.5 2",
@@ -26,6 +26,7 @@ export const ICONES: Record<Aba, string> = {
   anuncios: "M3 17l5-6 4 3 5-8M14 6h4v4",
   disparar: "M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-5.7A8.4 8.4 0 1 1 21 11.5z",
   pastas: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+  bi: "M5 20V10M12 20V4M19 20v-7",
 };
 
 /** Ordem do dia do gerente (Junior, 15/09). Leads e B.I. vêm depois. */
@@ -82,9 +83,17 @@ export function RailV10({
       })}
 
       <div className="rail-sep" />
-      <a className="soon" aria-disabled="true">
-        <svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7" /></svg>B.I.
-      </a>
+      {onAba ? (
+        <button type="button" className={`railb${atual === "bi" ? " on" : ""}`}
+          aria-current={atual === "bi" ? "page" : undefined} onClick={() => onAba("bi")}>
+          <svg viewBox="0 0 24 24"><path d={ICONES.bi} /></svg>B.I.
+        </button>
+      ) : (
+        <Link to="/manager?aba=bi" className={atual === "bi" ? "on" : undefined}
+          aria-current={atual === "bi" ? "page" : undefined}>
+          <svg viewBox="0 0 24 24"><path d={ICONES.bi} /></svg>B.I.
+        </Link>
+      )}
 
       <div className="rail-foot">
         {/* Sair não existia em tela nenhuma do v10: quem entrava no painel do

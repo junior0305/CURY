@@ -19,14 +19,16 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useManagerV10, diasUteisRestantes, type V10Lead } from "@/hooks/useManagerV10";
 import { useCruzamentoCury } from "@/hooks/useCruzamentoCury";
 import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/components/manager-v10/ui";
+import { useSearchParams } from "react-router-dom";
 import TempoReal from "@/components/manager-v10/TempoReal";
 import TimeTab from "@/components/manager-v10/TimeTab";
+import BiTab from "@/components/manager-v10/BiTab";
 import { RailV10 } from "@/components/manager-v10/RailV10";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import AchadosCury from "@/components/manager-v10/AchadosCury";
 import "@/styles/manager-v10.css";
 
-type View = "tempo" | "time";
+type View = "tempo" | "time" | "bi";
 
 // Quatro portas, não sete. Coach, Liga, Análise e Pool foram feitos pra uma
 // operação que está parada — continuam em /manager/coach etc. e voltam pra cá
@@ -69,7 +71,9 @@ export default function ManagerV10() {
   // porque ninguém registra visita no Comandra — duas 'visitas' diferentes
   // na mesma tela era o pior defeito da aba.
   const { data: cruz } = useCruzamentoCury(userId);
-  const [view, setView] = useState<View>("tempo");
+  const [params] = useSearchParams();
+  const abaInicial = (params.get("aba") as View) || "tempo";
+  const [view, setView] = useState<View>(["tempo", "time", "bi"].includes(abaInicial) ? abaInicial : "tempo");
 
   useEffect(loadFonts, []);
 
@@ -215,15 +219,18 @@ export default function ManagerV10() {
 
       <main className="shell2">
         <header className="top2">
-          <div><h1>{view === "tempo" ? "Tempo real" : "Time"}</h1>
+          <div><h1>{view === "tempo" ? "Tempo real" : view === "time" ? "Time" : "B.I. — Fechamento"}</h1>
             <p>{view === "tempo" ? "O que a equipe está fazendo agora"
-               : "A estratégia da equipe"}</p></div>
-          <div className="top2-r"><SeletorPeriodo /></div>
+               : view === "time" ? "A estratégia da equipe"
+               : "Vendas × Visitas × Documentos — a operação em números"}</p></div>
+          {view !== "bi" ? <div className="top2-r"><SeletorPeriodo /></div> : null}
         </header>
         {view === "tempo" ? (
           <TempoReal managerId={userId} />
-        ) : (
+        ) : view === "time" ? (
           <TimeTab managerId={userId} />
+        ) : (
+          <BiTab scope="gerente" managerId={userId} />
         )}
       </main>
     </div>
