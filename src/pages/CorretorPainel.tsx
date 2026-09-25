@@ -132,6 +132,24 @@ const CorretorPainel = () => {
     } catch { toast.error("Não consegui atualizar o status"); }
   };
 
+  // ── JARVIS no painel: "o que fazer agora" a partir dos leads do corretor ─────
+  const jarvis = useMemo(() => {
+    const now = Date.now();
+    const h = (iso?: string | null) => (iso ? (now - new Date(iso).getTime()) / 3.6e6 : Infinity);
+    const items: { id: string; u: number; icon: string; txt: string }[] = [];
+    for (const l of leads) {
+      if (l.status === "CONCLUDED" || l.status === "ABANDONED") continue;
+      const nome = firstName(l.name);
+      const respondeu = l.lastLeadResponseAt && (!l.lastBrokerWhatsappAt || new Date(l.lastLeadResponseAt) > new Date(l.lastBrokerWhatsappAt));
+      if (respondeu) items.push({ id: l.id, u: 100, icon: "💬", txt: `${nome} respondeu e está esperando você` });
+      else if (l.leadTemperature === "quente" && h(l.lastInteractionAt) >= 2) items.push({ id: l.id, u: 90, icon: "🔥", txt: `${nome} está quente e parado há ${Math.round(h(l.lastInteractionAt))}h` });
+      else if (l.status === "VISIT_SCHEDULED") items.push({ id: l.id, u: 80, icon: "📅", txt: `Confirme a visita de ${nome}` });
+      else if (l.status === "DOCS_REQUESTED") items.push({ id: l.id, u: 70, icon: "📄", txt: `Cobre os documentos de ${nome}` });
+      else if (l.status === "NEW" && (l.contactAttempts || 0) === 0) items.push({ id: l.id, u: 60, icon: "🆕", txt: `${nome} é novo — faça o 1º contato` });
+    }
+    return items.sort((a, b) => b.u - a.u);
+  }, [leads]);
+
   // ── SIMULADOR (sliders) ─────────────────────────────────────────────────────
   const [rRenda, setRRenda] = useState(3600);
   const [rFgts, setRFgts] = useState(14000);
@@ -360,6 +378,24 @@ const CorretorPainel = () => {
             {/* Palco */}
             <main className="stage">
               <div className="stage-inner">
+                {jarvis.length > 0 && (
+                  <div className="card" style={{ marginBottom: 12, borderColor: "var(--accent-border)", background: "var(--accent-soft)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, fontSize: 14, color: "var(--accent)", marginBottom: 10 }}>
+                      🤖 Comandra · o que fazer agora
+                      <span style={{ background: "var(--accent)", color: "#fff", borderRadius: 99, fontSize: 11, padding: "1px 7px", fontWeight: 800 }}>{jarvis.length}</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {jarvis.slice(0, 3).map((j) => (
+                        <button key={j.id} onClick={() => { setSelId(j.id); setMobileDetail(true); }}
+                          style={{ display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: "10px 12px", borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", width: "100%" }}>
+                          <span style={{ fontSize: 17 }}>{j.icon}</span>
+                          <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{j.txt}</span>
+                          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--accent)" }}>Ir →</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {sel ? (
                   <>
                     <div className="mobile-back-bar">
