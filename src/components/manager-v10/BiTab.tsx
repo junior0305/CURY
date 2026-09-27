@@ -127,11 +127,12 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
   const [busca, setBusca] = useState("");
   const [selMgr, setSelMgr] = useState("ALL");
 
+  // B.I. da DIRETORIA (empresa inteira): informação COMPARTILHADA — todo gerente/super
+  // vê o mesmo consolidado, não filtrado por equipe. p_manager sempre null → toda a diretoria.
   const { data, isLoading } = useQuery({
-    queryKey: ["biFechamento", scope, managerId, dias],
-    enabled: !!managerId,
+    queryKey: ["biFechamento", dias],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("bi_fechamento", { p_dias: dias, p_escopo: scope, p_manager: managerId });
+      const { data, error } = await supabase.rpc("bi_fechamento", { p_dias: dias, p_escopo: "diretoria", p_manager: null });
       if (error) throw error;
       return data as any;
     },
@@ -188,7 +189,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                 <div className="hero-title-block">
                   <h1>Fechamento &amp; Comparativo — Vendas × Visitas × Documentos</h1>
                   <span className="hero-filter-badge">
-                    Escopo: {scope === "super" ? "SUPERINTENDÊNCIA" : "SUA EQUIPE"} · {nf(gerentes.length)} Gerentes · {nf(corretores.length)} Corretores · Últimos {dias} dias
+                    DIRETORIA (visão compartilhada) · {nf(gerentes.length)} Gerentes · {nf(corretores.length)} Corretores · Últimos {dias} dias
                   </span>
                 </div>
               </div>
