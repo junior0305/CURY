@@ -171,6 +171,12 @@ export default function Tropas() {
       toast({ title: "Digite o nome de usuário", variant: "destructive" });
       return;
     }
+    // Corretor SEM telefone não recebe o aviso de lead (que vai pro WhatsApp dele
+    // pelo chip do gerente). Por isso é obrigatório no cadastro de corretor.
+    if (formData.role === "BROKER" && (formData.phone || "").replace(/\D/g, "").length < 10) {
+      toast({ title: "Telefone obrigatório para corretor", description: "O corretor precisa do WhatsApp para receber o aviso de lead pelo chip do gerente.", variant: "destructive" });
+      return;
+    }
     if (!editUser && !formData.password.trim()) {
       toast({ title: "Senha obrigatória para novo usuário", variant: "destructive" });
       return;
