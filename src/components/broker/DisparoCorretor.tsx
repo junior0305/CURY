@@ -51,6 +51,8 @@ export function DisparoCorretor({ managerId, configId, wabaId, cota, brokerId, b
   const precisaFoto = (tpl?.header_type || "").toUpperCase() === "IMAGE";
   const restante = Math.max(0, cota - usados);
   const enviaveis = Math.min(alvos.length, restante);
+  const previewTexto = (tpl?.body_text || "").replace(/\{\{\s*([\wÀ-ÿ]+)\s*\}\}/g, (_m, k: string) =>
+    k.toLowerCase() === "nome" ? "«nome do contato»" : (vars[k]?.trim() || `«${k}»`));
 
   const lerArquivo = (f: File) => {
     const r = new FileReader();
@@ -107,12 +109,24 @@ export function DisparoCorretor({ managerId, configId, wabaId, cota, brokerId, b
           <option value="">— escolha a mensagem —</option>
           {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
-        {tpl?.body_text && <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8, whiteSpace: "pre-wrap" }}>{tpl.body_text}</p>}
         {varsPedir.map((v) => (
           <input key={v} placeholder={`Valor de {{${v}}}`} value={vars[v] || ""}
             onChange={(e) => setVars((s) => ({ ...s, [v]: e.target.value }))}
             style={{ width: "100%", marginTop: 8, padding: "9px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }} />
         ))}
+        {tpl && (
+          <>
+            <div style={{ fontSize: 11, color: "var(--muted)", margin: "12px 0 6px" }}>PRÉVIA DO QUE O CLIENTE RECEBE</div>
+            <div style={{ background: "#0b141a", borderRadius: 12, padding: 10 }}>
+              <div style={{ background: "#005c4b", color: "#e9edef", borderRadius: 10, padding: 8, maxWidth: 300 }}>
+                {precisaFoto && (fotoPreview
+                  ? <img src={fotoPreview} alt="" style={{ width: "100%", borderRadius: 8, marginBottom: 6, display: "block" }} />
+                  : <div style={{ background: "#0c1f1a", borderRadius: 8, padding: "22px 8px", textAlign: "center", fontSize: 12, opacity: 0.7, marginBottom: 6 }}>📷 escolha a foto abaixo</div>)}
+                <div style={{ fontSize: 13, whiteSpace: "pre-wrap", lineHeight: 1.4 }}>{previewTexto}</div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* 2. foto (se o template pedir) */}
