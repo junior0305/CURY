@@ -16,6 +16,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchLeadsForDashboard, updateLeadStatus, setLeadNegotiating } from "@/integrations/supabase/leads";
 import { fetchLeadNotes, addLeadNote, waLink } from "@/integrations/supabase/atender";
+import { DisparoCorretor } from "@/components/broker/DisparoCorretor";
 import type { Lead, LeadStatus } from "@/types/lead";
 import { TIPO_TRABALHO_LABEL } from "@/types/lead";
 
@@ -168,15 +169,15 @@ const CorretorPainel = () => {
     enabled: !!user,
     queryFn: async () => {
       const { data: prof } = await supabase.from("profiles")
-        .select("disparo_enabled, disparo_cota_diaria, manager_id").eq("id", user!.id).maybeSingle();
-      if (!prof) return { enabled: false, cota: 0, numero: null, managerId: null };
+        .select("disparo_enabled, disparo_cota_diaria, manager_id, first_name").eq("id", user!.id).maybeSingle();
+      if (!prof) return { enabled: false, cota: 0, numero: null, managerId: null, brokerNome: null };
       let numero = null;
       if (prof.manager_id) {
         const { data } = await supabase.from("whatsapp_config")
-          .select("id, label, display_number").eq("owner_id", prof.manager_id).eq("is_active", true).limit(1);
+          .select("id, label, display_number, waba_id").eq("owner_id", prof.manager_id).eq("is_active", true).limit(1);
         numero = data?.[0] || null;
       }
-      return { enabled: !!prof.disparo_enabled, cota: prof.disparo_cota_diaria || 0, numero, managerId: prof.manager_id };
+      return { enabled: !!prof.disparo_enabled, cota: prof.disparo_cota_diaria || 0, numero, managerId: prof.manager_id, brokerNome: prof.first_name };
     },
   });
   const dispEnabled = !!(dispInfo?.enabled && dispInfo?.numero);
@@ -563,7 +564,14 @@ const CorretorPainel = () => {
                   }}>🙋 Pedir liberação ao gerente</button>
                 </div>
               ) : (
-                <DisparoUnlocked />
+                <DisparoCorretor
+                  managerId={dispInfo.managerId}
+                  configId={dispInfo.numero.id}
+                  wabaId={dispInfo.numero.waba_id}
+                  cota={dispInfo.cota}
+                  brokerId={user!.id}
+                  brokerNome={dispInfo.brokerNome}
+                />
               )}
             </div>
           </div>
