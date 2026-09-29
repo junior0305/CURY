@@ -230,7 +230,14 @@ export default function Tropas() {
           }
         });
 
-        if (error) throw error;
+        if (error) {
+          // functions.invoke joga um "non-2xx" genérico; a razão real (ex.:
+          // "e-mail já cadastrado") vem no corpo da resposta. Sem isto o admin
+          // só vê "Edge Function returned a non-2xx status code".
+          let msg = (error as any).message || "Falha ao criar usuário";
+          try { const body = await (error as any).context?.json?.(); if (body?.error) msg = body.error; } catch {}
+          throw new Error(msg);
+        }
         if (data?.error) throw new Error(data.error);
 
         if (data?.user?.id) {
