@@ -59,31 +59,6 @@ interface AgentDef {
 
 const AGENTS: AgentDef[] = [
   {
-    id: "redistribuicao",
-    icon: RefreshCw,
-    color: "text-blue-400",
-    bgColor: "bg-blue-900/20",
-    borderColor: "border-blue-500/30",
-    title: "Redistribuição Automática",
-    description:
-      "Move leads sem resposta do corretor para outro corretor disponível após X horas.",
-    enabledKey: "agente_redistribuicao_enabled",
-    status: "available",
-    fields: [
-      {
-        key: "agente_redistribuicao_threshold_h",
-        label: "Redistribuir após (horas)",
-        type: "number",
-        default: 4,
-        min: 1,
-        max: 72,
-        hint: "Horas sem resposta do corretor antes de redistribuir o lead para outro disponível.",
-      },
-    ],
-    notes:
-      'Corretores marcados como "protegidos" nunca têm leads redistribuídos automaticamente, independente do tempo.',
-  },
-  {
     id: "relatorio",
     icon: BarChart2,
     color: "text-purple-400",
@@ -107,65 +82,6 @@ const AGENTS: AgentDef[] = [
       "Usa a mesma instância de notificações já configurada no Sistema. Envia para todos os admins e gerentes com telefone cadastrado.",
   },
   {
-    id: "recuperacao",
-    icon: RotateCcw,
-    color: "text-green-400",
-    bgColor: "bg-green-900/20",
-    borderColor: "border-green-500/30",
-    title: "Recuperação de Abandonados",
-    description:
-      "Reativa leads abandonados após X dias com mensagem personalizada.",
-    enabledKey: "agente_recuperacao_enabled",
-    status: "available",
-    fields: [
-      {
-        key: "agente_recuperacao_dias",
-        label: "Dias de espera após abandono",
-        type: "number",
-        default: 15,
-        min: 7,
-        max: 90,
-        hint: "Quantos dias após o abandono antes de tentar reativar o lead.",
-      },
-      {
-        key: "agente_recuperacao_max_tentativas",
-        label: "Máx. tentativas por lead",
-        type: "number",
-        default: 2,
-        min: 1,
-        max: 5,
-        hint: "Após atingir o limite, o lead não será mais contatado automaticamente.",
-      },
-    ],
-    notes:
-      "Leads reativados voltam para status NEW. O corretor original é notificado para fazer o acompanhamento.",
-  },
-  {
-    id: "sobrecarga",
-    icon: Scale,
-    color: "text-orange-400",
-    bgColor: "bg-orange-900/20",
-    borderColor: "border-orange-500/30",
-    title: "Anti-Sobrecarga",
-    description:
-      "Pausa a distribuição para corretores com leads ativos acima do limite.",
-    enabledKey: "agente_sobrecarga_enabled",
-    status: "available",
-    fields: [
-      {
-        key: "agente_sobrecarga_max_leads",
-        label: "Máx. leads ativos por corretor",
-        type: "number",
-        default: 30,
-        min: 5,
-        max: 200,
-        hint: "Ao atingir o limite, o corretor para de receber novos leads. Restaura automaticamente quando a carga cair para 80% do limite.",
-      },
-    ],
-    notes:
-      "Só pausa corretores que foram desativados por este agente. Corretores desabilitados manualmente não são afetados.",
-  },
-  {
     id: "scoring",
     icon: Target,
     color: "text-red-400",
@@ -179,71 +95,6 @@ const AGENTS: AgentDef[] = [
     fields: [],
     notes:
       "Score de 0-100 atualizado a cada hora. Leva em conta: resposta ao contato inicial, status no funil, tempo desde a última interação e acessibilidade via bot.",
-  },
-  {
-    id: "sentinela-quentes",
-    icon: Flame,
-    color: "text-orange-400",
-    bgColor: "bg-orange-900/20",
-    borderColor: "border-orange-500/30",
-    title: "Sentinela de Leads Quentes",
-    description:
-      "Alerta gerentes via WhatsApp quando leads classificados como 'quentes' ficam sem resposta do corretor.",
-    enabledKey: "agente_sentinela_quentes_enabled",
-    status: "available",
-    fields: [
-      {
-        key: "agente_sentinela_quentes_threshold_min",
-        label: "Alertar após (minutos sem resposta)",
-        type: "number",
-        default: 30,
-        min: 5,
-        max: 240,
-        hint: "Tempo sem resposta do corretor para um lead quente antes de alertar o gerente.",
-      },
-    ],
-    notes:
-      "Roda a cada 5 minutos via cron. Só alerta leads com intenção classificada como 'quente' pela IA (lead_state). Deduplica alertas — não reenvia para o mesmo lead dentro de 2h.",
-  },
-  {
-    id: "briefing-corretor",
-    icon: Bell,
-    color: "text-cyan-400",
-    bgColor: "bg-cyan-900/20",
-    borderColor: "border-cyan-500/30",
-    title: "Briefing Matinal do Corretor",
-    description:
-      "Envia às 08h BRT um resumo personalizado para cada corretor com leads quentes, ranking e tarefas do dia.",
-    enabledKey: "agente_briefing_corretor_enabled",
-    status: "available",
-    fields: [],
-    notes:
-      "Disparado diariamente às 08:00 BRT. Inclui: leads quentes aguardando resposta, fila ativa por status, posição no ranking mensal e tarefas do dia. Deduplica — só envia uma vez por corretor por dia.",
-  },
-  {
-    id: "classificacao-retro",
-    icon: Brain,
-    color: "text-violet-400",
-    bgColor: "bg-violet-900/20",
-    borderColor: "border-violet-500/30",
-    title: "Classificação Retroativa",
-    description:
-      "Classifica com IA leads ativos que ainda não possuem intenção definida (lead_state sem_info).",
-    enabledKey: "agente_classificacao_retro_enabled",
-    status: "available",
-    fields: [
-      {
-        key: "agente_classificacao_retro_batch",
-        label: "Leads por execução (batch)",
-        type: "number",
-        default: 50,
-        min: 10,
-        max: 200,
-        hint: "Quantos leads processar por vez. Valores menores reduzem custo de IA por execução.",
-      },
-    ],
-    notes:
-      "Usa Gemini Flash para classificar intenção, tema e momento com base no histórico de conversas. Roda diariamente às 09h BRT (ou manualmente). Processa apenas leads sem classificação prévia.",
   },
 ];
 
