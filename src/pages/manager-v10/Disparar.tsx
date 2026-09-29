@@ -33,11 +33,12 @@ import {
 } from "@/hooks/useDisparar";
 import { conectarBM, finalizarConexao } from "@/lib/embeddedSignup";
 import { Blank } from "@/components/manager-v10/ui";
+import { HabilitarDisparo } from "@/components/manager-v10/HabilitarDisparo";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import "@/styles/manager-v10.css";
 import "@/styles/disparar.css";
 
-type Etapa = "bm" | "tpl" | "disp" | "conv";
+type Etapa = "bm" | "tpl" | "disp" | "conv" | "corretores";
 type Destino = "fila" | "escolher";
 
 const brl = (n: number) => "R$ " + n.toFixed(2).replace(".", ",");
@@ -635,6 +636,7 @@ export default function Disparar() {
             ["tpl", "Mensagens", d.templates.some((t) => t.status === "APPROVED")],
             ["disp", "Disparar", false],
             ["conv", "Respostas", false],
+            ["corretores", "Corretores", false],
           ] as [Etapa, string, boolean][]).map(([k, rot, feito], i) => (
             <button key={k} role="tab" aria-selected={etapa === k}
               className={`et${etapa === k ? " on" : ""}${feito ? " feito" : ""}`}
@@ -1965,6 +1967,11 @@ export default function Disparar() {
               </p></div>
             )}
           </div>
+        </div>
+
+        {/* ══ Corretores — habilitar disparo + cota ══ */}
+        <div className={`pane${etapa === "corretores" ? " on" : ""}`}>
+          <HabilitarDisparo managerId={userId} />
         </div>
       </>
     );

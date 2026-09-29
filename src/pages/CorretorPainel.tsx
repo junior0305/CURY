@@ -161,16 +161,25 @@ const CorretorPainel = () => {
   // ── DISPARAR: liberado quando o corretor tem um NÚMERO OFICIAL atrelado a ele ──
   // (whatsapp_config.owner_id === corretor). O gerente/super atrela na aba "Atrelar
   // número" do WPP Oficial, logo após cadastrar a WABA. Sem número → tela de bloqueio.
-  const { data: minhaWaba = null } = useQuery<any>({
-    queryKey: ["minhaWaba", user?.id],
+  // Disparo é liberado pelo GESTOR (profiles.disparo_enabled + cota) e sai pelo
+  // NÚMERO do gestor (whatsapp_config.owner_id = manager). Sem os dois, bloqueado.
+  const { data: dispInfo = null } = useQuery<any>({
+    queryKey: ["dispInfo", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase.from("whatsapp_config")
-        .select("id, label, display_number, is_active").eq("owner_id", user!.id).eq("is_active", true).limit(1);
-      return data?.[0] || null;
+      const { data: prof } = await supabase.from("profiles")
+        .select("disparo_enabled, disparo_cota_diaria, manager_id").eq("id", user!.id).maybeSingle();
+      if (!prof) return { enabled: false, cota: 0, numero: null, managerId: null };
+      let numero = null;
+      if (prof.manager_id) {
+        const { data } = await supabase.from("whatsapp_config")
+          .select("id, label, display_number").eq("owner_id", prof.manager_id).eq("is_active", true).limit(1);
+        numero = data?.[0] || null;
+      }
+      return { enabled: !!prof.disparo_enabled, cota: prof.disparo_cota_diaria || 0, numero, managerId: prof.manager_id };
     },
   });
-  const dispEnabled = !!minhaWaba;
+  const dispEnabled = !!(dispInfo?.enabled && dispInfo?.numero);
 
   // ── REGIÃO: mapa campanha → região das filas (distribution_queues.match_value → region) ──
   const { data: regionByCampaign = {} } = useQuery<Record<string, string>>({
@@ -534,7 +543,7 @@ const CorretorPainel = () => {
                   <p className="lead-sub">Reative leads da sua carteira pelo WhatsApp oficial com modelos Utility (R$ 0,035)</p>
                 </div>
                 <div className="disp-perm-bar">
-                  <span className={`l-badge ${dispEnabled ? "ready" : "urgent"}`}>{dispEnabled ? "✓ Liberado pelo admin" : "🔒 Sem permissão do admin"}</span>
+                  <span className={`l-badge ${dispEnabled ? "ready" : "urgent"}`}>{dispEnabled ? `✓ Liberado · ${dispInfo.cota}/dia` : "🔒 Sem permissão do gestor"}</span>
                 </div>
               </div>
 
@@ -542,8 +551,17 @@ const CorretorPainel = () => {
                 <div className="card" style={{ textAlign: "center", padding: "48px 24px" }}>
                   <div style={{ fontSize: 36, marginBottom: 10 }}>🔒</div>
                   <h2 className="lead-title">Disparador oficial desabilitado para seu perfil</h2>
-                  <p className="lead-sub" style={{ maxWidth: 480, margin: "8px auto 18px" }}>O administrador ou seu gerente ainda não habilitou a cota de disparos via API oficial (Meta Cloud API) para a sua conta.</p>
-                  <button className="btn-primary" onClick={() => toast.success("Pedido de liberação enviado ao gerente")}>🙋 Pedir liberação de cota</button>
+                  <p className="lead-sub" style={{ maxWidth: 480, margin: "8px auto 18px" }}>Seu gerente ainda não habilitou a cota de disparos para a sua conta. O disparo sai pelo número oficial da equipe.</p>
+                  <button className="btn-primary" onClick={async () => {
+                    if (!dispInfo?.managerId) { toast.error("Você não tem gerente definido — fale com o admin."); return; }
+                    const { error } = await supabase.from("internal_notifications").insert({
+                      to_id: dispInfo.managerId, type: "DISPARO_LIBERACAO_PEDIDO",
+                      title: "🙋 Pedido de liberação de disparo",
+                      message: `${user?.email || "Um corretor"} pediu para ser habilitado a disparar. Libere em Disparar › Corretores.`,
+                    });
+                    if (error) { toast.error("Não consegui enviar o pedido."); return; }
+                    toast.success("Pedido enviado ao seu gerente ✅");
+                  }}>🙋 Pedir liberação ao gerente</button>
                 </div>
               ) : (
                 <DisparoUnlocked />
