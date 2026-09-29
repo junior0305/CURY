@@ -142,6 +142,18 @@ export function useDisparar(managerId: string | undefined) {
         body: { action: "refresh", owner_id: managerId },
       }).catch(() => {});
 
+      // Escopo por gerente: só as campanhas (e respostas) do NÚMERO dele.
+      // thread -> campaign_id -> campanha cujo owner_id = gerente OU wa_config_id
+      // é um número do gerente. Sem isto cada gerente via as respostas de todos.
+      const { data: meusCfg } = await supabase.from("whatsapp_config").select("id").eq("owner_id", managerId!);
+      const cfgIds = (meusCfg ?? []).map((c: any) => c.id);
+      const orCamp = cfgIds.length
+        ? `owner_id.eq.${managerId},wa_config_id.in.(${cfgIds.join(",")})`
+        : `owner_id.eq.${managerId}`;
+      const { data: meusCamps } = await supabase.from("whatsapp_campaigns").select("id").or(orCamp);
+      const campIds = (meusCamps ?? []).map((c: any) => c.id);
+      const campIdsSafe = campIds.length ? campIds : ["00000000-0000-0000-0000-000000000000"];
+
       const de15 = new Date(Date.now() - 15 * 86_400_000).toISOString();
       const [cfgRes, timeRes, tplRes, campRes, thrRes, leadsRes, precoRes, jaRes] = await Promise.all([
         supabase.from("whatsapp_config").select("*"),
@@ -150,11 +162,13 @@ export function useDisparar(managerId: string | undefined) {
         supabase.from("whatsapp_templates").select("*").order("created_at", { ascending: false }),
         supabase.from("whatsapp_campaigns")
           .select("id,name,status,audience_count,sent_count,delivered_count,read_count,reply_count,failed_count,cost_total,created_at,scheduled_at")
+          .in("id", campIdsSafe)
           .order("created_at", { ascending: false }).limit(15),
         // `select("*")` de propósito: o esquema do disparador foi crescendo por
         // migração e nem todo ambiente tem as mesmas colunas — listar uma que
         // falte derruba a consulta inteira, e a tela fica vazia sem dizer por quê.
         supabase.from("whatsapp_threads").select("*")
+          .in("campaign_id", campIdsSafe)
           .order("last_inbound_at", { ascending: false, nullsFirst: false }).limit(60),
         supabase.from("leads")
           .select("id,name,phone,broker_id,status,last_interaction_at,last_broker_whatsapp_at,created_at,contact_attempts")
