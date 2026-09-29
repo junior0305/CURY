@@ -79,7 +79,7 @@ const CorretorPainel = () => {
   const reduce = useReducedMotion();
 
   const [mode, setMode] = useState<"atender" | "disparar" | "pescar">("atender");
-  const [filter, setFilter] = useState<"prio" | "visita" | "todos">("prio");
+  const [filter, setFilter] = useState<"prio" | "pescados" | "visita" | "todos">("prio");
   const [selId, setSelId] = useState<string | null>(null);
   const [mobileDetail, setMobileDetail] = useState(false); // celular: lista vs ficha
   const [tool, setTool] = useState<"sim" | "doc" | "msg">("sim");
@@ -93,6 +93,7 @@ const CorretorPainel = () => {
 
   const counts = useMemo(() => ({
     prio: leads.filter((l) => l.leadTemperature === "quente" || l.status === "NEW" || l.status === "IN_PROGRESS").length,
+    pescados: leads.filter((l) => l.source === "cold_pool").length,
     visita: leads.filter((l) => l.status === "VISIT_SCHEDULED" || l.status === "VISITA_REALIZADA").length,
     todos: leads.length,
   }), [leads]);
@@ -100,6 +101,7 @@ const CorretorPainel = () => {
   const rows = useMemo(() => {
     let r = leads;
     if (filter === "prio") r = leads.filter((l) => l.leadTemperature === "quente" || l.status === "NEW" || l.status === "IN_PROGRESS" || l.status === "NEGOTIATING");
+    else if (filter === "pescados") r = leads.filter((l) => l.source === "cold_pool");
     else if (filter === "visita") r = leads.filter((l) => l.status === "VISIT_SCHEDULED" || l.status === "VISITA_REALIZADA");
     return r;
   }, [leads, filter]);
@@ -354,6 +356,7 @@ const CorretorPainel = () => {
                 </div>
                 <div className="filter-bar">
                   <button className={`f-pill${filter === "prio" ? " on" : ""}`} onClick={() => setFilter("prio")}>Prioridade ({counts.prio})</button>
+                  <button className={`f-pill${filter === "pescados" ? " on" : ""}`} onClick={() => setFilter("pescados")}>🎣 Pescados ({counts.pescados})</button>
                   <button className={`f-pill${filter === "visita" ? " on" : ""}`} onClick={() => setFilter("visita")}>Visitas ({counts.visita})</button>
                   <button className={`f-pill${filter === "todos" ? " on" : ""}`} onClick={() => setFilter("todos")}>Todos ({counts.todos})</button>
                 </div>
