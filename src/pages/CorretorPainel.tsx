@@ -555,9 +555,8 @@ const CorretorPainel = () => {
                   <button className="btn-primary" onClick={async () => {
                     if (!dispInfo?.managerId) { toast.error("Você não tem gerente definido — fale com o admin."); return; }
                     const { error } = await supabase.from("internal_notifications").insert({
-                      to_id: dispInfo.managerId, type: "DISPARO_LIBERACAO_PEDIDO",
-                      title: "🙋 Pedido de liberação de disparo",
-                      message: `${user?.email || "Um corretor"} pediu para ser habilitado a disparar. Libere em Disparar › Corretores.`,
+                      to_id: dispInfo.managerId, from_id: user?.id, type: "DISPARO_LIBERACAO_PEDIDO",
+                      message: `🙋 ${user?.email || "Um corretor"} pediu liberação para disparar. Libere em Disparar › Corretores.`,
                     });
                     if (error) { toast.error("Não consegui enviar o pedido."); return; }
                     toast.success("Pedido enviado ao seu gerente ✅");
