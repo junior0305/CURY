@@ -1020,21 +1020,7 @@ export default function Tropas() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-gray-400 text-xs uppercase">Equipe</Label>
-                <Select value={formData.team_id || "none"} onValueChange={value => setFormData({ ...formData, team_id: value === "none" ? null : value })}>
-                  <SelectTrigger className="bg-slate-800 border-gray-600 text-white">
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-gray-600">
-                    <SelectItem value="none">Nenhuma</SelectItem>
-                    {teams.map(team => (
-                      <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="grid grid-cols-1 gap-4">
               {R !== "ADMIN" && (
                 <div>
                   <Label className="text-gray-400 text-xs uppercase">{gestorLabel}</Label>
@@ -1073,12 +1059,6 @@ export default function Tropas() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-
-                <div>
-                  <Label className="text-gray-400 text-xs uppercase">Nome da Instância Evolution</Label>
-                  <Input value={formData.evolution_instance} onChange={e => setFormData({ ...formData, evolution_instance: e.target.value })} placeholder="ex: joao_silva" className="bg-slate-800 border-gray-600 text-white" />
-                  <p className="text-xs text-gray-500 mt-1">Nome exato da instância no Evolution API</p>
                 </div>
 
                 <div className="border-2 border-purple-500/30 bg-purple-950/20 rounded-lg p-4 space-y-3">
