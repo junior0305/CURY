@@ -87,7 +87,7 @@ export default function Tropas() {
     is_active: true,
     team_id: null as string | null,
     manager_id: null as string | null,
-    lead_assignment_enabled: false,
+    lead_assignment_enabled: true,
     evolution_instance: "",
     qualification_ai_enabled: false,
     bot_instance_id: null as string | null,
@@ -402,7 +402,7 @@ export default function Tropas() {
   const resetForm = () => {
     setFormData({
       email: "", password: "mudar@123", first_name: "", full_name: "", phone: "", role: "broker", is_active: true,
-      team_id: null, manager_id: null, lead_assignment_enabled: false, evolution_instance: "",
+      team_id: null, manager_id: null, lead_assignment_enabled: true, evolution_instance: "",
       qualification_ai_enabled: false, bot_instance_id: null,
       automation_settings: { welcome_enabled: false, follow_up_enabled: true, ai_assist_enabled: false },
     });
