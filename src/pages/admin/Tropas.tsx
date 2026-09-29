@@ -166,8 +166,9 @@ export default function Tropas() {
   }, []);
 
   const handleSaveUser = async () => {
-    if (!formData.email.trim()) {
-      toast({ title: "Email obrigatório", variant: "destructive" });
+    const handle = formData.email.replace(/@comandra$/i, "").trim();
+    if (!handle) {
+      toast({ title: "Digite o nome de usuário", variant: "destructive" });
       return;
     }
     if (!editUser && !formData.password.trim()) {
@@ -393,7 +394,7 @@ export default function Tropas() {
 
   const resetForm = () => {
     setFormData({
-      email: "", password: "", first_name: "", full_name: "", phone: "", role: "broker", is_active: true,
+      email: "", password: "mudar@123", first_name: "", full_name: "", phone: "", role: "broker", is_active: true,
       team_id: null, manager_id: null, lead_assignment_enabled: false, evolution_instance: "",
       qualification_ai_enabled: false, bot_instance_id: null,
       automation_settings: { welcome_enabled: false, follow_up_enabled: true, ai_assist_enabled: false },
@@ -970,8 +971,17 @@ export default function Tropas() {
                 <Input value={formData.first_name} onChange={e => setFormData({ ...formData, first_name: e.target.value })} placeholder="João" className="bg-slate-800 border-gray-600 text-white" />
               </div>
               <div>
-                <Label className="text-gray-400 text-xs uppercase">Email *</Label>
-                <Input value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} disabled={!!editUser} placeholder="joao@email.com" className="bg-slate-800 border-gray-600 text-white" />
+                <Label className="text-gray-400 text-xs uppercase">Usuário (login) *</Label>
+                <div className="flex items-center">
+                  <Input
+                    value={(formData.email || "").replace(/@comandra$/i, "")}
+                    onChange={e => setFormData({ ...formData, email: e.target.value.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "") + "@comandra" })}
+                    disabled={!!editUser}
+                    placeholder="alba"
+                    className="bg-slate-800 border-gray-600 text-white rounded-r-none" />
+                  <span className="px-3 h-10 flex items-center bg-slate-700 border border-l-0 border-gray-600 rounded-r text-gray-300 text-sm whitespace-nowrap">@comandra</span>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">Nome único. Senha inicial: <b className="text-gray-300">mudar@123</b> (troca no 1º login).</p>
               </div>
             </div>
 
