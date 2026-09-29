@@ -268,7 +268,7 @@ const CorretorPainel = () => {
     try {
       const { data: skips } = await supabase.from("cold_skip").select("contact_id").eq("broker_id", user.id).gte("skipped_at", new Date(Date.now() - 7 * 864e5).toISOString());
       const skipIds = new Set((skips || []).map((s: any) => s.contact_id));
-      let q = supabase.from("cold_contacts").select("id, name, phone, tag").eq("status", "available").order("created_at", { ascending: true }).limit(60);
+      let q = supabase.from("cold_contacts").select("id, name, phone, tag").eq("status", "available").or(`previous_broker_id.is.null,previous_broker_id.neq.${user.id}`).order("created_at", { ascending: true }).limit(60);
       if (regiaoAtual) q = q.in("tag", regiaoAtual.tags);
       const { data } = await q;
       setFila(((data as any[]) || []).filter((c) => !skipIds.has(c.id)));
@@ -364,7 +364,7 @@ const CorretorPainel = () => {
                   return (
                     <div key={l.id} className={`lead-row${sel?.id === l.id ? " selected" : ""}`} onClick={() => { setSelId(l.id); setMobileDetail(true); }}>
                       <div>
-                        <div className="l-name">{l.name}</div>
+                        <div className="l-name">{l.name}{l.source === "cold_pool" && <span className="pescado-tag">🎣 Pescado</span>}</div>
                         <div className="l-meta">{[l.tipoTrabalho && TIPO_TRABALHO_LABEL[l.tipoTrabalho], fmtRenda(l.rendaDeclarada) !== "—" ? fmtRenda(l.rendaDeclarada) : null, regiaoDe(l) || null].filter(Boolean).join(" · ") || l.phone}</div>
                       </div>
                       <span className={b.cls}>{b.txt}</span>
@@ -692,6 +692,7 @@ html.dark .cpv2{--bg:#080e1c;--surface:#111927;--subtle:#18212f;--rail-bg:#060a1
 .cpv2 .l-name{font-weight:600;font-size:14px;}
 .cpv2 .l-meta{font-size:12px;color:var(--muted);margin-top:2px;}
 .cpv2 .l-badge{font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;background:var(--subtle);color:var(--muted);white-space:nowrap;}
+.cpv2 .pescado-tag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:var(--accent-soft);color:var(--accent);margin-left:6px;white-space:nowrap;vertical-align:middle;}
 .cpv2 .l-badge.urgent{background:var(--warn-soft);color:var(--warn);}
 .cpv2 .l-badge.ready{background:var(--accent-soft);color:var(--accent);}
 .cpv2 .stage{overflow-y:auto;padding:28px 38px;display:flex;justify-content:center;height:100%;flex:1;min-width:0;}
