@@ -276,10 +276,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Nunca redireciona quem está trocando senha obrigatória — o ProtectedRoute já cuida disso
       if (path === '/force-password-change') return;
       try {
-        if (role === 'ADMIN' || role === 'SUPERINTENDENT') {
+        if (role === 'SUPERINTENDENT' || role === 'DIRECTOR') {
+          // Super/Diretor: painel de HIERARQUIA (/super, estilo gerente, com drill
+          // nos gerentes via /manager?manager=<id>). NÃO caem mais no /admin cru.
+          // Mantêm acesso às telas de admin (cadastro, filas...) quando precisarem.
+          const SUP_ALLOWED_PREFIXES = ['/super', '/manager', '/admin'];
+          const SUP_ALLOWED_EXACT = ['/command-center', '/user-management', '/atribuir-chips', '/cold-pool'];
+          const isAllowed =
+            SUP_ALLOWED_PREFIXES.some((p) => path === p || path.startsWith(p + '/')) ||
+            SUP_ALLOWED_EXACT.includes(path);
+          if (!isAllowed) {
+            navigate('/super', { replace: true });
+          }
+        } else if (role === 'ADMIN') {
           // Whitelist: rotas admin + telas de gestão (cold-pool, atribuir-chips, etc).
-          // Qualquer rota com prefixo /admin é permitida automaticamente; demais
-          // rotas de admin precisam estar listadas aqui.
           const ADMIN_ALLOWED_PREFIXES = ['/admin'];
           const ADMIN_ALLOWED_EXACT = [
             '/command-center',
