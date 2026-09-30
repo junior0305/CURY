@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root { color-scheme: light; }
+    body { width: 280px; margin: 0; font: 14px -apple-system, Segoe UI, Roboto, sans-serif; background: #fff; color: #0f172a; }
+    .wrap { padding: 16px; }
+    h1 { font-size: 15px; margin: 0 0 2px; }
+    p.sub { margin: 0 0 14px; font-size: 12px; color: #64748b; }
+    label { display: block; font-size: 11px; font-weight: 700; color: #475569; margin: 10px 0 4px; }
+    input { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
+    button { width: 100%; margin-top: 14px; padding: 10px; border: none; border-radius: 9px; background: #0d9488; color: #fff; font-weight: 800; font-size: 14px; cursor: pointer; }
+    button.ghost { background: #f1f5f9; color: #334155; }
+    .msg { margin-top: 10px; font-size: 12px; min-height: 16px; }
+    .msg.err { color: #dc2626; }
+    .msg.ok { color: #0d9488; }
+    .who { font-weight: 700; }
+    .hint { font-size: 11px; color: #94a3b8; margin-top: 12px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Comandra no WhatsApp</h1>
+    <p class="sub">Entre com seu login do Comandra.</p>
+
+    <div id="formBox">
+      <label>Usuário (ex: seunome@comandra)</label>
+      <input id="email" type="text" autocomplete="username" placeholder="seunome@comandra" />
+      <label>Senha</label>
+      <input id="password" type="password" autocomplete="current-password" placeholder="Senha" />
+      <button id="entrar">Entrar</button>
+    </div>
+
+    <div id="loggedBox" hidden>
+      <p>Conectado como <span class="who" id="whoEmail"></span> ✅</p>
+      <button id="sair" class="ghost">Sair</button>
+    </div>
+
+    <div class="msg" id="msg"></div>
+    <p class="hint">Depois de entrar, abra uma conversa no WhatsApp Web e clique no botão <b>Comandra</b> que aparece na tela.</p>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

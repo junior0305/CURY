@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Comandra no WhatsApp",
+  "version": "0.1.0",
+  "description": "O funil do Comandra dentro do WhatsApp Web — ficha do lead, avançar status e registrar atendimento sem sair da conversa.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Comandra — entrar"
+  },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://comandra.com.br/*",
+    "https://web.whatsapp.com/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
