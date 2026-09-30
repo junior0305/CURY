@@ -1,49 +1,54 @@
 // Comandra no WhatsApp — content script.
-// Injeta um botão flutuante + painel no web.whatsapp.com. Detecta o número do
-// chat aberto, busca o lead do corretor (via background) e deixa avançar o
-// status e registrar o atendimento — tudo sem sair da conversa.
+// Painel que SABE em qual conversa você está (lê o número do chat aberto) e já
+// mostra o lead, com Jarvis, status, agendar visita e registrar atendimento —
+// sem buscar nada na mão.
 
-const send = (m) => new Promise((res) => chrome.runtime.sendMessage(m, res));
+const send = (m) => new Promise((res) => { try { chrome.runtime.sendMessage(m, res); } catch { res(null); } });
 
 const STATUS = [
-  { k: "IN_PROGRESS",     l: "Em atendimento" },
-  { k: "VISIT_SCHEDULED", l: "📅 Visita agendada" },
-  { k: "VISITA_REALIZADA",l: "✅ Visita feita" },
-  { k: "NEGOTIATING",     l: "💬 Negociando" },
-  { k: "DOCS_REQUESTED",  l: "📄 Documentos" },
-  { k: "CONCLUDED",       l: "🏆 Vendeu" },
-  { k: "ABANDONED",       l: "✖ Perdeu" },
+  { k: "IN_PROGRESS",      l: "Em atendimento" },
+  { k: "VISIT_SCHEDULED",  l: "📅 Visita agendada" },
+  { k: "VISITA_REALIZADA", l: "✅ Visita feita" },
+  { k: "NEGOTIATING",      l: "💬 Negociando" },
+  { k: "DOCS_REQUESTED",   l: "📄 Documentos" },
+  { k: "CONCLUDED",        l: "🏆 Vendeu" },
+  { k: "ABANDONED",        l: "✖ Perdeu" },
 ];
 const STATUS_LABEL = Object.fromEntries(STATUS.map((s) => [s.k, s.l]));
 
-let lead = null;      // lead atual
-let lastPhone = "";   // último número detectado
+let lead = null;       // objeto | "notfound" | null
+let curPhone = "";     // número da conversa aberta agora
+let loading = false;
 
-// ---- detecção do número do chat aberto ----
-function detectPhone() {
+// ---- SABER a conversa aberta: o número vem do JID das mensagens (data-id).
+//      Funciona pra contato SALVO e não salvo (o cabeçalho só mostra número
+//      quando não é salvo — por isso não dá pra depender dele). ----
+function activePhone() {
+  const nodes = document.querySelectorAll('#main [data-id]');
+  for (const n of nodes) {
+    const m = (n.getAttribute("data-id") || "").match(/(\d{10,15})@c\.us/);
+    if (m) return m[1];
+  }
+  // fallback: cabeçalho (número de contato não salvo)
   const head = document.querySelector("#main header");
-  if (!head) return "";
-  const cands = [];
-  head.querySelectorAll("span[title]").forEach((s) => cands.push(s.getAttribute("title")));
-  cands.push(head.textContent || "");
-  for (const c of cands) {
-    const d = (c || "").replace(/\D/g, "");
-    if (d.length >= 10 && d.length <= 13) return d;
+  if (head) {
+    for (const s of head.querySelectorAll("span[title]")) {
+      const d = (s.getAttribute("title") || "").replace(/\D/g, "");
+      if (d.length >= 10 && d.length <= 13) return d;
+    }
   }
   return "";
 }
 
-// nome do contato aberto (pra capturar contato novo). Se o topo mostra número, volta vazio.
-function detectName() {
+function activeName() {
   const head = document.querySelector("#main header");
   if (!head) return "";
   const s = head.querySelector("span[title]");
   const t = ((s && s.getAttribute("title")) || "").trim();
-  if (t && /^[\d\s()+\-]+$/.test(t)) return ""; // é número, não nome
+  if (t && /^[\d\s()+\-]+$/.test(t)) return "";
   return t;
 }
 
-// Jarvis: a próxima ação sugerida pra ESTE lead (mesma régua do painel).
 function jarvis(l) {
   if (!l || l === "notfound") return null;
   const h = (iso) => (iso ? (Date.now() - new Date(iso).getTime()) / 3.6e6 : 9999);
@@ -60,7 +65,7 @@ function jarvis(l) {
   return null;
 }
 
-// ---- UI ----
+// ---- helpers DOM ----
 function el(tag, attrs = {}, ...kids) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -72,75 +77,8 @@ function el(tag, attrs = {}, ...kids) {
   kids.forEach((c) => n.appendChild(typeof c === "string" ? document.createTextNode(c) : c));
   return n;
 }
-
-function panelEl() { return document.getElementById("cmd-panel"); }
-
-async function renderBody() {
-  const body = document.getElementById("cmd-body");
-  if (!body) return;
-  body.innerHTML = "";
-
-  const s = await send({ type: "session" });
-  if (!s || !s.ok) {
-    body.appendChild(el("div", { class: "cmd-empty" },
-      "Você não está conectado. Clique no ícone da extensão (ao lado da barra de endereço) e faça login com seu usuário do Comandra."));
-    return;
-  }
-
-  // linha do telefone
-  const phoneInput = el("input", { class: "cmd-input", id: "cmd-phone", placeholder: "Número (ex: 5511...)", value: lastPhone });
-  const buscar = el("button", { class: "cmd-btn", onclick: () => doSearch(phoneInput.value) }, "Buscar");
-  body.appendChild(el("div", { class: "cmd-row" }, phoneInput, buscar));
-
-  if (lead === "notfound") {
-    const nm = detectName();
-    body.appendChild(el("div", { class: "cmd-empty" }, "Esse número ainda não é um lead seu."));
-    body.appendChild(el("button", { class: "cmd-btn wide", onclick: () => doCapture(lastPhone, nm) },
-      "➕ Capturar este contato" + (nm ? " (" + nm + ")" : "")));
-    return;
-  }
-  if (!lead) {
-    body.appendChild(el("div", { class: "cmd-hint" }, "Abra uma conversa — eu busco o lead pelo número automaticamente."));
-    return;
-  }
-
-  // ficha
-  const badge = el("span", { class: "cmd-badge", text: STATUS_LABEL[lead.status] || lead.status || "—" });
-  body.appendChild(el("div", { class: "cmd-name" }, lead.name || "Sem nome", badge));
-  const facts = [
-    lead.tag ? "📍 " + lead.tag : "",
-    lead.product ? "🏢 " + lead.product : "",
-    lead.renda_declarada ? "💰 " + String(lead.renda_declarada).replace(/_/g, " ") : "",
-  ].filter(Boolean).join("  ·  ");
-  if (facts) body.appendChild(el("div", { class: "cmd-facts", text: facts }));
-
-  // Jarvis — próxima ação
-  const j = jarvis(lead);
-  if (j) body.appendChild(el("div", { class: "cmd-jarvis" }, el("span", { class: "cmd-j-ic", text: j.icon }), el("span", { text: j.txt })));
-
-  // status
-  body.appendChild(el("div", { class: "cmd-label", text: "AVANÇAR STATUS" }));
-  const grid = el("div", { class: "cmd-grid" });
-  STATUS.forEach((st) => {
-    const b = el("button", {
-      class: "cmd-chip" + (lead.status === st.k ? " on" : ""),
-      onclick: () => doStatus(st.k),
-    }, st.l);
-    grid.appendChild(b);
-  });
-  body.appendChild(grid);
-
-  // agendar visita
-  body.appendChild(el("div", { class: "cmd-label", text: "AGENDAR VISITA" }));
-  const dt = el("input", { class: "cmd-input", id: "cmd-date", type: "datetime-local" });
-  body.appendChild(el("div", { class: "cmd-row" }, dt, el("button", { class: "cmd-btn", onclick: () => doVisita(dt.value) }, "Agendar")));
-
-  // registro de atendimento
-  body.appendChild(el("div", { class: "cmd-label", text: "REGISTRAR ATENDIMENTO" }));
-  const ta = el("textarea", { class: "cmd-ta", id: "cmd-note", placeholder: "O que rolou nessa conversa…" });
-  body.appendChild(ta);
-  body.appendChild(el("button", { class: "cmd-btn wide", onclick: () => doNote(ta.value) }, "Salvar no Comandra"));
-}
+const panelEl = () => document.getElementById("cmd-panel");
+const isOpen = () => { const p = panelEl(); return p && !p.classList.contains("hidden"); };
 
 function toast(txt, ok = true) {
   const t = document.getElementById("cmd-toast");
@@ -149,81 +87,158 @@ function toast(txt, ok = true) {
   setTimeout(() => { t.className = "cmd-toast"; }, 2600);
 }
 
-async function doSearch(phone) {
-  lastPhone = (phone || "").replace(/\D/g, "");
-  lead = null; await renderBody();
-  const r = await send({ type: "getLead", phone: lastPhone });
-  lead = r && r.ok ? (r.lead || "notfound") : "notfound";
-  if (r && !r.ok) toast(r.error || "Erro ao buscar", false);
-  await renderBody();
+// ---- render (nunca deixa vazio: sempre mostra algo) ----
+async function render() {
+  const body = document.getElementById("cmd-body");
+  if (!body) return;
+
+  const s = await send({ type: "session" });
+  body.innerHTML = "";
+
+  if (!s || !s.ok) {
+    body.appendChild(el("div", { class: "cmd-empty" },
+      "Faça login: clique no ícone da extensão (🧩 na barra do Chrome → Comandra) e entre com seu usuário do Comandra. Depois volte aqui."));
+    return;
+  }
+
+  // qual conversa
+  if (!curPhone) {
+    body.appendChild(el("div", { class: "cmd-hint" }, "Abra uma conversa no WhatsApp que eu já trago o lead."));
+    body.appendChild(fallbackInput());
+    return;
+  }
+  body.appendChild(el("div", { class: "cmd-conv" }, "📱 " + fmt(curPhone),
+    el("span", { class: "cmd-link", onclick: () => { const i = fallbackInput(true); body.appendChild(i); } }, "não é esse?")));
+
+  if (loading) { body.appendChild(el("div", { class: "cmd-hint" }, "Carregando…")); return; }
+
+  if (lead === "notfound") {
+    const nm = activeName();
+    body.appendChild(el("div", { class: "cmd-empty" }, "Essa pessoa ainda não é um lead seu."));
+    body.appendChild(el("button", { class: "cmd-btn wide", onclick: () => doCapture() },
+      "➕ Capturar este contato" + (nm ? " (" + nm + ")" : "")));
+    return;
+  }
+  if (!lead) { body.appendChild(el("div", { class: "cmd-hint" }, "—")); return; }
+
+  // ficha
+  body.appendChild(el("div", { class: "cmd-name" }, lead.name || "Sem nome",
+    el("span", { class: "cmd-badge", text: STATUS_LABEL[lead.status] || lead.status || "—" })));
+  const facts = [
+    lead.tag ? "📍 " + lead.tag : "",
+    lead.product ? "🏢 " + lead.product : "",
+    lead.renda_declarada ? "💰 " + String(lead.renda_declarada).replace(/_/g, " ") : "",
+  ].filter(Boolean).join("  ·  ");
+  if (facts) body.appendChild(el("div", { class: "cmd-facts", text: facts }));
+
+  const j = jarvis(lead);
+  if (j) body.appendChild(el("div", { class: "cmd-jarvis" }, el("span", { class: "cmd-j-ic", text: j.icon }), el("span", { text: j.txt })));
+
+  body.appendChild(el("div", { class: "cmd-label", text: "AVANÇAR STATUS" }));
+  const grid = el("div", { class: "cmd-grid" });
+  STATUS.forEach((st) => grid.appendChild(el("button", {
+    class: "cmd-chip" + (lead.status === st.k ? " on" : ""), onclick: () => doStatus(st.k),
+  }, st.l)));
+  body.appendChild(grid);
+
+  body.appendChild(el("div", { class: "cmd-label", text: "AGENDAR VISITA" }));
+  const dt = el("input", { class: "cmd-input", type: "datetime-local" });
+  body.appendChild(el("div", { class: "cmd-row" }, dt, el("button", { class: "cmd-btn", onclick: () => doVisita(dt.value) }, "Agendar")));
+
+  body.appendChild(el("div", { class: "cmd-label", text: "REGISTRAR ATENDIMENTO" }));
+  const ta = el("textarea", { class: "cmd-ta", placeholder: "O que rolou nessa conversa…" });
+  body.appendChild(ta);
+  body.appendChild(el("button", { class: "cmd-btn wide", onclick: () => doNote(ta.value) }, "Salvar no Comandra"));
 }
 
+function fmt(d) { d = (d || "").replace(/\D/g, ""); return d.length >= 12 ? d : "55" + d; }
+
+function fallbackInput(focus) {
+  const inp = el("input", { class: "cmd-input", placeholder: "Digite o número (5511...)", value: curPhone });
+  const row = el("div", { class: "cmd-row", style: "margin-top:8px" }, inp,
+    el("button", { class: "cmd-btn", onclick: () => loadFor(inp.value) }, "Buscar"));
+  if (focus) setTimeout(() => inp.focus(), 50);
+  return row;
+}
+
+// ---- carregar o lead da conversa ----
+async function loadFor(phone) {
+  const digits = (phone || "").replace(/\D/g, "");
+  if (digits.length < 10) return;
+  curPhone = digits; lead = null; loading = true; await render();
+  const r = await send({ type: "getLead", phone: curPhone });
+  loading = false;
+  lead = r && r.ok ? (r.lead || "notfound") : "notfound";
+  if (r && !r.ok) toast(r.error || "Erro ao buscar", false);
+  await render();
+}
+
+// roda quando abre o painel e quando troca de conversa
+async function track() {
+  if (!isOpen()) return;
+  const ph = activePhone();
+  if (ph && ph !== curPhone) return loadFor(ph);
+  if (!ph && !curPhone) render();
+}
+
+// ---- ações ----
 async function doStatus(status) {
   if (!lead || lead === "notfound") return;
   const r = await send({ type: "setStatus", id: lead.id, status });
-  if (r && r.ok) { lead.status = status; toast("Status: " + (STATUS_LABEL[status] || status)); await renderBody(); }
+  if (r && r.ok) { lead.status = status; toast("Status: " + (STATUS_LABEL[status] || status)); await render(); }
   else toast((r && r.error) || "Falhou", false);
 }
-
 async function doNote(content) {
   if (!lead || lead === "notfound") return;
   if (!content || !content.trim()) { toast("Escreva algo primeiro", false); return; }
   const r = await send({ type: "addNote", id: lead.id, content: content.trim() });
-  if (r && r.ok) { toast("Atendimento registrado ✅"); const t = document.getElementById("cmd-note"); if (t) t.value = ""; }
+  if (r && r.ok) toast("Atendimento registrado ✅");
   else toast((r && r.error) || "Falhou", false);
 }
-
-async function doCapture(phone, name) {
-  const r = await send({ type: "capture", phone: phone || lastPhone, name });
-  if (r && r.ok) { toast(r.existia ? "Já era seu lead" : "Contato capturado ✅"); await doSearch(phone || lastPhone); }
+async function doCapture() {
+  const r = await send({ type: "capture", phone: curPhone, name: activeName() });
+  if (r && r.ok) { toast(r.existia ? "Já era seu lead" : "Contato capturado ✅"); await loadFor(curPhone); }
   else toast((r && r.error) || "Não consegui capturar", false);
 }
-
 async function doVisita(val) {
   if (!lead || lead === "notfound") return;
   if (!val) { toast("Escolha a data da visita", false); return; }
-  const iso = new Date(val).toISOString();
-  const r = await send({ type: "agendarVisita", id: lead.id, date: iso });
-  if (r && r.ok) { lead.status = "VISIT_SCHEDULED"; lead.visit_scheduled_at = iso; toast("Visita agendada 📅"); await renderBody(); }
+  const r = await send({ type: "agendarVisita", id: lead.id, date: new Date(val).toISOString() });
+  if (r && r.ok) { lead.status = "VISIT_SCHEDULED"; toast("Visita agendada 📅"); await render(); }
   else toast((r && r.error) || "Não consegui agendar", false);
 }
 
-function togglePanel(open) {
-  const p = panelEl();
-  if (!p) return;
+// ---- painel ----
+function toggle(open) {
+  const p = panelEl(); if (!p) return;
   const show = open ?? p.classList.contains("hidden");
   p.classList.toggle("hidden", !show);
-  if (show) { const ph = detectPhone(); if (ph && ph !== lastPhone) doSearch(ph); else renderBody(); }
+  if (show) track();
 }
 
 function mount() {
   if (document.getElementById("cmd-fab")) return;
-  const fab = el("button", { id: "cmd-fab", title: "Comandra", onclick: () => togglePanel() }, "Comandra");
-  const panel = el("div", { id: "cmd-panel", class: "hidden" });
-  const head = el("div", { id: "cmd-head" },
-    el("span", { text: "Comandra" }),
-    el("span", { id: "cmd-close", onclick: () => togglePanel(false), text: "✕" }));
-  const bodyWrap = el("div", { id: "cmd-body" });
-  const toastEl = el("div", { id: "cmd-toast", class: "cmd-toast" });
-  panel.append(head, bodyWrap, toastEl);
-  document.body.append(fab, panel);
+  document.body.append(
+    el("button", { id: "cmd-fab", title: "Comandra", onclick: () => toggle() }, "Comandra"),
+    (() => {
+      const panel = el("div", { id: "cmd-panel", class: "hidden" });
+      panel.append(
+        el("div", { id: "cmd-head" }, el("span", { text: "Comandra" }),
+          el("span", { id: "cmd-close", onclick: () => toggle(false), text: "✕" })),
+        el("div", { id: "cmd-body" }),
+        el("div", { id: "cmd-toast", class: "cmd-toast" }),
+      );
+      return panel;
+    })(),
+  );
 }
 
-// re-detecta quando o corretor troca de conversa (se o painel estiver aberto)
 let tmr = null;
-const obs = new MutationObserver(() => {
-  clearTimeout(tmr);
-  tmr = setTimeout(() => {
-    const p = panelEl();
-    if (!p || p.classList.contains("hidden")) return;
-    const ph = detectPhone();
-    if (ph && ph !== lastPhone) doSearch(ph);
-  }, 600);
-});
+const obs = new MutationObserver(() => { clearTimeout(tmr); tmr = setTimeout(track, 500); });
 
-function boot() {
+const wait = setInterval(() => {
+  if (!document.body) return;
+  clearInterval(wait);
   mount();
   obs.observe(document.body, { childList: true, subtree: true });
-}
-// o WhatsApp Web demora pra montar; tenta até achar o body
-const wait = setInterval(() => { if (document.body) { clearInterval(wait); boot(); } }, 500);
+}, 500);
