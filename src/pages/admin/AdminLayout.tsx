@@ -157,7 +157,6 @@ const GROUPS = [
       { value: "lancamentos",  label: "Lançamentos",  roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "economia",     label: "Economia",     roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "premios",      label: "Prêmios",      roles: ["ADMIN", "SUPERINTENDENT"] },
-      { value: "regras",       label: "Regras",       roles: ["ADMIN", "SUPERINTENDENT"] },
     ],
   },
 ] as const;
@@ -496,13 +495,11 @@ function AdminLayoutInner() {
             { v: "lancamentos",  l: "Lançamentos",  roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "economia",     l: "Economia",     roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "premios",      l: "Prêmios",      roles: ["ADMIN","SUPERINTENDENT"] },
-            { v: "regras",       l: "Regras",       roles: ["ADMIN","SUPERINTENDENT"] },
           ]} role={gateRole}>
             <TabsContent value="metas" className="p-0"><Metas /></TabsContent>
             <TabsContent value="lancamentos" className="p-6"><Lancamentos /></TabsContent>
             <TabsContent value="economia"><Economia /></TabsContent>
             <TabsContent value="premios"><Premios /></TabsContent>
-            <TabsContent value="regras"><Regras /></TabsContent>
           </SubTabs>
         )}
           </motion.div>
