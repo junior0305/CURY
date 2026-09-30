@@ -33,6 +33,33 @@ function detectPhone() {
   return "";
 }
 
+// nome do contato aberto (pra capturar contato novo). Se o topo mostra número, volta vazio.
+function detectName() {
+  const head = document.querySelector("#main header");
+  if (!head) return "";
+  const s = head.querySelector("span[title]");
+  const t = ((s && s.getAttribute("title")) || "").trim();
+  if (t && /^[\d\s()+\-]+$/.test(t)) return ""; // é número, não nome
+  return t;
+}
+
+// Jarvis: a próxima ação sugerida pra ESTE lead (mesma régua do painel).
+function jarvis(l) {
+  if (!l || l === "notfound") return null;
+  const h = (iso) => (iso ? (Date.now() - new Date(iso).getTime()) / 3.6e6 : 9999);
+  const st = l.status;
+  if (["CONCLUDED", "ABANDONED", "EXCLUDED"].includes(st)) return null;
+  if (l.last_lead_response_at && (!l.last_broker_whatsapp_at || new Date(l.last_lead_response_at) > new Date(l.last_broker_whatsapp_at)))
+    return { icon: "💬", txt: "Respondeu e está te esperando — retorne agora" };
+  if (l.lead_temperature === "quente" && h(l.last_interaction_at) >= 2)
+    return { icon: "🔥", txt: "Quente e parado há " + Math.round(h(l.last_interaction_at)) + "h — fale agora" };
+  if (st === "VISIT_SCHEDULED") return { icon: "📅", txt: "Confirme a visita" };
+  if (st === "DOCS_REQUESTED") return { icon: "📄", txt: "Cobre os documentos" };
+  if ((l.contact_attempts || 0) === 0 && (st === "NEW" || st === "IN_PROGRESS"))
+    return { icon: "🆕", txt: "Faça o primeiro contato" };
+  return null;
+}
+
 // ---- UI ----
 function el(tag, attrs = {}, ...kids) {
   const n = document.createElement(tag);
@@ -66,7 +93,10 @@ async function renderBody() {
   body.appendChild(el("div", { class: "cmd-row" }, phoneInput, buscar));
 
   if (lead === "notfound") {
-    body.appendChild(el("div", { class: "cmd-empty" }, "Nenhum lead seu com esse número. Se for novo, pesque ou cadastre pelo painel."));
+    const nm = detectName();
+    body.appendChild(el("div", { class: "cmd-empty" }, "Esse número ainda não é um lead seu."));
+    body.appendChild(el("button", { class: "cmd-btn wide", onclick: () => doCapture(lastPhone, nm) },
+      "➕ Capturar este contato" + (nm ? " (" + nm + ")" : "")));
     return;
   }
   if (!lead) {
@@ -84,6 +114,10 @@ async function renderBody() {
   ].filter(Boolean).join("  ·  ");
   if (facts) body.appendChild(el("div", { class: "cmd-facts", text: facts }));
 
+  // Jarvis — próxima ação
+  const j = jarvis(lead);
+  if (j) body.appendChild(el("div", { class: "cmd-jarvis" }, el("span", { class: "cmd-j-ic", text: j.icon }), el("span", { text: j.txt })));
+
   // status
   body.appendChild(el("div", { class: "cmd-label", text: "AVANÇAR STATUS" }));
   const grid = el("div", { class: "cmd-grid" });
@@ -95,6 +129,11 @@ async function renderBody() {
     grid.appendChild(b);
   });
   body.appendChild(grid);
+
+  // agendar visita
+  body.appendChild(el("div", { class: "cmd-label", text: "AGENDAR VISITA" }));
+  const dt = el("input", { class: "cmd-input", id: "cmd-date", type: "datetime-local" });
+  body.appendChild(el("div", { class: "cmd-row" }, dt, el("button", { class: "cmd-btn", onclick: () => doVisita(dt.value) }, "Agendar")));
 
   // registro de atendimento
   body.appendChild(el("div", { class: "cmd-label", text: "REGISTRAR ATENDIMENTO" }));
@@ -132,6 +171,21 @@ async function doNote(content) {
   const r = await send({ type: "addNote", id: lead.id, content: content.trim() });
   if (r && r.ok) { toast("Atendimento registrado ✅"); const t = document.getElementById("cmd-note"); if (t) t.value = ""; }
   else toast((r && r.error) || "Falhou", false);
+}
+
+async function doCapture(phone, name) {
+  const r = await send({ type: "capture", phone: phone || lastPhone, name });
+  if (r && r.ok) { toast(r.existia ? "Já era seu lead" : "Contato capturado ✅"); await doSearch(phone || lastPhone); }
+  else toast((r && r.error) || "Não consegui capturar", false);
+}
+
+async function doVisita(val) {
+  if (!lead || lead === "notfound") return;
+  if (!val) { toast("Escolha a data da visita", false); return; }
+  const iso = new Date(val).toISOString();
+  const r = await send({ type: "agendarVisita", id: lead.id, date: iso });
+  if (r && r.ok) { lead.status = "VISIT_SCHEDULED"; lead.visit_scheduled_at = iso; toast("Visita agendada 📅"); await renderBody(); }
+  else toast((r && r.error) || "Não consegui agendar", false);
 }
 
 function togglePanel(open) {
