@@ -28,15 +28,17 @@ const OK = "var(--ok,#18A999)";
 const WARN = "var(--warn,#E0A82E)";
 const BAD = "var(--bad,#E4572E)";
 
-/** Quanto a Caixa cobre do preço (0..1). É o inverso da entrada. */
-function cobertura(p: ProjetoFecha) {
-  if (!p.preco_medio) return 0;
-  return Math.max(0, Math.min(1, 1 - p.entrada_media / p.preco_medio));
-}
-function statusDe(c: number) {
-  if (c >= 0.9) return { cor: OK, dot: "🟢", txt: "fecha fácil" };
-  if (c >= 0.75) return { cor: WARN, dot: "🟡", txt: "entrada média" };
+/** "Pode ou não": olha a MELHOR unidade do projeto (entrada mínima), não a média.
+ *  É o piso de entrada — a partir de quanto dá pra entrar no projeto. */
+function statusDe(p: ProjetoFecha) {
+  const e = p.entrada_min;
+  if (e <= 0) return { cor: OK, dot: "🟢", txt: "fecha sem entrada" };
+  if (e <= 30_000) return { cor: WARN, dot: "🟡", txt: "entra com FGTS" };
   return { cor: BAD, dot: "🔴", txt: "entrada pesada" };
+}
+/** Quantas unidades fecham sem entrada (financia 100%) para a renda. */
+function quantasFecham(p: ProjetoFecha) {
+  return Math.round((p.pct_fecha / 100) * p.disponiveis);
 }
 
 export default function Estrategia() {
@@ -73,7 +75,8 @@ export default function Estrategia() {
       .filter((p) => p.disponiveis >= 15)
       .filter((p) => (seg === "mcmv" ? p.avaliacao_media <= TETO_MCMV : p.avaliacao_media > TETO_MCMV))
       .filter((p) => reg === null || (reg === "__na__" ? !p.regiao : p.regiao === reg))
-      .sort((a, b) => cobertura(b) - cobertura(a));
+      // "pode ou não": ordena pela MELHOR unidade (menor entrada), não pela média
+      .sort((a, b) => a.entrada_min - b.entrada_min || quantasFecham(b) - quantasFecham(a));
   }, [data, seg, reg]);
 
   return (
@@ -83,7 +86,7 @@ export default function Estrategia() {
         <header className="top2">
           <div>
             <h1>Onde atacar</h1>
-            <p>Os projetos que fecham mais fácil — onde a Caixa cobre mais do preço</p>
+            <p>Onde o cliente CONSEGUE entrar — pela unidade mais acessível, não pela média</p>
           </div>
         </header>
         <section className="view">
@@ -122,7 +125,8 @@ export default function Estrategia() {
           </Sec>
 
           <Sec
-            title="Projetos — do que fecha mais fácil para o mais difícil"
+            title="Projetos — a partir de quanto dá pra entrar"
+            sub="Olhamos a MELHOR unidade de cada projeto (menor entrada), não a média — é o que diz se o cliente pode ou não. 🟢 tem unidade que financia 100% · 🟡 entra com FGTS · 🔴 nem a melhor fecha."
             tag="estimativa · planilha Caixa"
           >
             {isLoading ? (
@@ -132,14 +136,14 @@ export default function Estrategia() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {lista.map((p) => {
-                  const c = cobertura(p);
-                  const s = statusDe(c);
+                  const s = statusDe(p);
+                  const fecham = quantasFecham(p);
                   return (
                     <button
                       key={p.cod_empreendimento}
                       onClick={() => setAberto(p)}
                       style={{
-                        display: "grid", gridTemplateColumns: "26px 1fr 190px", gap: 12, alignItems: "center",
+                        display: "grid", gridTemplateColumns: "26px 1fr 150px", gap: 12, alignItems: "center",
                         textAlign: "left", width: "100%", cursor: "pointer",
                         padding: "12px 14px", borderRadius: 12, border: "1px solid var(--line,#e2e8f0)",
                         background: "var(--panel,transparent)", color: "inherit", font: "inherit",
@@ -149,20 +153,15 @@ export default function Estrategia() {
                       <span style={{ minWidth: 0 }}>
                         <span style={{ display: "block", fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.empreendimento}</span>
                         <span style={{ fontSize: 12, color: "var(--muted,#64748b)" }}>
-                          {p.regiao ? p.regiao + " · " : ""}{p.disponiveis} disponíveis · preço ~{brlk(p.preco_medio)} · <b style={{ color: s.cor }}>{s.txt}</b>
+                          {p.regiao ? p.regiao + " · " : ""}{p.disponiveis} disp.
+                          {fecham > 0 ? <b style={{ color: OK }}> · {fecham} fecham sem entrada</b> : ""}
+                          {" · preço ~" + brlk(p.preco_medio)}
                         </span>
                       </span>
-                      <span>
-                        <span style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-                          <span style={{ color: "var(--muted,#64748b)" }}>Caixa cobre</span>
-                          <b style={{ color: s.cor }}>{Math.round(c * 100)}%</b>
-                        </span>
-                        <span style={{ display: "block", height: 8, borderRadius: 6, background: "var(--line,#e2e8f0)", overflow: "hidden" }}>
-                          <span style={{ display: "block", height: "100%", width: `${Math.round(c * 100)}%`, background: s.cor }} />
-                        </span>
-                        <span style={{ display: "block", fontSize: 11.5, color: "var(--muted,#64748b)", marginTop: 4 }}>
-                          entrada ~{p.entrada_media <= 0 ? "zero" : brlk(p.entrada_media)}
-                        </span>
+                      <span style={{ textAlign: "right" }}>
+                        <span style={{ display: "block", fontSize: 11, color: "var(--muted,#64748b)" }}>entra a partir de</span>
+                        <b style={{ display: "block", fontSize: 16, color: s.cor }}>{p.entrada_min <= 0 ? "R$ 0" : brlk(p.entrada_min)}</b>
+                        <span style={{ display: "block", fontSize: 11, color: s.cor, fontWeight: 600 }}>{s.txt}</span>
                       </span>
                     </button>
                   );
