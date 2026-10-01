@@ -18,6 +18,7 @@ export const RENDAS = [2000, 3000, 4000, 5000, 6000, 8000];
 export type ProjetoFecha = {
   cod_empreendimento: number;
   empreendimento: string;
+  regiao: string | null;
   disponiveis: number;
   preco_medio: number;
   avaliacao_media: number;

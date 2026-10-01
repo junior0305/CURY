@@ -46,6 +46,7 @@ export default function Estrategia() {
   const [dep, setDep] = useState(true);
   const { data, isLoading } = useEstrategiaFecha(renda, dep);
   const [seg, setSeg] = useState<Seg>("mcmv");
+  const [reg, setReg] = useState<string | null>(null);
   const [aberto, setAberto] = useState<ProjetoFecha | null>(null);
 
   loadFonts();
@@ -56,12 +57,24 @@ export default function Estrategia() {
     if (n && n >= 1000) { setRenda(n); setAberto(null); }
   }
 
+  // regiões presentes no estoque (com contagem), "A classificar" para sem região
+  const regioes = useMemo(() => {
+    const m = new Map<string, number>();
+    (data ?? []).forEach((p) => {
+      if (p.disponiveis < 15) return;
+      const k = p.regiao || "__na__";
+      m.set(k, (m.get(k) || 0) + 1);
+    });
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [data]);
+
   const lista = useMemo(() => {
     return (data ?? [])
       .filter((p) => p.disponiveis >= 15)
       .filter((p) => (seg === "mcmv" ? p.avaliacao_media <= TETO_MCMV : p.avaliacao_media > TETO_MCMV))
+      .filter((p) => reg === null || (reg === "__na__" ? !p.regiao : p.regiao === reg))
       .sort((a, b) => cobertura(b) - cobertura(a));
-  }, [data, seg]);
+  }, [data, seg, reg]);
 
   return (
     <div className="mgr10 app2 estrategia">
@@ -98,6 +111,14 @@ export default function Estrategia() {
               <Mini variant={seg === "mcmv" ? "solid" : undefined} onClick={() => { setSeg("mcmv"); setAberto(null); }}>MCMV</Mini>
               <Mini variant={seg === "alto" ? "solid" : undefined} onClick={() => { setSeg("alto"); setAberto(null); }}>SFH / SBPE</Mini>
             </div>
+            <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+              <Mini variant={reg === null ? "solid" : undefined} onClick={() => { setReg(null); setAberto(null); }}>Todas as regiões</Mini>
+              {regioes.map(([k, n]) => (
+                <Mini key={k} variant={reg === k ? "solid" : undefined} onClick={() => { setReg(k); setAberto(null); }}>
+                  {(k === "__na__" ? "A classificar" : k)} ({n})
+                </Mini>
+              ))}
+            </div>
           </Sec>
 
           <Sec
@@ -128,7 +149,7 @@ export default function Estrategia() {
                       <span style={{ minWidth: 0 }}>
                         <span style={{ display: "block", fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.empreendimento}</span>
                         <span style={{ fontSize: 12, color: "var(--muted,#64748b)" }}>
-                          {p.disponiveis} disponíveis · preço ~{brlk(p.preco_medio)} · <b style={{ color: s.cor }}>{s.txt}</b>
+                          {p.regiao ? p.regiao + " · " : ""}{p.disponiveis} disponíveis · preço ~{brlk(p.preco_medio)} · <b style={{ color: s.cor }}>{s.txt}</b>
                         </span>
                       </span>
                       <span>
