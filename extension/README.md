@@ -25,12 +25,20 @@ atendimento** — sem sair do WhatsApp.
 - As chamadas à API saem pelo *background* da extensão (o CSP do WhatsApp bloqueia
   o content script de falar direto com a API).
 
-## Limitações deste MVP (honesto)
-- **Detecção do número:** pega automático quando o contato **não está salvo** (o
-  WhatsApp mostra o número no topo). Se estiver salvo (aparece o nome), digite/cole
-  o número no campo e clique **Buscar**.
-- Se o número não bate com nenhum lead seu, mostra "nenhum lead" (pesque/cadastre no painel).
-- É um MVP: sem Jarvis e sem "Fecha a Conta" ainda (próximos passos).
+## Detecção da conversa (automática)
+Lê a **1ª linha do cabeçalho** do chat aberto:
+- Contato **não salvo** (leads de disparo/pescar) → o WhatsApp mostra o **número** →
+  o painel já traz o lead sozinho. **É o caso principal.**
+- Contato **salvo** → o WhatsApp mostra só o **nome** (o número não existe no DOM) →
+  o painel busca o lead **pelo nome**. Se não achar (nome divergente), aparece o campo
+  pra digitar o número. O link **"não é esse?"** troca a qualquer momento.
+
+> Nota técnica: o WhatsApp mudou o `data-id` das mensagens (virou só hex, sem `@c.us`)
+> e tirou o número do `span[title]` — por isso a versão antiga caía no "digite o número".
+
+## Limitações
+- Contato salvo com nome diferente do cadastro → cai no campo manual.
+- Sem "Fecha a Conta" ainda (próximo passo, ligado ao Junix).
 
 ## Config
 API e chave anon ficam em `background.js` (`CFG`). A chave anon é pública (a

@@ -58,6 +58,17 @@ async function getLead(phone) {
   return { ok: true, lead: (Array.isArray(r.data) && r.data[0]) || null };
 }
 
+// Fallback pra contato SALVO (WhatsApp não mostra o número): busca por nome.
+async function getLeadByName(name) {
+  const q = (name || "").trim();
+  if (q.length < 3) return { ok: true, lead: null };
+  const sel = "id,name,phone,status,tag,product,fb_campaign,renda_declarada,lead_temperature,last_interaction_at,last_lead_response_at,last_broker_whatsapp_at,contact_attempts,created_at,welcome_responded_at,visit_scheduled_at";
+  const enc = encodeURIComponent("%" + q + "%");
+  const r = await api(`/rest/v1/leads?select=${sel}&name=ilike.${enc}&order=last_interaction_at.desc.nullslast&limit=1`);
+  if (!r.ok) return { ok: false, error: "Erro ao buscar (" + r.status + ")" };
+  return { ok: true, lead: (Array.isArray(r.data) && r.data[0]) || null };
+}
+
 async function setStatus(id, status) {
   const r = await api(`/rest/v1/leads?id=eq.${id}`, {
     method: "PATCH", prefer: "return=minimal",
@@ -85,6 +96,15 @@ async function capture(phone, name) {
   return { ok: true, id: r.data && r.data.id, existia: !!(r.data && r.data.existia) };
 }
 
+// #2: registra "corretor falou com o lead" (sem conteúdo) — RPC bumpa timestamps.
+async function logInteraction(phone) {
+  const digits = (phone || "").replace(/\D/g, "");
+  if (digits.length < 10) return { ok: false };
+  const r = await api("/rest/v1/rpc/registrar_interacao_wa", { method: "POST", body: { p_phone: digits } });
+  if (!r.ok) return { ok: false };
+  return { ok: true, found: !!(r.data && r.data.found) };
+}
+
 async function agendarVisita(id, dateISO) {
   const r = await api(`/rest/v1/leads?id=eq.${id}`, {
     method: "PATCH", prefer: "return=minimal",
@@ -101,9 +121,11 @@ chrome.runtime.onMessage.addListener((msg, _s, reply) => {
         case "logout":    await chrome.storage.local.clear(); return reply({ ok: true });
         case "session":   return reply(await session());
         case "getLead":   return reply(await getLead(msg.phone));
+        case "getLeadByName": return reply(await getLeadByName(msg.name));
         case "setStatus": return reply(await setStatus(msg.id, msg.status));
         case "addNote":   return reply(await addNote(msg.id, msg.content));
         case "capture":   return reply(await capture(msg.phone, msg.name));
+        case "logInteraction": return reply(await logInteraction(msg.phone));
         case "agendarVisita": return reply(await agendarVisita(msg.id, msg.date));
         default:          return reply({ ok: false, error: "ação desconhecida" });
       }

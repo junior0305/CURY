@@ -17,7 +17,7 @@ export function loadFonts() {
   document.head.appendChild(l);
 }
 
-export type Aba = "tempo" | "time" | "leads" | "pastas" | "anuncios" | "disparar" | "bi";
+export type Aba = "tempo" | "time" | "leads" | "pastas" | "anuncios" | "disparar" | "estrategia" | "bi";
 
 export const ICONES: Record<Aba, string> = {
   tempo: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3.5 2",
@@ -26,6 +26,7 @@ export const ICONES: Record<Aba, string> = {
   anuncios: "M3 17l5-6 4 3 5-8M14 6h4v4",
   disparar: "M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-5.7A8.4 8.4 0 1 1 21 11.5z",
   pastas: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+  estrategia: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
   bi: "M5 20V10M12 20V4M19 20v-7",
 };
 
@@ -37,6 +38,7 @@ export const ABAS: { k: Aba; label: string; to: string }[] = [
   { k: "pastas", label: "Pastas", to: "/manager/pastas" },
   { k: "anuncios", label: "Anúncios", to: "/manager/anuncios" },
   { k: "disparar", label: "Disparar", to: "/manager/whatsapp" },
+  { k: "estrategia", label: "Onde atacar", to: "/manager/estrategia" },
 ];
 
 export function RailV10({

@@ -17,36 +17,34 @@ const STATUS = [
 const STATUS_LABEL = Object.fromEntries(STATUS.map((s) => [s.k, s.l]));
 
 let lead = null;       // objeto | "notfound" | null
-let curPhone = "";     // número da conversa aberta agora
+let curKey = "";       // identidade da conversa aberta (phone ou "nome:<x>")
+let curPhone = "";     // número, quando a conversa tem número visível
+let curName = "";      // nome, quando é contato salvo (sem número no DOM)
 let loading = false;
 
-// ---- SABER a conversa aberta: o número vem do JID das mensagens (data-id).
-//      Funciona pra contato SALVO e não salvo (o cabeçalho só mostra número
-//      quando não é salvo — por isso não dá pra depender dele). ----
-function activePhone() {
-  const nodes = document.querySelectorAll('#main [data-id]');
-  for (const n of nodes) {
-    const m = (n.getAttribute("data-id") || "").match(/(\d{10,15})@c\.us/);
-    if (m) return m[1];
-  }
-  // fallback: cabeçalho (número de contato não salvo)
-  const head = document.querySelector("#main header");
-  if (head) {
-    for (const s of head.querySelectorAll("span[title]")) {
-      const d = (s.getAttribute("title") || "").replace(/\D/g, "");
-      if (d.length >= 10 && d.length <= 13) return d;
-    }
-  }
-  return "";
-}
-
-function activeName() {
+// ---- SABER a conversa aberta ----
+// O WhatsApp mudou: o data-id das mensagens virou só hex (sem @c.us) e o número
+// não fica mais em span[title]. A verdade agora está na 1ª linha do cabeçalho:
+//   - contato NÃO salvo  -> "+55 11 99698-4154"  (é o número)  ← caso dos leads
+//   - contato SALVO      -> "Carlos Eduardo"      (é o nome; número não existe no DOM)
+function headerLine() {
   const head = document.querySelector("#main header");
   if (!head) return "";
-  const s = head.querySelector("span[title]");
-  const t = ((s && s.getAttribute("title")) || "").trim();
-  if (t && /^[\d\s()+\-]+$/.test(t)) return "";
-  return t;
+  const lines = (head.innerText || "").split("\n").map((s) => s.trim()).filter(Boolean);
+  return lines[0] || "";   // 1ª linha = número (não salvo) ou nome (salvo)
+}
+function looksPhone(t) {
+  if (!t || !/^[\d\s()+\-]+$/.test(t)) return false;
+  const d = t.replace(/\D/g, "");
+  return d.length >= 10 && d.length <= 13;
+}
+function activePhone() {
+  const t = headerLine();
+  return looksPhone(t) ? t.replace(/\D/g, "") : "";
+}
+function activeName() {
+  const t = headerLine();
+  return looksPhone(t) ? "" : t;
 }
 
 function jarvis(l) {
@@ -63,6 +61,45 @@ function jarvis(l) {
   if ((l.contact_attempts || 0) === 0 && (st === "NEW" || st === "IN_PROGRESS"))
     return { icon: "🆕", txt: "Faça o primeiro contato" };
   return null;
+}
+
+// ---- mensagem sugerida (sem LLM: template pelo estado do lead) ----
+function firstName(l) { return (((l && l.name) || "").trim().split(/\s+/)[0]) || ""; }
+function fmtDate(iso) {
+  try { const d = new Date(iso); const p = (n) => String(n).padStart(2, "0");
+    return "dia " + p(d.getDate()) + "/" + p(d.getMonth() + 1) + " às " + p(d.getHours()) + ":" + p(d.getMinutes());
+  } catch { return ""; }
+}
+function suggestMsg(l) {
+  if (!l || l === "notfound") return null;
+  const nm = firstName(l);
+  const oi = nm ? "Oi, " + nm + "! " : "Oi! ";
+  const st = l.status;
+  if (["CONCLUDED", "ABANDONED", "EXCLUDED"].includes(st)) return null;
+  if (l.last_lead_response_at && (!l.last_broker_whatsapp_at || new Date(l.last_lead_response_at) > new Date(l.last_broker_whatsapp_at)))
+    return oi + "Vi sua mensagem aqui 🙌 Consigo te ajudar agora — posso te passar as condições e já deixar uma visita marcada?";
+  if (st === "VISIT_SCHEDULED")
+    return oi + "Passando pra confirmar nossa visita" + (l.visit_scheduled_at ? " " + fmtDate(l.visit_scheduled_at) : "") + ". Fica de pé pra você? Qualquer coisa a gente remarca 👍";
+  if (st === "DOCS_REQUESTED")
+    return oi + "Pra dar sequência na sua aprovação, me manda por aqui quando puder: RG/CNH, comprovante de renda e comprovante de residência. Assim que chegar eu já toco o processo 📄";
+  if ((l.contact_attempts || 0) === 0 && (st === "NEW" || st === "IN_PROGRESS"))
+    return oi + "Sou consultor(a) da Econ 🏠 Vi seu interesse em um apartamento pelo Minha Casa Minha Vida. Você já tem uma região preferida? Posso te mostrar opções que cabem no seu bolso.";
+  return oi + "Tudo bem? Passando pra retomar nosso contato sobre o apartamento. Ainda faz sentido pra você? Consigo boas condições essa semana 😉";
+}
+
+// cola texto no campo de digitação do WhatsApp (editor Lexical) — NÃO envia.
+function pasteToWa(text) {
+  const box = document.querySelector('#main footer div[contenteditable="true"]');
+  if (!box) return false;
+  box.focus();
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(box);
+  sel.removeAllRanges(); sel.addRange(range);
+  const dt = new DataTransfer();
+  dt.setData("text/plain", text);
+  box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  return true;
 }
 
 // ---- helpers DOM ----
@@ -101,22 +138,31 @@ async function render() {
     return;
   }
 
-  // qual conversa
-  if (!curPhone) {
+  // nenhuma conversa aberta ainda
+  if (!curKey) {
     body.appendChild(el("div", { class: "cmd-hint" }, "Abra uma conversa no WhatsApp que eu já trago o lead."));
     body.appendChild(fallbackInput());
     return;
   }
-  body.appendChild(el("div", { class: "cmd-conv" }, "📱 " + fmt(curPhone),
+
+  // cabeçalho do painel: a conversa que eu detectei
+  const convLabel = curPhone ? ("📱 " + fmt(curPhone)) : ("👤 " + curName);
+  body.appendChild(el("div", { class: "cmd-conv" }, convLabel,
     el("span", { class: "cmd-link", onclick: () => { const i = fallbackInput(true); body.appendChild(i); } }, "não é esse?")));
 
   if (loading) { body.appendChild(el("div", { class: "cmd-hint" }, "Carregando…")); return; }
 
   if (lead === "notfound") {
-    const nm = activeName();
-    body.appendChild(el("div", { class: "cmd-empty" }, "Essa pessoa ainda não é um lead seu."));
-    body.appendChild(el("button", { class: "cmd-btn wide", onclick: () => doCapture() },
-      "➕ Capturar este contato" + (nm ? " (" + nm + ")" : "")));
+    if (curPhone) {
+      const nm = activeName();
+      body.appendChild(el("div", { class: "cmd-empty" }, "Essa pessoa ainda não é um lead seu."));
+      body.appendChild(el("button", { class: "cmd-btn wide", onclick: () => doCapture() },
+        "➕ Capturar este contato" + (nm ? " (" + nm + ")" : "")));
+    } else {
+      body.appendChild(el("div", { class: "cmd-empty" },
+        "Não achei lead com o nome “" + curName + "”. Esse contato está salvo no seu celular, então o WhatsApp não mostra o número aqui — abra pela conversa do número, ou digite abaixo."));
+      body.appendChild(fallbackInput());
+    }
     return;
   }
   if (!lead) { body.appendChild(el("div", { class: "cmd-hint" }, "—")); return; }
@@ -133,6 +179,19 @@ async function render() {
 
   const j = jarvis(lead);
   if (j) body.appendChild(el("div", { class: "cmd-jarvis" }, el("span", { class: "cmd-j-ic", text: j.icon }), el("span", { text: j.txt })));
+
+  // resposta sugerida (o corretor revisa e envia pelo próprio número)
+  const sug = suggestMsg(lead);
+  if (sug) {
+    body.appendChild(el("div", { class: "cmd-label", text: "RESPOSTA SUGERIDA" }));
+    const ta = el("textarea", { class: "cmd-ta" });
+    ta.value = sug;
+    body.appendChild(ta);
+    body.appendChild(el("button", { class: "cmd-btn wide", onclick: () => {
+      if (pasteToWa(ta.value)) toast("Colei no WhatsApp — revise e envie 📩");
+      else toast("Abra o campo de mensagem primeiro", false);
+    } }, "📋 Usar essa mensagem"));
+  }
 
   body.appendChild(el("div", { class: "cmd-label", text: "AVANÇAR STATUS" }));
   const grid = el("div", { class: "cmd-grid" });
@@ -156,29 +215,58 @@ function fmt(d) { d = (d || "").replace(/\D/g, ""); return d.length >= 12 ? d : 
 function fallbackInput(focus) {
   const inp = el("input", { class: "cmd-input", placeholder: "Digite o número (5511...)", value: curPhone });
   const row = el("div", { class: "cmd-row", style: "margin-top:8px" }, inp,
-    el("button", { class: "cmd-btn", onclick: () => loadFor(inp.value) }, "Buscar"));
+    el("button", { class: "cmd-btn", onclick: () => loadForPhone(inp.value) }, "Buscar"));
   if (focus) setTimeout(() => inp.focus(), 50);
   return row;
 }
 
 // ---- carregar o lead da conversa ----
-async function loadFor(phone) {
+async function loadForPhone(phone) {
   const digits = (phone || "").replace(/\D/g, "");
   if (digits.length < 10) return;
-  curPhone = digits; lead = null; loading = true; await render();
-  const r = await send({ type: "getLead", phone: curPhone });
+  curKey = digits; curPhone = digits; curName = ""; lead = null; loading = true; await render();
+  const r = await send({ type: "getLead", phone: digits });
   loading = false;
   lead = r && r.ok ? (r.lead || "notfound") : "notfound";
   if (r && !r.ok) toast(r.error || "Erro ao buscar", false);
   await render();
 }
 
+async function loadForName(name) {
+  curKey = "nome:" + name; curPhone = ""; curName = name; lead = null; loading = true; await render();
+  const r = await send({ type: "getLeadByName", name });
+  loading = false;
+  if (r && r.ok && r.lead) { lead = r.lead; curPhone = (r.lead.phone || "").replace(/\D/g, ""); }
+  else lead = "notfound";
+  await render();
+}
+
+// ---- #2: registro PASSIVO de interação ----
+// Quando o corretor envia uma mensagem (Enter no campo ou botão Enviar), marca
+// "andou com o lead" no Comandra — sem ler/gravar o conteúdo. Alimenta o Tempo
+// Real do gerente e zera o relógio dos 15 dias do pescar. Debounce por número.
+const lastLog = {};
+function onSend() {
+  const digits = (curPhone || activePhone() || "").replace(/\D/g, "");
+  if (digits.length < 10) return;                 // contato salvo sem número → não dá pra resolver
+  const now = Date.now();
+  if (lastLog[digits] && now - lastLog[digits] < 45000) return;
+  lastLog[digits] = now;
+  send({ type: "logInteraction", phone: digits }).then((r) => {
+    if (r && r.ok && r.found && isOpen()) toast("✓ registrado no Comandra");
+  });
+}
+
 // roda quando abre o painel e quando troca de conversa
 async function track() {
   if (!isOpen()) return;
   const ph = activePhone();
-  if (ph && ph !== curPhone) return loadFor(ph);
-  if (!ph && !curPhone) render();
+  if (ph) { if (ph !== curPhone) loadForPhone(ph); return; }
+  const nm = activeName();
+  if (nm) { if (curKey !== "nome:" + nm) loadForName(nm); return; }
+  // nenhuma conversa aberta
+  if (curKey) { curKey = ""; curPhone = ""; curName = ""; lead = null; }
+  render();
 }
 
 // ---- ações ----
@@ -197,7 +285,7 @@ async function doNote(content) {
 }
 async function doCapture() {
   const r = await send({ type: "capture", phone: curPhone, name: activeName() });
-  if (r && r.ok) { toast(r.existia ? "Já era seu lead" : "Contato capturado ✅"); await loadFor(curPhone); }
+  if (r && r.ok) { toast(r.existia ? "Já era seu lead" : "Contato capturado ✅"); await loadForPhone(curPhone); }
   else toast((r && r.error) || "Não consegui capturar", false);
 }
 async function doVisita(val) {
@@ -235,6 +323,17 @@ function mount() {
 
 let tmr = null;
 const obs = new MutationObserver(() => { clearTimeout(tmr); tmr = setTimeout(track, 500); });
+
+// detecção de envio (roda mesmo com o painel fechado)
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+  const box = e.target && e.target.closest && e.target.closest('#main footer div[contenteditable="true"]');
+  if (box && box.innerText.trim()) onSend();
+}, true);
+document.addEventListener("click", (e) => {
+  const btn = e.target && e.target.closest && e.target.closest('[data-icon="send"], [data-icon^="send"], button[aria-label="Enviar"]');
+  if (btn) onSend();
+}, true);
 
 const wait = setInterval(() => {
   if (!document.body) return;

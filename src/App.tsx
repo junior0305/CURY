@@ -27,6 +27,7 @@ import AnunciosV10 from "./pages/manager-v10/Anuncios";
 import LeadsV10 from "./pages/manager-v10/Leads";
 import DispararV10 from "./pages/manager-v10/Disparar";
 import PastasV10 from "./pages/manager-v10/Pastas";
+import EstrategiaV10 from "./pages/manager-v10/Estrategia";
 import CoachIndex from "./pages/manager-v2/CoachIndex";
 import CoachBroker from "./pages/manager-v2/CoachBroker";
 import CampanhaIndex from "./pages/manager-v2/CampanhaIndex";
@@ -156,6 +157,7 @@ const App = () => (
             <Route path="/manager/pastas" element={<ProtectedManagerRoute><PastasV10 /></ProtectedManagerRoute>} />
             <Route path="/manager/anuncios" element={<ProtectedManagerRoute><AnunciosV10 /></ProtectedManagerRoute>} />
             <Route path="/manager/whatsapp" element={<ProtectedManagerRoute><DispararV10 /></ProtectedManagerRoute>} />
+            <Route path="/manager/estrategia" element={<ProtectedManagerRoute><EstrategiaV10 /></ProtectedManagerRoute>} />
             <Route path="/manager/coach" element={<ProtectedManagerRoute><CoachIndex /></ProtectedManagerRoute>} />
             <Route path="/manager/coach/:brokerId" element={<ProtectedManagerRoute><CoachBroker /></ProtectedManagerRoute>} />
             <Route path="/manager/campanha" element={<ProtectedManagerRoute><CampanhaIndex /></ProtectedManagerRoute>} />
