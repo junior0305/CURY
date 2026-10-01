@@ -59,16 +59,18 @@ export default function Estrategia() {
     if (n && n >= 1000) { setRenda(n); setAberto(null); }
   }
 
-  // regiões presentes no estoque (com contagem), "A classificar" para sem região
+  // regiões presentes NO SEGMENTO ATUAL (com contagem). Respeita MCMV/SBPE pra o
+  // chip não mostrar uma região que, naquele segmento, não tem nada.
   const regioes = useMemo(() => {
     const m = new Map<string, number>();
     (data ?? []).forEach((p) => {
       if (p.disponiveis < 15) return;
+      if (seg === "mcmv" ? p.avaliacao_media > TETO_MCMV : p.avaliacao_media <= TETO_MCMV) return;
       const k = p.regiao || "__na__";
       m.set(k, (m.get(k) || 0) + 1);
     });
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
-  }, [data]);
+  }, [data, seg]);
 
   const lista = useMemo(() => {
     return (data ?? [])
@@ -111,8 +113,8 @@ export default function Estrategia() {
               <Mini variant={dep ? "key" : undefined} onClick={() => setDep(true)}>Com dependente</Mini>
               <Mini variant={!dep ? "key" : undefined} onClick={() => setDep(false)}>Sem</Mini>
               <span style={{ width: 12 }} />
-              <Mini variant={seg === "mcmv" ? "solid" : undefined} onClick={() => { setSeg("mcmv"); setAberto(null); }}>MCMV</Mini>
-              <Mini variant={seg === "alto" ? "solid" : undefined} onClick={() => { setSeg("alto"); setAberto(null); }}>SFH / SBPE</Mini>
+              <Mini variant={seg === "mcmv" ? "solid" : undefined} onClick={() => { setSeg("mcmv"); setReg(null); setAberto(null); }}>MCMV</Mini>
+              <Mini variant={seg === "alto" ? "solid" : undefined} onClick={() => { setSeg("alto"); setReg(null); setAberto(null); }}>SFH / SBPE</Mini>
             </div>
             <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 10 }}>
               <Mini variant={reg === null ? "solid" : undefined} onClick={() => { setReg(null); setAberto(null); }}>Todas as regiões</Mini>
