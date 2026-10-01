@@ -1,18 +1,18 @@
-// ONDE ATACAR — estratégia de estoque pela matemática REAL da Caixa.
+// ONDE ATACAR — qual projeto fecha mais fácil.
 //
-// Pergunta única, para gerente/super/diretor: QUAL PROJETO FECHA MAIS FÁCIL
-// para a renda do meu lead? A régua é a ENTRADA (o bolso do cliente):
-//     entrada = preço − mín( financiamento(renda) , 0,8 × avaliação ) − subsídio
-// Menor entrada = fecha mais fácil. Escolha a renda-alvo (composta, até 3
-// pessoas) e tudo recalcula. Ver memory/project_tabelao_fecha_a_conta.md.
+// Uma pergunta, uma resposta. A régua é simples e intuitiva: QUANTO A CAIXA
+// COBRE DO PREÇO. Quanto mais cobre (financiamento + subsídio), menos entrada o
+// cliente precisa, mais fácil fechar. Ordena do que mais cobre para o que menos
+// cobre. A renda do público ajusta o cálculo (a Caixa libera conforme a renda).
+// Ver memory/project_tabelao_fecha_a_conta.md.
 
 import { useMemo, useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
-import { Sec, Tbl, Tr, Cell, ScoreRow, Blank, Mini } from "@/components/manager-v10/ui";
+import { Sec, Tbl, Tr, Blank, Mini } from "@/components/manager-v10/ui";
 import {
   useEstrategiaFecha, useUnidades, entradaUnidade,
-  TETO_MCMV, RENDAS, type ProjetoFecha,
+  TETO_MCMV, type ProjetoFecha,
 } from "@/hooks/useEstrategia";
 import "@/styles/manager-v10.css";
 
@@ -22,60 +22,46 @@ const brlk = (n: number | null | undefined) =>
   n == null ? "—" : (n < 0 ? "−" : "") + "R$ " + Math.round(Math.abs(n) / 1000) + "k";
 
 const TETO_FAIXA: Record<string, number> = { HIS1: 275_000, HIS2: 400_000, SBPE: 750_000 };
-
 type Seg = "mcmv" | "alto";
-type Ord = "entrada" | "fecha" | "volume";
 
-/** Verde = entrada baixa (cabe no FGTS/economias). Vermelho = entrada pesada. */
-function tomEntrada(e: number): "good" | "alert" | undefined {
-  if (e <= 30_000) return "good";
-  if (e >= 100_000) return "alert";
-  return undefined;
+const OK = "var(--ok,#18A999)";
+const WARN = "var(--warn,#E0A82E)";
+const BAD = "var(--bad,#E4572E)";
+
+/** Quanto a Caixa cobre do preço (0..1). É o inverso da entrada. */
+function cobertura(p: ProjetoFecha) {
+  if (!p.preco_medio) return 0;
+  return Math.max(0, Math.min(1, 1 - p.entrada_media / p.preco_medio));
+}
+function statusDe(c: number) {
+  if (c >= 0.9) return { cor: OK, dot: "🟢", txt: "fecha fácil" };
+  if (c >= 0.75) return { cor: WARN, dot: "🟡", txt: "entrada média" };
+  return { cor: BAD, dot: "🔴", txt: "entrada pesada" };
 }
 
 export default function Estrategia() {
   const { mode, toggle } = useTheme();
-  const [renda, setRenda] = useState(4000);
-  const [rendaInput, setRendaInput] = useState("4000");
+  const [renda, setRenda] = useState(3000);
+  const [rendaInput, setRendaInput] = useState("3000");
   const [dep, setDep] = useState(true);
-
-  function aplicarRenda(v?: string) {
-    const n = parseInt((v ?? rendaInput).replace(/\D/g, ""), 10);
-    if (n && n >= 1000) { setRenda(n); setRendaInput(String(n)); setAberto(null); }
-  }
   const { data, isLoading } = useEstrategiaFecha(renda, dep);
   const [seg, setSeg] = useState<Seg>("mcmv");
-  const [minDisp, setMinDisp] = useState(20);
-  const [ord, setOrd] = useState<Ord>("entrada");
   const [aberto, setAberto] = useState<ProjetoFecha | null>(null);
 
   loadFonts();
 
-  const info = data?.[0];
+  function setR(v: string) {
+    setRendaInput(v);
+    const n = parseInt(v.replace(/\D/g, ""), 10);
+    if (n && n >= 1000) { setRenda(n); setAberto(null); }
+  }
 
   const lista = useMemo(() => {
-    const base = (data ?? [])
-      .filter((p) => p.disponiveis >= minDisp)
-      .filter((p) => (seg === "mcmv" ? p.avaliacao_media <= TETO_MCMV : p.avaliacao_media > TETO_MCMV));
-    const cmp: Record<Ord, (a: ProjetoFecha, b: ProjetoFecha) => number> = {
-      entrada: (a, b) => a.entrada_media - b.entrada_media,
-      fecha: (a, b) => b.pct_fecha - a.pct_fecha || a.entrada_media - b.entrada_media,
-      volume: (a, b) => b.disponiveis - a.disponiveis,
-    };
-    return base.sort(cmp[ord]);
-  }, [data, seg, minDisp, ord]);
-
-  const resumo = useMemo(() => {
-    const unid = lista.reduce((s, p) => s + p.disponiveis, 0);
-    const bons = lista.filter((p) => p.entrada_media <= 30_000);
-    return {
-      projetos: lista.length, unid,
-      bons: bons.length,
-      unidBons: bons.reduce((s, p) => s + p.disponiveis, 0),
-    };
-  }, [lista]);
-
-  const cols = "1.7fr .7fr .9fr .9fr 1fr .9fr .8fr";
+    return (data ?? [])
+      .filter((p) => p.disponiveis >= 15)
+      .filter((p) => (seg === "mcmv" ? p.avaliacao_media <= TETO_MCMV : p.avaliacao_media > TETO_MCMV))
+      .sort((a, b) => cobertura(b) - cobertura(a));
+  }, [data, seg]);
 
   return (
     <div className="mgr10 app2 estrategia">
@@ -84,106 +70,83 @@ export default function Estrategia() {
         <header className="top2">
           <div>
             <h1>Onde atacar</h1>
-            <p>Qual projeto fecha mais fácil — pela entrada que a renda do lead deixa</p>
+            <p>Os projetos que fecham mais fácil — onde a Caixa cobre mais do preço</p>
           </div>
         </header>
         <section className="view">
           <Sec
-            title="Renda-alvo do lead"
-            tag="estimativa · planilha Caixa"
-            sub={
-              info
-                ? `Com renda ${brl(renda)}, a Caixa libera até ${brl(info.financiamento)}${info.subsidio ? ` + subsídio ${brl(info.subsidio)}` : ""} (faixa ${info.faixa}), limitado a 80% da avaliação de cada unidade — a entrada é o que faltar para o preço. Renda composta (até 3 pessoas). Valores são estimativa pela planilha; o número exato vem do Simular da Caixa (em integração).`
-                : "Escolha a renda do lead para calcular a entrada em cada projeto."
-            }
+            title="Para que público"
+            sub="Diga a renda típica do seu público (até 3 pessoas). A Caixa libera conforme a renda — e o que ela não cobrir vira entrada do cliente."
           >
-            <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10, alignItems: "center" }}>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 13 }}>
-                Renda R$
+            <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+                Renda do público R$
                 <input
                   value={rendaInput}
-                  onChange={(e) => {
-                    setRendaInput(e.target.value);
-                    const n = parseInt(e.target.value.replace(/\D/g, ""), 10);
-                    if (n && n >= 1000) { setRenda(n); setAberto(null); }
-                  }}
-                  onBlur={() => aplicarRenda()}
-                  onKeyDown={(e) => { if (e.key === "Enter") aplicarRenda(); }}
-                  inputMode="numeric"
-                  placeholder="ex: 6500"
-                  style={{
-                    width: 110, padding: "7px 10px", borderRadius: 8,
-                    border: "1px solid var(--line,#cbd5e1)", background: "var(--panel,transparent)",
-                    color: "inherit", font: "inherit", fontWeight: 700, textAlign: "right",
-                  }}
+                  onChange={(e) => setR(e.target.value)}
+                  inputMode="numeric" placeholder="ex: 3000"
+                  style={{ width: 110, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line,#cbd5e1)", background: "var(--panel,transparent)", color: "inherit", font: "inherit", fontWeight: 700, textAlign: "right" }}
                 />
               </label>
-              {RENDAS.map((r) => (
-                <Mini key={r} variant={renda === r ? "solid" : undefined} onClick={() => aplicarRenda(String(r))}>
-                  {brlk(r)}
-                </Mini>
+              {[2000, 3000, 4000, 5000].map((r) => (
+                <Mini key={r} variant={renda === r ? "solid" : undefined} onClick={() => setR(String(r))}>{brlk(r)}</Mini>
               ))}
-              <span style={{ width: 16 }} />
+              <span style={{ width: 12 }} />
               <Mini variant={dep ? "key" : undefined} onClick={() => setDep(true)}>Com dependente</Mini>
-              <Mini variant={!dep ? "key" : undefined} onClick={() => setDep(false)}>Sem dependente</Mini>
-            </div>
-
-            <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-              <Mini variant={seg === "mcmv" ? "solid" : undefined} onClick={() => { setSeg("mcmv"); setAberto(null); }}>MCMV (≤ 400k)</Mini>
+              <Mini variant={!dep ? "key" : undefined} onClick={() => setDep(false)}>Sem</Mini>
+              <span style={{ width: 12 }} />
+              <Mini variant={seg === "mcmv" ? "solid" : undefined} onClick={() => { setSeg("mcmv"); setAberto(null); }}>MCMV</Mini>
               <Mini variant={seg === "alto" ? "solid" : undefined} onClick={() => { setSeg("alto"); setAberto(null); }}>SFH / SBPE</Mini>
-              <span style={{ width: 16 }} />
-              <Mini variant={ord === "entrada" ? "key" : undefined} onClick={() => setOrd("entrada")}>Menor entrada</Mini>
-              <Mini variant={ord === "fecha" ? "key" : undefined} onClick={() => setOrd("fecha")}>Zero bolso</Mini>
-              <Mini variant={ord === "volume" ? "key" : undefined} onClick={() => setOrd("volume")}>Mais estoque</Mini>
-              <span style={{ width: 16 }} />
-              {[10, 20, 50].map((m) => (
-                <Mini key={m} variant={minDisp === m ? "key" : undefined} onClick={() => setMinDisp(m)}>{m}+ disp.</Mini>
-              ))}
             </div>
-
-            {seg === "alto" ? (
-              <p className="sec-sub" style={{ margin: "0 0 12px" }}>
-                SFH / SBPE — imóveis acima de R$ 400 mil, com <b>juros maiores</b> e <b>fora da tabela MCMV</b> (sem subsídio). O financiamento usa a faixa SBPE da renda.
-              </p>
-            ) : null}
-
-            <ScoreRow>
-              <Cell label="Projetos" value={resumo.projetos} />
-              <Cell label="Unidades disponíveis" value={resumo.unid.toLocaleString("pt-BR")} />
-              <Cell label="Entrada leve (≤30k)" value={resumo.bons} tone="good" sub="projetos" />
-              <Cell label="Unidades com entrada leve" value={resumo.unidBons.toLocaleString("pt-BR")} tone="good" />
-            </ScoreRow>
           </Sec>
 
-          <Sec title="Ranking" sub="Menor entrada primeiro. Clique num projeto para ver as unidades.">
+          <Sec
+            title="Projetos — do que fecha mais fácil para o mais difícil"
+            tag="estimativa · planilha Caixa"
+          >
             {isLoading ? (
-              <Blank title="Calculando a entrada em cada projeto…" />
+              <Blank title="Calculando…" />
             ) : lista.length === 0 ? (
-              <Blank title="Nenhum projeto neste filtro.">Afrouxe o corte de estoque ou troque o segmento.</Blank>
+              <Blank title="Nenhum projeto com estoque neste filtro." />
             ) : (
-              <Tbl
-                cols={cols}
-                head={["Projeto", "Disp.", "Preço méd.", "Avaliação", "Entrada méd.", "Melhor unid.", "Zero bolso"]}
-              >
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {lista.map((p) => {
-                  const t = tomEntrada(p.entrada_media);
+                  const c = cobertura(p);
+                  const s = statusDe(c);
                   return (
-                    <Tr key={p.cod_empreendimento} cols={cols} onClick={() => setAberto(p)}>
-                      <span style={{ fontWeight: 600 }}>{p.empreendimento}</span>
-                      <span>{p.disponiveis}</span>
-                      <span>{brlk(p.preco_medio)}</span>
-                      <span>{brlk(p.avaliacao_media)}</span>
-                      <span style={{ color: t === "good" ? "var(--ok,#18A999)" : t === "alert" ? "var(--bad,#E4572E)" : undefined, fontWeight: 700 }}>
-                        {p.entrada_media <= 0 ? "sem entrada" : brlk(p.entrada_media)}
+                    <button
+                      key={p.cod_empreendimento}
+                      onClick={() => setAberto(p)}
+                      style={{
+                        display: "grid", gridTemplateColumns: "26px 1fr 190px", gap: 12, alignItems: "center",
+                        textAlign: "left", width: "100%", cursor: "pointer",
+                        padding: "12px 14px", borderRadius: 12, border: "1px solid var(--line,#e2e8f0)",
+                        background: "var(--panel,transparent)", color: "inherit", font: "inherit",
+                      }}
+                    >
+                      <span style={{ fontSize: 18 }}>{s.dot}</span>
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: "block", fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.empreendimento}</span>
+                        <span style={{ fontSize: 12, color: "var(--muted,#64748b)" }}>
+                          {p.disponiveis} disponíveis · preço ~{brlk(p.preco_medio)} · <b style={{ color: s.cor }}>{s.txt}</b>
+                        </span>
                       </span>
-                      <span>{p.entrada_min <= 0 ? "sem entrada" : brlk(p.entrada_min)}</span>
-                      <span style={{ color: p.pct_fecha > 0 ? "var(--ok,#18A999)" : undefined, fontWeight: p.pct_fecha > 0 ? 700 : 400 }}>
-                        {p.pct_fecha}%
+                      <span>
+                        <span style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                          <span style={{ color: "var(--muted,#64748b)" }}>Caixa cobre</span>
+                          <b style={{ color: s.cor }}>{Math.round(c * 100)}%</b>
+                        </span>
+                        <span style={{ display: "block", height: 8, borderRadius: 6, background: "var(--line,#e2e8f0)", overflow: "hidden" }}>
+                          <span style={{ display: "block", height: "100%", width: `${Math.round(c * 100)}%`, background: s.cor }} />
+                        </span>
+                        <span style={{ display: "block", fontSize: 11.5, color: "var(--muted,#64748b)", marginTop: 4 }}>
+                          entrada ~{p.entrada_media <= 0 ? "zero" : brlk(p.entrada_media)}
+                        </span>
                       </span>
-                    </Tr>
+                    </button>
                   );
                 })}
-              </Tbl>
+              </div>
             )}
           </Sec>
 
@@ -197,24 +160,23 @@ export default function Estrategia() {
 function Drill({ p, renda, onClose }: { p: ProjetoFecha; renda: number; onClose: () => void }) {
   const { data, isLoading } = useUnidades(p.cod_empreendimento);
   const teto = TETO_FAIXA[p.faixa] ?? 400_000;
-  const cols = "0.8fr 1fr 0.6fr 0.7fr 0.9fr 0.9fr 1fr";
+  const cols = "0.8fr 1fr 0.6fr 0.7fr 0.9fr 1fr";
   const unidades = useMemo(
-    () =>
-      (data ?? [])
-        .map((u) => ({ u, entrada: entradaUnidade(u, p.financiamento, p.subsidio, teto) }))
-        .sort((a, b) => (a.entrada ?? 1e12) - (b.entrada ?? 1e12)),
+    () => (data ?? [])
+      .map((u) => ({ u, entrada: entradaUnidade(u, p.financiamento, p.subsidio, teto) }))
+      .sort((a, b) => (a.entrada ?? 1e12) - (b.entrada ?? 1e12)),
     [data, p.financiamento, p.subsidio, teto],
   );
   return (
     <Sec
       title={p.empreendimento}
       tag={<button type="button" className="mini" onClick={onClose}>fechar ✕</button>}
-      sub={`Renda ${brl(renda)} → libera ${brl(p.financiamento)}${p.subsidio ? ` + subsídio ${brl(p.subsidio)}` : ""}. ${p.disponiveis} disponíveis.`}
+      sub={`Renda ${brl(renda)} → a Caixa libera ${brl(p.financiamento)}${p.subsidio ? ` + subsídio ${brl(p.subsidio)}` : ""}. ${p.disponiveis} unidades disponíveis.`}
     >
       {isLoading ? (
         <Blank title="Carregando unidades…" />
       ) : (
-        <Tbl cols={cols} head={["Unid.", "Bloco", "Dorm.", "m²", "Preço", "Avaliação", "Entrada"]}>
+        <Tbl cols={cols} head={["Unid.", "Bloco", "Dorm.", "m²", "Preço", "Entrada"]}>
           {unidades.map(({ u, entrada }, i) => (
             <Tr key={i} cols={cols}>
               <span style={{ fontWeight: 600 }}>{u.numero || "—"}</span>
@@ -222,9 +184,8 @@ function Drill({ p, renda, onClose }: { p: ProjetoFecha; renda: number; onClose:
               <span>{u.dormitorios ?? "—"}</span>
               <span>{u.metragem != null ? Number(u.metragem).toLocaleString("pt-BR") : "—"}</span>
               <span>{brl(u.valor)}</span>
-              <span>{brl(u.valor_avaliacao)}</span>
-              <span style={{ color: entrada != null && entrada <= 30_000 ? "var(--ok,#18A999)" : entrada != null && entrada >= 100_000 ? "var(--bad,#E4572E)" : undefined, fontWeight: 600 }}>
-                {entrada == null ? "—" : entrada <= 0 ? "sem entrada" : brl(entrada)}
+              <span style={{ color: entrada != null && entrada <= 20_000 ? OK : entrada != null && entrada >= 80_000 ? BAD : undefined, fontWeight: 600 }}>
+                {entrada == null ? "—" : entrada <= 0 ? "zero" : brl(entrada)}
               </span>
             </Tr>
           ))}
