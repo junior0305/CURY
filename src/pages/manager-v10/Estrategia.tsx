@@ -102,7 +102,11 @@ export default function Estrategia() {
                 Renda R$
                 <input
                   value={rendaInput}
-                  onChange={(e) => setRendaInput(e.target.value)}
+                  onChange={(e) => {
+                    setRendaInput(e.target.value);
+                    const n = parseInt(e.target.value.replace(/\D/g, ""), 10);
+                    if (n && n >= 1000) { setRenda(n); setAberto(null); }
+                  }}
                   onBlur={() => aplicarRenda()}
                   onKeyDown={(e) => { if (e.key === "Enter") aplicarRenda(); }}
                   inputMode="numeric"
