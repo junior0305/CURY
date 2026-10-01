@@ -36,7 +36,13 @@ function tomEntrada(e: number): "good" | "alert" | undefined {
 export default function Estrategia() {
   const { mode, toggle } = useTheme();
   const [renda, setRenda] = useState(4000);
+  const [rendaInput, setRendaInput] = useState("4000");
   const [dep, setDep] = useState(true);
+
+  function aplicarRenda(v?: string) {
+    const n = parseInt((v ?? rendaInput).replace(/\D/g, ""), 10);
+    if (n && n >= 1000) { setRenda(n); setRendaInput(String(n)); setAberto(null); }
+  }
   const { data, isLoading } = useEstrategiaFecha(renda, dep);
   const [seg, setSeg] = useState<Seg>("mcmv");
   const [minDisp, setMinDisp] = useState(20);
@@ -91,9 +97,25 @@ export default function Estrategia() {
                 : "Escolha a renda do lead para calcular a entrada em cada projeto."
             }
           >
-            <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10, alignItems: "center" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 13 }}>
+                Renda R$
+                <input
+                  value={rendaInput}
+                  onChange={(e) => setRendaInput(e.target.value)}
+                  onBlur={() => aplicarRenda()}
+                  onKeyDown={(e) => { if (e.key === "Enter") aplicarRenda(); }}
+                  inputMode="numeric"
+                  placeholder="ex: 6500"
+                  style={{
+                    width: 110, padding: "7px 10px", borderRadius: 8,
+                    border: "1px solid var(--line,#cbd5e1)", background: "var(--panel,transparent)",
+                    color: "inherit", font: "inherit", fontWeight: 700, textAlign: "right",
+                  }}
+                />
+              </label>
               {RENDAS.map((r) => (
-                <Mini key={r} variant={renda === r ? "solid" : undefined} onClick={() => { setRenda(r); setAberto(null); }}>
+                <Mini key={r} variant={renda === r ? "solid" : undefined} onClick={() => aplicarRenda(String(r))}>
                   {brlk(r)}
                 </Mini>
               ))}
@@ -104,7 +126,7 @@ export default function Estrategia() {
 
             <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
               <Mini variant={seg === "mcmv" ? "solid" : undefined} onClick={() => { setSeg("mcmv"); setAberto(null); }}>MCMV (≤ 400k)</Mini>
-              <Mini variant={seg === "alto" ? "solid" : undefined} onClick={() => { setSeg("alto"); setAberto(null); }}>Alto padrão</Mini>
+              <Mini variant={seg === "alto" ? "solid" : undefined} onClick={() => { setSeg("alto"); setAberto(null); }}>SFH / SBPE</Mini>
               <span style={{ width: 16 }} />
               <Mini variant={ord === "entrada" ? "key" : undefined} onClick={() => setOrd("entrada")}>Menor entrada</Mini>
               <Mini variant={ord === "fecha" ? "key" : undefined} onClick={() => setOrd("fecha")}>Zero bolso</Mini>
@@ -114,6 +136,12 @@ export default function Estrategia() {
                 <Mini key={m} variant={minDisp === m ? "key" : undefined} onClick={() => setMinDisp(m)}>{m}+ disp.</Mini>
               ))}
             </div>
+
+            {seg === "alto" ? (
+              <p className="sec-sub" style={{ margin: "0 0 12px" }}>
+                SFH / SBPE — imóveis acima de R$ 400 mil, com <b>juros maiores</b> e <b>fora da tabela MCMV</b> (sem subsídio). O financiamento usa a faixa SBPE da renda.
+              </p>
+            ) : null}
 
             <ScoreRow>
               <Cell label="Projetos" value={resumo.projetos} />
