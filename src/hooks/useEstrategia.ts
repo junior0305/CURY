@@ -107,6 +107,17 @@ export function useUnidades(cod: number | null) {
   });
 }
 
+/** Valor APROVADO pela Caixa para uma unidade (o empréstimo) = mín(capacidade da
+ *  renda, 80% da avaliação). É o "valor aprovado". */
+export function liberadoUnidade(
+  u: Unidade,
+  financiamento: number,
+  ltv = 0.8,
+): number | null {
+  if (u.valor_avaliacao == null) return null;
+  return Math.min(financiamento, ltv * u.valor_avaliacao);
+}
+
 /** Entrada de uma unidade, para a renda escolhida (mesma conta do servidor). */
 export function entradaUnidade(
   u: Unidade,

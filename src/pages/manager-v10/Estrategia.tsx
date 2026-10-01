@@ -11,7 +11,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import { Sec, Tbl, Tr, Blank, Mini } from "@/components/manager-v10/ui";
 import {
-  useEstrategiaFecha, useUnidades, entradaUnidade,
+  useEstrategiaFecha, useUnidades, entradaUnidade, liberadoUnidade,
   TETO_MCMV, type ProjetoFecha,
 } from "@/hooks/useEstrategia";
 import "@/styles/manager-v10.css";
@@ -155,7 +155,7 @@ export default function Estrategia() {
                         <span style={{ fontSize: 12, color: "var(--muted,#64748b)" }}>
                           {p.regiao ? p.regiao + " · " : ""}{p.disponiveis} disp.
                           {fecham > 0 ? <b style={{ color: OK }}> · {fecham} fecham sem entrada</b> : ""}
-                          {" · preço ~" + brlk(p.preco_medio)}
+                          {` · preço ~${brlk(p.preco_medio)} · aval. ~${brlk(p.avaliacao_media)}`}
                         </span>
                       </span>
                       <span style={{ textAlign: "right" }}>
@@ -180,10 +180,14 @@ export default function Estrategia() {
 function Drill({ p, renda, onClose }: { p: ProjetoFecha; renda: number; onClose: () => void }) {
   const { data, isLoading } = useUnidades(p.cod_empreendimento);
   const teto = TETO_FAIXA[p.faixa] ?? 400_000;
-  const cols = "0.8fr 1fr 0.6fr 0.7fr 0.9fr 1fr";
+  const cols = "0.7fr 0.5fr 0.55fr 0.9fr 0.9fr 0.95fr 0.9fr";
   const unidades = useMemo(
     () => (data ?? [])
-      .map((u) => ({ u, entrada: entradaUnidade(u, p.financiamento, p.subsidio, teto) }))
+      .map((u) => ({
+        u,
+        aprovado: liberadoUnidade(u, p.financiamento),
+        entrada: entradaUnidade(u, p.financiamento, p.subsidio, teto),
+      }))
       .sort((a, b) => (a.entrada ?? 1e12) - (b.entrada ?? 1e12)),
     [data, p.financiamento, p.subsidio, teto],
   );
@@ -191,19 +195,20 @@ function Drill({ p, renda, onClose }: { p: ProjetoFecha; renda: number; onClose:
     <Sec
       title={p.empreendimento}
       tag={<button type="button" className="mini" onClick={onClose}>fechar ✕</button>}
-      sub={`Renda ${brl(renda)} → a Caixa libera ${brl(p.financiamento)}${p.subsidio ? ` + subsídio ${brl(p.subsidio)}` : ""}. ${p.disponiveis} unidades disponíveis.`}
+      sub={`Renda ${brl(renda)} → a Caixa aprova até ${brl(p.financiamento)}${p.subsidio ? ` + subsídio ${brl(p.subsidio)}` : ""}, limitado a 80% da avaliação de cada unidade. Preço = o que a construtora cobre; Avaliação = o que a Caixa avalia. Entrada = preço − aprovado − subsídio.`}
     >
       {isLoading ? (
         <Blank title="Carregando unidades…" />
       ) : (
-        <Tbl cols={cols} head={["Unid.", "Bloco", "Dorm.", "m²", "Preço", "Entrada"]}>
-          {unidades.map(({ u, entrada }, i) => (
+        <Tbl cols={cols} head={["Unid.", "Dorm.", "m²", "Preço", "Avaliação", "Caixa aprova", "Entrada"]}>
+          {unidades.map(({ u, aprovado, entrada }, i) => (
             <Tr key={i} cols={cols}>
               <span style={{ fontWeight: 600 }}>{u.numero || "—"}</span>
-              <span>{u.bloco || "—"}</span>
               <span>{u.dormitorios ?? "—"}</span>
               <span>{u.metragem != null ? Number(u.metragem).toLocaleString("pt-BR") : "—"}</span>
               <span>{brl(u.valor)}</span>
+              <span>{brl(u.valor_avaliacao)}</span>
+              <span style={{ color: OK, fontWeight: 600 }}>{brl(aprovado)}</span>
               <span style={{ color: entrada != null && entrada <= 20_000 ? OK : entrada != null && entrada >= 80_000 ? BAD : undefined, fontWeight: 600 }}>
                 {entrada == null ? "—" : entrada <= 0 ? "zero" : brl(entrada)}
               </span>
