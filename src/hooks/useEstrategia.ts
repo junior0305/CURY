@@ -45,6 +45,40 @@ export function useEstrategiaFecha(renda: number, dependente: boolean) {
   });
 }
 
+/** Uma unidade disponível com a entrada já calculada para uma renda. */
+export type UnidadeFecha = {
+  cod_unidade: number;
+  cod_empreendimento: number;
+  empreendimento: string;
+  numero: string | null;
+  bloco: string | null;
+  dormitorios: number | null;
+  metragem: number | null;
+  valor: number;
+  valor_avaliacao: number;
+  entrada: number;
+  financiamento: number;
+  subsidio: number | null;
+  faixa: string;
+};
+
+/** As unidades que mais fecham a conta (menor entrada) para uma renda. Usado no
+ *  painel do corretor, por lead. */
+export function useUnidadesFecha(renda: number, dependente: boolean, enabled = true) {
+  return useQuery({
+    queryKey: ["unidades-fecha", renda, dependente],
+    enabled,
+    queryFn: async (): Promise<UnidadeFecha[]> => {
+      const { data, error } = await supabase.rpc("unidades_fecha", {
+        p_renda: renda, p_dependente: dependente, p_limit: 40,
+      });
+      if (error) throw error;
+      return (data ?? []) as UnidadeFecha[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export type Unidade = {
   numero: string | null;
   bloco: string | null;

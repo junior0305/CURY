@@ -19,6 +19,7 @@ import { fetchLeadNotes, addLeadNote, waLink } from "@/integrations/supabase/ate
 import { DisparoCorretor } from "@/components/broker/DisparoCorretor";
 import type { Lead, LeadStatus } from "@/types/lead";
 import { TIPO_TRABALHO_LABEL } from "@/types/lead";
+import { useUnidadesFecha } from "@/hooks/useEstrategia";
 
 // ── stages do funil (iguais ao Atender atual) ───────────────────────────────
 const STAGES: [LeadStatus, string][] = [
@@ -156,8 +157,12 @@ const CorretorPainel = () => {
   // ── SIMULADOR (sliders) ─────────────────────────────────────────────────────
   const [rRenda, setRRenda] = useState(3600);
   const [rFgts, setRFgts] = useState(14000);
+  const [rDep, setRDep] = useState(true);
   useEffect(() => { if (sel) { setRRenda(rendaNum(sel) || 3600); } }, [sel?.id]); // eslint-disable-line
   const sim = simular(rRenda, rFgts);
+  // Fecha a Conta REAL: unidades disponíveis do Junix + tabela da Caixa.
+  const { data: fecha, isLoading: fechaLoading } = useUnidadesFecha(rRenda, rDep, !!sel);
+  const fechaInfo = fecha?.[0];
 
   // ── DISPARAR: liberado quando o corretor tem um NÚMERO OFICIAL atrelado a ele ──
   // (whatsapp_config.owner_id === corretor). O gerente/super atrela na aba "Atrelar
@@ -483,23 +488,52 @@ const CorretorPainel = () => {
                         <div>
                           <div className="sim-grid">
                             <div className="field-box">
-                              <div className="field-top"><span>Renda familiar</span><span className="field-val">{brl(rRenda)}</span></div>
+                              <div className="field-top"><span>Renda familiar (até 3)</span><span className="field-val">{brl(rRenda)}</span></div>
                               <input type="range" min={1800} max={8000} step={100} value={rRenda} onChange={(e) => setRRenda(+e.target.value)} />
                             </div>
                             <div className="field-box">
                               <div className="field-top"><span>Saldo FGTS</span><span className="field-val">{brl(rFgts)}</span></div>
-                              <input type="range" min={0} max={40000} step={1000} value={rFgts} onChange={(e) => setRFgts(+e.target.value)} />
+                              <input type="range" min={0} max={60000} step={1000} value={rFgts} onChange={(e) => setRFgts(+e.target.value)} />
                             </div>
                           </div>
-                          <div className="kpi-strip">
-                            <div><div className="kpi-label">Faixa</div><div className="kpi-num">Faixa {sim.faixa}</div></div>
-                            <div><div className="kpi-label">Subsídio (est.)</div><div className="kpi-num" style={{ color: "var(--accent)" }}>{brl(sim.subsidio)}</div></div>
-                            <div><div className="kpi-label">Parcela (est.)</div><div className="kpi-num">{brl(sim.parcela)}/mês</div></div>
+                          <div style={{ display: "flex", gap: 8, margin: "0 0 10px" }}>
+                            <button className={`tool-tab${rDep ? " active" : ""}`} onClick={() => setRDep(true)}>Com dependente</button>
+                            <button className={`tool-tab${!rDep ? " active" : ""}`} onClick={() => setRDep(false)}>Sem dependente</button>
                           </div>
-                          <div className="match-title"><span>🏢 Estimativa MCMV</span><span style={{ color: "var(--faint)", fontWeight: 600 }}>não é cálculo oficial</span></div>
-                          <div className="sim-actions">
-                            <button className="btn-caixa" onClick={() => setCaixaOpen(true)}>📄 Ver espelho (estimativa)</button>
-                            <a className="btn-primary" style={{ justifyContent: "center" }} href={sel ? waLink(sel.phone, `Simulação: renda ${brl(rRenda)}, FGTS ${brl(rFgts)} → parcela ~${brl(sim.parcela)}/mês (Faixa ${sim.faixa}).`) : "#"} target="_blank" rel="noreferrer">📲 Mandar no meu Whats</a>
+                          <div className="kpi-strip">
+                            <div><div className="kpi-label">Faixa</div><div className="kpi-num">{fechaInfo?.faixa ?? "—"}</div></div>
+                            <div><div className="kpi-label">Caixa libera</div><div className="kpi-num">{fechaInfo ? brl(fechaInfo.financiamento) : "—"}</div></div>
+                            <div><div className="kpi-label">Subsídio</div><div className="kpi-num" style={{ color: "var(--accent)" }}>{fechaInfo?.subsidio ? brl(fechaInfo.subsidio) : "—"}</div></div>
+                          </div>
+                          <div className="match-title"><span>🏢 Unidades que fecham a conta</span><span style={{ color: "var(--faint)", fontWeight: 600 }}>estoque Econ · estimativa planilha</span></div>
+                          {fechaLoading ? (
+                            <div style={{ color: "var(--muted)", padding: 12 }}>Buscando no estoque…</div>
+                          ) : !fecha?.length ? (
+                            <div style={{ color: "var(--muted)", padding: 12 }}>Sem unidades no estoque agora.</div>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 340, overflowY: "auto" }}>
+                              {fecha.map((u) => {
+                                const semEntrada = u.entrada <= 0;
+                                const cabeFgts = u.entrada <= rFgts;
+                                const cor = semEntrada || cabeFgts ? "var(--accent)" : "var(--faint)";
+                                const tag = semEntrada ? "sem entrada" : cabeFgts ? "cabe no FGTS" : "falta " + brl(u.entrada - rFgts);
+                                return (
+                                  <div key={u.cod_unidade} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 10, background: "var(--card2, rgba(0,0,0,.04))" }}>
+                                    <div style={{ minWidth: 0 }}>
+                                      <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.empreendimento}</div>
+                                      <div style={{ fontSize: 11.5, color: "var(--muted)" }}>un. {u.numero || "—"}{u.bloco ? " · " + u.bloco : ""}{u.dormitorios ? ` · ${u.dormitorios} dorm` : ""}{u.metragem ? ` · ${u.metragem}m²` : ""} · {brl(u.valor)}</div>
+                                    </div>
+                                    <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+                                      <div style={{ fontWeight: 800, fontSize: 13, color: cor }}>{semEntrada ? "sem entrada" : brl(u.entrada)}</div>
+                                      <div style={{ fontSize: 10.5, color: cor, fontWeight: 600 }}>{tag}</div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <div className="sim-actions" style={{ marginTop: 10 }}>
+                            <a className="btn-primary" style={{ justifyContent: "center" }} href={sel && fecha?.[0] ? waLink(sel.phone, `Achei pra você: ${fecha[0].empreendimento}, ${brl(fecha[0].valor)}. Com sua renda a Caixa financia e ${fecha[0].entrada <= 0 ? "dá pra fechar sem entrada" : "a entrada fica ~" + brl(fecha[0].entrada)}. Quer ver?`) : "#"} target="_blank" rel="noreferrer">📲 Mandar a melhor opção no Whats</a>
                           </div>
                         </div>
                       )}
