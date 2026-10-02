@@ -142,110 +142,72 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
     refetchInterval: 5 * 60_000,
     staleTime: 60_000,
     queryFn: async () => {
-      const vazio: TempoReal = {
-        gente: [], totais: { plantao: 0, online: 0, atendimentos: 0, perdidos: 0, vendas: 0 },
-        atualizadoEm: null, gerenteCuryId: null,
-      };
+      const de7iso = new Date(Date.now() - 7 * 86_400_000).toISOString();
 
-      const { data: eu } = await supabase.from("cury_pessoas")
-        .select("cury_id").eq("escopo", "gerente").eq("profile_id", managerId!).maybeSingle();
-      const gerenteCuryId = (eu as any)?.cury_id ?? null;
-
-      const de7 = diaSP(new Date(Date.now() - 7 * 86_400_000));
-
-      const [timeRes, hojeRes, semanaRes, leadsRes] = await Promise.all([
+      const [timeRes, leadsRes, ckRes] = await Promise.all([
         supabase.from("profiles")
           .select("id,first_name,last_name,last_seen_at,lead_assignment_enabled,lead_assignment_source")
           .eq("manager_id", managerId!).eq("role", "BROKER"),
-        gerenteCuryId
-          ? supabase.from("cury_metricas_diarias")
-              .select("cury_id,nome,apelido,profile_id,checkins,atendimentos,vendas,ativados,expirados,atualizado_em")
-              .eq("data", data).eq("escopo", "corretor").eq("gerente_cury_id", gerenteCuryId)
-          : Promise.resolve({ data: [] as any[] }),
-        gerenteCuryId
-          ? supabase.from("cury_metricas_diarias")
-              .select("profile_id,data,checkins,atendimentos,vendas")
-              .eq("escopo", "corretor").eq("gerente_cury_id", gerenteCuryId).gte("data", de7)
-          : Promise.resolve({ data: [] as any[] }),
         supabase.from("leads")
           .select("broker_id,source,original_broker_id,status")
           .eq("manager_id", managerId!)
           .not("status", "in", "(CONCLUDED,EXCLUDED,ABANDONED)"),
+        // Plantão/atendimento agora vêm do C2S (check-in), não mais da Cury.
+        supabase.from("c2s_checkins")
+          .select("corretor,created_at").gte("created_at", de7iso),
       ]);
 
       const time = (timeRes.data ?? []) as any[];
-      const hoje = ((hojeRes as any).data ?? []) as any[];
-      const semana = ((semanaRes as any).data ?? []) as any[];
       const leads = (leadsRes.data ?? []) as any[];
+      const checks = (ckRes.data ?? []) as any[];
 
       // carteira por origem
       const cart = new Map<string, Record<Origem, number>>();
       for (const l of leads) {
         if (!l.broker_id) continue;
-        const c = cart.get(l.broker_id) ??
-          { anuncio: 0, disparo: 0, repescagem: 0, propria: 0 };
+        const c = cart.get(l.broker_id) ?? { anuncio: 0, disparo: 0, repescagem: 0, propria: 0 };
         c[origemDoLead(l.source, l.original_broker_id)] += 1;
         cart.set(l.broker_id, c);
       }
 
-      // acumulado de 7 dias
-      const sem = new Map<string, { dias: number; atend: number; vendas: number }>();
-      for (const r of semana) {
-        if (!r.profile_id) continue;
-        const s = sem.get(r.profile_id) ?? { dias: 0, atend: 0, vendas: 0 };
-        if ((r.checkins ?? 0) > 0) s.dias += 1;
-        s.atend += r.atendimentos ?? 0;
-        s.vendas += r.vendas ?? 0;
-        sem.set(r.profile_id, s);
+      // Check-in do C2S por corretor: casa o seller_name do C2S ao profile pelo
+      // primeiro nome (ex. "GALILEIA BN" -> "Galileia"). Hoje = plantão de hoje;
+      // 7 dias = dias de plantão + atendimentos da semana.
+      const prim = (x: string) => (x || "").trim().split(/\s+/)[0].toLowerCase();
+      const porNome = new Map<string, string>();
+      for (const b of time) {
+        const fn = (b.first_name || "").trim().toLowerCase();
+        if (fn) porNome.set(fn, b.id);
       }
-
-      // Quem bate ponto na Cury sob este gerente e NAO aparece no time dele
-      // aqui. Eram tratados só os que não existem no Comandra — e o caso comum
-      // é outro: a pessoa existe, foi transferida na Cury e ninguém mexeu no
-      // cadastro daqui. Ela some do painel, e o gerente conta uma pessoa a
-      // menos no plantão sem saber por quê.
-      const doTime = new Set(time.map((b: any) => b.id));
-      const hojePorPerfil = new Map<string, any>();
-      const foraDoTime: any[] = [];
-      for (const h of hoje) {
-        if (h.profile_id && doTime.has(h.profile_id)) hojePorPerfil.set(h.profile_id, h);
-        else if ((h.checkins ?? 0) > 0) foraDoTime.push(h);
-      }
-
-      // Por que cada um está de fora: existe e é de outro gerente, existe e
-      // está desativado, ou não existe. Cada caso pede uma ação diferente.
-      const idsFora = foraDoTime.map((h) => h.profile_id).filter(Boolean);
-      let perfisFora: any[] = [];
-      if (idsFora.length) {
-        const { data: pf } = await supabase.from("profiles")
-          .select("id,first_name,is_active,manager_id")
-          .in("id", idsFora);
-        perfisFora = pf ?? [];
-      }
-      const gerentesFora = new Map<string, string>();
-      const idsGer = [...new Set(perfisFora.map((p) => p.manager_id).filter(Boolean))];
-      if (idsGer.length) {
-        const { data: gg } = await supabase.from("profiles")
-          .select("id,first_name").in("id", idsGer);
-        for (const g of (gg ?? [])) gerentesFora.set(g.id, g.first_name ?? "—");
+      const ckHoje = new Map<string, number>();
+      const ckSem = new Map<string, { atend: number; dias: Set<string> }>();
+      let ultimo: string | null = null;
+      for (const ck of checks) {
+        const pid = porNome.get(prim(ck.corretor));
+        if (!pid) continue;
+        const diaCk = diaSP(new Date(ck.created_at));
+        const sm = ckSem.get(pid) ?? { atend: 0, dias: new Set<string>() };
+        sm.atend += 1; sm.dias.add(diaCk); ckSem.set(pid, sm);
+        if (diaCk === data) ckHoje.set(pid, (ckHoje.get(pid) ?? 0) + 1);
+        if (!ultimo || ck.created_at > ultimo) ultimo = ck.created_at;
       }
 
       const zero = { anuncio: 0, disparo: 0, repescagem: 0, propria: 0 } as Record<Origem, number>;
 
       const gente: Pessoa[] = time.map((b: any) => {
-        const h = hojePorPerfil.get(b.id);
-        const s = sem.get(b.id) ?? { dias: 0, atend: 0, vendas: 0 };
         const o = cart.get(b.id) ?? zero;
+        const hj = ckHoje.get(b.id) ?? 0;
+        const sm = ckSem.get(b.id);
         return {
-          profileId: b.id, curyId: h?.cury_id ?? null,
+          profileId: b.id, curyId: null,
           nome: [b.first_name, b.last_name].filter(Boolean).join(" ") || "—",
-          apelido: h?.apelido ?? b.first_name,
-          ponto: (h?.checkins ?? 0) > 0,
-          checkins: h?.checkins ?? 0,
-          pegos: h?.ativados ?? 0,
-          perdidos: h?.expirados ?? 0,
-          atendimentos: h?.atendimentos ?? 0,
-          vendas: h?.vendas ?? 0,
+          apelido: b.first_name,
+          ponto: hj > 0,
+          checkins: hj,
+          pegos: 0,
+          perdidos: 0,
+          atendimentos: hj,
+          vendas: 0,
           online: horas(b.last_seen_at) < 0.25,
           ultimoAcesso: b.last_seen_at ?? null,
           recebeLead: b.lead_assignment_enabled !== false,
@@ -253,44 +215,24 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
           carteira: Object.values(o).reduce((a, n) => a + n, 0),
           porOrigem: o,
           cadastro: "ok" as const, gerenteAtual: null,
-          diasPlantao: s.dias, atendSemana: s.atend, vendasSemana: s.vendas,
+          diasPlantao: sm?.dias.size ?? 0,
+          atendSemana: sm?.atend ?? 0,
+          vendasSemana: 0,
         };
       });
 
-      // Quem trabalhou hoje sob este gerente e está de fora do time aqui. Entra
-      // no painel contando no plantão — porque trabalhou — e marcado com o que
-      // falta acertar. Deixar de fora é o pior dos dois erros: o gerente cobra
-      // uma equipe menor do que a que tem.
-      for (const h of foraDoTime) {
-        const pf = perfisFora.find((p) => p.id === h.profile_id);
-        const cadastro: Pessoa["cadastro"] = !pf ? "sem_cadastro"
-          : pf.is_active === false ? "desativado" : "outra_equipe";
-        gente.push({
-          profileId: h.profile_id ?? null, curyId: h.cury_id,
-          nome: h.nome ?? pf?.first_name ?? "—", apelido: h.apelido,
-          ponto: true, checkins: h.checkins ?? 0, pegos: h.ativados ?? 0,
-          perdidos: h.expirados ?? 0, atendimentos: h.atendimentos ?? 0, vendas: h.vendas ?? 0,
-          online: false, ultimoAcesso: null, recebeLead: false, fonteRodizio: null,
-          carteira: 0, porOrigem: { ...zero },
-          cadastro,
-          gerenteAtual: pf?.manager_id ? (gerentesFora.get(pf.manager_id) ?? null) : null,
-          diasPlantao: 0, atendSemana: 0, vendasSemana: 0,
-        });
-      }
-
-      const soma = (f: (p: Pessoa) => number) => gente.reduce((a, p) => a + f(p), 0);
+      const soma = (fn: (p: Pessoa) => number) => gente.reduce((a, p) => a + fn(p), 0);
       return {
         gente,
         totais: {
           plantao: gente.filter((p) => p.ponto).length,
           online: gente.filter((p) => p.online).length,
           atendimentos: soma((p) => p.atendimentos),
-          perdidos: soma((p) => p.perdidos),
-          vendas: soma((p) => p.vendas),
+          perdidos: 0,
+          vendas: 0,
         },
-        atualizadoEm: hoje.reduce<string | null>(
-          (m, h: any) => (!m || h.atualizado_em > m ? h.atualizado_em : m), null),
-        gerenteCuryId,
+        atualizadoEm: ultimo,
+        gerenteCuryId: null,
       };
     },
   });

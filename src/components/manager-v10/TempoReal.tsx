@@ -19,7 +19,6 @@ import { toast } from "sonner";
 import { useTempoReal, definirRecebimento, status,
          type Pessoa, type Nivel, type Origem } from "@/hooks/useTempoReal";
 import { Sec, Panel, Blank } from "@/components/manager-v10/ui";
-import { useCheckinEquipe } from "@/hooks/useCheckin";
 import MetaSemana from "@/components/manager-v10/MetaSemana";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { usePeriodo } from "@/hooks/usePeriodo";
@@ -76,8 +75,6 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
   const { periodo } = usePeriodo();
   // Tempo real mostra UM dia — quando o período é um intervalo, o dia é o fim dele.
   const { data, isLoading } = useTempoReal(managerId, periodo.ate);
-  // Check-in de plantão (Contact2Sale) — substitui o "atendimento" que vinha da Cury.
-  const { data: checkins } = useCheckinEquipe(managerId, 7);
   const qc = useQueryClient();
   const [soPlantao, setSoPlantao] = useState(true);
   const [filtro, setFiltro] = useState<Nivel | null>(null);
@@ -85,15 +82,7 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
   const [ocupado, setOcupado] = useState<string | null>(null);
 
   if (isLoading) return <Blank title="Carregando o plantão de hoje…" />;
-
-  if (!data?.gerenteCuryId) {
-    return (
-      <Blank title="Seu cadastro ainda não foi ligado ao da Cury">
-        Sem esse vínculo eu não sei qual equipe mostrar. É um ajuste feito uma
-        vez só — peça para o administrador.
-      </Blank>
-    );
-  }
+  if (!data) return <Blank title="Ainda não há plantão para mostrar hoje." />;
 
   async function alternar(p: Pessoa) {
     if (!p.profileId) return;
@@ -134,7 +123,7 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
         title={periodo.preset === "hoje" || periodo.ate === new Date().toISOString().slice(0, 10)
           ? "Hoje, agora" : `O dia ${periodo.ate.split("-").reverse().slice(0, 2).join("/")}`}
         tag={<span className="dim">{hora ? `atualizado ${hora}` : ""}</span>}
-        sub="Ponto, atendimento, venda e lead perdido vêm do app da Cury — é o que a operação fez, não o que foi digitado aqui."
+        sub="Ponto e atendimento vêm do check-in no plantão (Contact2Sale); a carteira vem da Comandra — é o que a operação fez, não o que foi digitado aqui."
       >
         {/* A meta é um card na MESMA fileira dos números, não um bloco acima:
             ela é a pergunta e eles são o estado — lado a lado a leitura é uma só. */}
@@ -159,28 +148,6 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
       </Sec>
 
       <FunilOrigem managerId={managerId} gerenteCuryId={data.gerenteCuryId} />
-
-      <Sec title="Plantão — check-in (7 dias)" tag={<span className="dim">Contact2Sale</span>}
-        sub="Quem do seu time bateu ponto no plantão. Substitui o atendimento que vinha da Cury.">
-        {!checkins?.length ? (
-          <Blank title="Ninguém do seu time bateu ponto nos últimos 7 dias." />
-        ) : (
-          <div className="tr-pulso">
-            {checkins.map((c) => {
-              const d = c.ultimo ? new Date(c.ultimo) : null;
-              const pad = (n: number) => String(n).padStart(2, "0");
-              const quando = d ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}` : "—";
-              return (
-                <div key={c.corretor} className="tr-kpi">
-                  <span className="tag">{c.corretor.trim()}</span>
-                  <b className="win">{c.n_checkins}</b>
-                  <i>check-in{c.n_checkins > 1 ? "s" : ""} · último {quando}</i>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Sec>
 
       <Sec title="Os corretores" tag={<span className="dim">
         {lista.length} {soPlantao ? "no plantão" : "no time"} · {totais.online} online
