@@ -19,6 +19,7 @@ import { Sec, Blank } from "@/components/manager-v10/ui";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { usePeriodo } from "@/hooks/usePeriodo";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
+import { Link } from "react-router-dom";
 import "@/styles/manager-v10.css";
 
 const brl = (n: number) => "R$ " + n.toFixed(2).replace(".", ",");
@@ -361,12 +362,16 @@ export default function Anuncios() {
 
   return (
     <div className="mgr10 app2">
-      <RailV10 atual="anuncios" mode={mode} toggle={toggle} />
+      <RailV10 atual={"leads" as any} mode={mode} toggle={toggle} />
       <main className="shell2">
         <header className="top2">
           <div>
             <h1>Anúncios</h1>
             <p>De onde vem o seu lead e quanto ele custa</p>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <Link to="/manager/leads" className="mini">Leads</Link>
+              <Link to="/manager/anuncios" className="mini solid">Anúncios</Link>
+            </div>
           </div>
           <div className="top2-r"><SeletorPeriodo /></div>
         </header>

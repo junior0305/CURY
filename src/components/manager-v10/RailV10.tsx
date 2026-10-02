@@ -37,7 +37,6 @@ export const ABAS: { k: Aba; label: string; to: string }[] = [
   { k: "time", label: "Time", to: "/manager?aba=time" },
   { k: "leads", label: "Leads", to: "/manager/leads" },
   { k: "pastas", label: "Pastas", to: "/manager/pastas" },
-  { k: "anuncios", label: "Anúncios", to: "/manager/anuncios" },
   { k: "disparar", label: "Disparar", to: "/manager/whatsapp" },
   { k: "estrategia", label: "Onde atacar", to: "/manager/estrategia" },
 ];

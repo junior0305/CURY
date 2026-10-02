@@ -15,6 +15,7 @@ import { usePeriodo } from "@/hooks/usePeriodo";
 import { Sec, Blank } from "@/components/manager-v10/ui";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
+import { Link } from "react-router-dom";
 import "@/styles/manager-v10.css";
 
 const brl = (n: number) => "R$ " + n.toFixed(2).replace(".", ",");
@@ -460,7 +461,11 @@ export default function Leads() {
       <RailV10 atual={"leads" as any} mode={mode} toggle={toggle} />
       <main className="shell2">
         <header className="top2">
-          <div><h1>Leads</h1><p>O que chegou, com quem está, e no que deu</p></div>
+          <div><h1>Leads</h1><p>O que chegou, com quem está, e no que deu</p>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <Link to="/manager/leads" className="mini solid">Leads</Link>
+              <Link to="/manager/anuncios" className="mini">Anúncios</Link>
+            </div></div>
           <div className="top2-r"><SeletorPeriodo /></div>
         </header>
         <section className="view ld">{corpo()}</section>
