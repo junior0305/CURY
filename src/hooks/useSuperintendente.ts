@@ -11,7 +11,7 @@ export function useEffectiveManagerId(): string | undefined {
   const { session, role } = useAuth();
   const [params] = useSearchParams();
   const override = params.get("manager");
-  if ((role === "SUPERINTENDENT" || role === "ADMIN") && override) return override;
+  if ((role === "SUPERINTENDENT" || role === "ADMIN" || role === "DIRECTOR") && override) return override;
   return session?.user?.id ?? undefined;
 }
 

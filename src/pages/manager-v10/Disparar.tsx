@@ -18,7 +18,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
+import { useEffectiveManagerId, useSuperintendenteRollup } from "@/hooks/useSuperintendente";
+import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -101,8 +102,17 @@ const TIPOS = [
 ];
 
 export default function Disparar() {
-  const { session } = useAuth();
+  const { session, role } = useAuth();
   const userId = useEffectiveManagerId() ?? session?.user?.id;
+  // Só o admin atribui/troca a conta WABA. Gerente/super ficam travados na
+  // conta deles — senão dá para disparar no cartão de outra pessoa.
+  const podeTrocarConta = role === "ADMIN";
+  // Super/diretor escolhe por qual gerente disparar: usa a conta dele e as
+  // respostas voltam para a equipe dele (a fila é DISPARO_<managerId>).
+  const [sp, setSp] = useSearchParams();
+  const ehGestorAcima = role === "SUPERINTENDENT" || role === "ADMIN" || role === "DIRECTOR";
+  const { data: rollupSup } = useSuperintendenteRollup(ehGestorAcima ? session?.user?.id : undefined, 30);
+  const gerentes = rollupSup?.gerentes ?? [];
   const { mode, toggle } = useTheme();
   const qc = useQueryClient();
   const { data, isLoading } = useDisparar(userId);
@@ -630,6 +640,24 @@ export default function Disparar() {
 
     return (
       <>
+        {ehGestorAcima && gerentes.length > 0 ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>Disparar como:</span>
+            <select
+              value={userId ?? ""}
+              onChange={(e) => {
+                const v = e.target.value; const p = new URLSearchParams(sp);
+                if (v) p.set("manager", v); else p.delete("manager");
+                setSp(p);
+              }}
+              style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--card)", color: "inherit", font: "inherit", fontWeight: 600 }}
+            >
+              <option value="">— escolha o gerente —</option>
+              {gerentes.map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
+            </select>
+            <span style={{ fontSize: 12, color: "var(--ink-3)" }}>usa a conta dele e as respostas voltam para a equipe dele</span>
+          </div>
+        ) : null}
         <div className="etapas" role="tablist">
           {([
             ["bm", "Seu número", !!cfg],
@@ -764,20 +792,24 @@ export default function Disparar() {
                         cobrança vai para o cartão cadastrado nela. Ninguém mais
                         enxerga os números dessa conta.
                       </p>
-                      <button className="btn sm" style={{ marginTop: 10 }}
-                        onClick={() => setTrocarConta((v) => !v)}>
-                        {trocarConta ? "Deixar como está" : "Usar outra conta"}
-                      </button>
+                      {podeTrocarConta ? (
+                        <button className="btn sm" style={{ marginTop: 10 }}
+                          onClick={() => setTrocarConta((v) => !v)}>
+                          {trocarConta ? "Deixar como está" : "Usar outra conta"}
+                        </button>
+                      ) : null}
                     </>
                   ) : (
                     <p className="vars-n">
                       Enquanto você não tiver a sua, seus disparos saem pelo
-                      número da empresa — <b>no cartão da empresa</b>. Cole
-                      abaixo o ID da conta que foi criada para você.
+                      número da empresa — <b>no cartão da empresa</b>.{" "}
+                      {podeTrocarConta
+                        ? "Cole abaixo o ID da conta que foi criada para você."
+                        : "Peça ao administrador para atribuir a sua conta."}
                     </p>
                   )}
 
-                  {!minhaConta || trocarConta ? (
+                  {podeTrocarConta && (!minhaConta || trocarConta) ? (
                     <>
                       {livres.length ? (
                         <div className="bm-lista" style={{ marginTop: 12 }}>
