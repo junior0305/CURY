@@ -635,7 +635,9 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
   .mgr10 .rail{position:sticky;top:0;z-index:30;height:auto;flex-direction:row;overflow-x:auto;
     padding:8px 9px;border-right:0;background:#0f172a;justify-content:space-around}
   .mgr10 .rail .on::before{display:none}
-  .mgr10 .rail-brand,.mgr10 .rail-sep,.mgr10 .rail-foot{display:none}
+  .mgr10 .rail-brand,.mgr10 .rail-sep{display:none}
+  .mgr10 .rail-foot{display:flex;flex-direction:row;margin:0 0 0 auto;padding:0 2px;gap:4px;align-items:center;flex-shrink:0}
+  .mgr10 .rail-foot .railb.sair{padding:9px 10px}
   .mgr10 .rail a,.mgr10 .rail button.railb{width:auto;white-space:nowrap}
   .mgr10 .rail .pip{position:static;margin-left:4px}
   .mgr10 .shell2{padding:14px 13px 80px}
