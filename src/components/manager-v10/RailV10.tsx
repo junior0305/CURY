@@ -40,7 +40,6 @@ export const ABAS: { k: Aba; label: string; to: string }[] = [
   { k: "anuncios", label: "Anúncios", to: "/manager/anuncios" },
   { k: "disparar", label: "Disparar", to: "/manager/whatsapp" },
   { k: "estrategia", label: "Onde atacar", to: "/manager/estrategia" },
-  { k: "plantao", label: "Plantão", to: "/manager/plantao" },
 ];
 
 export function RailV10({

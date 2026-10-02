@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { useTempoReal, definirRecebimento, status,
          type Pessoa, type Nivel, type Origem } from "@/hooks/useTempoReal";
 import { Sec, Panel, Blank } from "@/components/manager-v10/ui";
+import { useCheckinEquipe } from "@/hooks/useCheckin";
 import MetaSemana from "@/components/manager-v10/MetaSemana";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { usePeriodo } from "@/hooks/usePeriodo";
@@ -75,6 +76,8 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
   const { periodo } = usePeriodo();
   // Tempo real mostra UM dia — quando o período é um intervalo, o dia é o fim dele.
   const { data, isLoading } = useTempoReal(managerId, periodo.ate);
+  // Check-in de plantão (Contact2Sale) — substitui o "atendimento" que vinha da Cury.
+  const { data: checkins } = useCheckinEquipe(managerId, 7);
   const qc = useQueryClient();
   const [soPlantao, setSoPlantao] = useState(true);
   const [filtro, setFiltro] = useState<Nivel | null>(null);
@@ -156,6 +159,28 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
       </Sec>
 
       <FunilOrigem managerId={managerId} gerenteCuryId={data.gerenteCuryId} />
+
+      <Sec title="Plantão — check-in (7 dias)" tag={<span className="dim">Contact2Sale</span>}
+        sub="Quem do seu time bateu ponto no plantão. Substitui o atendimento que vinha da Cury.">
+        {!checkins?.length ? (
+          <Blank title="Ninguém do seu time bateu ponto nos últimos 7 dias." />
+        ) : (
+          <div className="tr-pulso">
+            {checkins.map((c) => {
+              const d = c.ultimo ? new Date(c.ultimo) : null;
+              const pad = (n: number) => String(n).padStart(2, "0");
+              const quando = d ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}` : "—";
+              return (
+                <div key={c.corretor} className="tr-kpi">
+                  <span className="tag">{c.corretor.trim()}</span>
+                  <b className="win">{c.n_checkins}</b>
+                  <i>check-in{c.n_checkins > 1 ? "s" : ""} · último {quando}</i>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Sec>
 
       <Sec title="Os corretores" tag={<span className="dim">
         {lista.length} {soPlantao ? "no plantão" : "no time"} · {totais.online} online

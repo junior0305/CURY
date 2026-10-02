@@ -25,3 +25,26 @@ export function useCheckinResumo(dias: number) {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+export type CheckinEquipe = {
+  corretor: string;
+  n_checkins: number;
+  ultimo: string | null;
+  tipos: string | null;
+};
+
+/** Check-in da equipe de UM gerente (de-para seller C2S → profile por 1º nome). */
+export function useCheckinEquipe(managerId: string | undefined, dias: number) {
+  return useQuery({
+    queryKey: ["c2s-checkin-equipe", managerId, dias],
+    enabled: !!managerId,
+    queryFn: async (): Promise<CheckinEquipe[]> => {
+      const { data, error } = await supabase.rpc("c2s_checkin_equipe", {
+        p_manager_id: managerId, p_dias: dias,
+      });
+      if (error) throw error;
+      return (data ?? []) as CheckinEquipe[];
+    },
+    staleTime: 3 * 60 * 1000,
+  });
+}
