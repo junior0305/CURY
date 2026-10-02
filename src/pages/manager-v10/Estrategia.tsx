@@ -24,9 +24,9 @@ const brlk = (n: number | null | undefined) =>
 const TETO_FAIXA: Record<string, number> = { HIS1: 275_000, HIS2: 400_000, SBPE: 750_000 };
 type Seg = "mcmv" | "alto";
 
-const OK = "var(--ok,#18A999)";
-const WARN = "var(--warn,#E0A82E)";
-const BAD = "var(--bad,#E4572E)";
+const OK = "var(--good)";
+const WARN = "#E0A82E";
+const BAD = "var(--red)";
 
 /** "Pode ou não": olha a MELHOR unidade do projeto (entrada mínima), não a média.
  *  É o piso de entrada — a partir de quanto dá pra entrar no projeto. */
@@ -103,7 +103,7 @@ export default function Estrategia() {
                   value={rendaInput}
                   onChange={(e) => setR(e.target.value)}
                   inputMode="numeric" placeholder="ex: 3000"
-                  style={{ width: 110, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line,#cbd5e1)", background: "var(--panel,transparent)", color: "inherit", font: "inherit", fontWeight: 700, textAlign: "right" }}
+                  style={{ width: 110, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line,#cbd5e1)", background: "var(--card)", color: "inherit", font: "inherit", fontWeight: 700, textAlign: "right" }}
                 />
               </label>
               {[2000, 3000, 4000, 5000].map((r) => (
@@ -148,20 +148,20 @@ export default function Estrategia() {
                         display: "grid", gridTemplateColumns: "26px 1fr 150px", gap: 12, alignItems: "center",
                         textAlign: "left", width: "100%", cursor: "pointer",
                         padding: "12px 14px", borderRadius: 12, border: "1px solid var(--line,#e2e8f0)",
-                        background: "var(--panel,transparent)", color: "inherit", font: "inherit",
+                        background: "var(--card)", color: "inherit", font: "inherit",
                       }}
                     >
                       <span style={{ fontSize: 18 }}>{s.dot}</span>
                       <span style={{ minWidth: 0 }}>
                         <span style={{ display: "block", fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.empreendimento}</span>
-                        <span style={{ fontSize: 12, color: "var(--muted,#64748b)" }}>
+                        <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
                           {p.regiao ? p.regiao + " · " : ""}{p.disponiveis} disp.
                           {fecham > 0 ? <b style={{ color: OK }}> · {fecham} fecham sem entrada</b> : ""}
                           {` · preço ~${brlk(p.preco_medio)} · aval. ~${brlk(p.avaliacao_media)}`}
                         </span>
                       </span>
                       <span style={{ textAlign: "right" }}>
-                        <span style={{ display: "block", fontSize: 11, color: "var(--muted,#64748b)" }}>entra a partir de</span>
+                        <span style={{ display: "block", fontSize: 11, color: "var(--ink-3)" }}>entra a partir de</span>
                         <b style={{ display: "block", fontSize: 16, color: s.cor }}>{p.entrada_min <= 0 ? "R$ 0" : brlk(p.entrada_min)}</b>
                         <span style={{ display: "block", fontSize: 11, color: s.cor, fontWeight: 600 }}>{s.txt}</span>
                       </span>

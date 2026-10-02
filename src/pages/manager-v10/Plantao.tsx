@@ -96,10 +96,10 @@ export default function Plantao() {
                 {lista.map((c: CheckinCorretor) => (
                   <Tr key={c.corretor} cols={cols}>
                     <span style={{ fontWeight: 700 }}>{c.corretor.trim()}</span>
-                    <span style={{ color: "var(--muted,#64748b)" }}>{nomeCurto(c.gerente)}</span>
+                    <span style={{ color: "var(--ink-3)" }}>{nomeCurto(c.gerente)}</span>
                     <span style={{ fontWeight: 700 }}>{c.n_checkins}</span>
                     <span>{fmtDt(c.ultimo)}</span>
-                    <span style={{ color: "var(--muted,#64748b)", fontSize: 12.5 }}>{c.tipos || "—"}</span>
+                    <span style={{ color: "var(--ink-3)", fontSize: 12.5 }}>{c.tipos || "—"}</span>
                   </Tr>
                 ))}
               </Tbl>
