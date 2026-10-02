@@ -5,7 +5,7 @@
 // ele mesmo, mesmo que alguém adultere o pedido. Esconder o botão não protegeria
 // nada — quem sabe chamar a URL continua chamando.
 //
-// O padrão do cadastro (Junior, 15/09): login `nome@cury`, senha `mudar@123` com
+// O padrão do cadastro (Junior, 15/09): login `nome@comandra`, senha `mudar@123` com
 // troca no primeiro acesso, instância do WhatsApp com a inicial maiúscula, equipe
 // e gerente do criador, boas-vindas e follow-up ligados, e entra na fila EQ_NOME.
 //
@@ -52,7 +52,7 @@ export default function CadastrarCorretor({
 
   // o primeiro nome vira login e instância; se já existir, entra o sufixo
   const primeiro = semAcento(nome).split(/\s+/)[0] ?? "";
-  const login = primeiro ? `${primeiro}@cury` : "nome@cury";
+  const login = primeiro ? `${primeiro}@comandra` : "nome@comandra";
   const sufixo = semAcento(gerente.nome).slice(0, 2);
   const base = primeiro ? primeiro.charAt(0).toUpperCase() + primeiro.slice(1) : "Nome";
   const instancia = conflito && primeiro
@@ -62,7 +62,7 @@ export default function CadastrarCorretor({
     if (!primeiro) { setConflito(false); return; }
     const t = setTimeout(async () => {
       const [{ data: perfil }, { data: inst }] = await Promise.all([
-        supabase.from("profiles").select("id").eq("email", `${primeiro}@cury`).maybeSingle(),
+        supabase.from("profiles").select("id").eq("email", `${primeiro}@comandra`).maybeSingle(),
         supabase.from("bot_instances").select("id").eq("instance_name", base).maybeSingle(),
       ]);
       setConflito(!!perfil || !!inst);
@@ -76,7 +76,7 @@ export default function CadastrarCorretor({
     try {
       const { data, error } = await supabase.functions.invoke("create-user", {
         body: {
-          email: conflito ? `${primeiro}.${sufixo}@cury` : login,
+          email: conflito ? `${primeiro}.${sufixo}@comandra` : login,
           password: "mudar@123",
           firstName: nome.trim().split(/\s+/)[0],
           lastName: nome.trim().split(/\s+/).slice(1).join(" ") || null,
@@ -135,7 +135,7 @@ export default function CadastrarCorretor({
 
         <div className="tm-auto">
           <div className="tm-autol">O sistema já preenche</div>
-          <div>Login <b>{conflito ? `${primeiro}.${sufixo}@cury` : login}</b></div>
+          <div>Login <b>{conflito ? `${primeiro}.${sufixo}@comandra` : login}</b></div>
           <div>Senha <b>mudar@123</b></div>
           <div>WhatsApp <b>{instancia}</b></div>
           <div>Equipe <b>{gerente.equipe ?? "—"}</b></div>
