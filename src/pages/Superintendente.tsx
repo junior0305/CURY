@@ -18,6 +18,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useSuperintendenteRollup, type GerenteRollup, type CorretorRollup } from "@/hooks/useSuperintendente";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import BiTab from "@/components/manager-v10/BiTab";
+import { Boundary } from "@/components/manager-v10/Boundary";
 import "@/styles/manager-v10.css";
 import "@/styles/superintendente.css";
 
@@ -52,6 +53,7 @@ export default function Superintendente() {
         }}
       />
       <main className="shell2">
+        <Boundary>
         <div className="sup-wrap">
           <div className="sup-top">
             <div>
@@ -137,6 +139,7 @@ export default function Superintendente() {
             </>
           )}
         </div>
+        </Boundary>
       </main>
     </div>
   );
