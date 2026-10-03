@@ -106,15 +106,16 @@ export default function Disparar() {
   // Só o admin atribui/troca a conta WABA. Gerente/super ficam travados na
   // conta deles — senão dá para disparar no cartão de outra pessoa.
   const podeTrocarConta = role === "ADMIN";
-  // Super/diretor: dispara pela conta DELE (o chip é dele), mas pode escolher
-  // corretor de qualquer equipe abaixo. Por isso o "time" (corretores e leads)
-  // abrange todos os gerentes dele — e no passo de corretores filtra por gerente.
+  // Super/diretor: dispara pela conta DELE (o chip é dele), mas a CAMPANHA é de
+  // um gerente — ela escolhe o gerente num seletor aqui, e a audiência/corretores
+  // passam a ser os daquele gerente. O chip e os templates seguem sendo dela.
   const ehGestorAcima = role === "SUPERINTENDENT" || role === "ADMIN" || role === "DIRECTOR";
   const { data: rollupSup } = useSuperintendenteRollup(ehGestorAcima ? session?.user?.id : undefined, 30);
   const gerentes = rollupSup?.gerentes ?? [];
-  const teamIds = ehGestorAcima ? gerentes.map((g) => g.id) : undefined;
-  // filtro de gerente no passo de escolher corretor (só super/diretor)
-  const [gerFiltro, setGerFiltro] = useState<string | null>(null);
+  // o gerente escolhido para a campanha (só super/diretor)
+  const [gerenteSel, setGerenteSel] = useState<string | null>(null);
+  // escopo da audiência/corretores: o gerente escolhido. Vazio enquanto não escolhe.
+  const teamIds = ehGestorAcima ? (gerenteSel ? [gerenteSel] : []) : undefined;
   const { mode, toggle } = useTheme();
   const qc = useQueryClient();
   const { data, isLoading } = useDisparar(userId, teamIds);
@@ -643,12 +644,19 @@ export default function Disparar() {
     return (
       <>
         {ehGestorAcima ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap",
-            padding: "9px 12px", borderRadius: 10, background: "var(--sunk)", border: "1px solid var(--line)" }}>
-            <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
-              Você dispara <b style={{ color: "var(--ink)" }}>pela sua conta de WhatsApp</b> e pode
-              escolher corretores de <b style={{ color: "var(--ink)" }}>qualquer equipe</b> abaixo —
-              no passo “Disparar”, filtre por gerente e marque os corretores.
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap",
+            padding: "10px 12px", borderRadius: 10, background: "var(--sunk)", border: "1px solid var(--line)" }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>Campanha para a equipe de:</span>
+            <select
+              value={gerenteSel ?? ""}
+              onChange={(e) => setGerenteSel(e.target.value || null)}
+              style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--card)", color: "inherit", font: "inherit", fontWeight: 600 }}
+            >
+              <option value="">— escolha o gerente —</option>
+              {gerentes.map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
+            </select>
+            <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
+              envia pela <b style={{ color: "var(--ink)" }}>sua conta</b>; a audiência e os corretores são os desse gerente
             </span>
           </div>
         ) : null}
@@ -1742,34 +1750,25 @@ export default function Disparar() {
                     </button>
                   </div>
                   {destino === "escolher" ? (
-                    <>
-                    {ehGestorAcima && gerentes.length > 0 ? (
-                      <div className="row" style={{ gap: 6, flexWrap: "wrap", margin: "0 0 10px" }}>
-                        <button type="button" className={`mini${gerFiltro === null ? " solid" : ""}`}
-                          onClick={() => setGerFiltro(null)}>Todos os gerentes</button>
-                        {gerentes.map((g) => (
-                          <button type="button" key={g.id}
-                            className={`mini${gerFiltro === g.id ? " solid" : ""}`}
-                            onClick={() => setGerFiltro(g.id)}>{g.nome}</button>
-                        ))}
-                      </div>
-                    ) : null}
+                    ehGestorAcima && !gerenteSel ? (
+                      <p style={{ fontSize: 13, color: "var(--ink-3)", margin: "4px 0 0" }}>
+                        Escolha o gerente da campanha lá em cima para ver os corretores da equipe dele.
+                      </p>
+                    ) : (
                     <div className="dest-cor">
-                      {d.corretores
-                        .filter((c) => gerFiltro === null || c.gerenteId === gerFiltro)
-                        .map((c) => (
+                      {d.corretores.map((c) => (
                         <label className="dc" key={c.id}>
                           <input type="checkbox" checked={marcados.has(c.id)}
                             onChange={() => setMarcados((s) => {
                               const n = new Set(s); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n;
                             })} />
                           <span className="av">{ini(c.nome)}</span>
-                          <span><b>{c.nome}</b><i>{c.carteira} na carteira{ehGestorAcima && c.gerenteNome ? ` · ${c.gerenteNome}` : ""}</i></span>
+                          <span><b>{c.nome}</b><i>{c.carteira} na carteira</i></span>
                           {c.online ? <span className="on" title="online agora" /> : <span />}
                         </label>
                       ))}
                     </div>
-                    </>
+                    )
                   ) : null}
                 </div>
               </div>
