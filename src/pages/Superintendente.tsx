@@ -34,7 +34,7 @@ export default function Superintendente() {
   // quais gerentes estão expandidos (mostrando os corretores)
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
   const toggleGer = (id: string) => setAberto((v) => ({ ...v, [id]: !v[id] }));
-  const { data, isLoading } = useSuperintendenteRollup(superId, dias);
+  const { data, isLoading, error } = useSuperintendenteRollup(superId, dias);
   loadFonts();
 
   const abrir = (id: string) => nav(`/manager?manager=${id}`);
@@ -42,6 +42,7 @@ export default function Superintendente() {
 
   return (
     <div className="mgr10 app2 sup">
+      <Boundary>
       <RailV10
         atual={aba === "bi" ? "bi" : "tempo"}
         mode={mode}
@@ -53,7 +54,6 @@ export default function Superintendente() {
         }}
       />
       <main className="shell2">
-        <Boundary>
         <div className="sup-wrap">
           <div className="sup-top">
             <div>
@@ -71,6 +71,10 @@ export default function Superintendente() {
 
           {aba === "bi" ? (
             <BiTab scope="super" managerId={superId} />
+          ) : error ? (
+            <div className="sup-vazio" style={{ color: "var(--red)" }}>
+              Não consegui somar as equipes. Erro: {String((error as any)?.message ?? error)}
+            </div>
           ) : isLoading || !data ? (
             <p className="sup-vazio">Somando as equipes…</p>
           ) : (
@@ -139,8 +143,8 @@ export default function Superintendente() {
             </>
           )}
         </div>
-        </Boundary>
       </main>
+      </Boundary>
     </div>
   );
 }
