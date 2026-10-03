@@ -84,6 +84,8 @@ export default function Superintendente() {
                 <div className="sup-k"><span>Gerentes</span><b>{t!.gerentes}</b></div>
                 <div className="sup-k"><span>Corretores</span><b>{t!.corretores}</b>
                   <i>{t!.online} online agora</i></div>
+                <div className="sup-k"><span>No plantão hoje</span><b>{t!.plantao_hoje}</b>
+                  <i>{t!.plantao_semana} na semana · check-in C2S</i></div>
                 <div className="sup-k"><span>Leads no período</span><b>{t!.leads_periodo}</b></div>
                 <div className="sup-k"><span>Carteira viva</span><b>{t!.carteira}</b>
                   <i>{t!.em_conversa} em conversa</i></div>
@@ -106,6 +108,7 @@ export default function Superintendente() {
                         <span className="sup-ger-cor">{g.corretores} corretores
                           {g.online ? <i className="sup-on" title={`${g.online} online agora`} /> : null}</span>
                         <span className="sup-ger-nums">
+                          <em><b>{g.plantao_hoje}</b> no plantão</em>
                           <em><b>{g.leads_periodo}</b> leads</em>
                           <em><b>{g.carteira}</b> carteira</em>
                           <em><b>{g.em_conversa}</b> conversa</em>
@@ -122,6 +125,7 @@ export default function Superintendente() {
                               <span className="sup-cor-nm">
                                 <s className={c.online ? "on" : "off"} />
                                 {c.nome}
+                                {c.plantao_hoje ? <em style={{ marginLeft: 6, fontStyle: "normal", fontSize: 11, color: "var(--good)", fontWeight: 700 }}>• no plantão</em> : null}
                               </span>
                               <span className="sup-cor-nums">
                                 <em><b>{c.leads_periodo}</b> leads</em>

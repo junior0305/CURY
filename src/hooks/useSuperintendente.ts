@@ -18,16 +18,22 @@ export function useEffectiveManagerId(): string | undefined {
 export interface CorretorRollup {
   id: string; nome: string; online: boolean | null; ultimo_acesso: string | null;
   carteira: number; em_conversa: number; leads_periodo: number; vendas_mes: number;
+  plantao_hoje?: boolean;
 }
 export interface GerenteRollup {
   id: string; nome: string; corretores: number; online: number;
+  plantao_hoje: number; plantao_semana: number;
   leads_periodo: number; carteira: number; em_conversa: number; vendas_mes: number;
   corretores_lista: CorretorRollup[];
 }
 export interface SuperRollup {
   dias: number;
   gerentes: GerenteRollup[];
-  total: Omit<GerenteRollup, "id" | "nome"> & { gerentes: number };
+  total: {
+    gerentes: number; corretores: number; online: number;
+    plantao_hoje: number; plantao_semana: number;
+    leads_periodo: number; carteira: number; em_conversa: number; vendas_mes: number;
+  };
 }
 
 /* A visão agregada do superintendente: um rollup de cada gerente abaixo dele.
