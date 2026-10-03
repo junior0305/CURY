@@ -15,9 +15,14 @@ export function useEffectiveManagerId(): string | undefined {
   return session?.user?.id ?? undefined;
 }
 
+export interface CorretorRollup {
+  id: string; nome: string; online: boolean | null; ultimo_acesso: string | null;
+  carteira: number; em_conversa: number; leads_periodo: number; vendas_mes: number;
+}
 export interface GerenteRollup {
   id: string; nome: string; corretores: number; online: number;
   leads_periodo: number; carteira: number; em_conversa: number; vendas_mes: number;
+  corretores_lista: CorretorRollup[];
 }
 export interface SuperRollup {
   dias: number;

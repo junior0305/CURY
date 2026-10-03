@@ -15,7 +15,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useSuperintendenteRollup, type GerenteRollup } from "@/hooks/useSuperintendente";
+import { useSuperintendenteRollup, type GerenteRollup, type CorretorRollup } from "@/hooks/useSuperintendente";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import BiTab from "@/components/manager-v10/BiTab";
 import "@/styles/manager-v10.css";
@@ -30,6 +30,9 @@ export default function Superintendente() {
   const nav = useNavigate();
   const [dias, setDias] = useState(30);
   const [aba, setAba] = useState<"consolidado" | "bi">("consolidado");
+  // quais gerentes estão expandidos (mostrando os corretores)
+  const [aberto, setAberto] = useState<Record<string, boolean>>({});
+  const toggleGer = (id: string) => setAberto((v) => ({ ...v, [id]: !v[id] }));
   const { data, isLoading } = useSuperintendenteRollup(superId, dias);
   loadFonts();
 
@@ -81,25 +84,52 @@ export default function Superintendente() {
                 <div className="sup-k bom"><span>Vendas no mês</span><b>{t!.vendas_mes}</b></div>
               </div>
 
-              {/* um card por gerente — clica e entra no painel dele */}
-              <div className="sup-h">Suas equipes <span>clique para abrir o painel do gerente</span></div>
-              <div className="sup-grid">
-                {data.gerentes.map((g: GerenteRollup) => (
-                  <button className="sup-g" key={g.id} onClick={() => abrir(g.id)}>
-                    <div className="sup-g-h">
-                      <b>{g.nome}</b>
-                      <span className="sup-g-cor">{g.corretores} corretores
-                        {g.online ? <i className="sup-on" title="algum online agora" /> : null}</span>
+              {/* a estrutura inteira: cada gerente abre a lista dos corretores dele;
+                  "Abrir painel" entra no painel completo do gerente */}
+              <div className="sup-h">Suas equipes <span>toque para ver os corretores · "Abrir painel" entra no gerente</span></div>
+              <div className="sup-estrutura">
+                {data.gerentes.map((g: GerenteRollup) => {
+                  const exp = !!aberto[g.id];
+                  return (
+                    <div className={`sup-ger${exp ? " exp" : ""}`} key={g.id}>
+                      <div className="sup-ger-h" role="button" tabIndex={0}
+                        onClick={() => toggleGer(g.id)}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleGer(g.id); } }}>
+                        <span className="sup-caret" aria-hidden="true">{exp ? "▾" : "▸"}</span>
+                        <b>{g.nome}</b>
+                        <span className="sup-ger-cor">{g.corretores} corretores
+                          {g.online ? <i className="sup-on" title={`${g.online} online agora`} /> : null}</span>
+                        <span className="sup-ger-nums">
+                          <em><b>{g.leads_periodo}</b> leads</em>
+                          <em><b>{g.carteira}</b> carteira</em>
+                          <em><b>{g.em_conversa}</b> conversa</em>
+                          <em className="bom"><b>{g.vendas_mes}</b> vendas</em>
+                        </span>
+                        <button className="sup-abrir" onClick={(e) => { e.stopPropagation(); abrir(g.id); }}>
+                          Abrir painel →
+                        </button>
+                      </div>
+                      {exp ? (
+                        <div className="sup-cors">
+                          {g.corretores_lista.length ? g.corretores_lista.map((c: CorretorRollup) => (
+                            <div className="sup-cor" key={c.id}>
+                              <span className="sup-cor-nm">
+                                <s className={c.online ? "on" : "off"} />
+                                {c.nome}
+                              </span>
+                              <span className="sup-cor-nums">
+                                <em><b>{c.leads_periodo}</b> leads</em>
+                                <em><b>{c.carteira}</b> carteira</em>
+                                <em><b>{c.em_conversa}</b> conversa</em>
+                                <em className="bom"><b>{c.vendas_mes}</b> vendas</em>
+                              </span>
+                            </div>
+                          )) : <p className="sup-vazio" style={{ padding: "10px 0" }}>Sem corretores ativos.</p>}
+                        </div>
+                      ) : null}
                     </div>
-                    <div className="sup-g-l">
-                      <div><b>{g.leads_periodo}</b><span>leads no período</span></div>
-                      <div><b>{g.carteira}</b><span>carteira viva</span></div>
-                      <div><b>{g.em_conversa}</b><span>em conversa</span></div>
-                      <div className="bom"><b>{g.vendas_mes}</b><span>vendas no mês</span></div>
-                    </div>
-                    <span className="sup-g-abrir">Abrir painel →</span>
-                  </button>
-                ))}
+                  );
+                })}
                 {!data.gerentes.length ? (
                   <p className="sup-vazio">Nenhum gerente ligado a você ainda.</p>
                 ) : null}
