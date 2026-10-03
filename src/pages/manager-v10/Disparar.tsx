@@ -102,7 +102,13 @@ const TIPOS = [
 
 export default function Disparar() {
   const { session, role } = useAuth();
-  const userId = useEffectiveManagerId() ?? session?.user?.id;
+  const effId = useEffectiveManagerId();
+  // Super/diretor dispara SEMPRE pela conta DELE — o ?manager (drill-down vindo do
+  // painel do gerente) NÃO troca o chip aqui, senão cairia no número da casa
+  // (o gerente não tem chip próprio). Admin pode abrir o disparador de um gerente
+  // (impersonar). Gerente comum = ele mesmo.
+  const userId = ((role === "SUPERINTENDENT" || role === "DIRECTOR")
+    ? session?.user?.id : effId) ?? session?.user?.id;
   // Só o admin atribui/troca a conta WABA. Gerente/super ficam travados na
   // conta deles — senão dá para disparar no cartão de outra pessoa.
   const podeTrocarConta = role === "ADMIN";
