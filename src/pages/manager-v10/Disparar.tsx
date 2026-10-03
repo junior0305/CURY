@@ -325,6 +325,15 @@ export default function Disparar() {
     () => (contasWA ?? []).find((c) => c.dono_id === userId) ?? null,
     [contasWA, userId],
   );
+  // A conta que a tela mostra como "sua": primeiro a do portfólio da empresa; se
+  // não estiver lá (ex.: super com BM PRÓPRIO), cai na config real do whatsapp_config
+  // (data.config) — que é a conta que de fato envia. Assim quem já tem conta só a
+  // VISUALIZA, sem a dobra pedir pra "definir/escolher".
+  const contaView = useMemo(() => {
+    if (minhaConta) return minhaConta as { nome: string | null; waba_id: string };
+    const c = data?.config;
+    return c ? { nome: c.label ?? c.displayNumber ?? c.wabaId, waba_id: c.wabaId } : null;
+  }, [minhaConta, data?.config]);
   // Livre = do portfólio, sem dono e não é a da empresa. A da empresa nunca
   // entra: ela atende quem não tem a própria e não pode ter dono.
   const livres = useMemo(
@@ -770,18 +779,18 @@ export default function Disparar() {
                 {/* A conta de WhatsApp do gerente. É ela que carrega o cartão:
                     número cadastrado daqui para frente nasce dentro dela, e é
                     por isso que a cobrança cai no cartão certo. */}
-                <details className="dobra" open={!minhaConta}>
+                <details className="dobra" open={!contaView}>
                   <summary>
-                    {minhaConta
-                      ? `Sua conta de WhatsApp — ${minhaConta.nome ?? minhaConta.waba_id}`
+                    {contaView
+                      ? `Sua conta de WhatsApp — ${contaView.nome ?? contaView.waba_id}`
                       : "Sua conta de WhatsApp — ainda não definida"}
                   </summary>
 
-                  {minhaConta ? (
+                  {contaView ? (
                     <>
                       <p className="vars-n">
-                        Seus números novos entram em <b>{minhaConta.nome}</b>
-                        {" "}(<span className="mono">{minhaConta.waba_id}</span>), e a
+                        Seus números novos entram em <b>{contaView.nome}</b>
+                        {" "}(<span className="mono">{contaView.waba_id}</span>), e a
                         cobrança vai para o cartão cadastrado nela. Ninguém mais
                         enxerga os números dessa conta.
                       </p>
