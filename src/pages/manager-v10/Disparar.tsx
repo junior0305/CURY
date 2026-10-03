@@ -113,6 +113,8 @@ export default function Disparar() {
   const ehGestorAcima = role === "SUPERINTENDENT" || role === "ADMIN" || role === "DIRECTOR";
   const { data: rollupSup } = useSuperintendenteRollup(ehGestorAcima ? session?.user?.id : undefined, 30);
   const gerentes = rollupSup?.gerentes ?? [];
+  const gerenteEscolhido = sp.get("manager");
+  const precisaEscolherGerente = ehGestorAcima && !gerenteEscolhido;
   const { mode, toggle } = useTheme();
   const qc = useQueryClient();
   const { data, isLoading } = useDisparar(userId);
@@ -658,7 +660,22 @@ export default function Disparar() {
             <span style={{ fontSize: 12, color: "var(--ink-3)" }}>usa a conta dele e as respostas voltam para a equipe dele</span>
           </div>
         ) : null}
-        <div className="etapas" role="tablist">
+        {precisaEscolherGerente ? (
+          <div className="sec" style={{ marginTop: 8 }}>
+            <div className="box" style={{ padding: 22, textAlign: "center" }}>
+              <b style={{ display: "block", font: "800 17px Archivo,sans-serif", marginBottom: 6 }}>
+                Escolha um gerente para disparar
+              </b>
+              <p style={{ fontSize: 13.5, color: "var(--ink-3)", margin: "0 auto", maxWidth: 440 }}>
+                Como superintendente, você dispara <b>pela conta de um gerente</b>. Escolha o
+                gerente em <b>“Disparar como:”</b> aqui em cima — aí aparecem os corretores da
+                equipe dele e você monta o disparo. A mensagem sai pelo número dele e as
+                respostas voltam para a equipe dele.
+              </p>
+            </div>
+          </div>
+        ) : (
+        <><div className="etapas" role="tablist">
           {([
             ["bm", "Seu número", !!cfg],
             ["tpl", "Mensagens", d.templates.some((t) => t.status === "APPROVED")],
@@ -2005,6 +2022,8 @@ export default function Disparar() {
         <div className={`pane${etapa === "corretores" ? " on" : ""}`}>
           <HabilitarDisparo managerId={userId} />
         </div>
+        </>
+        )}
       </>
     );
   };
