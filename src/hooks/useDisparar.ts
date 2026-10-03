@@ -101,7 +101,7 @@ export interface DadosDisparar {
   conversas: Conversa[];
   /** cada lista já traz as pessoas, porque o disparo insere os alvos um a um */
   publicos: { chave: string; titulo: string; sub: string; n: number; gente: Alvo[] }[];
-  corretores: { id: string; nome: string; online: boolean; carteira: number }[];
+  corretores: { id: string; nome: string; online: boolean; carteira: number; gerenteId: string | null; gerenteNome: string | null }[];
   precos: { marketing: number; utility: number };
 }
 
@@ -128,9 +128,13 @@ function varsDoCorpo(corpo: string, declaradas: any): string[] {
   return [...new Set([...(corpo ?? "").matchAll(/\{\{\s*([\wÀ-ÿ]+)\s*\}\}/g)].map((m) => m[1]))];
 }
 
-export function useDisparar(managerId: string | undefined) {
+export function useDisparar(managerId: string | undefined, teamManagerIds?: string[]) {
+  // Super/diretor: o "time" (corretores e leads) abrange todos os gerentes dele.
+  // O CHIP e os templates continuam sendo os DELE (managerId) — ela dispara pela
+  // conta dela, mas escolhe corretor de qualquer equipe abaixo.
+  const equipe = teamManagerIds && teamManagerIds.length ? teamManagerIds : null;
   return useQuery<DadosDisparar>({
-    queryKey: ["disparar", managerId],
+    queryKey: ["disparar", managerId, equipe?.join(",") ?? ""],
     enabled: !!managerId,
     staleTime: 60_000,
     refetchInterval: 2 * 60_000,
@@ -157,8 +161,11 @@ export function useDisparar(managerId: string | undefined) {
       const de15 = new Date(Date.now() - 15 * 86_400_000).toISOString();
       const [cfgRes, timeRes, tplRes, campRes, thrRes, leadsRes, precoRes, jaRes] = await Promise.all([
         supabase.from("whatsapp_config").select("*"),
-        supabase.from("profiles").select("id,first_name,last_name,last_seen_at")
-          .eq("manager_id", managerId!).eq("role", "BROKER"),
+        equipe
+          ? supabase.from("profiles").select("id,first_name,last_name,last_seen_at,manager_id")
+              .in("manager_id", equipe).eq("role", "BROKER")
+          : supabase.from("profiles").select("id,first_name,last_name,last_seen_at,manager_id")
+              .eq("manager_id", managerId!).eq("role", "BROKER"),
         supabase.from("whatsapp_templates").select("*").order("created_at", { ascending: false }),
         supabase.from("whatsapp_campaigns")
           .select("id,name,status,audience_count,sent_count,delivered_count,read_count,reply_count,failed_count,cost_total,created_at,scheduled_at")
@@ -170,9 +177,13 @@ export function useDisparar(managerId: string | undefined) {
         supabase.from("whatsapp_threads").select("*")
           .in("campaign_id", campIdsSafe)
           .order("last_inbound_at", { ascending: false, nullsFirst: false }).limit(60),
-        supabase.from("leads")
-          .select("id,name,phone,broker_id,status,last_interaction_at,last_broker_whatsapp_at,created_at,contact_attempts")
-          .eq("manager_id", managerId!),
+        equipe
+          ? supabase.from("leads")
+              .select("id,name,phone,broker_id,status,last_interaction_at,last_broker_whatsapp_at,created_at,contact_attempts")
+              .in("manager_id", equipe)
+          : supabase.from("leads")
+              .select("id,name,phone,broker_id,status,last_interaction_at,last_broker_whatsapp_at,created_at,contact_attempts")
+              .eq("manager_id", managerId!),
         supabase.from("system_settings").select("key,value")
           .in("key", ["wa_preco_marketing", "wa_preco_utility"]),
         // Quem JA recebeu disparo nos ultimos 15 dias — para nao reaparecer nas
@@ -185,6 +196,15 @@ export function useDisparar(managerId: string | undefined) {
       const time = (timeRes.data ?? []) as any[];
       const nomePor = new Map<string, string>(time.map((b: any) =>
         [b.id, [b.first_name, b.last_name].filter(Boolean).join(" ") || "—"]));
+
+      // Nome do gerente de cada corretor — só quando é super (p/ agrupar/filtrar
+      // a escolha de corretor por equipe no disparo).
+      const gerNomePor = new Map<string, string>();
+      if (equipe) {
+        const { data: gers } = await supabase.from("profiles")
+          .select("id,first_name").in("id", equipe);
+        for (const g of (gers ?? []) as any[]) gerNomePor.set(g.id, g.first_name ?? "—");
+      }
 
       /* ── configurações de WhatsApp ── */
       const cfgs = (cfgRes.data ?? []) as any[];
@@ -299,6 +319,8 @@ export function useDisparar(managerId: string | undefined) {
           id: b.id, nome: nomePor.get(b.id) ?? "—",
           online: horas(b.last_seen_at) < 0.25,
           carteira: carteiraPor.get(b.id) ?? 0,
+          gerenteId: b.manager_id ?? null,
+          gerenteNome: b.manager_id ? (gerNomePor.get(b.manager_id) ?? null) : null,
         })).sort((a, b) => a.nome.localeCompare(b.nome)),
         precos,
       };

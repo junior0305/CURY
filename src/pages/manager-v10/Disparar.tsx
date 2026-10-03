@@ -19,7 +19,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useEffectiveManagerId, useSuperintendenteRollup } from "@/hooks/useSuperintendente";
-import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -107,17 +106,18 @@ export default function Disparar() {
   // Só o admin atribui/troca a conta WABA. Gerente/super ficam travados na
   // conta deles — senão dá para disparar no cartão de outra pessoa.
   const podeTrocarConta = role === "ADMIN";
-  // Super/diretor escolhe por qual gerente disparar: usa a conta dele e as
-  // respostas voltam para a equipe dele (a fila é DISPARO_<managerId>).
-  const [sp, setSp] = useSearchParams();
+  // Super/diretor: dispara pela conta DELE (o chip é dele), mas pode escolher
+  // corretor de qualquer equipe abaixo. Por isso o "time" (corretores e leads)
+  // abrange todos os gerentes dele — e no passo de corretores filtra por gerente.
   const ehGestorAcima = role === "SUPERINTENDENT" || role === "ADMIN" || role === "DIRECTOR";
   const { data: rollupSup } = useSuperintendenteRollup(ehGestorAcima ? session?.user?.id : undefined, 30);
   const gerentes = rollupSup?.gerentes ?? [];
-  const gerenteEscolhido = sp.get("manager");
-  const precisaEscolherGerente = ehGestorAcima && !gerenteEscolhido;
+  const teamIds = ehGestorAcima ? gerentes.map((g) => g.id) : undefined;
+  // filtro de gerente no passo de escolher corretor (só super/diretor)
+  const [gerFiltro, setGerFiltro] = useState<string | null>(null);
   const { mode, toggle } = useTheme();
   const qc = useQueryClient();
-  const { data, isLoading } = useDisparar(userId);
+  const { data, isLoading } = useDisparar(userId, teamIds);
 
   const [etapa, setEtapa] = useState<Etapa>("bm");
   loadFonts();
@@ -642,40 +642,17 @@ export default function Disparar() {
 
     return (
       <>
-        {ehGestorAcima && gerentes.length > 0 ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>Disparar como:</span>
-            <select
-              value={userId ?? ""}
-              onChange={(e) => {
-                const v = e.target.value; const p = new URLSearchParams(sp);
-                if (v) p.set("manager", v); else p.delete("manager");
-                setSp(p);
-              }}
-              style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--card)", color: "inherit", font: "inherit", fontWeight: 600 }}
-            >
-              <option value="">— escolha o gerente —</option>
-              {gerentes.map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
-            </select>
-            <span style={{ fontSize: 12, color: "var(--ink-3)" }}>usa a conta dele e as respostas voltam para a equipe dele</span>
+        {ehGestorAcima ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap",
+            padding: "9px 12px", borderRadius: 10, background: "var(--sunk)", border: "1px solid var(--line)" }}>
+            <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
+              Você dispara <b style={{ color: "var(--ink)" }}>pela sua conta de WhatsApp</b> e pode
+              escolher corretores de <b style={{ color: "var(--ink)" }}>qualquer equipe</b> abaixo —
+              no passo “Disparar”, filtre por gerente e marque os corretores.
+            </span>
           </div>
         ) : null}
-        {precisaEscolherGerente ? (
-          <div className="sec" style={{ marginTop: 8 }}>
-            <div className="box" style={{ padding: 22, textAlign: "center" }}>
-              <b style={{ display: "block", font: "800 17px Archivo,sans-serif", marginBottom: 6 }}>
-                Escolha um gerente para disparar
-              </b>
-              <p style={{ fontSize: 13.5, color: "var(--ink-3)", margin: "0 auto", maxWidth: 440 }}>
-                Como superintendente, você dispara <b>pela conta de um gerente</b>. Escolha o
-                gerente em <b>“Disparar como:”</b> aqui em cima — aí aparecem os corretores da
-                equipe dele e você monta o disparo. A mensagem sai pelo número dele e as
-                respostas voltam para a equipe dele.
-              </p>
-            </div>
-          </div>
-        ) : (
-        <><div className="etapas" role="tablist">
+        <div className="etapas" role="tablist">
           {([
             ["bm", "Seu número", !!cfg],
             ["tpl", "Mensagens", d.templates.some((t) => t.status === "APPROVED")],
@@ -1765,19 +1742,34 @@ export default function Disparar() {
                     </button>
                   </div>
                   {destino === "escolher" ? (
+                    <>
+                    {ehGestorAcima && gerentes.length > 0 ? (
+                      <div className="row" style={{ gap: 6, flexWrap: "wrap", margin: "0 0 10px" }}>
+                        <button type="button" className={`mini${gerFiltro === null ? " solid" : ""}`}
+                          onClick={() => setGerFiltro(null)}>Todos os gerentes</button>
+                        {gerentes.map((g) => (
+                          <button type="button" key={g.id}
+                            className={`mini${gerFiltro === g.id ? " solid" : ""}`}
+                            onClick={() => setGerFiltro(g.id)}>{g.nome}</button>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="dest-cor">
-                      {d.corretores.map((c) => (
+                      {d.corretores
+                        .filter((c) => gerFiltro === null || c.gerenteId === gerFiltro)
+                        .map((c) => (
                         <label className="dc" key={c.id}>
                           <input type="checkbox" checked={marcados.has(c.id)}
                             onChange={() => setMarcados((s) => {
                               const n = new Set(s); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n;
                             })} />
                           <span className="av">{ini(c.nome)}</span>
-                          <span><b>{c.nome}</b><i>{c.carteira} na carteira</i></span>
+                          <span><b>{c.nome}</b><i>{c.carteira} na carteira{ehGestorAcima && c.gerenteNome ? ` · ${c.gerenteNome}` : ""}</i></span>
                           {c.online ? <span className="on" title="online agora" /> : <span />}
                         </label>
                       ))}
                     </div>
+                    </>
                   ) : null}
                 </div>
               </div>
@@ -2022,8 +2014,6 @@ export default function Disparar() {
         <div className={`pane${etapa === "corretores" ? " on" : ""}`}>
           <HabilitarDisparo managerId={userId} />
         </div>
-        </>
-        )}
       </>
     );
   };
