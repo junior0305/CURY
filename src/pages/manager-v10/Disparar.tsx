@@ -16,7 +16,7 @@
 //    a um disparo e 17 ficaram sem retorno. Escolher o destino aqui é
 //    obrigatório, não opcional.
 
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useEffectiveManagerId, useSuperintendenteRollup } from "@/hooks/useSuperintendente";
 import { useQueryClient } from "@tanstack/react-query";
@@ -106,16 +106,14 @@ export default function Disparar() {
   // Só o admin atribui/troca a conta WABA. Gerente/super ficam travados na
   // conta deles — senão dá para disparar no cartão de outra pessoa.
   const podeTrocarConta = role === "ADMIN";
-  // Super/diretor: dispara pela conta DELE (o chip é dele), mas a CAMPANHA é de
-  // um gerente — ela escolhe o gerente num seletor aqui, e a audiência/corretores
-  // passam a ser os daquele gerente. O chip e os templates seguem sendo dela.
+  // Super/diretor: dispara pela conta DELE (o chip é dele). O "time" abrange
+  // TODOS os gerentes abaixo — e no passo "Corretores que eu escolher" ela vê a
+  // estrutura inteira (gerentes E corretores) e marca quem recebe a resposta do
+  // lead, podendo marcar o PRÓPRIO gerente como quem recebe.
   const ehGestorAcima = role === "SUPERINTENDENT" || role === "ADMIN" || role === "DIRECTOR";
   const { data: rollupSup } = useSuperintendenteRollup(ehGestorAcima ? session?.user?.id : undefined, 30);
   const gerentes = rollupSup?.gerentes ?? [];
-  // o gerente escolhido para a campanha (só super/diretor)
-  const [gerenteSel, setGerenteSel] = useState<string | null>(null);
-  // escopo da audiência/corretores: o gerente escolhido. Vazio enquanto não escolhe.
-  const teamIds = ehGestorAcima ? (gerenteSel ? [gerenteSel] : []) : undefined;
+  const teamIds = ehGestorAcima ? gerentes.map((g) => g.id) : undefined;
   const { mode, toggle } = useTheme();
   const qc = useQueryClient();
   const { data, isLoading } = useDisparar(userId, teamIds);
@@ -644,19 +642,12 @@ export default function Disparar() {
     return (
       <>
         {ehGestorAcima ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap",
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap",
             padding: "10px 12px", borderRadius: 10, background: "var(--sunk)", border: "1px solid var(--line)" }}>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>Campanha para a equipe de:</span>
-            <select
-              value={gerenteSel ?? ""}
-              onChange={(e) => setGerenteSel(e.target.value || null)}
-              style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--card)", color: "inherit", font: "inherit", fontWeight: 600 }}
-            >
-              <option value="">— escolha o gerente —</option>
-              {gerentes.map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
-            </select>
-            <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
-              envia pela <b style={{ color: "var(--ink)" }}>sua conta</b>; a audiência e os corretores são os desse gerente
+            <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
+              Você dispara <b style={{ color: "var(--ink)" }}>pela sua conta de WhatsApp</b>. No passo
+              “Disparar”, em <b style={{ color: "var(--ink)" }}>“Corretores que eu escolher”</b>, marque
+              quem recebe as respostas — pode ser um corretor ou o <b style={{ color: "var(--ink)" }}>próprio gerente</b>, de qualquer equipe.
             </span>
           </div>
         ) : null}
@@ -1750,24 +1741,51 @@ export default function Disparar() {
                     </button>
                   </div>
                   {destino === "escolher" ? (
-                    ehGestorAcima && !gerenteSel ? (
-                      <p style={{ fontSize: 13, color: "var(--ink-3)", margin: "4px 0 0" }}>
-                        Escolha o gerente da campanha lá em cima para ver os corretores da equipe dele.
-                      </p>
+                    ehGestorAcima ? (
+                      // Super/diretor: a estrutura inteira — cada gerente (também
+                      // selecionável como quem recebe) com os corretores dele embaixo.
+                      <div className="dest-cor">
+                        {gerentes.map((g) => {
+                          const doGer = d.corretores.filter((c) => c.gerenteId === g.id);
+                          return (
+                            <Fragment key={g.id}>
+                              <label className="dc dc-ger">
+                                <input type="checkbox" checked={marcados.has(g.id)}
+                                  onChange={() => setMarcados((s) => {
+                                    const n = new Set(s); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n;
+                                  })} />
+                                <span className="av">{ini(g.nome)}</span>
+                                <span><b>{g.nome}</b><i>gerente · recebe a resposta direto</i></span>
+                              </label>
+                              {doGer.map((c) => (
+                                <label className="dc dc-cor" key={c.id}>
+                                  <input type="checkbox" checked={marcados.has(c.id)}
+                                    onChange={() => setMarcados((s) => {
+                                      const n = new Set(s); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n;
+                                    })} />
+                                  <span className="av">{ini(c.nome)}</span>
+                                  <span><b>{c.nome}</b><i>{c.carteira} na carteira</i></span>
+                                  {c.online ? <span className="on" title="online agora" /> : <span />}
+                                </label>
+                              ))}
+                            </Fragment>
+                          );
+                        })}
+                      </div>
                     ) : (
-                    <div className="dest-cor">
-                      {d.corretores.map((c) => (
-                        <label className="dc" key={c.id}>
-                          <input type="checkbox" checked={marcados.has(c.id)}
-                            onChange={() => setMarcados((s) => {
-                              const n = new Set(s); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n;
-                            })} />
-                          <span className="av">{ini(c.nome)}</span>
-                          <span><b>{c.nome}</b><i>{c.carteira} na carteira</i></span>
-                          {c.online ? <span className="on" title="online agora" /> : <span />}
-                        </label>
-                      ))}
-                    </div>
+                      <div className="dest-cor">
+                        {d.corretores.map((c) => (
+                          <label className="dc" key={c.id}>
+                            <input type="checkbox" checked={marcados.has(c.id)}
+                              onChange={() => setMarcados((s) => {
+                                const n = new Set(s); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n;
+                              })} />
+                            <span className="av">{ini(c.nome)}</span>
+                            <span><b>{c.nome}</b><i>{c.carteira} na carteira</i></span>
+                            {c.online ? <span className="on" title="online agora" /> : <span />}
+                          </label>
+                        ))}
+                      </div>
                     )
                   ) : null}
                 </div>

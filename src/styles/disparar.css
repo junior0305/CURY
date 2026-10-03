@@ -401,3 +401,11 @@
 .mgr10.disparar .ct-r i{display:block;font-style:normal;font-size:11px}
 .mgr10.disparar .ct-av{border-left:3px solid var(--warn);background:var(--warn-soft);
   border-radius:0 9px 9px 0;padding:9px 12px;font-size:12px;line-height:1.5;color:var(--ink-2)}
+
+/* Super escolhe quem recebe a resposta: estrutura inteira (gerentes + corretores).
+   O gerente é uma linha em destaque; os corretores dele ficam recuados embaixo. */
+.mgr10.disparar .dest-cor{max-height:320px}
+.mgr10.disparar .dc-ger{background:var(--surface-2);position:sticky;top:0;z-index:1}
+.mgr10.disparar .dc-ger b{font-weight:800}
+.mgr10.disparar .dc-ger .av{background:var(--accent-soft);color:var(--accent)}
+.mgr10.disparar .dc-cor{padding-left:22px}
