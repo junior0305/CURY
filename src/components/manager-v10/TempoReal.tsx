@@ -22,6 +22,7 @@ import { Sec, Panel, Blank } from "@/components/manager-v10/ui";
 import MetaSemana from "@/components/manager-v10/MetaSemana";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { usePeriodo } from "@/hooks/usePeriodo";
+import { useCheckinEquipe } from "@/hooks/useCheckin";
 import FunilOrigem from "@/components/manager-v10/FunilOrigem";
 import PrecisaDeVoce from "@/components/manager-v10/PrecisaDeVoce";
 
@@ -73,16 +74,18 @@ function Chave({ p, onToggle, ocupado }: {
 
 export default function TempoReal({ managerId }: { managerId: string | undefined }) {
   const { periodo } = usePeriodo();
-  // Tempo real mostra UM dia — quando o período é um intervalo, o dia é o fim dele.
-  const { data, isLoading } = useTempoReal(managerId, periodo.ate);
+  const { data, isLoading } = useTempoReal(managerId, periodo);
+  // Check-in de plantão (Contact2Sale) — janela do período (mín. 7 dias p/ visão de rotina).
+  const diasCheckin = Math.max(periodo?.dias ?? 7, 7);
+  const { data: checkins } = useCheckinEquipe(managerId, diasCheckin);
   const qc = useQueryClient();
   const [soPlantao, setSoPlantao] = useState(true);
   const [filtro, setFiltro] = useState<Nivel | null>(null);
   const [aberto, setAberto] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
 
-  if (isLoading) return <Blank title="Carregando o plantão de hoje…" />;
-  if (!data) return <Blank title="Ainda não há plantão para mostrar hoje." />;
+  if (isLoading) return <Blank title="Carregando o plantão…" />;
+  if (!data) return <Blank title="Ainda não há plantão para mostrar." />;
 
   async function alternar(p: Pessoa) {
     if (!p.profileId) return;
@@ -99,6 +102,8 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
   }
 
   const { gente, totais, atualizadoEm } = data;
+  const isSingleDay = data.periodo.isSingleDay;
+
   const contagem = gente.reduce<Record<string, number>>((a, p) => {
     const n = status(p).nivel; a[n] = (a[n] ?? 0) + 1; return a;
   }, {});
@@ -120,8 +125,10 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
   return (
     <section className="view tr">
       <Sec
-        title={periodo.preset === "hoje" || periodo.ate === new Date().toISOString().slice(0, 10)
-          ? "Hoje, agora" : `O dia ${periodo.ate.split("-").reverse().slice(0, 2).join("/")}`}
+        title={isSingleDay
+          ? (periodo.preset === "hoje" || data.periodo.ate === new Date().toISOString().slice(0, 10)
+              ? "Hoje, agora" : `O dia ${data.periodo.ate.split("-").reverse().slice(0, 2).join("/")}`)
+          : `Período: ${data.periodo.rotulo}`}
         tag={<span className="dim">{hora ? `atualizado ${hora}` : ""}</span>}
         sub="Ponto e atendimento vêm do check-in no plantão (Contact2Sale); a carteira vem da Comandra — é o que a operação fez, não o que foi digitado aqui."
       >
@@ -130,14 +137,14 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
         <div className="tr-pulso">
           <MetaSemana managerId={managerId} gerenteCuryId={data.gerenteCuryId} />
           <div className="tr-kpi">
-            <span className="tag">No plantão</span>
+            <span className="tag">{isSingleDay ? "No plantão" : "Bateram ponto"}</span>
             <b>{totais.plantao}</b>
             <i><em className="win">{totais.online}</em> online agora · {gente.length} no time</i>
           </div>
           <div className="tr-kpi">
             <span className="tag">Atendimentos</span>
             <b className={totais.atendimentos > 0 ? "win" : ""}>{totais.atendimentos}</b>
-            <i>hoje</i>
+            <i>{isSingleDay ? "hoje" : "no período"}</i>
           </div>
           <div className="tr-kpi">
             <span className="tag">Leads perdidos</span>
@@ -149,15 +156,40 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
 
       <FunilOrigem managerId={managerId} gerenteCuryId={data.gerenteCuryId} />
 
+      <Sec title={`Plantão — check-in (Contact2Sale · ${diasCheckin} dias)`}
+        tag={<span className="dim">C2S</span>}
+        sub="Quem do seu time bateu ponto no plantão, vindo do Contact2Sale.">
+        {!checkins?.length ? (
+          <Blank title={`Ninguém do time bateu ponto nos últimos ${diasCheckin} dias.`}>
+            Os check-ins aparecem aqui conforme os corretores batem ponto no plantão (sincroniza a cada 30 min).
+          </Blank>
+        ) : (
+          <div className="tr-pulso">
+            {checkins.map((c) => {
+              const d = c.ultimo ? new Date(c.ultimo) : null;
+              const pad = (n: number) => String(n).padStart(2, "0");
+              const quando = d ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}` : "—";
+              return (
+                <div key={c.corretor} className="tr-kpi">
+                  <span className="tag">{c.corretor.trim()}</span>
+                  <b className="win">{c.n_checkins}</b>
+                  <i>check-in{c.n_checkins > 1 ? "s" : ""} · último {quando}</i>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Sec>
+
       <Sec title="Os corretores" tag={<span className="dim">
-        {lista.length} {soPlantao ? "no plantão" : "no time"} · {totais.online} online
+        {lista.length} {soPlantao ? (isSingleDay ? "no plantão" : "com check-in") : "no time"} · {totais.online} online
       </span>}>
         <div className="tr-filtros">
           <button type="button"
             className={`tr-fl work${soPlantao ? " on" : ""}`}
             aria-pressed={soPlantao}
             onClick={() => setSoPlantao((v) => !v)}>
-            Trabalhando hoje <b>{totais.plantao}</b>{soPlantao ? <span className="x">✕</span> : null}
+            {isSingleDay ? "Trabalhando hoje" : "Trabalharam no período"} <b>{totais.plantao}</b>{soPlantao ? <span className="x">✕</span> : null}
           </button>
           <span className="tr-fsep" />
           {NIVEIS.map((n) => (
@@ -172,7 +204,9 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
 
         <Panel>
           {lista.length === 0 ? (
-            <Blank title={soPlantao ? "Ninguém bateu ponto ainda hoje" : "Nenhum corretor nesta equipe"}>
+            <Blank title={soPlantao
+              ? (isSingleDay ? "Ninguém bateu ponto ainda hoje" : "Nenhum corretor bateu ponto neste período")
+              : "Nenhum corretor nesta equipe"}>
               {soPlantao ? "O plantão é sincronizado a cada 30 minutos no horário comercial." : null}
             </Blank>
           ) : lista.map(({ p, st }) => {
@@ -196,7 +230,9 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
                   </span>
 
                   <span className={`tr-trab${p.ponto ? "" : " faltou"}`}>
-                    <b>{p.ponto ? "Trabalhando" : "Faltou"}</b>
+                    <b>{isSingleDay
+                      ? (p.ponto ? "Trabalhando" : "Faltou")
+                      : (p.ponto ? `${p.atendimentos} check-in${p.atendimentos === 1 ? "" : "s"}` : "Sem check-in")}</b>
                     <s className={p.online ? "on" : "off"}><em />{p.online ? "online" : "offline"}</s>
                   </span>
 

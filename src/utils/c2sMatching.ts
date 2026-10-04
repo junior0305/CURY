@@ -3,18 +3,19 @@
  *
  * Aplica matching em múltiplos níveis para evitar colisão entre homônimos de outras equipes:
  * 1. Nome completo normalizado (sem acentos, minúsculo)
- * 2. Substring de nome completo (mínimo 5 caracteres)
- * 3. Primeiro nome:
- *    - Se houver apenas 1 corretor com esse primeiro nome na equipe e o gerente no C2S
- *      bater com o gerente da equipe (ou gerente C2S estiver vazio), atribui a ele.
- *    - Se houver mais de 1 corretor com o mesmo primeiro nome na equipe, desempata
- *      pelo sobrenome.
+ * 2. Nome de guerra / primeiro nome / último nome ou login (@comandra)
+ * 3. Substring de nome completo (mínimo 4 caracteres) ou interseção de tokens
+ * 4. Validação de gerência:
+ *    - Se o C2S registrar a Superintendência ou Diretoria (ex: "Superintendencia LilianeViana"),
+ *      não bloqueia o corretor da equipe, pois é o nível guarda-chuva da operação.
+ *    - Se registrar gerente específico conflitante, protege contra homônimos de outras equipes.
  */
 
 export interface BrokerProfile {
   id: string;
   first_name: string | null;
   last_name: string | null;
+  email?: string | null;
 }
 
 export interface ManagerProfile {
@@ -41,61 +42,118 @@ export function normalizarTexto(s?: string | null): string {
 
 export function extrairTokensGerente(mgr?: ManagerProfile | null): string[] {
   if (!mgr) return [];
-  return normalizarTexto(`${mgr.first_name || ""} ${mgr.last_name || ""}`)
-    .split(/\s+/)
-    .filter((t) => t.length >= 3);
+  const full = normalizarTexto(`${mgr.first_name || ""} ${mgr.last_name || ""}`);
+  const tokens = full.split(/\s+/).filter((t) => t.length >= 3);
+  // Variações conhecidas de apelidos
+  if (tokens.some((t) => t.includes("eduardo") || t.includes("dudu"))) {
+    tokens.push("eduardo", "dudu");
+  }
+  return [...new Set(tokens)];
 }
 
-export function casarCheckinsComEquipe(
+export interface CheckinSemCadastro {
+  checkin: C2SCheckinRow;
+  corretorNome: string;
+  gerenteNome: string | null;
+}
+
+export interface ClassificacaoCheckins {
+  casados: Array<{ checkin: C2SCheckinRow; brokerId: string }>;
+  semCadastro: CheckinSemCadastro[];
+}
+
+export function classificarCheckinsEquipe(
   checkins: C2SCheckinRow[],
   corretores: BrokerProfile[],
   gerente?: ManagerProfile | null
-): Array<{ checkin: C2SCheckinRow; brokerId: string }> {
+): ClassificacaoCheckins {
   const norm = normalizarTexto;
   const mgrTokens = extrairTokensGerente(gerente);
 
   const porNomeCompleto = new Map<string, string>();
   const porPrimeiroNome = new Map<string, string[]>();
+  const porUltimoNome = new Map<string, string[]>();
+  const porHandleEmail = new Map<string, string>();
+  const tokensPorBroker = new Map<string, string[]>();
 
   for (const b of corretores) {
+    const fn = norm(b.first_name);
+    const ln = norm(b.last_name);
     const full = norm(`${b.first_name || ""} ${b.last_name || ""}`);
-    const first = norm(b.first_name);
+    const emailHandle = b.email ? norm(b.email.split("@")[0]) : "";
+
     if (full) porNomeCompleto.set(full, b.id);
-    if (first) {
-      const arr = porPrimeiroNome.get(first) ?? [];
+    if (fn) {
+      const arr = porPrimeiroNome.get(fn) ?? [];
       arr.push(b.id);
-      porPrimeiroNome.set(first, arr);
+      porPrimeiroNome.set(fn, arr);
     }
+    if (ln) {
+      const arr = porUltimoNome.get(ln) ?? [];
+      arr.push(b.id);
+      porUltimoNome.set(ln, arr);
+    }
+    if (emailHandle) {
+      porHandleEmail.set(emailHandle, b.id);
+    }
+
+    const tks = full.split(/\s+/).filter((t) => t.length >= 3);
+    if (emailHandle && emailHandle.length >= 3) tks.push(emailHandle);
+    tokensPorBroker.set(b.id, tks);
   }
 
-  const matches: Array<{ checkin: C2SCheckinRow; brokerId: string }> = [];
+  const casados: Array<{ checkin: C2SCheckinRow; brokerId: string }> = [];
+  const semCadastro: CheckinSemCadastro[] = [];
 
   for (const ck of checkins) {
     const ckNome = norm(ck.corretor);
-    const ckPrim = ckNome.split(/\s+/)[0];
+    if (!ckNome) continue;
+
+    const ckTokens = ckNome.split(/\s+/).filter((t) => t.length >= 3);
+    const ckPrim = ckTokens[0] || ckNome;
     const ckGer = norm(ck.gerente);
 
+    // Se o C2S registrou superintendência/diretoria, não bloqueia o corretor da equipe
+    const isSuperOuDiretoria =
+      ckGer.includes("super") ||
+      ckGer.includes("diretor") ||
+      ckGer.includes("diretoria") ||
+      ckGer.includes("geral") ||
+      ckGer.includes("vendas");
+
     const gerenteBate =
-      !ckGer || mgrTokens.length === 0 || mgrTokens.some((tok) => ckGer.includes(tok));
+      !ckGer ||
+      isSuperOuDiretoria ||
+      mgrTokens.length === 0 ||
+      mgrTokens.some((tok) => ckGer.includes(tok));
 
     let pid: string | null = null;
+
+    // 1. Nome completo exato ou handle do email
     if (porNomeCompleto.has(ckNome)) {
       pid = porNomeCompleto.get(ckNome)!;
-    } else {
+    } else if (porHandleEmail.has(ckNome)) {
+      pid = porHandleEmail.get(ckNome)!;
+    }
+
+    // 2. Substring de nome completo (>= 4 caracteres)
+    if (!pid) {
       for (const [full, id] of porNomeCompleto.entries()) {
-        if (full.length >= 5 && (ckNome.includes(full) || full.includes(ckNome))) {
+        if (full.length >= 4 && (ckNome.includes(full) || full.includes(ckNome))) {
           pid = id;
           break;
         }
       }
     }
 
+    // 3. Primeiro nome ou nome de guerra
     if (!pid && ckPrim) {
-      const candidatos = porPrimeiroNome.get(ckPrim) ?? [];
-      if (candidatos.length === 1 && gerenteBate) {
-        pid = candidatos[0];
-      } else if (candidatos.length > 1) {
-        for (const cid of candidatos) {
+      const candidatosPrim = porPrimeiroNome.get(ckPrim) ?? [];
+      if (candidatosPrim.length === 1 && gerenteBate) {
+        pid = candidatosPrim[0];
+      } else if (candidatosPrim.length > 1) {
+        // Desempata pelo sobrenome
+        for (const cid of candidatosPrim) {
           const b = corretores.find((x) => x.id === cid);
           const bLast = norm(b?.last_name);
           if (bLast && ckNome.includes(bLast)) {
@@ -106,10 +164,46 @@ export function casarCheckinsComEquipe(
       }
     }
 
+    // 4. Último nome como nome de guerra (ex: LEITÃO)
+    if (!pid && ckTokens.length > 0) {
+      for (const tk of ckTokens) {
+        const candidatosUlt = porUltimoNome.get(tk) ?? [];
+        if (candidatosUlt.length === 1 && gerenteBate) {
+          pid = candidatosUlt[0];
+          break;
+        }
+      }
+    }
+
+    // 5. Interseção de tokens de nome (ex: GALILEIA BN com GALILEIA)
+    if (!pid && gerenteBate) {
+      for (const [bid, bTks] of tokensPorBroker.entries()) {
+        if (ckTokens.some((ct) => bTks.includes(ct))) {
+          pid = bid;
+          break;
+        }
+      }
+    }
+
     if (pid) {
-      matches.push({ checkin: ck, brokerId: pid });
+      casados.push({ checkin: ck, brokerId: pid });
+    } else if (gerenteBate) {
+      // Corretor registrou check-in para a equipe/superintendência mas ainda não tem perfil no Comandra
+      semCadastro.push({
+        checkin: ck,
+        corretorNome: ck.corretor.trim(),
+        gerenteNome: ck.gerente ?? null,
+      });
     }
   }
 
-  return matches;
+  return { casados, semCadastro };
+}
+
+export function casarCheckinsComEquipe(
+  checkins: C2SCheckinRow[],
+  corretores: BrokerProfile[],
+  gerente?: ManagerProfile | null
+): Array<{ checkin: C2SCheckinRow; brokerId: string }> {
+  return classificarCheckinsEquipe(checkins, corretores, gerente).casados;
 }

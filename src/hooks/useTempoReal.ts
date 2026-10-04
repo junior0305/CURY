@@ -58,11 +58,24 @@ export interface Status {
   chave: string;
 }
 
+export interface PeriodoFiltro {
+  de?: string;
+  ate?: string;
+  preset?: string;
+  rotulo?: string;
+}
+
 export interface TempoReal {
   gente: Pessoa[];
   totais: { plantao: number; online: number; atendimentos: number; perdidos: number; vendas: number };
   atualizadoEm: string | null;
   gerenteCuryId: string | null;
+  periodo: {
+    de: string;
+    ate: string;
+    rotulo: string;
+    isSingleDay: boolean;
+  };
 }
 
 const diaSP = (d = new Date()) =>
@@ -134,23 +147,31 @@ export function status(p: Pessoa): Status {
     regra: ["Sem ponto hoje", `Carteira de ${p.carteira} leads`], acao: "Ver leads", chave: "fora" };
 }
 
-export function useTempoReal(managerId: string | undefined, dia?: string) {
-  const data = dia ?? diaSP();
+export function useTempoReal(
+  managerId: string | undefined,
+  filtro?: PeriodoFiltro | string
+) {
+  const de = typeof filtro === "object" ? filtro.de || diaSP() : (filtro ?? diaSP());
+  const ate = typeof filtro === "object" ? filtro.ate || diaSP() : (filtro ?? diaSP());
+  const rotulo = typeof filtro === "object" ? (filtro.rotulo ?? (de === ate ? "hoje" : `${de} a ${ate}`)) : (de === diaSP() ? "hoje" : de);
+  const isSingleDay = de === ate;
 
   return useQuery<TempoReal>({
-    queryKey: ["tempo-real", managerId, data],
+    queryKey: ["tempo-real", managerId, de, ate],
     enabled: !!managerId,
     refetchInterval: 5 * 60_000,
     staleTime: 60_000,
     queryFn: async () => {
+      const deIso = new Date(de + "T00:00:00").toISOString();
       const de7iso = new Date(Date.now() - 7 * 86_400_000).toISOString();
+      const minIso = deIso < de7iso ? deIso : de7iso;
 
       const [mgrRes, timeRes, leadsRes, ckRes, vendasRes] = await Promise.all([
         supabase.from("profiles")
           .select("id,first_name,last_name")
           .eq("id", managerId!).maybeSingle(),
         supabase.from("profiles")
-          .select("id,first_name,last_name,last_seen_at,lead_assignment_enabled,lead_assignment_source")
+          .select("id,first_name,last_name,email,last_seen_at,lead_assignment_enabled,lead_assignment_source")
           .eq("manager_id", managerId!).eq("role", "BROKER"),
         supabase.from("leads")
           .select("broker_id,source,original_broker_id,status")
@@ -158,13 +179,13 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
           .not("status", "in", "(CONCLUDED,EXCLUDED,ABANDONED)"),
         // Plantão/atendimento vêm do C2S (check-in), com corretor e gerente para matching seguro.
         supabase.from("c2s_checkins")
-          .select("corretor,gerente,created_at").gte("created_at", de7iso),
-        // Vendas concluídas nesta semana (nativas do Comandra)
+          .select("corretor,gerente,created_at").gte("created_at", minIso),
+        // Vendas concluídas (nativas do Comandra)
         supabase.from("leads")
-          .select("broker_id,updated_at,created_at")
+          .select("broker_id,updated_at,last_interaction_at,created_at")
           .eq("manager_id", managerId!)
           .eq("status", "CONCLUDED")
-          .gte("updated_at", de7iso),
+          .gte("updated_at", minIso),
       ]);
 
       const mgr = (mgrRes.data as any) ?? null;
@@ -191,15 +212,20 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
 
       // Check-in do C2S por corretor com matching seguro (sem colisão de homônimos de outras equipes)
       const matched = casarCheckinsComEquipe(checks, time, mgr);
-      const ckHoje = new Map<string, number>();
+      const ckPeriodo = new Map<string, number>();
       const ckSem = new Map<string, { atend: number; dias: Set<string> }>();
       let ultimo: string | null = null;
 
       for (const { checkin: ck, brokerId: pid } of matched) {
         const diaCk = diaSP(new Date(ck.created_at));
+        // Janela de 7 dias para avaliação de rotina e presença
         const sm = ckSem.get(pid) ?? { atend: 0, dias: new Set<string>() };
         sm.atend += 1; sm.dias.add(diaCk); ckSem.set(pid, sm);
-        if (diaCk === data) ckHoje.set(pid, (ckHoje.get(pid) ?? 0) + 1);
+
+        // Período selecionado (ex: últimos 7 dias, hoje, etc.)
+        if (diaCk >= de && diaCk <= ate) {
+          ckPeriodo.set(pid, (ckPeriodo.get(pid) ?? 0) + 1);
+        }
         if (!ultimo || ck.created_at > ultimo) ultimo = ck.created_at;
       }
 
@@ -207,18 +233,18 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
 
       const gente: Pessoa[] = time.map((b: any) => {
         const o = cart.get(b.id) ?? zero;
-        const hj = ckHoje.get(b.id) ?? 0;
+        const nPeriodo = ckPeriodo.get(b.id) ?? 0;
         const sm = ckSem.get(b.id);
         const vSem = vendasSemanaPorBroker.get(b.id) ?? 0;
         return {
           profileId: b.id, curyId: null,
           nome: [b.first_name, b.last_name].filter(Boolean).join(" ") || "—",
           apelido: b.first_name,
-          ponto: hj > 0,
-          checkins: hj,
+          ponto: nPeriodo > 0,
+          checkins: nPeriodo,
           pegos: 0,
           perdidos: 0,
-          atendimentos: hj,
+          atendimentos: nPeriodo,
           vendas: vSem,
           online: horas(b.last_seen_at) < 0.25,
           ultimoAcesso: b.last_seen_at ?? null,
@@ -245,6 +271,12 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
         },
         atualizadoEm: ultimo,
         gerenteCuryId: null,
+        periodo: {
+          de,
+          ate,
+          rotulo,
+          isSingleDay,
+        },
       };
     },
   });

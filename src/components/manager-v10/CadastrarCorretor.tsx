@@ -20,9 +20,14 @@ const semAcento = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
 export default function CadastrarCorretor({
-  managerId, onFechar, onPronto,
-}: { managerId: string; onFechar: () => void; onPronto: () => void }) {
-  const [nome, setNome] = useState("");
+  managerId, onFechar, onPronto, nomeInicial = "",
+}: {
+  managerId: string;
+  onFechar: () => void;
+  onPronto: () => void;
+  nomeInicial?: string;
+}) {
+  const [nome, setNome] = useState(nomeInicial);
   const [tel, setTel] = useState("");
   const [foto, setFoto] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
