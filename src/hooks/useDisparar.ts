@@ -712,6 +712,9 @@ export async function dispararCampanha(opts: {
   quando?: string | null;
   /** o gerente escolheu os corretores na mão — manda para eles, sem filtrar chip */
   manual?: boolean;
+  /** 'lead' = resposta vira lead do corretor; 'outro' = campanha não-lead
+   *  (ex.: contratação) — resposta só notifica + guarda, não vira lead */
+  kind?: "lead" | "outro";
 }) {
   if (!opts.alvos.length) throw new Error("Nenhuma pessoa na seleção.");
   const queueId = await filaDoGerente(opts.managerId, opts.brokerIds);
@@ -739,6 +742,7 @@ export async function dispararCampanha(opts: {
     header_image_url: opts.imagem || null,
     wa_config_id: opts.configId, owner_id: opts.managerId, created_by: opts.managerId,
     brokers_manuais: opts.manual === true,
+    kind: opts.kind ?? "lead",
     status: "draft", throttle_per_min: 10,
   }).select("id").single();
   if (error) throw error;

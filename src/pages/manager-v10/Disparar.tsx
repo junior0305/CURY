@@ -120,6 +120,9 @@ export default function Disparar() {
   const { data: rollupSup } = useSuperintendenteRollup(ehGestorAcima ? session?.user?.id : undefined, 30);
   const gerentes = rollupSup?.gerentes ?? [];
   const teamIds = ehGestorAcima ? gerentes.map((g) => g.id) : undefined;
+  // Tipo da campanha: 'lead' (resposta vira lead do corretor) ou 'outro'
+  // (não-lead, ex.: contratação — resposta só notifica + guarda, não vira lead).
+  const [tipoCampanha, setTipoCampanha] = useState<"lead" | "outro">("lead");
   const { mode, toggle } = useTheme();
   const qc = useQueryClient();
   const { data, isLoading } = useDisparar(userId, teamIds);
@@ -586,6 +589,7 @@ export default function Disparar() {
         // "escolher" = escolha manual: o motor manda para esses corretores sem
         // filtrar chip/roleta. "fila" segue o rodizio normal.
         manual: destino === "escolher",
+        kind: tipoCampanha,
         configId: cfgEnvio?.id ?? data.config?.id ?? null,
         imagem: urlImagem,
         quando: marcado ? marcado.toISOString() : null,
@@ -1742,7 +1746,23 @@ export default function Disparar() {
                 ) : null}
 
                 <div className="f" style={{ marginTop: 18 }}>
-                  <label>Quem atende quem responder</label>
+                  <label>Tipo da campanha</label>
+                  <div className="dest">
+                    <button className={`dst${tipoCampanha === "lead" ? " on" : ""}`} onClick={() => setTipoCampanha("lead")}>
+                      <input type="radio" readOnly checked={tipoCampanha === "lead"} />
+                      <span><b>Leads (clientes)</b>
+                        <span>quem responder vira lead e vai pro corretor</span></span>
+                    </button>
+                    <button className={`dst${tipoCampanha === "outro" ? " on" : ""}`} onClick={() => setTipoCampanha("outro")}>
+                      <input type="radio" readOnly checked={tipoCampanha === "outro"} />
+                      <span><b>Outra campanha (ex.: contratação)</b>
+                        <span>não vira lead — só notifica o responsável e guarda quem respondeu</span></span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="f" style={{ marginTop: 18 }}>
+                  <label>{tipoCampanha === "outro" ? "Quem fala com quem responder" : "Quem atende quem responder"}</label>
                   <div className="dest">
                     <button className={`dst${destino === "fila" ? " on" : ""}`} onClick={() => setDestino("fila")}>
                       <input type="radio" readOnly checked={destino === "fila"} />
