@@ -15,7 +15,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useSuperintendenteRollup, type GerenteRollup, type CorretorRollup } from "@/hooks/useSuperintendente";
+import { useSuperintendenteRollup, useCampanhasNaoLead, type GerenteRollup, type CorretorRollup, type CampanhaNaoLead } from "@/hooks/useSuperintendente";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import BiTab from "@/components/manager-v10/BiTab";
 import { Boundary } from "@/components/manager-v10/Boundary";
@@ -30,7 +30,7 @@ export default function Superintendente() {
   const superId = session?.user?.id;
   const nav = useNavigate();
   const [dias, setDias] = useState(30);
-  const [aba, setAba] = useState<"consolidado" | "bi">("consolidado");
+  const [aba, setAba] = useState<"consolidado" | "bi" | "campanhas">("consolidado");
   // quais gerentes estão expandidos (mostrando os corretores)
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
   const toggleGer = (id: string) => setAberto((v) => ({ ...v, [id]: !v[id] }));
@@ -62,6 +62,7 @@ export default function Superintendente() {
             </div>
             <div className="sup-per">
               <button className={aba === "consolidado" ? "on" : ""} onClick={() => setAba("consolidado")}>Consolidado</button>
+              <button className={aba === "campanhas" ? "on" : ""} onClick={() => setAba("campanhas")}>Campanhas</button>
               <button className={aba === "bi" ? "on" : ""} onClick={() => setAba("bi")}>B.I.</button>
               {aba === "consolidado" ? PERIODOS.map(([n, r]) => (
                 <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{r}</button>
@@ -69,7 +70,9 @@ export default function Superintendente() {
             </div>
           </div>
 
-          {aba === "bi" ? (
+          {aba === "campanhas" ? (
+            <CampanhasNaoLead superId={superId} />
+          ) : aba === "bi" ? (
             <BiTab scope="super" managerId={superId} />
           ) : error ? (
             <div className="sup-vazio" style={{ color: "var(--red)" }}>
@@ -149,6 +152,53 @@ export default function Superintendente() {
         </div>
       </main>
       </Boundary>
+    </div>
+  );
+}
+
+/* Campanhas NÃO-lead (ex.: contratação): quem respondeu, gerente responsável e
+ * se o gerente já falou com a pessoa (cruzando com o chip Evolution dele). */
+function CampanhasNaoLead({ superId }: { superId: string | undefined }) {
+  const { data, isLoading } = useCampanhasNaoLead(superId);
+  const fmt = (iso: string | null) => {
+    if (!iso) return "—";
+    try { const d = new Date(iso); const p = (n: number) => String(n).padStart(2, "0");
+      return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    } catch { return "—"; }
+  };
+  if (isLoading) return <p className="sup-vazio">Carregando campanhas…</p>;
+  if (!data?.length) return <p className="sup-vazio">Nenhuma campanha que não seja de lead (ex.: contratação) ainda.</p>;
+  return (
+    <div className="sup-estrutura">
+      {data.map((c: CampanhaNaoLead) => (
+        <div className="sup-ger exp" key={c.id}>
+          <div className="sup-ger-h" style={{ cursor: "default" }}>
+            <b>{c.nome}</b>
+            <span className="sup-ger-nums" style={{ marginLeft: "auto" }}>
+              <em><b>{c.responderam}</b> responderam</em>
+              <em className={c.falaram >= c.responderam && c.responderam > 0 ? "bom" : ""}>
+                <b>{c.falaram}</b> o gerente já falou</em>
+              <em className="bom"><b>{Math.max(0, c.responderam - c.falaram)}</b> aguardando o gerente</em>
+            </span>
+          </div>
+          <div className="sup-cors">
+            {c.pessoas.map((p, i) => (
+              <div className="sup-cor" key={i}>
+                <span className="sup-cor-nm" style={{ minWidth: 160 }}>
+                  <s className={p.falou ? "on" : "off"} />
+                  {p.nome}
+                </span>
+                <span className="sup-cor-nums">
+                  <em>resp. <b>{p.gerente}</b></em>
+                  <em className={p.falou ? "bom" : ""}><b>{p.falou ? "falou ✅" : "não falou"}</b></em>
+                  <em>{fmt(p.quando)}</em>
+                  <em><a href={`https://wa.me/${p.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" style={{ color: "var(--blue)", textDecoration: "none" }}>WhatsApp →</a></em>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

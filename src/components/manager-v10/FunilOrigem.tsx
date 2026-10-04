@@ -17,6 +17,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Sec, Panel, Blank } from "@/components/manager-v10/ui";
+import { casarCheckinsComEquipe, type BrokerProfile, type C2SCheckinRow } from "@/utils/c2sMatching";
 
 type Origem = "anuncio" | "disparo" | "repescagem" | "propria";
 const ROT: Record<Origem, string> = {
@@ -43,24 +44,83 @@ function segunda() {
   return diaSP(new Date(Date.now() - d * 86_400_000));
 }
 
-export function useFunilSemana(managerId: string | undefined, gerenteCuryId: string | null) {
+export function useFunilSemana(managerId: string | undefined, _gerenteCuryId?: string | null) {
   const de = segunda(), ate = diaSP();
+  const deIso = new Date(de + "T00:00:00").toISOString();
   return useQuery<Degrau[]>({
     queryKey: ["funil-origem", managerId, de, ate],
     enabled: !!managerId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const [funilRes, curyRes] = await Promise.all([
-        supabase.rpc("funil_origem", { p_manager: managerId!, p_de: de, p_ate: ate }),
-        gerenteCuryId
-          ? supabase.from("cury_metricas_diarias")
-              .select("atendimentos,vendas")
-              .eq("escopo", "corretor").eq("gerente_cury_id", gerenteCuryId)
-              .gte("data", de).lte("data", ate)
-          : Promise.resolve({ data: [] as any[] }),
+      // 1. Equipe e Gerente
+      const [mgrRes, brokersRes] = await Promise.all([
+        supabase.from("profiles")
+          .select("id,first_name,last_name")
+          .eq("id", managerId!)
+          .maybeSingle(),
+        supabase.from("profiles")
+          .select("id,first_name,last_name")
+          .eq("manager_id", managerId!)
+          .eq("role", "BROKER"),
       ]);
 
-      const linhas = (funilRes.data ?? []) as any[];
+      const mgr = (mgrRes.data as any) ?? null;
+      const brokers = (brokersRes.data ?? []) as BrokerProfile[];
+
+      // 2. RPC funil_origem (se disponível), Check-ins C2S e Vendas concluídas
+      const [funilRes, ckRes, vendasRes] = await Promise.all([
+        supabase.rpc("funil_origem", { p_manager: managerId!, p_de: de, p_ate: ate }),
+        supabase.from("c2s_checkins")
+          .select("corretor,gerente,created_at")
+          .gte("created_at", deIso),
+        supabase.from("leads")
+          .select("id,broker_id,updated_at,last_interaction_at,created_at")
+          .eq("manager_id", managerId!)
+          .eq("status", "CONCLUDED")
+          .gte("updated_at", deIso),
+      ]);
+
+      let linhas = (funilRes.data ?? []) as any[];
+
+      // Fallback gracioso se a RPC funil_origem não retornar dados
+      if (!linhas || linhas.length === 0) {
+        const { data: leadsSemana } = await supabase.from("leads")
+          .select("id,source,original_broker_id,status,contact_attempts,last_interaction_at,created_at")
+          .eq("manager_id", managerId!)
+          .gte("created_at", deIso);
+
+        const mapa: Record<Origem, { entraram: number; contatados: number; responderam: number; negociando: number }> = {
+          anuncio: { entraram: 0, contatados: 0, responderam: 0, negociando: 0 },
+          disparo: { entraram: 0, contatados: 0, responderam: 0, negociando: 0 },
+          repescagem: { entraram: 0, contatados: 0, responderam: 0, negociando: 0 },
+          propria: { entraram: 0, contatados: 0, responderam: 0, negociando: 0 },
+        };
+
+        const origemDoLead = (source: string | null, orig: string | null): Origem => {
+          if (source === "cold_pool" || orig) return "repescagem";
+          if (source === "facebook_make") return "anuncio";
+          if (source === "wa_oficial" || source === "campaign") return "disparo";
+          return "propria";
+        };
+
+        for (const l of (leadsSemana ?? [])) {
+          const orig = origemDoLead(l.source, l.original_broker_id);
+          const o = mapa[orig];
+          o.entraram += 1;
+          const contatado = (l.contact_attempts ?? 0) > 0 || !!l.last_interaction_at || l.status !== "NEW";
+          if (contatado) o.contatados += 1;
+          const respondeu = ["IN_PROGRESS", "NEGOTIATING", "VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED", "CONCLUDED"].includes(l.status);
+          if (respondeu) o.responderam += 1;
+          const negoc = ["NEGOTIATING", "VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED"].includes(l.status);
+          if (negoc) o.negociando += 1;
+        }
+
+        linhas = Object.entries(mapa).map(([origem, counts]) => ({
+          origem,
+          ...counts,
+        }));
+      }
+
       const por = (campo: string) => {
         const o: Partial<Record<Origem, number>> = {};
         for (const l of linhas) if (l[campo] > 0) o[l.origem as Origem] = Number(l[campo]);
@@ -68,9 +128,14 @@ export function useFunilSemana(managerId: string | undefined, gerenteCuryId: str
       };
       const soma = (campo: string) => linhas.reduce((a, l) => a + Number(l[campo] ?? 0), 0);
 
-      const cury = ((curyRes as any).data ?? []) as any[];
-      const visitas = cury.reduce((a, c) => a + (c.atendimentos ?? 0), 0);
-      const vendas = cury.reduce((a, c) => a + (c.vendas ?? 0), 0);
+      // Check-ins C2S casados com a equipe
+      const checks = ((ckRes as any).data ?? []) as C2SCheckinRow[];
+      const matched = casarCheckinsComEquipe(checks, brokers, mgr);
+      const visitas = matched.length;
+
+      // Vendas concluídas na semana
+      const vendasRows = ((vendasRes as any).data ?? []) as any[];
+      const vendas = vendasRows.length;
 
       return [
         { label: "Leads na semana", n: soma("entraram"),   origem: por("entraram") },
@@ -86,7 +151,7 @@ export function useFunilSemana(managerId: string | undefined, gerenteCuryId: str
 
 export default function FunilOrigem({
   managerId, gerenteCuryId,
-}: { managerId: string | undefined; gerenteCuryId: string | null }) {
+}: { managerId: string | undefined; gerenteCuryId?: string | null }) {
   const { data, isLoading } = useFunilSemana(managerId, gerenteCuryId);
   const [aberto, setAberto] = useState<number | null>(null);
 
@@ -146,8 +211,9 @@ export default function FunilOrigem({
               {data[aberto].origem === null ? (
                 <>
                   <h4>{data[aberto].label} <span>· {data[aberto].n} no total</span></h4>
-                  <p>A origem do lead não sobrevive até aqui. Visita e venda vêm do
-                     app da Cury com o nome do corretor, não com a origem — mostrar
+                  <p>A origem do lead não sobrevive até aqui. Visita vem do
+                     check-in no plantão (Contact2Sale) e venda é concluída no
+                     Comandra com o nome do corretor, não com a origem — mostrar
                      uma divisão neste degrau seria inventar precisão que não existe.</p>
                 </>
               ) : (
@@ -177,7 +243,7 @@ export default function FunilOrigem({
           )}
 
           <p className="fo-nota">
-            Visita e venda vêm da Cury, medidas sem ninguém digitar. Negociação depende
+            Visita vem do check-in no plantão (Contact2Sale) e venda é registrada no Comandra. Negociação depende
             do corretor mexer no status do lead, e por isso vem por baixo.
           </p>
         </div>

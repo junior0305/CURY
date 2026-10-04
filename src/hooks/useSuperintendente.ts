@@ -36,6 +36,25 @@ export interface SuperRollup {
   };
 }
 
+export interface CampanhaNaoLead {
+  id: string; nome: string; responderam: number; falaram: number;
+  pessoas: { phone: string; nome: string; gerente: string; falou: boolean; quando: string | null }[];
+}
+/* Campanhas NÃO-lead do super (ex.: contratação): quem respondeu, gerente
+ * responsável e se o gerente já falou (cruzando com o chip Evolution dele). */
+export function useCampanhasNaoLead(superId: string | undefined) {
+  return useQuery<CampanhaNaoLead[]>({
+    queryKey: ["super-nao-lead", superId],
+    enabled: !!superId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("super_campanhas_nao_lead", { p_super: superId });
+      if (error) throw error;
+      return ((data as any)?.campanhas ?? []) as CampanhaNaoLead[];
+    },
+  });
+}
+
 /* A visão agregada do superintendente: um rollup de cada gerente abaixo dele.
  * Baseado em leads + profiles — dado que sobrevive a sair da Cury. */
 export function useSuperintendenteRollup(superId: string | undefined, dias: number) {

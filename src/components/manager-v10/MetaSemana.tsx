@@ -20,6 +20,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { casarCheckinsComEquipe, type BrokerProfile, type C2SCheckinRow } from "@/utils/c2sMatching";
 
 const diaSP = (d = new Date()) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo",
@@ -59,35 +60,50 @@ interface Meta {
 
 const RAZAO_EMPRESA = 5.0;   // 215 atendimentos / 43 vendas, ago+set 2026
 
-export function useMetaSemana(managerId: string | undefined, gerenteCuryId: string | null) {
+export function useMetaSemana(managerId: string | undefined, _gerenteCuryId?: string | null) {
   const de = segunda(), hoje = diaSP();
   const inicioMes = hoje.slice(0, 8) + "01";
+  const de60iso = new Date(Date.now() - 60 * 86_400_000).toISOString();
+  const inicioMesIso = new Date(inicioMes + "T00:00:00").toISOString();
+  const deSemanaIso = new Date(de + "T00:00:00").toISOString();
+
   return useQuery<Meta>({
     queryKey: ["meta-semana", managerId, hoje],
     enabled: !!managerId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data: perfil } = await supabase.from("profiles")
-        .select("team_id").eq("id", managerId!).maybeSingle();
-      const teamId = (perfil as any)?.team_id ?? null;
+      // 1. Dados do gerente e corretores da equipe
+      const [mgrRes, brokersRes] = await Promise.all([
+        supabase.from("profiles")
+          .select("id,first_name,last_name,team_id")
+          .eq("id", managerId!)
+          .maybeSingle(),
+        supabase.from("profiles")
+          .select("id,first_name,last_name")
+          .eq("manager_id", managerId!)
+          .eq("role", "BROKER"),
+      ]);
 
-      const [metasRes, mesRes, histRes] = await Promise.all([
+      const mgr = (mgrRes.data as any) ?? null;
+      const teamId = mgr?.team_id ?? null;
+      const brokers = (brokersRes.data ?? []) as BrokerProfile[];
+
+      // 2. Metas (team_goals), Vendas nativas do Comandra (leads CONCLUDED) e Check-ins C2S (c2s_checkins)
+      const [metasRes, vendasRes, ckRes] = await Promise.all([
         teamId
           ? supabase.from("team_goals").select("sales_target,goal_type,week_start,month")
               .eq("team_id", teamId)
           : Promise.resolve({ data: [] as any[] }),
-        // Uma consulta só do dia 1 até hoje: a semana sai daqui por recorte,
-        // em vez de uma segunda ida ao banco pedindo o mesmo dado menor.
-        gerenteCuryId
-          ? supabase.from("cury_metricas_diarias").select("data,atendimentos,vendas")
-              .eq("escopo", "corretor").eq("gerente_cury_id", gerenteCuryId)
-              .gte("data", inicioMes).lte("data", hoje)
-          : Promise.resolve({ data: [] as any[] }),
-        gerenteCuryId
-          ? supabase.from("cury_metricas_diarias").select("atendimentos,vendas")
-              .eq("escopo", "corretor").eq("gerente_cury_id", gerenteCuryId)
-              .gte("data", diaSP(new Date(Date.now() - 60 * 86_400_000)))
-          : Promise.resolve({ data: [] as any[] }),
+        // Vendas concluídas dos últimos 60 dias da equipe
+        supabase.from("leads")
+          .select("id,broker_id,updated_at,last_interaction_at,created_at")
+          .eq("manager_id", managerId!)
+          .eq("status", "CONCLUDED")
+          .gte("updated_at", de60iso),
+        // Check-ins C2S dos últimos 60 dias
+        supabase.from("c2s_checkins")
+          .select("corretor,gerente,created_at")
+          .gte("created_at", de60iso),
       ]);
 
       const metas = ((metasRes as any).data ?? []) as any[];
@@ -95,31 +111,45 @@ export function useMetaSemana(managerId: string | undefined, gerenteCuryId: stri
       const daSemana = metas.find((m) => m.goal_type === "weekly" && m.week_start === de);
       const alvoMes = doMes?.sales_target || null;
 
-      const mes = ((mesRes as any).data ?? []) as any[];
-      const soma = (linhas: any[], campo: string) =>
-        linhas.reduce((a, x) => a + (x[campo] ?? 0), 0);
-      const naSemana = mes.filter((x) => String(x.data) >= de);
+      // Classificar vendas (mês, semana e histórico de 60 dias)
+      const todasVendas = ((vendasRes as any).data ?? []) as any[];
+      const dtVenda = (v: any) => v.updated_at || v.last_interaction_at || v.created_at || "";
 
-      const vendasMes = soma(mes, "vendas");
+      const vendasMes = todasVendas.filter((v) => dtVenda(v) >= inicioMesIso || dtVenda(v) >= inicioMes).length;
+      const vendasSemana = todasVendas.filter((v) => dtVenda(v) >= deSemanaIso || dtVenda(v) >= de).length;
+      const hVendas = todasVendas.length;
+
+      // Casar check-ins C2S com a equipe
+      const checks = ((ckRes as any).data ?? []) as C2SCheckinRow[];
+      const matched = casarCheckinsComEquipe(checks, brokers, mgr);
+
+      let atendMes = 0;
+      let atendSemana = 0;
+      const hAtend = matched.length;
+
+      for (const m of matched) {
+        const d = m.checkin.created_at;
+        if (d >= inicioMesIso || d >= inicioMes) atendMes += 1;
+        if (d >= deSemanaIso || d >= de) atendSemana += 1;
+      }
+
       const faltaNoMes = alvoMes ? Math.max(0, alvoMes - vendasMes) : 0;
-
-      // A semana não é o mês dividido por 4,33: é o que falta repartido pelas
-      // semanas que ainda existem. Em dia 25 com metade da meta aberta, a conta
-      // fixa mentiria para baixo — e é justamente quando ela precisa apertar.
       const semanasRestantes = Math.max(1, Math.ceil(diasNoMes() / 7));
       const alvoSemana = daSemana?.sales_target
         ? daSemana.sales_target
         : (alvoMes ? Math.ceil(faltaNoMes / semanasRestantes) : null);
 
-      const hist = ((histRes as any).data ?? []) as any[];
-      const hAtend = soma(hist, "atendimentos"), hVendas = soma(hist, "vendas");
-      // Amostra pequena não vira régua: abaixo de 5 vendas usa a da empresa.
+      // Amostra de histórico de conversão (60 dias)
       const propria = hVendas >= 5 && hAtend > 0;
 
       return {
-        alvoMes, vendasMes, atendMes: soma(mes, "atendimentos"),
-        alvoSemana, semanaCadastrada: !!daSemana?.sales_target,
-        vendasSemana: soma(naSemana, "vendas"), atendSemana: soma(naSemana, "atendimentos"),
+        alvoMes,
+        vendasMes,
+        atendMes,
+        alvoSemana,
+        semanaCadastrada: !!daSemana?.sales_target,
+        vendasSemana,
+        atendSemana,
         razao: propria ? hAtend / hVendas : RAZAO_EMPRESA,
         razaoPropria: propria,
       };
@@ -129,7 +159,7 @@ export function useMetaSemana(managerId: string | undefined, gerenteCuryId: stri
 
 export default function MetaSemana({
   managerId, gerenteCuryId,
-}: { managerId: string | undefined; gerenteCuryId: string | null }) {
+}: { managerId: string | undefined; gerenteCuryId?: string | null }) {
   const { data } = useMetaSemana(managerId, gerenteCuryId);
   if (!data) return null;
 

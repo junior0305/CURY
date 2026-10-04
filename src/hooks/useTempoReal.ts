@@ -12,6 +12,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { casarCheckinsComEquipe } from "@/utils/c2sMatching";
 
 export type Nivel = "crit" | "trav" | "warn" | "ok";
 export type Origem = "anuncio" | "disparo" | "repescagem" | "propria";
@@ -144,7 +145,10 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
     queryFn: async () => {
       const de7iso = new Date(Date.now() - 7 * 86_400_000).toISOString();
 
-      const [timeRes, leadsRes, ckRes] = await Promise.all([
+      const [mgrRes, timeRes, leadsRes, ckRes, vendasRes] = await Promise.all([
+        supabase.from("profiles")
+          .select("id,first_name,last_name")
+          .eq("id", managerId!).maybeSingle(),
         supabase.from("profiles")
           .select("id,first_name,last_name,last_seen_at,lead_assignment_enabled,lead_assignment_source")
           .eq("manager_id", managerId!).eq("role", "BROKER"),
@@ -152,14 +156,22 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
           .select("broker_id,source,original_broker_id,status")
           .eq("manager_id", managerId!)
           .not("status", "in", "(CONCLUDED,EXCLUDED,ABANDONED)"),
-        // Plantão/atendimento agora vêm do C2S (check-in), não mais da Cury.
+        // Plantão/atendimento vêm do C2S (check-in), com corretor e gerente para matching seguro.
         supabase.from("c2s_checkins")
-          .select("corretor,created_at").gte("created_at", de7iso),
+          .select("corretor,gerente,created_at").gte("created_at", de7iso),
+        // Vendas concluídas nesta semana (nativas do Comandra)
+        supabase.from("leads")
+          .select("broker_id,updated_at,created_at")
+          .eq("manager_id", managerId!)
+          .eq("status", "CONCLUDED")
+          .gte("updated_at", de7iso),
       ]);
 
+      const mgr = (mgrRes.data as any) ?? null;
       const time = (timeRes.data ?? []) as any[];
       const leads = (leadsRes.data ?? []) as any[];
       const checks = (ckRes.data ?? []) as any[];
+      const vendas = (vendasRes.data ?? []) as any[];
 
       // carteira por origem
       const cart = new Map<string, Record<Origem, number>>();
@@ -170,21 +182,20 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
         cart.set(l.broker_id, c);
       }
 
-      // Check-in do C2S por corretor: casa o seller_name do C2S ao profile pelo
-      // primeiro nome (ex. "GALILEIA BN" -> "Galileia"). Hoje = plantão de hoje;
-      // 7 dias = dias de plantão + atendimentos da semana.
-      const prim = (x: string) => (x || "").trim().split(/\s+/)[0].toLowerCase();
-      const porNome = new Map<string, string>();
-      for (const b of time) {
-        const fn = (b.first_name || "").trim().toLowerCase();
-        if (fn) porNome.set(fn, b.id);
+      // Vendas da semana por corretor
+      const vendasSemanaPorBroker = new Map<string, number>();
+      for (const v of vendas) {
+        if (!v.broker_id) continue;
+        vendasSemanaPorBroker.set(v.broker_id, (vendasSemanaPorBroker.get(v.broker_id) ?? 0) + 1);
       }
+
+      // Check-in do C2S por corretor com matching seguro (sem colisão de homônimos de outras equipes)
+      const matched = casarCheckinsComEquipe(checks, time, mgr);
       const ckHoje = new Map<string, number>();
       const ckSem = new Map<string, { atend: number; dias: Set<string> }>();
       let ultimo: string | null = null;
-      for (const ck of checks) {
-        const pid = porNome.get(prim(ck.corretor));
-        if (!pid) continue;
+
+      for (const { checkin: ck, brokerId: pid } of matched) {
         const diaCk = diaSP(new Date(ck.created_at));
         const sm = ckSem.get(pid) ?? { atend: 0, dias: new Set<string>() };
         sm.atend += 1; sm.dias.add(diaCk); ckSem.set(pid, sm);
@@ -198,6 +209,7 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
         const o = cart.get(b.id) ?? zero;
         const hj = ckHoje.get(b.id) ?? 0;
         const sm = ckSem.get(b.id);
+        const vSem = vendasSemanaPorBroker.get(b.id) ?? 0;
         return {
           profileId: b.id, curyId: null,
           nome: [b.first_name, b.last_name].filter(Boolean).join(" ") || "—",
@@ -207,7 +219,7 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
           pegos: 0,
           perdidos: 0,
           atendimentos: hj,
-          vendas: 0,
+          vendas: vSem,
           online: horas(b.last_seen_at) < 0.25,
           ultimoAcesso: b.last_seen_at ?? null,
           recebeLead: b.lead_assignment_enabled !== false,
@@ -217,7 +229,7 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
           cadastro: "ok" as const, gerenteAtual: null,
           diasPlantao: sm?.dias.size ?? 0,
           atendSemana: sm?.atend ?? 0,
-          vendasSemana: 0,
+          vendasSemana: vSem,
         };
       });
 
@@ -229,7 +241,7 @@ export function useTempoReal(managerId: string | undefined, dia?: string) {
           online: gente.filter((p) => p.online).length,
           atendimentos: soma((p) => p.atendimentos),
           perdidos: 0,
-          vendas: 0,
+          vendas: soma((p) => p.vendasSemana),
         },
         atualizadoEm: ultimo,
         gerenteCuryId: null,
