@@ -123,11 +123,95 @@ export default function IntegracaoFacebook() {
         )}
       </div>
 
+      {temConexao ? <MapaFormularios /> : null}
+
       <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-        <b>Próximo passo (em construção):</b> depois de conectar, você vai mapear cada
-        <b> formulário → fila → corretores</b>, e ligar o <b>CAPI</b> (otimização de anúncios)
-        reaproveitando esta mesma conexão.
+        <b>Em breve:</b> ligar o <b>CAPI</b> (otimização de anúncios) reaproveitando esta conexão.
       </div>
+    </div>
+  );
+}
+
+// Mapa formulário → corretores. Cada formulário vira uma "fila" (distribution_queue)
+// com os corretores marcados. Sem corretor = cai na distribuição padrão.
+function MapaFormularios() {
+  const [paginas, setPaginas] = useState<any[]>([]);
+  const [brokers, setBrokers] = useState<any[]>([]);
+  const [mapa, setMapa] = useState<Record<string, string[]>>({});
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function carregar() {
+    setLoading(true);
+    const [{ data: fb }, { data: brk }] = await Promise.all([
+      supabase.functions.invoke("fb-forms", { body: {} }),
+      supabase.from("profiles").select("id,first_name,last_name").eq("role", "BROKER").eq("is_active", true).order("first_name"),
+    ]);
+    const pags = ((fb as any)?.paginas ?? []) as any[];
+    setPaginas(pags);
+    setBrokers((brk as any[]) ?? []);
+    const m: Record<string, string[]> = {};
+    for (const p of pags) for (const f of (p.forms ?? [])) m[f.id] = f.broker_ids ?? [];
+    setMapa(m);
+    setLoading(false);
+  }
+  useEffect(() => { carregar(); }, []);
+
+  async function toggle(formId: string, brokerId: string) {
+    const s = new Set(mapa[formId] ?? []);
+    s.has(brokerId) ? s.delete(brokerId) : s.add(brokerId);
+    const arr = [...s];
+    setMapa((m) => ({ ...m, [formId]: arr }));
+    setBusy(formId);
+    const { data, error } = await supabase.functions.invoke("fb-map-form", { body: { form_id: formId, broker_ids: arr } });
+    setBusy(null);
+    if (error || (data as any)?.error) toast.error("Não consegui salvar.");
+  }
+
+  const nomeBroker = (b: any) => [b.first_name, b.last_name].filter(Boolean).join(" ") || "—";
+  if (loading) return <div className="text-sm text-muted-foreground">carregando formulários…</div>;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="text-sm font-semibold">Formulários → quem recebe</div>
+        <div className="text-xs text-muted-foreground">Marque os corretores de cada formulário. Sem corretor marcado, o lead cai na distribuição padrão.</div>
+      </div>
+      {!paginas.length ? (
+        <div className="text-sm text-muted-foreground">Conecte uma página primeiro.</div>
+      ) : paginas.map((p) => (
+        <div key={p.page_id}>
+          <div className="text-xs font-semibold text-muted-foreground mb-1">{p.page_name}</div>
+          {p.erro ? <div className="text-xs text-amber-600 mb-1">{p.erro}</div> : null}
+          <div className="space-y-2">
+            {(p.forms ?? []).map((f: any) => (
+              <div key={f.id} className="rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-medium text-sm">{f.name}</div>
+                  {busy === f.id ? (
+                    <span className="text-xs text-muted-foreground">salvando…</span>
+                  ) : (mapa[f.id]?.length ? (
+                    <Badge className="bg-green-100 text-green-700 border-green-200">{mapa[f.id].length} corretor(es)</Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">→ distribuição padrão</span>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {brokers.map((b) => {
+                    const on = (mapa[f.id] ?? []).includes(b.id);
+                    return (
+                      <button key={b.id} type="button" onClick={() => toggle(f.id, b.id)}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${on ? "bg-blue-600 text-white border-blue-600" : "bg-background text-foreground hover:bg-muted"}`}>
+                        {nomeBroker(b)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
