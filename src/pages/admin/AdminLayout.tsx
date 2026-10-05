@@ -66,6 +66,7 @@ import SaudeLeads   from "./SaudeLeads";
 import { Prospeccao } from "./Prospeccao";
 import ColdPool from "./ColdPool";
 import WppOficial from "./WppOficial";
+import IntegracaoFacebook from "./IntegracaoFacebook";
 import AudioSettings from "@/components/admin/AudioSettings";
 import SistemaControl from "@/components/admin/SistemaControl";
 import Agentes from "./Agentes";
@@ -142,6 +143,7 @@ const GROUPS = [
     icon: Plug,
     roles: ["ADMIN", "SUPERINTENDENT"],
     subtabs: [
+      { value: "fb-leads", label: "Facebook Leads", roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "webhooks", label: "Webhooks",     roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "sons",     label: "Arena Sonora", roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "monitor",  label: "Sistema",      roles: ["ADMIN", "SUPERINTENDENT"] },
@@ -433,6 +435,7 @@ function AdminLayoutInner() {
             { v: "wpp-oficial", l: "WPP Oficial", roles: ["ADMIN","SUPERINTENDENT"] },
           ]} role={gateRole}>
             <TabsContent value="anuncios-fb" className="p-0"><Anuncios /></TabsContent>
+            <TabsContent value="fb-leads" className="p-0"><IntegracaoFacebook /></TabsContent>
             <TabsContent value="wpp-oficial" className="p-0"><WppOficial /></TabsContent>
           </SubTabs>
         )}
