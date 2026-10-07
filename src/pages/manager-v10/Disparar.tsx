@@ -552,7 +552,9 @@ export default function Disparar() {
     const gente = [...data.publicos.filter((p) => pubs.has(p.chave)).flatMap((p) => p.gente), ...csv];
     // Uma pessoa pode estar em duas listas; a Meta cobra as duas mensagens.
     const unicos = [...new Map(gente.map((a) => [a.telefone.replace(/\D/g, ""), a])).values()];
-    const teto = data.config?.tetoHoje ?? unicos.length;
+    // O teto é do número que VAI enviar (o escolhido), não do padrão: com dois
+    // números, cortar pelo padrão mandava 250 por um número que entrou hoje.
+    const teto = cfgEnvio?.tetoHoje ?? data.config?.tetoHoje ?? unicos.length;
     const vai = unicos.slice(0, teto);
     const brokers = destino === "escolher" ? [...marcados] : data.corretores.map((c) => c.id);
     if (!brokers.length) { toast.error("Escolha pelo menos um corretor para atender."); return; }
