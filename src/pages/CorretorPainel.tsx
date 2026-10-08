@@ -17,14 +17,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchLeadsForDashboard, updateLeadStatus, setLeadNegotiating } from "@/integrations/supabase/leads";
 import { fetchLeadNotes, addLeadNote, waLink } from "@/integrations/supabase/atender";
 import { DisparoCorretor } from "@/components/broker/DisparoCorretor";
-import type { Lead, LeadStatus } from "@/types/lead";
-import { TIPO_TRABALHO_LABEL } from "@/types/lead";
+import type { Lead, LeadStatus, LostReason } from "@/types/lead";
+import { TIPO_TRABALHO_LABEL, LOST_REASON_LABEL } from "@/types/lead";
 import { useUnidadesFecha } from "@/hooks/useEstrategia";
 
 // ── stages do funil (iguais ao Atender atual) ───────────────────────────────
 const STAGES: [LeadStatus, string][] = [
   ["NEW", "Novo"], ["IN_PROGRESS", "Atend."], ["NEGOTIATING", "Negoc."],
   ["VISIT_SCHEDULED", "Visita"], ["VISITA_REALIZADA", "Veio"], ["DOCS_REQUESTED", "Docs"], ["CONCLUDED", "Venda"],
+];
+
+// Motivos de descarte (mesma lista do Atender). Sai da fila como ABANDONED + lost_reason.
+const DISCARD_REASONS: NonNullable<LostReason>[] = [
+  "SEM_PERFIL", "NUMERO_ERRADO", "DESISTIU", "SEM_RETORNO", "CLIENTE_BLOQUEOU", "JA_COMPROU",
+  "RENDA_FORA_FAIXA", "JA_TEM_IMOVEL", "JA_USOU_PROGRAMA", "RESTRICAO_CPF",
+  "NAO_COMPARECEU", "FOI_CONCORRENTE", "LOCALIZACAO",
 ];
 
 const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
@@ -87,6 +94,7 @@ const CorretorPainel = () => {
   const [tool, setTool] = useState<"sim" | "doc" | "msg">("sim");
   const [noteDraft, setNoteDraft] = useState("");
   const [caixaOpen, setCaixaOpen] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
 
   // ── LEADS REAIS ───────────────────────────────────────────────────────────
   const { data: leads = [] } = useQuery<Lead[]>({
@@ -134,6 +142,16 @@ const CorretorPainel = () => {
       qc.invalidateQueries({ queryKey: ["painelLeads"] });
       toast.success("Status atualizado");
     } catch { toast.error("Não consegui atualizar o status"); }
+  };
+
+  const discard = async (reason: NonNullable<LostReason>) => {
+    if (!sel) return;
+    try {
+      await updateLeadStatus(sel.id, "ABANDONED", null, reason);
+      toast.success(`${sel.name} descartado · ${LOST_REASON_LABEL[reason]}`);
+      setDiscardOpen(false); setSelId(null); setMobileDetail(false);
+      qc.invalidateQueries({ queryKey: ["painelLeads"] });
+    } catch { toast.error("Não consegui descartar o lead"); }
   };
 
   // ── JARVIS no painel: "o que fazer agora" a partir dos leads do corretor ─────
@@ -440,6 +458,7 @@ const CorretorPainel = () => {
                           <div key={k} className={`pipe-step${i === ci ? " current" : i < ci ? " done" : ""}`} onClick={() => advance(k)}>{lbl}</div>
                         ))}
                       </div>
+                      <button className="btn-discard" onClick={() => setDiscardOpen(true)}>🗑️ Descartar lead · sem interesse, número errado…</button>
                     </div>
 
                     {/* 2. Registro do atendimento (substitui o espelho de conversa) */}
@@ -689,6 +708,25 @@ const CorretorPainel = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* MODAL descartar (motivo obrigatório) */}
+      <AnimatePresence>
+        {discardOpen && sel && (
+          <motion.div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setDiscardOpen(false); }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduce ? 0 : 0.15 }}>
+            <motion.div className="discard-sheet" initial={{ scale: reduce ? 1 : 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: reduce ? 1 : 0.96, opacity: 0 }} transition={{ type: "spring", stiffness: 320, damping: 30 }}>
+              <div className="discard-head">
+                <div className="discard-title">Descartar lead</div>
+                <div className="discard-sub">{sel.name} · {sel.phone} — escolha o motivo</div>
+              </div>
+              <div className="discard-grid">
+                {DISCARD_REASONS.map((r) => <button key={r} className="discard-reason" onClick={() => discard(r)}>{LOST_REASON_LABEL[r]}</button>)}
+              </div>
+              <div className="caixa-foot"><button className="btn-ghost" onClick={() => setDiscardOpen(false)}>Cancelar</button></div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -823,6 +861,14 @@ html.dark .cpv2{--bg:#080e1c;--surface:#111927;--subtle:#18212f;--rail-bg:#060a1
 .cpv2 .disp-subtab{padding:8px 14px;border-radius:8px;background:transparent;font-size:12.5px;font-weight:700;color:var(--text-2);display:flex;align-items:center;gap:6px;}
 .cpv2 .disp-subtab.on{background:var(--text);color:var(--surface);}
 .cpv2 .modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.65);display:grid;place-items:center;z-index:600;padding:20px;}
+.cpv2 .btn-discard{margin-top:12px;width:100%;height:38px;border:1px solid #f2d6d4;background:#fdeae7;color:#b0413b;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer;}
+.cpv2 .btn-discard:hover{background:#fbdcd7;}
+.cpv2 .discard-sheet{width:100%;max-width:460px;background:#fff;color:#0f172a;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.4);}
+.cpv2 .discard-head{padding:18px 20px 6px;} .cpv2 .discard-title{font-weight:800;font-size:16px;} .cpv2 .discard-sub{color:#64748b;font-size:13px;margin-top:2px;}
+.cpv2 .discard-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 20px 18px;}
+.cpv2 .discard-reason{text-align:left;border:1px solid #e2e8f0;background:#f8fafc;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:600;color:#0f172a;cursor:pointer;}
+.cpv2 .discard-reason:hover{border-color:#e5a29c;background:#fdeae7;color:#b0413b;}
+@media (max-width:480px){.cpv2 .discard-grid{grid-template-columns:1fr;}}
 .cpv2 .caixa-sheet{width:100%;max-width:540px;background:#fff;color:#0f172a;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.4);}
 .cpv2 .caixa-head{background:linear-gradient(90deg,#005ca9,#0073d1);color:#fff;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;}
 .cpv2 .caixa-logo{font-weight:900;font-size:15px;}
