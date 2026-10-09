@@ -628,7 +628,7 @@ export function acharCheiroOferta(texto: string): string[] {
 }
 
 /** A Meta recusa nome de exibição que não tenha relação com o negócio. */
-export function checarNome(nome: string, marca = "Cury") {
+export function checarNome(nome: string, marca = "Econ") {
   const v = nome.trim();
   if (!v) return { ok: false, sugestao: null as string | null, texto: "" };
   if (v.toLowerCase().includes(marca.toLowerCase()))

@@ -75,7 +75,7 @@ const MODELOS: Record<string, { rotulo: string; corpo: string; ex: Record<string
       ex: { quando: "março", empreendimento: "Cidade Lapa — Perdizes",
             informacao: "A condição que você consultou continua disponível." } },
     { rotulo: "Retorno de atendimento",
-      corpo: "{{nome}}, aqui é da Cury. Seu atendimento sobre o {{empreendimento}} ficou em aberto com a gente.\n\n{{pendencia}}\n\nQuer que eu retome de onde parou?",
+      corpo: "{{nome}}, aqui é da Econ. Seu atendimento sobre o {{empreendimento}} ficou em aberto com a gente.\n\n{{pendencia}}\n\nQuer que eu retome de onde parou?",
       ex: { empreendimento: "Cambuci", pendencia: "Faltou você nos enviar o comprovante de renda." } },
     { rotulo: "Confirmação de visita",
       corpo: "Olá {{nome}}, confirmando sua visita ao {{empreendimento}} em {{quando}}.\n\nEndereço: {{endereco}}\n\nSe precisar remarcar, é só responder aqui.",
@@ -137,7 +137,7 @@ export default function Disparar() {
   const [tNome, setTNome] = useState("retomada_cadastro");
   const [tTipo, setTTipo] = useState("UTILITY");
   const [tCorpo, setTCorpo] = useState(MODELOS.UTILITY[0].corpo);
-  const [tRod, setTRod] = useState("Cury Vendas · responda SAIR para não receber mais");
+  const [tRod, setTRod] = useState("Econ Vendas · responda SAIR para não receber mais");
   const [b1, setB1] = useState("Quero continuar");
   const [b2, setB2] = useState("Não tenho mais interesse");
   const [img, setImg] = useState<string | null>(null);
@@ -636,8 +636,8 @@ export default function Disparar() {
     return (
       <div className="fone">
         <div className="fone-top">
-          <div className="fone-av">{ini(data?.config?.label ?? "Cury")}</div>
-          <div><b>{data?.config?.label ?? "Cury Vendas"}</b><span>conta comercial</span></div>
+          <div className="fone-av">{ini(data?.config?.label ?? "Econ")}</div>
+          <div><b>{data?.config?.label ?? "Econ Vendas"}</b><span>conta comercial</span></div>
         </div>
         <div className="fone-corpo">
           <div className="bolha">
@@ -723,7 +723,7 @@ export default function Disparar() {
                             <label htmlFor="sobre">Recado do perfil</label>
                             <input id="sobre" maxLength={139}
                               value={sobre || perfilAtual?.sobre || ""}
-                              placeholder="Cury — imóveis Minha Casa Minha Vida"
+                              placeholder="Econ — imóveis Minha Casa Minha Vida"
                               onChange={(e) => setSobre(e.target.value)} />
                             <small>Aparece embaixo do nome quando o cliente abre a conversa.</small>
                           </div>
@@ -939,7 +939,7 @@ export default function Disparar() {
                       <div className="f" style={{ marginBottom: 10 }}>
                         <label htmlFor="disp-nome">Nome que o cliente vai ver</label>
                         <input id="disp-nome" autoComplete="off" value={nomeExib}
-                          disabled={conectando} placeholder="Cury — Dudu"
+                          disabled={conectando} placeholder="Econ — Dudu"
                           onChange={(e) => setNomeExib(e.target.value)} />
                         {nomeCheck ? (
                           <div className={`nome-v ${nomeCheck.ok ? "ok" : "ruim"}`}>
