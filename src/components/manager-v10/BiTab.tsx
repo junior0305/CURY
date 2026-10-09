@@ -197,8 +197,13 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
         slot(g).checkins.add(`${cor}|${r.dia}`);
       }
       for (const v of visitasRows) { const g = gerDoCorretor.get(chaveNome(v.corretor || "")); if (g) slot(g).visitas++; }
+      const porCor = new Map<string, { nome: string; gerente: string; checkins: Set<string>; visitas: number }>();
+      const slotC = (nome: string, g: string) => { const k = chaveNome(nome); let x = porCor.get(k); if (!x) { x = { nome: nome.trim(), gerente: g, checkins: new Set(), visitas: 0 }; porCor.set(k, x); } if (!x.gerente && g) x.gerente = g; return x; };
+      for (const r of soCorretores) slotC(r.corretor, chaveGer(r.gerente)).checkins.add(r.dia);
+      for (const v of visitasRows) if ((v.corretor || "").trim()) slotC(v.corretor, gerDoCorretor.get(chaveNome(v.corretor)) || "").visitas++;
       return {
         porGerente: [...porGer.entries()].map(([g, x]) => ({ gerente: g, checkins: x.checkins.size, visitas: x.visitas })),
+        porCorretor: [...porCor.entries()].map(([k, x]) => ({ chave: k, nome: x.nome, gerente: x.gerente, checkins: x.checkins.size, visitas: x.visitas })),
         presencas, corretoresPlantao, presentesHoje, mediaDia,
         visitas: visitasRows.length,
         primeirasVisitas: visitasRows.filter((v) => /primeira/i.test(v.visit_type || "")).length,
@@ -220,6 +225,26 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
       .sort((a, b) => b.vgv - a.vgv || b.checkins - a.checkins);
   }, [op, vendasJunix]);
   const maxCheckGer = Math.max(1, ...porGerenteEcon.map((g) => g.checkins));
+  const titulo = (k: string) => (k ? k.charAt(0) + k.slice(1).toLowerCase() : "—");
+  const porCorretorEcon = useMemo(() => {
+    const m = new Map<string, { nome: string; gerente: string; checkins: number; visitas: number; vendas: number; vgv: number }>();
+    for (const c of op?.porCorretor || []) m.set(c.chave, { nome: c.nome, gerente: c.gerente, checkins: c.checkins, visitas: c.visitas, vendas: 0, vgv: 0 });
+    for (const v of vendasJunix) {
+      const k = chaveNome(v.corretor || ""); if (!k) continue;
+      let x = m.get(k); if (!x) { x = { nome: (v.corretor || "").trim(), gerente: chaveGer(v.gerente || ""), checkins: 0, visitas: 0, vendas: 0, vgv: 0 }; m.set(k, x); }
+      x.vendas += Number(v.qtd || 1); x.vgv += Number(v.vgv || 0); if (!x.gerente) x.gerente = chaveGer(v.gerente || "");
+    }
+    return [...m.values()].map((x) => ({ ...x, gerente: titulo(x.gerente) }));
+  }, [op, vendasJunix]);
+  const [ordem, setOrdem] = useState<"vgv" | "checkins" | "visitas">("vgv");
+  const rankEcon = useMemo(() => {
+    let arr: any[] = nivel === "corretor" ? porCorretorEcon.slice() : porGerenteEcon.map((g) => ({ ...g, nome: g.gerente }));
+    if (nivel === "corretor" && selMgr !== "ALL") arr = arr.filter((l) => l.gerente === selMgr);
+    if (busca.trim()) { const q = busca.toLowerCase(); arr = arr.filter((l) => (l.nome || "").toLowerCase().includes(q)); }
+    const chave = (l: any) => (ordem === "vgv" ? [l.vgv, l.vendas, l.checkins] : ordem === "checkins" ? [l.checkins, l.visitas, l.vgv] : [l.visitas, l.checkins, l.vgv]);
+    return arr.sort((a, b) => { const x = chave(a), y = chave(b); for (let i = 0; i < 3; i++) if (y[i] !== x[i]) return y[i] - x[i]; return 0; });
+  }, [nivel, porCorretorEcon, porGerenteEcon, selMgr, busca, ordem]);
+  const maxRank = Math.max(1, ...rankEcon.map((l) => (ordem === "vgv" ? l.vgv : ordem === "checkins" ? l.checkins : l.visitas)));
 
   const vjQtd = vendasJunix.reduce((a, v) => a + Number(v.qtd || 1), 0);
   const vjVgv = vendasJunix.reduce((a, v) => a + Number(v.vgv || 0), 0);
@@ -279,7 +304,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                 <div className="hero-title-block">
                   <h1>Fechamento &amp; Comparativo — Vendas × Visitas × Documentos</h1>
                   <span className="hero-filter-badge">
-                    DIRETORIA (visão compartilhada) · {nf(gerentes.length)} Gerentes · {nf(corretores.length)} Corretores · Últimos {dias} dias
+                    DIRETORIA (visão compartilhada) · {nf(porGerenteEcon.length)} Gerentes · {nf(porCorretorEcon.length)} Corretores · Últimos {dias} dias
                   </span>
                 </div>
               </div>
@@ -293,8 +318,8 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                   </select>
                 </div>
                 <div className="hc-buttons">
-                  <button className={`hc-btn${nivel === "gerente" ? " active" : ""}`} onClick={() => setNivel("gerente")}>🧑‍💼 {nf(gerentes.length)} Gerentes</button>
-                  <button className={`hc-btn${nivel === "corretor" ? " active" : ""}`} onClick={() => setNivel("corretor")}>🏃‍♂️ {nf(corretores.length)} Corretores</button>
+                  <button className={`hc-btn${nivel === "gerente" ? " active" : ""}`} onClick={() => setNivel("gerente")}>🧑‍💼 {nf(porGerenteEcon.length)} Gerentes</button>
+                  <button className={`hc-btn${nivel === "corretor" ? " active" : ""}`} onClick={() => setNivel("corretor")}>🏃‍♂️ {nf(porCorretorEcon.length)} Corretores</button>
                 </div>
               </div>
             </div>
@@ -417,13 +442,13 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
 
                   {/* CENTRO */}
                   <div className="panel-cury">
-                    <div className="p-hdr-bar"><span>🏆 Ranking &amp; Comparativo — {nivel === "corretor" ? `${nf(linhas.length)} Corretores` : `${nf(linhas.length)} Gerentes`}</span></div>
+                    <div className="p-hdr-bar"><span>🏆 Ranking &amp; Comparativo — {nivel === "corretor" ? `${nf(rankEcon.length)} Corretores` : `${nf(rankEcon.length)} Gerentes`}</span><small>C2S + Junix</small></div>
                     <div className="cascade-filter-bar">
                       <div className="cf-mode-tabs">
                         <div className="mode-pill-group">
                           <span style={{ fontSize: 10.5, color: "#93C5FD", fontWeight: 800, alignSelf: "center", marginRight: 4 }}>VISUALIZAR POR:</span>
-                          <button className={`m-pill${nivel === "gerente" ? " active" : ""}`} onClick={() => setNivel("gerente")}>🧑‍💼 Gerentes ({nf(gerentes.length)})</button>
-                          <button className={`m-pill${nivel === "corretor" ? " active" : ""}`} onClick={() => setNivel("corretor")}>🏃‍♂️ Corretores ({nf(corretores.length)})</button>
+                          <button className={`m-pill${nivel === "gerente" ? " active" : ""}`} onClick={() => setNivel("gerente")}>🧑‍💼 Gerentes ({nf(porGerenteEcon.length)})</button>
+                          <button className={`m-pill${nivel === "corretor" ? " active" : ""}`} onClick={() => setNivel("corretor")}>🏃‍♂️ Corretores ({nf(porCorretorEcon.length)})</button>
                         </div>
                       </div>
                       <div className="cf-top-row">
@@ -431,16 +456,16 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                           <label>Filtrar por Gerente</label>
                           <select value={selMgr} onChange={(e) => { setSelMgr(e.target.value); setNivel("corretor"); }} disabled={nivel !== "corretor"}>
                             <option value="ALL">👥 Todos os gerentes</option>
-                            {gerentes.map((g) => <option key={nomeDe(g)} value={g.apelido || g.nome}>{nomeDe(g)}</option>)}
+                            {porGerenteEcon.map((g) => <option key={g.gerente} value={g.gerente}>{g.gerente}</option>)}
                           </select>
                         </div>
                         <div className="cf-field">
                           <label>Ordenar</label>
-                          <select disabled><option>Por vendas (maior → menor)</option></select>
-                        </div>
-                        <div className="cf-field">
-                          <label>Status</label>
-                          <select disabled><option>Todos</option></select>
+                          <select value={ordem} onChange={(e) => setOrdem(e.target.value as any)}>
+                            <option value="vgv">Por VGV / vendas</option>
+                            <option value="checkins">Por check-ins</option>
+                            <option value="visitas">Por visitas</option>
+                          </select>
                         </div>
                         <div className="cf-field">
                           <label>🔍 Buscar nome</label>
@@ -453,32 +478,26 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                         <thead>
                           <tr>
                             <th>Rank · {nivel === "corretor" ? "Corretor (Gerente)" : "Gerente"}</th>
-                            <th className="r">Check-in</th>
+                            <th className="r">Check-ins</th>
                             <th className="r">Visitas</th>
-                            <th className="r">Docs</th>
-                            <th className="r">vs ant.</th>
                             <th className="r">Vendas</th>
-                            <th className="r">Δ</th>
                             <th className="r">VGV</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {linhas.map((l, i) => {
-                            const v = Number(l.vendas || 0); const d = delta(v, Number(l.vendas_ant || 0));
+                          {rankEcon.map((l, i) => {
+                            const val = ordem === "vgv" ? l.vgv : ordem === "checkins" ? l.checkins : l.visitas;
                             return (
-                              <tr key={"c" + nomeDe(l) + i}>
-                                <td><div className="mgr-cell"><span className="mgr-badge">{i + 1}</span><span>{nomeDe(l)}{nivel === "corretor" && l.gerente_apelido ? <small style={{ color: "#93C5FD", fontWeight: 600 }}> · {l.gerente_apelido}</small> : null}</span></div></td>
-                                <td className="r">{nf(Number(l.checkins || 0))}</td>
-                                <td className="r">{nf(Number(l.visitas || 0))}</td>
-                                <td className="r">{nf(Number(l.docs || 0))}</td>
-                                <td className="r">{nf1(Number(l.vendas_ant || 0))}</td>
-                                <td className="r"><div className="cell-bar-wrap"><span>{nf(v)}</span><div className="mini-bar-track"><div className="mini-bar-fill" style={{ width: `${Math.round((v / maxCenter) * 100)}%` }} /></div></div></td>
-                                <td className={`r ${d >= 0 ? "up-txt" : "dn-txt"}`}>{d >= 0 ? "✔" : "▼"} {Math.abs(d)}%</td>
-                                <td className="r">{moneyFull(rowVgv(l))}</td>
+                              <tr key={"c" + l.nome + i}>
+                                <td><div className="mgr-cell"><span className="mgr-badge">{i + 1}</span><span>{l.nome}{nivel === "corretor" && l.gerente && l.gerente !== "—" ? <small style={{ color: "#93C5FD", fontWeight: 600 }}> · {l.gerente}</small> : null}</span></div></td>
+                                <td className="r">{nf(l.checkins)}</td>
+                                <td className="r">{nf(l.visitas)}</td>
+                                <td className="r">{nf(l.vendas)}</td>
+                                <td className="r"><div className="cell-bar-wrap"><span>{l.vgv ? moneyFull(l.vgv) : "—"}</span><div className="mini-bar-track"><div className="mini-bar-fill" style={{ width: `${Math.round((val / maxRank) * 100)}%` }} /></div></div></td>
                               </tr>
                             );
                           })}
-                          {!linhas.length ? <tr><td colSpan={8} style={{ textAlign: "center", padding: 24, color: "#93C5FD" }}>Sem dados no período.</td></tr> : null}
+                          {!rankEcon.length ? <tr><td colSpan={5} style={{ textAlign: "center", padding: 18, color: "#93C5FD" }}>Sem dados no período.</td></tr> : null}
                         </tbody>
                         <tfoot>
                           <tr>
