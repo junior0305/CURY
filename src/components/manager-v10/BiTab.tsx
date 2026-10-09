@@ -117,7 +117,9 @@ const BI_CSS = `
 const nf = (n: number) => (n ?? 0).toLocaleString("pt-BR");
 // C2S grava "Gerente Fafa"/"LEITÃO", o Junix "FAFA"/"LEITAO": compara sem prefixo, acento, espaço e sufixo " BN"
 const chaveNome = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+BN$/, "").replace(/[^A-Z0-9]/g, "");
-const chaveGer = (s: string) => chaveNome((s || "").replace(/^ger[eê]n(te|cia)\s+/i, ""));
+// mesmo gerente com dois nomes no C2S (o Jaguar aparece também como "OtavioNeto")
+const APELIDO_GER: Record<string, string> = { OTAVIONETO: "JAGUAR" };
+const chaveGer = (s: string) => { const k = chaveNome((s || "").replace(/^ger[eê]n(te|cia)\s+/i, "")); return APELIDO_GER[k] || k; };
 const nf1 = (n: number) => (n ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 const moneyM = (n: number) => (n / 1e6).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "M";
 const moneyFull = (n: number) => Math.round(n).toLocaleString("pt-BR");
