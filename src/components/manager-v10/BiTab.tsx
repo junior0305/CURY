@@ -138,6 +138,23 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
     },
   });
 
+  // VENDAS = Junix (ImobFlow), venda a venda com VGV real — espelhado em junix_vendas
+  // pelo /root/junix/vendas.py. Só gestor lê (a linha traz comissão de todos os níveis).
+  const { data: vendasJunix = [] } = useQuery({
+    queryKey: ["junixVendas", dias],
+    queryFn: async () => {
+      const desde = new Date(Date.now() - 3 * 3600 * 1000 - (dias - 1) * 86400000).toISOString().slice(0, 10);
+      const { data, error } = await supabase.from("junix_vendas" as any)
+        .select("oc, empreendimento, bloco, unidade, fase, data_contrato, diretor, superintendente, gerente, corretor, vgv, qtd, sinal_status")
+        .eq("ativo", true).gte("data_contrato", desde).order("data_contrato", { ascending: false });
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+  });
+  const vjQtd = vendasJunix.reduce((a, v) => a + Number(v.qtd || 1), 0);
+  const vjVgv = vendasJunix.reduce((a, v) => a + Number(v.vgv || 0), 0);
+  const vjConfirmadas = vendasJunix.filter((v) => /confirmada/i.test(v.fase || "")).length;
+
   const t = data?.totais;
   const ticket = Number(t?.ticket_medio || 320000);
   const gerentes = (data?.por_gerente || []) as any[];
@@ -223,9 +240,9 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                   <div className="gk-card purple">
                     <div className="gk-icon">💰</div>
                     <div className="gk-body">
-                      <div className="gk-lbl">Vendas & VGV estimado</div>
-                      <div className="gk-val">{nf(t.vendas)} un · R$ {moneyM(vgvTot)}</div>
-                      <div className="gk-delta">R$ {moneyM(Number(t.rs))} realizado · {t.rs_com_valor}/{t.vendas_leads} c/ valor</div>
+                      <div className="gk-lbl">Vendas (Junix) & VGV</div>
+                      <div className="gk-val">{nf(vjQtd)} un · R$ {moneyM(vjVgv)}</div>
+                      <div className="gk-delta">{nf(vjConfirmadas)} confirmadas · {nf(vendasJunix.length - vjConfirmadas)} com pendência</div>
                     </div>
                   </div>
                   <div className="gk-card pink">
@@ -251,6 +268,30 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                       <div className="gk-val">{pct(t.presenca_pct)} Stand</div>
                       <div className="gk-delta">{nf(t.presentes)}/{nf(t.corretores)} bateram check-in</div>
                     </div>
+                  </div>
+                </div>
+
+                {/* VENDAS DO PERÍODO — JUNIX */}
+                <div className="panel-cury" style={{ marginBottom: 12 }}>
+                  <div className="p-hdr-bar"><span>🏆 Vendas do período — Junix</span><small>{nf(vjQtd)} un · R$ {moneyFull(vjVgv)} VGV</small></div>
+                  <div className="tbl-scroll">
+                    <table className="h-tbl">
+                      <thead><tr><th>Contrato</th><th>Corretor</th><th>Gerente</th><th>Superint.</th><th>Empreendimento</th><th>Unidade</th><th>Fase</th><th style={{ textAlign: "right" }}>VGV</th></tr></thead>
+                      <tbody>
+                        {vendasJunix.length ? vendasJunix.map((v) => (
+                          <tr key={`${v.oc}-${v.unidade}`}>
+                            <td>{v.data_contrato ? new Date(v.data_contrato + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</td>
+                            <td><b>{v.corretor || "—"}</b></td>
+                            <td>{v.gerente || "—"}</td>
+                            <td>{v.superintendente || "—"}</td>
+                            <td>{(v.empreendimento || "").replace(/^CONDOM[IÍ]NIO\s+/i, "")}</td>
+                            <td>{[v.bloco, v.unidade].filter(Boolean).join(" · ")}</td>
+                            <td><span className={/confirmada/i.test(v.fase || "") ? "up-txt" : "dn-txt"}>{v.fase || "—"}</span></td>
+                            <td style={{ textAlign: "right", fontFamily: "var(--mono)" }}>R$ {moneyFull(Number(v.vgv || 0))}</td>
+                          </tr>
+                        )) : <tr><td colSpan={8} style={{ textAlign: "center", color: "#CBD5E1", padding: 16 }}>Nenhuma venda no Junix neste período.</td></tr>}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
