@@ -27,10 +27,9 @@ const BI_CSS = `
 .biv1 .top-hero{background:var(--navy-header);color:#fff;padding:12px 22px 46px;border-bottom:1px solid #1E293B}
 .biv1 .top-hero-inner{max-width:1640px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
 .biv1 .brand-cluster{display:flex;align-items:center;gap:14px}
-.biv1 .cury-mark{display:flex;align-items:center;gap:8px;padding-right:14px;border-right:2px solid rgba(255,255,255,.18)}
-.biv1 .cury-stripes{display:flex;flex-direction:column;gap:2.5px}
-.biv1 .cury-stripes i{display:block;width:22px;height:4px;background:#38BDF8;transform:skewY(-18deg)}
-.biv1 .cury-mark strong{font-size:24px;font-weight:800;letter-spacing:.04em}
+.biv1 .brand-mark{display:flex;align-items:center;gap:8px;padding-right:14px;border-right:2px solid rgba(255,255,255,.18)}
+.biv1 .brand-mark img{width:30px;height:30px;object-fit:contain}
+.biv1 .brand-mark strong{font-size:22px;font-weight:800;letter-spacing:.04em}
 .biv1 .hero-title-block h1{font-size:20px;font-weight:800;letter-spacing:.01em;text-transform:uppercase}
 .biv1 .hero-filter-badge{display:inline-block;margin-top:2px;background:rgba(250,204,21,.16);border:1px solid rgba(250,204,21,.45);color:var(--gold);font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px}
 .biv1 .hero-controls{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}
@@ -185,7 +184,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
           <header className="top-hero">
             <div className="top-hero-inner">
               <div className="brand-cluster">
-                <div className="cury-mark"><div className="cury-stripes"><i /><i /><i /><i /><i /></div><strong>CURY</strong></div>
+                <div className="brand-mark"><img src="/comandra-icon.png" alt="" /><strong>COMANDRA</strong></div>
                 <div className="hero-title-block">
                   <h1>Fechamento &amp; Comparativo — Vendas × Visitas × Documentos</h1>
                   <span className="hero-filter-badge">
