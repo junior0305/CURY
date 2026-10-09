@@ -115,6 +115,9 @@ const BI_CSS = `
 `;
 
 const nf = (n: number) => (n ?? 0).toLocaleString("pt-BR");
+// C2S grava "Gerente Fafa"/"LEITÃO", o Junix "FAFA"/"LEITAO": compara sem prefixo, acento, espaço e sufixo " BN"
+const chaveNome = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+BN$/, "").replace(/[^A-Z0-9]/g, "");
+const chaveGer = (s: string) => chaveNome((s || "").replace(/^ger[eê]n(te|cia)\s+/i, ""));
 const nf1 = (n: number) => (n ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 const moneyM = (n: number) => (n / 1e6).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "M";
 const moneyFull = (n: number) => Math.round(n).toLocaleString("pt-BR");
@@ -181,7 +184,19 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
       const presentesHoje = new Set(soCorretores.filter((r: any) => r.dia === hojeSP).map((r: any) => r.corretor.trim().toUpperCase())).size;
       const mediaDia = diasComDado ? presencas / diasComDado : 0;
       const ps = (pastas || []) as any[];
+      // por gerente: check-ins (corretor×dia) e visitas (corretor da visita → gerente pelo plantão)
+      const gerDoCorretor = new Map<string, string>();
+      const porGer = new Map<string, { checkins: Set<string>; visitas: number }>();
+      const slot = (g: string) => { let x = porGer.get(g); if (!x) { x = { checkins: new Set(), visitas: 0 }; porGer.set(g, x); } return x; };
+      for (const r of soCorretores) {
+        const cor = r.corretor.trim().toUpperCase(), g = chaveGer(r.gerente);
+        if (!g) continue;
+        gerDoCorretor.set(chaveNome(cor), g);
+        slot(g).checkins.add(`${cor}|${r.dia}`);
+      }
+      for (const v of visitasRows) { const g = gerDoCorretor.get(chaveNome(v.corretor || "")); if (g) slot(g).visitas++; }
       return {
+        porGerente: [...porGer.entries()].map(([g, x]) => ({ gerente: g, checkins: x.checkins.size, visitas: x.visitas })),
         presencas, corretoresPlantao, presentesHoje, mediaDia,
         visitas: visitasRows.length,
         primeirasVisitas: visitasRows.filter((v) => /primeira/i.test(v.visit_type || "")).length,
@@ -193,6 +208,16 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
       };
     },
   });
+
+  const porGerenteEcon = useMemo(() => {
+    const m = new Map<string, { gerente: string; checkins: number; visitas: number; vendas: number; vgv: number }>();
+    const slot = (k: string, nome: string) => { let x = m.get(k); if (!x) { x = { gerente: nome, checkins: 0, visitas: 0, vendas: 0, vgv: 0 }; m.set(k, x); } return x; };
+    for (const g of op?.porGerente || []) { const x = slot(g.gerente, g.gerente); x.checkins = g.checkins; x.visitas = g.visitas; }
+    for (const v of vendasJunix) { const k = chaveGer(v.gerente || ""); if (!k) continue; const x = slot(k, k); x.vendas += Number(v.qtd || 1); x.vgv += Number(v.vgv || 0); }
+    return [...m.values()].map((x) => ({ ...x, gerente: x.gerente.charAt(0) + x.gerente.slice(1).toLowerCase() }))
+      .sort((a, b) => b.vgv - a.vgv || b.checkins - a.checkins);
+  }, [op, vendasJunix]);
+  const maxCheckGer = Math.max(1, ...porGerenteEcon.map((g) => g.checkins));
 
   const vjQtd = vendasJunix.reduce((a, v) => a + Number(v.qtd || 1), 0);
   const vjVgv = vendasJunix.reduce((a, v) => a + Number(v.vgv || 0), 0);
@@ -344,27 +369,23 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                   {/* ESQUERDA */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     <div className="panel-cury">
-                      <div className="p-hdr-bar"><span>🏢 Vendas × Visitas × Docs por Gerente</span><small>top da equipe</small></div>
+                      <div className="p-hdr-bar"><span>🏢 Check-ins × Visitas × Vendas por Gerente</span><small>C2S + Junix</small></div>
                       <div className="tbl-scroll">
                         <table className="h-tbl">
-                          <thead><tr><th>Gerente</th><th className="r">Visitas</th><th className="r">Docs</th><th className="r">VGV</th><th className="r">Vendas</th><th className="r">Δ %</th></tr></thead>
+                          <thead><tr><th>Gerente</th><th className="r">Check-ins</th><th className="r">Visitas</th><th className="r">Vendas</th><th className="r">VGV</th></tr></thead>
                           <tbody>
-                            {prod.map((l) => {
-                              const v = Number(l.vendas || 0); const d = delta(v, Number(l.vendas_ant || 0));
-                              return (
-                                <tr key={"p" + nomeDe(l)}>
-                                  <td>{nomeDe(l)}</td>
-                                  <td className="r">{nf(Number(l.visitas || 0))}</td>
-                                  <td className="r">{nf(Number(l.docs || 0))}</td>
-                                  <td className="r">{moneyFull(rowVgv(l))}</td>
-                                  <td className="r"><div className="cell-bar-wrap"><span>{nf(v)}</span><div className="mini-bar-track"><div className="mini-bar-fill" style={{ width: `${Math.round((v / maxProd) * 100)}%` }} /></div></div></td>
-                                  <td className={`r ${d >= 0 ? "up-txt" : "dn-txt"}`}>{d >= 0 ? "▲" : "▼"} {Math.abs(d)}%</td>
-                                </tr>
-                              );
-                            })}
-                            {!prod.length ? <tr><td colSpan={6} style={{ textAlign: "center", padding: 18, color: "#93C5FD" }}>Sem dados no período.</td></tr> : null}
+                            {porGerenteEcon.map((g) => (
+                              <tr key={"pg" + g.gerente}>
+                                <td>{g.gerente}</td>
+                                <td className="r"><div className="cell-bar-wrap"><span>{nf(g.checkins)}</span><div className="mini-bar-track"><div className="mini-bar-fill" style={{ width: `${Math.round((g.checkins / maxCheckGer) * 100)}%` }} /></div></div></td>
+                                <td className="r">{nf(g.visitas)}</td>
+                                <td className="r">{nf(g.vendas)}</td>
+                                <td className="r">{g.vgv ? moneyFull(g.vgv) : "—"}</td>
+                              </tr>
+                            ))}
+                            {!porGerenteEcon.length ? <tr><td colSpan={5} style={{ textAlign: "center", padding: 18, color: "#93C5FD" }}>Sem dados no período.</td></tr> : null}
                           </tbody>
-                          <tfoot><tr><td>Total</td><td className="r">{nf(t.visitas)}</td><td className="r">{nf(t.docs)}</td><td className="r">{moneyFull(vgvTot)}</td><td className="r">{nf(t.vendas)}</td><td className="r up-txt">▲ {delta(Number(t.vendas), Number(t.vendas_ant))}%</td></tr></tfoot>
+                          <tfoot><tr><td>Total</td><td className="r">{nf(porGerenteEcon.reduce((a, g) => a + g.checkins, 0))}</td><td className="r">{nf(porGerenteEcon.reduce((a, g) => a + g.visitas, 0))}</td><td className="r">{nf(vjQtd)}</td><td className="r">{moneyFull(vjVgv)}</td></tr></tfoot>
                         </table>
                       </div>
                     </div>
