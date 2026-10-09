@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PlantaoEmpresa from "./PlantaoEmpresa";
+import AnunciosGerentes from "./AnunciosGerentes";
 
 type Nivel = "gerente" | "corretor";
 
@@ -246,6 +247,32 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
   }, [nivel, porCorretorEcon, porGerenteEcon, selMgr, busca, ordem]);
   const maxRank = Math.max(1, ...rankEcon.map((l) => (ordem === "vgv" ? l.vgv : ordem === "checkins" ? l.checkins : l.visitas)));
 
+  const { data: ant } = useQuery({
+    queryKey: ["biAnteriorEcon", dias],
+    queryFn: async () => {
+      const ms = 86400000, agora = Date.now() - 3 * 3600 * 1000;
+      const ate = new Date(agora - dias * ms).toISOString().slice(0, 10);          // último dia do anterior
+      const de = new Date(agora - (2 * dias - 1) * ms).toISOString().slice(0, 10);  // primeiro dia do anterior
+      const { data: vs } = await supabase.from("junix_vendas" as any).select("vgv, qtd")
+        .eq("ativo", true).gte("data_contrato", de).lte("data_contrato", ate);
+      const plantao: any[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase.from("c2s_plantao" as any).select("dia, corretor, gerente")
+          .eq("diretor", DIRETORIA_C2S).gte("dia", de).lte("dia", ate).range(from, from + 999);
+        if (error) throw error;
+        plantao.push(...(data || []));
+        if (!data || data.length < 1000) break;
+      }
+      const ger = (g: string) => (g || "").replace(/^ger[eê]n(te|cia)\s+/i, "").trim().toUpperCase();
+      const checkins = new Set(plantao.filter((r) => (r.corretor || "").trim() && r.corretor.trim().toUpperCase() !== ger(r.gerente))
+        .map((r) => `${r.corretor.trim().toUpperCase()}|${r.dia}`)).size;
+      const { count: visitas } = await supabase.from("c2s_checkins" as any).select("id", { count: "exact", head: true })
+        .eq("diretor", DIRETORIA_C2S).gte("created_at", de + "T03:00:00Z").lt("created_at", new Date(Date.parse(ate + "T03:00:00Z") + ms).toISOString());
+      const v = (vs || []) as any[];
+      return { vendas: v.reduce((a, x) => a + Number(x.qtd || 1), 0), vgv: v.reduce((a, x) => a + Number(x.vgv || 0), 0), checkins, visitas: visitas || 0 };
+    },
+  });
+
   const vjQtd = vendasJunix.reduce((a, v) => a + Number(v.qtd || 1), 0);
   const vjVgv = vendasJunix.reduce((a, v) => a + Number(v.vgv || 0), 0);
   const vjConfirmadas = vendasJunix.filter((v) => /confirmada/i.test(v.fase || "")).length;
@@ -282,7 +309,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
       <div className="top-tabs-bar">
         <div className="ttb-left">
           <button className={`ttb-btn${screen === 1 ? " active" : ""}`} onClick={() => setScreen(1)}>🏆 TELA 1: Vendas × Visitas × Docs</button>
-          <button className={`ttb-btn${screen === 2 ? " active" : ""}`} onClick={() => setScreen(2)}>📣 TELA 2: Anúncios, Regiões & Canais</button>
+          <button className={`ttb-btn${screen === 2 ? " active" : ""}`} onClick={() => setScreen(2)}>📣 TELA 2: Anúncios por gerente</button>
           <button className={`ttb-btn${screen === 3 ? " active" : ""}`} onClick={() => setScreen(3)}>🏦 TELA 3: Análises Bancárias & Repasses</button>
           <button className={`ttb-btn${screen === 4 ? " active" : ""}`} onClick={() => setScreen(4)}>👥 TELA 4: Turnover, Contratações & Retenção</button>
           <button className={`ttb-btn${screen === 5 ? " active" : ""}`} onClick={() => setScreen(5)}>📍 TELA 5: Plantão — Empresa toda</button>
@@ -292,6 +319,8 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
 
       {screen === 5 ? (
         <PlantaoEmpresa />
+      ) : screen === 2 ? (
+        <AnunciosGerentes diasInicial={dias} />
       ) : screen !== 1 ? (
         <div className="bi-soon"><b>Em breve.</b><div style={{ marginTop: 8 }}>Esta tela precisa de dados de anúncios / bancário / RH que ainda não estão no sistema.</div></div>
       ) : (
@@ -418,23 +447,25 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                     </div>
 
                     <div className="panel-cury">
-                      <div className="p-hdr-bar"><span>⚖️ Período atual × anterior</span><small>vendas</small></div>
+                      <div className="p-hdr-bar"><span>⚖️ Período atual × anterior</span><small>{dias} dias × {dias} dias antes</small></div>
                       <div className="wk-chart-mini">
                         {(() => {
-                          const a = Number(t.vendas_ant || 0); const c = Number(t.vendas || 0); const mx = Math.max(1, a, c);
+                          const a = Number(ant?.vendas || 0); const c = vjQtd; const mx = Math.max(1, a, c);
                           return (
                             <>
-                              <div className="wk-col"><div className="wk-col-val">{nf1(a)} un</div><div className="wk-col-bar" style={{ height: `${Math.round((a / mx) * 70) + 6}px` }} /><div className="wk-col-lbl">Anterior</div></div>
-                              <div className="wk-col"><div className="wk-col-val">{nf1(c)} un</div><div className="wk-col-bar" style={{ height: `${Math.round((c / mx) * 70) + 6}px`, background: "linear-gradient(180deg,#4ADE80,#059669)" }} /><div className="wk-col-lbl">Atual</div></div>
+                              <div className="wk-col"><div className="wk-col-val">{nf(a)} un</div><div className="wk-col-bar" style={{ height: `${Math.round((a / mx) * 70) + 6}px` }} /><div className="wk-col-lbl">Anterior</div></div>
+                              <div className="wk-col"><div className="wk-col-val">{nf(c)} un</div><div className="wk-col-bar" style={{ height: `${Math.round((c / mx) * 70) + 6}px`, background: "linear-gradient(180deg,#4ADE80,#059669)" }} /><div className="wk-col-lbl">Atual</div></div>
                             </>
                           );
                         })()}
                       </div>
                       <table className="h-tbl">
-                        <thead><tr><th>Período</th><th className="r">Visitas</th><th className="r">Docs</th><th className="r">VGV</th><th className="r">Vendas</th><th className="r">Δ</th></tr></thead>
+                        <thead><tr><th>Período</th><th className="r">Check-ins</th><th className="r">Visitas</th><th className="r">Vendas</th><th className="r">VGV</th><th className="r">Δ vendas</th></tr></thead>
                         <tbody>
-                          <tr><td>Anterior</td><td className="r">—</td><td className="r">—</td><td className="r">{moneyFull(Number(t.vendas_ant || 0) * ticket)}</td><td className="r">{nf1(Number(t.vendas_ant || 0))}</td><td className="r">—</td></tr>
-                          <tr className="selected"><td>Atual ({dias}d)</td><td className="r">{nf(t.visitas)}</td><td className="r">{nf(t.docs)}</td><td className="r">{moneyFull(vgvTot)}</td><td className="r">{nf1(Number(t.vendas))}</td><td className={`r ${delta(Number(t.vendas), Number(t.vendas_ant)) >= 0 ? "up-txt" : "dn-txt"}`}>{delta(Number(t.vendas), Number(t.vendas_ant)) >= 0 ? "✔" : "▼"} {delta(Number(t.vendas), Number(t.vendas_ant))}%</td></tr>
+                          <tr><td>Anterior</td><td className="r">{nf(ant?.checkins ?? 0)}</td><td className="r">{nf(ant?.visitas ?? 0)}</td><td className="r">{nf(ant?.vendas ?? 0)}</td><td className="r">{moneyFull(ant?.vgv ?? 0)}</td><td className="r">—</td></tr>
+                          {(() => { const d = delta(vjQtd, Number(ant?.vendas || 0)); return (
+                            <tr className="selected"><td>Atual ({dias}d)</td><td className="r">{nf(op?.presencas ?? 0)}</td><td className="r">{nf(op?.visitas ?? 0)}</td><td className="r">{nf(vjQtd)}</td><td className="r">{moneyFull(vjVgv)}</td><td className={`r ${d >= 0 ? "up-txt" : "dn-txt"}`}>{d >= 0 ? "▲" : "▼"} {Math.abs(d)}%</td></tr>
+                          ); })()}
                         </tbody>
                       </table>
                     </div>
@@ -518,33 +549,41 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                   {/* DIREITA */}
                   <aside className="right-visual-panel">
                     <div>
-                      <div className="rvp-title"><span>🎯 Check-in → Visita</span><span style={{ color: "var(--green-bright)", fontFamily: "var(--mono)" }}>{pct(t.presenca_pct)}</span></div>
-                      <div className="donut-row">
-                        <div className="donut-circle" style={{ background: `conic-gradient(#10B981 0% ${t.presenca_pct}%, #38BDF8 ${t.presenca_pct}% ${Math.min(100, Number(t.presenca_pct) + 20)}%, #1E3A8A ${Math.min(100, Number(t.presenca_pct) + 20)}% 100%)` }}>
-                          <div className="donut-inner"><strong>{nf(t.visitas)}</strong><small>Visitas</small></div>
-                        </div>
-                        <div style={{ fontSize: 11.5, color: "#CBD5E1", lineHeight: 1.55 }}>
-                          <div>📍 <strong>{nf(t.checkins)}</strong> Check-ins</div>
-                          <div>👀 <strong style={{ color: "#4ADE80" }}>{nf(t.visitas)}</strong> Visitas (atend.)</div>
-                          <div>📁 <strong style={{ color: "#38BDF8" }}>{nf(t.docs_ok)}</strong> Pastas OK</div>
-                          <div>💰 <strong style={{ color: "var(--gold)" }}>{nf(t.vendas)}</strong> Vendas</div>
-                        </div>
-                      </div>
+                      {(() => {
+                        const ck = op?.presencas ?? 0, vi = op?.visitas ?? 0, pa = op?.pastasAndamento ?? 0;
+                        const taxa = ck ? Math.round((vi / ck) * 100) : 0;
+                        return (
+                          <>
+                            <div className="rvp-title"><span>🎯 Plantão → Venda</span><span style={{ color: "var(--green-bright)", fontFamily: "var(--mono)" }} title="visitas por check-in">{pct(taxa)}</span></div>
+                            <div className="donut-row">
+                              <div className="donut-circle" style={{ background: `conic-gradient(#10B981 0% ${Math.min(100, taxa)}%, #1E3A8A ${Math.min(100, taxa)}% 100%)` }}>
+                                <div className="donut-inner"><strong>{nf(vi)}</strong><small>Visitas</small></div>
+                              </div>
+                              <div style={{ fontSize: 11.5, color: "#CBD5E1", lineHeight: 1.55 }}>
+                                <div>📍 <strong>{nf(ck)}</strong> Check-ins</div>
+                                <div>👀 <strong style={{ color: "#4ADE80" }}>{nf(vi)}</strong> Visitas no estande</div>
+                                <div>📁 <strong style={{ color: "#38BDF8" }}>{nf(pa)}</strong> Pastas em andamento</div>
+                                <div>💰 <strong style={{ color: "var(--gold)" }}>{nf(vjQtd)}</strong> Vendas</div>
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
 
                     <div style={{ flex: 1 }}>
                       <div className="rvp-title"><span>🏅 Vendas por Gerente</span><small style={{ color: "#93C5FD", fontSize: 10.5 }}>Clique p/ ver corretores</small></div>
                       <div className="sup-bars-list">
-                        {topGer.map((g, i) => {
-                          const v = Number(g.vendas || 0); const d = delta(v, Number(g.vendas_ant || 0));
-                          return (
-                            <div className="sb-row" key={"g" + nomeDe(g)} onClick={() => { setSelMgr(g.apelido || g.nome); setNivel("corretor"); }}>
-                              <div className="sb-name">{i + 1}. {nomeDe(g)}</div>
-                              <div className="sb-track"><div className="sb-fill" style={{ width: `${Math.max(18, Math.round((v / maxGer) * 100))}%` }}><span>{nf(v)} un · R$ {moneyM(rowVgv(g))}</span><span>{d >= 0 ? "✔" : "✖"} {d}%</span></div></div>
+                        {(() => {
+                          const lista = porGerenteEcon.slice(0, 8);
+                          const mx = Math.max(1, ...lista.map((g) => g.vgv || g.checkins));
+                          return lista.length ? lista.map((g, i) => (
+                            <div className="sb-row" key={"g" + g.gerente} onClick={() => { setSelMgr(g.gerente); setNivel("corretor"); }}>
+                              <div className="sb-name">{i + 1}. {g.gerente}</div>
+                              <div className="sb-track"><div className="sb-fill" style={{ width: `${Math.max(18, Math.round(((g.vgv || g.checkins) / mx) * 100))}%` }}><span>{g.vendas ? `${nf(g.vendas)} un · R$ ${moneyM(g.vgv)}` : `${nf(g.checkins)} check-ins`}</span></div></div>
                             </div>
-                          );
-                        })}
-                        {!topGer.length ? <div style={{ color: "#93C5FD", fontSize: 11.5 }}>Sem dados no período.</div> : null}
+                          )) : <div style={{ color: "#93C5FD", fontSize: 11.5 }}>Sem dados no período.</div>;
+                        })()}
                       </div>
                     </div>
 
@@ -558,7 +597,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                 </div>
 
                 <div style={{ fontSize: 11, color: "#475569", marginTop: 10, padding: "0 4px" }}>
-                  Cartões: vendas e pastas = Junix · check-in e visitas = C2S. Tabelas abaixo: vendas registradas no Comandra; R$ realizado = valor informado no Comandra (leads.sale_value); VGV das tabelas = estimativa (vendas × ticket médio R$ {Math.round(ticket / 1000)} mil).
+                  Fontes: vendas, VGV e pastas = Junix · check-ins e visitas no estande = C2S (diretoria Gilberto Junior). Período anterior = mesmo número de dias, logo antes.
                 </div>
               </>
             )}
