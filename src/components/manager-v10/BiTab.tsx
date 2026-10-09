@@ -3,9 +3,10 @@
  * PORTE FIEL do mockup_bi_diretoria.html (h-screen-1): faixa navy, 4 cartões-gradiente,
  * grade de 3 colunas, tabelas com data-bars, mini-gráfico semanal, rosca e barras por equipe.
  * CSS do mockup embutido e escopado sob `.biv1` (paleta própria, look dark self-contido).
- * Dados reais via RPC bi_fechamento(p_dias, p_escopo, p_manager):
- *   · Vendas/Visitas/Check-in → cury_metricas_diarias   · Documentos → salesforce_propostas
- *   · R$ realizado → leads.sale_value   · VGV estimado → vendas × ticket (system_settings.bi_ticket_medio)
+ * Cartões do topo (fontes da Econ):
+ *   · Vendas → junix_vendas (Junix/ImobFlow)   · Pastas → junix_pastas (pipeline de propostas do Junix)
+ *   · Check-in no plantão → c2s_plantao   · Visitas de cliente no estande → c2s_checkins (C2S)
+ * Tabelas/rankings abaixo ainda via RPC bi_fechamento(p_dias, p_escopo, p_manager).
  * Telas 2/3/4 = "em breve" (falta dado de anúncios/bancário/RH).
  */
 import { useMemo, useState } from "react";
@@ -151,6 +152,37 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
       return (data || []) as any[];
     },
   });
+  // Plantão, visitas (C2S) e pastas (Junix) da diretoria. O C2S traz a rede inteira no
+  // check-in, então filtra pela diretoria do token (a mesma que o Junix enxerga).
+  const DIRETORIA_C2S = "Diretor Gilberto Junior";
+  const { data: op } = useQuery({
+    queryKey: ["biOperacaoEcon", dias],
+    queryFn: async () => {
+      const desde = new Date(Date.now() - 3 * 3600 * 1000 - (dias - 1) * 86400000).toISOString().slice(0, 10);
+      const plantao: any[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase.from("c2s_plantao" as any).select("dia, corretor")
+          .eq("diretor", DIRETORIA_C2S).gte("dia", desde).range(from, from + 999);
+        if (error) throw error;
+        plantao.push(...(data || []));
+        if (!data || data.length < 1000) break;
+      }
+      const { count: visitas } = await supabase.from("c2s_checkins" as any).select("id", { count: "exact", head: true })
+        .eq("diretor", DIRETORIA_C2S).gte("created_at", desde + "T03:00:00Z");
+      const { data: pastas } = await supabase.from("junix_pastas" as any).select("etapa, etapa_ordem");
+      const presencas = new Set(plantao.map((r: any) => `${(r.corretor || "").trim().toUpperCase()}|${r.dia}`)).size;
+      const corretoresPlantao = new Set(plantao.map((r: any) => (r.corretor || "").trim().toUpperCase())).size;
+      const ps = (pastas || []) as any[];
+      return {
+        presencas, corretoresPlantao, visitas: visitas || 0,
+        pastasAndamento: ps.filter((x) => x.etapa_ordem >= 1 && x.etapa_ordem <= 9).length,
+        pastasDocs: ps.filter((x) => x.etapa_ordem === 4).length,
+        pastasAnalise: ps.filter((x) => x.etapa_ordem >= 5 && x.etapa_ordem <= 9).length,
+        pastasConfirmadas: ps.filter((x) => x.etapa_ordem === 10).length,
+      };
+    },
+  });
+
   const vjQtd = vendasJunix.reduce((a, v) => a + Number(v.qtd || 1), 0);
   const vjVgv = vendasJunix.reduce((a, v) => a + Number(v.vgv || 0), 0);
   const vjConfirmadas = vendasJunix.filter((v) => /confirmada/i.test(v.fase || "")).length;
@@ -192,7 +224,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
           <button className={`ttb-btn${screen === 4 ? " active" : ""}`} onClick={() => setScreen(4)}>👥 TELA 4: Turnover, Contratações & Retenção</button>
           <button className={`ttb-btn${screen === 5 ? " active" : ""}`} onClick={() => setScreen(5)}>📍 TELA 5: Plantão — Empresa toda</button>
         </div>
-        <div className="ttb-right">📊 Dados reais · Cury + Salesforce + Comandra</div>
+        <div className="ttb-right">📊 Dados reais · Junix + C2S + Comandra</div>
       </div>
 
       {screen === 5 ? (
@@ -248,25 +280,25 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                   <div className="gk-card pink">
                     <div className="gk-icon">🎟️</div>
                     <div className="gk-body">
-                      <div className="gk-lbl">Check-ins → Visitas (Cury)</div>
-                      <div className="gk-val">{nf(t.checkins)} → {nf(t.visitas)}</div>
-                      <div className="gk-delta">▲ {pct(t.presenca_pct)} presença · {nf(t.presentes)} no stand</div>
+                      <div className="gk-lbl">Check-ins → Visitas (C2S)</div>
+                      <div className="gk-val">{nf(op?.presencas ?? 0)} → {nf(op?.visitas ?? 0)}</div>
+                      <div className="gk-delta">{nf(op?.corretoresPlantao ?? 0)} corretores no plantão · visitas de cliente no estande</div>
                     </div>
                   </div>
                   <div className="gk-card green">
                     <div className="gk-icon">📁</div>
                     <div className="gk-body">
-                      <div className="gk-lbl">Documentos (Salesforce)</div>
-                      <div className="gk-val">{nf(t.docs_ok)} Pastas OK</div>
-                      <div className="gk-delta">{nf(t.docs)} propostas · docs 4/4</div>
+                      <div className="gk-lbl">Pastas (Junix)</div>
+                      <div className="gk-val">{nf(op?.pastasAndamento ?? 0)} em andamento</div>
+                      <div className="gk-delta">{nf(op?.pastasDocs ?? 0)} anexando docs · {nf(op?.pastasAnalise ?? 0)} em análise · {nf(op?.pastasConfirmadas ?? 0)} confirmada(s)</div>
                     </div>
                   </div>
                   <div className="gk-card blue">
                     <div className="gk-icon">🧑‍💼</div>
                     <div className="gk-body">
                       <div className="gk-lbl">Plantão &amp; Presença</div>
-                      <div className="gk-val">{pct(t.presenca_pct)} Stand</div>
-                      <div className="gk-delta">{nf(t.presentes)}/{nf(t.corretores)} bateram check-in</div>
+                      <div className="gk-val">{pct(Number(t.corretores) ? Math.round(((op?.corretoresPlantao ?? 0) / Number(t.corretores)) * 100) : 0)} no plantão</div>
+                      <div className="gk-delta">{nf(op?.corretoresPlantao ?? 0)}/{nf(t.corretores)} corretores bateram check-in (C2S)</div>
                     </div>
                   </div>
                 </div>
@@ -473,7 +505,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                 </div>
 
                 <div style={{ fontSize: 11, color: "#475569", marginTop: 10, padding: "0 4px" }}>
-                  Vendas · Visitas · Check-in = operação (Cury). Docs = Salesforce. R$ realizado = valor informado no Comandra (leads.sale_value). VGV = estimativa (vendas × ticket médio R$ {Math.round(ticket / 1000)} mil).
+                  Cartões: vendas e pastas = Junix · check-in e visitas = C2S. Tabelas abaixo: vendas registradas no Comandra; R$ realizado = valor informado no Comandra (leads.sale_value); VGV das tabelas = estimativa (vendas × ticket médio R$ {Math.round(ticket / 1000)} mil).
                 </div>
               </>
             )}
