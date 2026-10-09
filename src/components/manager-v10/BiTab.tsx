@@ -11,6 +11,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import PlantaoEmpresa from "./PlantaoEmpresa";
 
 type Nivel = "gerente" | "corretor";
 
@@ -172,11 +173,14 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
           <button className={`ttb-btn${screen === 2 ? " active" : ""}`} onClick={() => setScreen(2)}>📣 TELA 2: Anúncios, Regiões & Canais</button>
           <button className={`ttb-btn${screen === 3 ? " active" : ""}`} onClick={() => setScreen(3)}>🏦 TELA 3: Análises Bancárias & Repasses</button>
           <button className={`ttb-btn${screen === 4 ? " active" : ""}`} onClick={() => setScreen(4)}>👥 TELA 4: Turnover, Contratações & Retenção</button>
+          <button className={`ttb-btn${screen === 5 ? " active" : ""}`} onClick={() => setScreen(5)}>📍 TELA 5: Plantão — Empresa toda</button>
         </div>
         <div className="ttb-right">📊 Dados reais · Cury + Salesforce + Comandra</div>
       </div>
 
-      {screen !== 1 ? (
+      {screen === 5 ? (
+        <PlantaoEmpresa />
+      ) : screen !== 1 ? (
         <div className="bi-soon"><b>Em breve.</b><div style={{ marginTop: 8 }}>Esta tela precisa de dados de anúncios / bancário / RH que ainda não estão no sistema.</div></div>
       ) : (
         <>
