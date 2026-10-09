@@ -167,14 +167,18 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
         plantao.push(...(data || []));
         if (!data || data.length < 1000) break;
       }
-      const { count: visitas } = await supabase.from("c2s_checkins" as any).select("id", { count: "exact", head: true })
+      const { data: vis } = await supabase.from("c2s_checkins" as any).select("corretor, visit_type")
         .eq("diretor", DIRETORIA_C2S).gte("created_at", desde + "T03:00:00Z");
+      const visitasRows = (vis || []) as any[];
       const { data: pastas } = await supabase.from("junix_pastas" as any).select("etapa, etapa_ordem");
       const presencas = new Set(plantao.map((r: any) => `${(r.corretor || "").trim().toUpperCase()}|${r.dia}`)).size;
       const corretoresPlantao = new Set(plantao.map((r: any) => (r.corretor || "").trim().toUpperCase())).size;
       const ps = (pastas || []) as any[];
       return {
-        presencas, corretoresPlantao, visitas: visitas || 0,
+        presencas, corretoresPlantao,
+        visitas: visitasRows.length,
+        primeirasVisitas: visitasRows.filter((v) => /primeira/i.test(v.visit_type || "")).length,
+        corretoresVisita: new Set(visitasRows.map((v) => (v.corretor || "").trim().toUpperCase()).filter(Boolean)).size,
         pastasAndamento: ps.filter((x) => x.etapa_ordem >= 1 && x.etapa_ordem <= 9).length,
         pastasDocs: ps.filter((x) => x.etapa_ordem === 4).length,
         pastasAnalise: ps.filter((x) => x.etapa_ordem >= 5 && x.etapa_ordem <= 9).length,
@@ -278,11 +282,11 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                     </div>
                   </div>
                   <div className="gk-card pink">
-                    <div className="gk-icon">🎟️</div>
+                    <div className="gk-icon">🏠</div>
                     <div className="gk-body">
-                      <div className="gk-lbl">Check-ins → Visitas (C2S)</div>
-                      <div className="gk-val">{nf(op?.presencas ?? 0)} → {nf(op?.visitas ?? 0)}</div>
-                      <div className="gk-delta">{nf(op?.corretoresPlantao ?? 0)} corretores no plantão · visitas de cliente no estande</div>
+                      <div className="gk-lbl">Visitas no plantão (C2S)</div>
+                      <div className="gk-val">{nf(op?.visitas ?? 0)} visitas</div>
+                      <div className="gk-delta">{nf(op?.primeirasVisitas ?? 0)} primeira visita · {nf(op?.corretoresVisita ?? 0)} corretores atenderam</div>
                     </div>
                   </div>
                   <div className="gk-card green">
@@ -294,11 +298,11 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                     </div>
                   </div>
                   <div className="gk-card blue">
-                    <div className="gk-icon">🧑‍💼</div>
+                    <div className="gk-icon">📍</div>
                     <div className="gk-body">
-                      <div className="gk-lbl">Plantão &amp; Presença</div>
-                      <div className="gk-val">{pct(Number(t.corretores) ? Math.round(((op?.corretoresPlantao ?? 0) / Number(t.corretores)) * 100) : 0)} no plantão</div>
-                      <div className="gk-delta">{nf(op?.corretoresPlantao ?? 0)}/{nf(t.corretores)} corretores bateram check-in (C2S)</div>
+                      <div className="gk-lbl">Check-ins no plantão (C2S)</div>
+                      <div className="gk-val">{nf(op?.corretoresPlantao ?? 0)} corretores</div>
+                      <div className="gk-delta">{nf(op?.presencas ?? 0)} check-ins no período · {pct(Number(t.corretores) ? Math.round(((op?.corretoresPlantao ?? 0) / Number(t.corretores)) * 100) : 0)} da equipe</div>
                     </div>
                   </div>
                 </div>
