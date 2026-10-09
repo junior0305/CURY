@@ -161,7 +161,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
       const desde = new Date(Date.now() - 3 * 3600 * 1000 - (dias - 1) * 86400000).toISOString().slice(0, 10);
       const plantao: any[] = [];
       for (let from = 0; ; from += 1000) {
-        const { data, error } = await supabase.from("c2s_plantao" as any).select("dia, corretor")
+        const { data, error } = await supabase.from("c2s_plantao" as any).select("dia, corretor, gerente")
           .eq("diretor", DIRETORIA_C2S).gte("dia", desde).range(from, from + 999);
         if (error) throw error;
         plantao.push(...(data || []));
@@ -171,11 +171,18 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
         .eq("diretor", DIRETORIA_C2S).gte("created_at", desde + "T03:00:00Z");
       const visitasRows = (vis || []) as any[];
       const { data: pastas } = await supabase.from("junix_pastas" as any).select("etapa, etapa_ordem");
-      const presencas = new Set(plantao.map((r: any) => `${(r.corretor || "").trim().toUpperCase()}|${r.dia}`)).size;
-      const corretoresPlantao = new Set(plantao.map((r: any) => (r.corretor || "").trim().toUpperCase())).size;
+      // gerente que bate check-in no proprio nome (ex.: "JAGUAR" na equipe do Jaguar) nao conta como corretor
+      const nomeGer = (g: string) => (g || "").replace(/^ger[eê]n(te|cia)\s+/i, "").trim().toUpperCase();
+      const soCorretores = plantao.filter((r: any) => (r.corretor || "").trim() && (r.corretor || "").trim().toUpperCase() !== nomeGer(r.gerente));
+      const presencas = new Set(soCorretores.map((r: any) => `${r.corretor.trim().toUpperCase()}|${r.dia}`)).size;
+      const corretoresPlantao = new Set(soCorretores.map((r: any) => r.corretor.trim().toUpperCase())).size;
+      const diasComDado = new Set(soCorretores.map((r: any) => r.dia)).size;
+      const hojeSP = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+      const presentesHoje = new Set(soCorretores.filter((r: any) => r.dia === hojeSP).map((r: any) => r.corretor.trim().toUpperCase())).size;
+      const mediaDia = diasComDado ? presencas / diasComDado : 0;
       const ps = (pastas || []) as any[];
       return {
-        presencas, corretoresPlantao,
+        presencas, corretoresPlantao, presentesHoje, mediaDia,
         visitas: visitasRows.length,
         primeirasVisitas: visitasRows.filter((v) => /primeira/i.test(v.visit_type || "")).length,
         corretoresVisita: new Set(visitasRows.map((v) => (v.corretor || "").trim().toUpperCase()).filter(Boolean)).size,
@@ -301,8 +308,8 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                     <div className="gk-icon">📍</div>
                     <div className="gk-body">
                       <div className="gk-lbl">Check-ins no plantão (C2S)</div>
-                      <div className="gk-val">{nf(op?.corretoresPlantao ?? 0)} corretores</div>
-                      <div className="gk-delta">{nf(op?.presencas ?? 0)} check-ins no período · {pct(Number(t.corretores) ? Math.round(((op?.corretoresPlantao ?? 0) / Number(t.corretores)) * 100) : 0)} da equipe</div>
+                      <div className="gk-val">{dias === 1 ? `${nf(op?.presentesHoje ?? 0)} hoje` : `${nf1(op?.mediaDia ?? 0)} por dia`}</div>
+                      <div className="gk-delta">{dias === 1 ? `${nf(op?.presencas ?? 0)} check-ins` : `hoje ${nf(op?.presentesHoje ?? 0)} · ${nf(op?.corretoresPlantao ?? 0)} diferentes em ${dias} dias`}</div>
                     </div>
                   </div>
                 </div>
