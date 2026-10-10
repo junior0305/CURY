@@ -266,7 +266,7 @@ const CorretorPainel = () => {
   };
   const docsCount = DOCS.filter((d) => docsDB[d.key]).length;
 
-  // ── PESCAR (pool cold_contacts): escolha por REGIÃO, 15/dia, devolve em 48h ──
+  // ── PESCAR (pool cold_contacts): escolha por REGIÃO, 70/dia, devolve em 48h ──
   const [regiaoSel, setRegiaoSel] = useState<string>(""); // "" = todas as regiões
   const { data: areasRaw = [] } = useQuery<{ tag: string; n: number }[]>({
     queryKey: ["poolAreas"], enabled: mode === "pescar", staleTime: 60000,
@@ -639,7 +639,7 @@ const CorretorPainel = () => {
                   <div>
                     <span className="l-badge urgent">🎣 Bolsa de oportunidades</span>
                     <h2 className="lead-title" style={{ marginTop: 6 }}>Pescar leads frios</h2>
-                    <p className="lead-sub">Pegue leads do pool da equipe. Até 15 por dia. Sem WhatsApp conectado obrigatório — você fala pelo seu WhatsApp pessoal.</p>
+                    <p className="lead-sub">Pegue leads do pool da equipe. Até 70 por dia. Sem WhatsApp conectado obrigatório — você fala pelo seu WhatsApp pessoal.</p>
                   </div>
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "var(--faint)", textTransform: "uppercase", letterSpacing: ".05em", margin: "14px 0 6px" }}>Escolha a região do pool</div>
@@ -649,15 +649,15 @@ const CorretorPainel = () => {
                     <span key={r.label} className={`q-tag${regiaoSel === r.label ? " on" : ""}`} onClick={() => setRegiaoSel(r.label)}>{r.label} ({r.count})</span>
                   ))}
                 </div>
-                <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--muted)" }}>Pescados hoje: <b style={{ color: "var(--accent)" }}>{pescaHoje}/15</b>{regiaoAtual ? <> · {regiaoAtual.label}: <b>{regiaoAtual.count}</b> no pool</> : null}</div>
+                <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--muted)" }}>Pescados hoje: <b style={{ color: "var(--accent)" }}>{pescaHoje}/70</b>{regiaoAtual ? <> · {regiaoAtual.label}: <b>{regiaoAtual.count}</b> no pool</> : null}</div>
               </div>
 
               {/* CARROSSEL: um nome por vez → Pegar ou Passar */}
               <div className="card" style={{ marginTop: 12 }}>
-                {pescaHoje >= 15 ? (
+                {pescaHoje >= 70 ? (
                   <div style={{ textAlign: "center", padding: "32px 12px", color: "var(--muted)" }}>
                     <div style={{ fontSize: 32 }}>✋</div>
-                    <div style={{ fontWeight: 800, fontSize: 16, marginTop: 8, color: "var(--text)" }}>Limite de 15 hoje atingido</div>
+                    <div style={{ fontWeight: 800, fontSize: 16, marginTop: 8, color: "var(--text)" }}>Limite de 70 hoje atingido</div>
                     <div style={{ fontSize: 13, marginTop: 4 }}>Trabalha os que você pegou e volta amanhã.</div>
                   </div>
                 ) : carregandoFila && !atual ? (
