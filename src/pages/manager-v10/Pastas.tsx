@@ -4,7 +4,7 @@
 //
 //   1. onde estão?        → as pastas da equipe por etapa do kanban
 //   2. de quem são?       → quantas cada corretor carrega, e quantas travaram
-//   3. o que ficou fora?  → pastas que não casaram com lead da equipe
+//   3. o que ficou fora?  → pastas de outras equipes da diretoria
 //
 // Vem do Junix (espelho de hora em hora), então mede o processo de crédito de
 // fato — não depende de ninguém registrar nada no Comandra.
@@ -36,7 +36,7 @@ function Linha({ p, mostraEtapa }: { p: Pasta; mostraEtapa?: boolean }) {
           {mostraEtapa ? <>{p.etapa}<em className="sep">·</em></> : null}
           {p.daEquipe
             ? (p.corretor ?? <em className="ruim">sem corretor no Comandra</em>)
-            : <em className="ruim">sem dono identificado</em>}
+            : <em className="ruim">de outras equipes</em>}
           {p.status ? <><em className="sep">·</em>{p.status}</> : null}
         </span>
       </div>
@@ -84,15 +84,15 @@ export default function Pastas() {
     return (
       <>
         <Sec title="Onde estão" tag={`${d.minhas.length} da equipe`}
-          sub="As pastas da sua equipe em cada etapa do kanban, agora. O dono sai do nome do cliente casado com os leads da equipe.">
+          sub="As pastas da sua equipe em cada etapa do kanban, agora. O dono (corretor e gerente) vem do próprio Junix.">
           <ScoreRow>
             <Cell label="pastas da equipe" value={d.minhas.length} />
             <Cell label={`travadas (${DIAS_TRAVADA}+ dias)`} value={travadas}
               tone={travadas ? "alert" : undefined}
               onClick={() => setSoTravadas((v) => !v)} active={soTravadas} />
             <Cell label="sem corretor" value={semCorretor}
-              sub="lead sem corretor no Comandra" tone={semCorretor ? "alert" : undefined} />
-            <Cell label="sem dono identificado" value={d.semDono.length}
+              sub="corretor sem login no Comandra" tone={semCorretor ? "alert" : undefined} />
+            <Cell label="de outras equipes" value={d.semDono.length}
               sub="da diretoria inteira"
               onClick={() => setVerSemDono((v) => !v)} active={verSemDono} />
           </ScoreRow>
@@ -156,8 +156,8 @@ export default function Pastas() {
           ) : <Blank title="Nenhum corretor com pasta" />}
         </Sec>
 
-        <Sec title="Pastas da diretoria sem dono identificado" tag={`${d.semDono.length}`}
-          sub="O nome do cliente não casou com nenhum lead da sua equipe. Podem ser de outra equipe ou ter o nome escrito diferente — ficam aqui para nada sumir.">
+        <Sec title="Pastas de outras equipes" tag={`${d.semDono.length}`}
+          sub="Pastas de outras equipes da diretoria, com o corretor e o gerente que o Junix registra.">
           <div className="pa-filtros">
             <button className={`mini${verSemDono ? " key" : ""}`} onClick={() => setVerSemDono((v) => !v)}>
               {verSemDono ? "esconder" : `mostrar as ${d.semDono.length}`}

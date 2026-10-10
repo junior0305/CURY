@@ -1,15 +1,12 @@
 // PASTAS — quais propostas a equipe tem no Junix, em que etapa, e há quanto
 // tempo paradas.
 //
-// Fonte: junix_pastas, espelho de hora em hora do kanban do Junix. O kanban
-// não diz de quem é a pasta — só o nome do cliente. A atribuição sai daqui:
-// casa o nome do cliente com os leads da equipe no Comandra.
+// Fonte: junix_pastas, espelho de hora em hora do kanban do Junix. O dono
+// (corretor, gerente, superintendência) vem da Pesquisa de Proposta do Junix,
+// gravado na mesma tabela pelo conector /root/junix/pastas.py.
 //
-//   1. nome normalizado idêntico        → casou
-//   2. primeiro E último nome iguais    → casou (pega "MARIA S. SOUZA" x "MARIA SOUZA")
-//
-// O que não casa com ninguém NÃO some: vai para "sem dono identificado", que
-// todo gestor vê. Esconder pasta por falha de nome é pior que mostrar a mais.
+// Gerente vê as pastas do seu nome; super vê a superintendência inteira.
+// O resto da diretoria fica em "outras equipes" — nada some.
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,11 +47,6 @@ export const normNome = (s: string | null) =>
   (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "")
     .toUpperCase().replace(/[^A-Z ]/g, " ").replace(/\s+/g, " ").trim();
 
-const pontas = (n: string) => {
-  const t = n.split(" ");
-  return t.length >= 2 ? `${t[0]}|${t[t.length - 1]}` : null;
-};
-
 /** PostgREST corta em 1000 linhas: pagina até acabar. */
 async function todas<T>(q: (de: number, ate: number) => PromiseLike<{ data: unknown; error: any }>) {
   const out: T[] = [];
@@ -68,7 +60,16 @@ async function todas<T>(q: (de: number, ate: number) => PromiseLike<{ data: unkn
   return out;
 }
 
-type LeadRow = { name: string | null; broker_id: string | null; created_at: string };
+/** 1º nome sem acento, sem o sufixo " BN" do Junix/C2S. */
+const chave = (s: string | null | undefined) =>
+  normNome(s ?? "").replace(/\bBN\b/g, "").trim().split(" ")[0] ?? "";
+/** Gerente no Junix: "DAIMON ", "OTAVIONETO" (= Jaguar no Comandra). */
+const APELIDO_GER: Record<string, string> = { OTAVIONETO: "JAGUAR" };
+const chaveGer = (g: string | null | undefined) => {
+  const k = normNome(g ?? "").replace(/\s/g, "");
+  return APELIDO_GER[k] ?? chave(g);
+};
+const titulo = (s: string) => s.trim().toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 
 export function usePastas(managerId: string | undefined) {
   return useQuery<DadosPastas>({
@@ -76,55 +77,36 @@ export function usePastas(managerId: string | undefined) {
     enabled: !!managerId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data: equipe } = await supabase.from("profiles")
-        .select("id,first_name").eq("manager_id", managerId!);
+      const [{ data: eu }, { data: equipe }] = await Promise.all([
+        supabase.from("profiles").select("first_name,last_name,role").eq("id", managerId!).maybeSingle(),
+        supabase.from("profiles").select("id,first_name").eq("manager_id", managerId!),
+      ]);
       const nomes = new Map<string, string>(
         ((equipe ?? []) as any[]).map((p) => [p.id, (p.first_name ?? "").trim() || "sem nome"]));
-      const ids = [...nomes.keys()];
+      // corretor do Junix ("GALILEIA BN") → profile da equipe, pelo 1º nome
+      const porPrimeiro = new Map<string, string>();
+      for (const [id, n] of nomes) porPrimeiro.set(chave(n), id);
 
-      // Leads da equipe: os do gerente e os dos corretores dele. O `or` com
-      // in.(...) fica num pedido só; sem corretor, basta o manager_id.
-      const filtro = ids.length
-        ? `manager_id.eq.${managerId},broker_id.in.(${ids.join(",")})`
-        : `manager_id.eq.${managerId}`;
+      const pastas = await todas<any>((de, ate) => supabase.from("junix_pastas" as any)
+        .select("proposta_id,cliente,etapa,etapa_ordem,status_texto,dias,fluxo,atualizado_em,corretor,gerente,superintendente")
+        .order("proposta_id").range(de, ate));
 
-      const [leads, pastas] = await Promise.all([
-        todas<LeadRow>((de, ate) => supabase.from("leads")
-          .select("name,broker_id,created_at").or(filtro)
-          .order("created_at", { ascending: false }).range(de, ate)),
-        todas<any>((de, ate) => supabase.from("junix_pastas" as any)
-          .select("proposta_id,cliente,etapa,etapa_ordem,status_texto,dias,fluxo,atualizado_em")
-          .order("proposta_id").range(de, ate)),
-      ]);
-
-      // Índices de nome → corretor. Lead mais novo primeiro: se o mesmo cliente
-      // entrou duas vezes, vale quem atende agora. Lead com corretor vence lead
-      // sem corretor, senão um cadastro antigo "sem dono" apagaria a atribuição.
-      const exato = new Map<string, string | null>();
-      const porPontas = new Map<string, string | null>();
-      const guarda = (m: Map<string, string | null>, k: string, b: string | null) => {
-        if (!m.has(k) || (m.get(k) === null && b)) m.set(k, b);
-      };
-      for (const l of leads) {
-        const n = normNome(l.name);
-        if (!n) continue;
-        guarda(exato, n, l.broker_id);
-        const p = pontas(n);
-        if (p) guarda(porPontas, p, l.broker_id);
-      }
+      // Dono vem do próprio Junix (Pesquisa de Proposta): gerente e superintendência
+      // por pasta. Gerente vê as do seu nome; super vê a superintendência inteira.
+      const meus = [chave((eu as any)?.first_name), chave((eu as any)?.last_name)].filter((t) => t.length >= 3);
+      const ehSuper = ["SUPERINTENDENT", "DIRECTOR", "ADMIN"].includes((eu as any)?.role ?? "");
+      const doGerente = (g: string | null) => { const k = chaveGer(g); return !!k && meus.includes(k); };
+      const daSuper = (sp: string | null) => { const k = normNome(sp).replace(/\s/g, ""); return meus.some((t) => k.includes(t)); };
 
       const todasPastas: Pasta[] = pastas.map((r) => {
-        const n = normNome(r.cliente);
-        const p = pontas(n);
-        const achou = exato.has(n) ? exato.get(n)! : p && porPontas.has(p) ? porPontas.get(p)! : undefined;
-        const corretorId = achou ?? null;
+        const corretorId = porPrimeiro.get(chave(r.corretor)) ?? null;
         return {
           id: r.proposta_id, cliente: r.cliente ?? "sem nome",
           etapa: r.etapa ?? "sem etapa", etapaOrdem: r.etapa_ordem ?? -1,
           status: r.status_texto || null, dias: r.dias ?? 0, fluxo: r.fluxo || null,
           corretorId,
-          corretor: corretorId ? nomes.get(corretorId) ?? null : null,
-          daEquipe: achou !== undefined,
+          corretor: corretorId ? nomes.get(corretorId) ?? null : (r.corretor ? titulo(r.corretor) : null),
+          daEquipe: doGerente(r.gerente) || (ehSuper && daSuper(r.superintendente)) || !!corretorId,
         };
       });
 
