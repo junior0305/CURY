@@ -19,7 +19,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useManagerV10, diasUteisRestantes, type V10Lead } from "@/hooks/useManagerV10";
 import { useCruzamentoCury } from "@/hooks/useCruzamentoCury";
 import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/components/manager-v10/ui";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import TempoReal from "@/components/manager-v10/TempoReal";
 import TimeTab from "@/components/manager-v10/TimeTab";
 import BiTab from "@/components/manager-v10/BiTab";
@@ -62,7 +62,7 @@ function quenteParado(l: V10Lead) {
 }
 
 export default function ManagerV10() {
-  const { session } = useAuth();
+  const { session, role } = useAuth();
   // super/admin podem abrir o painel de um gerente via ?manager=<id>
   const userId = useEffectiveManagerId() ?? session?.user?.id;
   const { mode, toggle } = useTheme();
@@ -76,6 +76,8 @@ export default function ManagerV10() {
   const [view, setView] = useState<View>(["tempo", "time", "bi"].includes(abaInicial) ? abaInicial : "tempo");
 
   useEffect(loadFonts, []);
+  // Super/diretor sem ?manager= não tem painel de gerente: o dele é o /super.
+  const semDrill = (role === "SUPERINTENDENT" || role === "DIRECTOR") && !params.get("manager");
 
   const calc = useMemo(() => {
     if (!data) return null;
@@ -192,6 +194,8 @@ export default function ManagerV10() {
       parados: leads.filter(quenteParado),
     };
   }, [data, cruz]);
+
+  if (semDrill) return <Navigate to={abaInicial === "time" || abaInicial === "bi" ? `/super?aba=${abaInicial}` : "/super"} replace />;
 
   if (!userId || isLoading || !data || !calc) {
     return (

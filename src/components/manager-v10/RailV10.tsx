@@ -54,7 +54,12 @@ export function RailV10({
   onAba?: (k: Aba) => void;
   pip?: number;
 }) {
-  const { signOut } = useAuth();
+  const { signOut, role } = useAuth();
+  // Superintendente/diretor: "Tempo real", "Time" e "B.I." são o painel DELE (/super),
+  // não o painel de gerente — senão ele cai num /manager com o próprio nome e vazio.
+  const ehSuper = role === "SUPERINTENDENT" || role === "DIRECTOR";
+  const destino = (a: { k: Aba; to: string }) =>
+    !ehSuper ? a.to : a.k === "tempo" ? "/super" : a.k === "time" ? "/super?aba=time" : a.to;
   return (
     <nav className="rail" aria-label="Seções">
       <div className="rail-brand">
@@ -79,7 +84,7 @@ export function RailV10({
             {conteudo}
           </button>
         ) : (
-          <Link key={a.k} to={a.to} className={on ? "on" : undefined}
+          <Link key={a.k} to={destino(a)} className={on ? "on" : undefined}
             aria-current={on ? "page" : undefined}>
             {conteudo}
           </Link>
@@ -93,7 +98,7 @@ export function RailV10({
           <svg viewBox="0 0 24 24"><path d={ICONES.bi} /></svg>B.I.
         </button>
       ) : (
-        <Link to="/manager?aba=bi" className={atual === "bi" ? "on" : undefined}
+        <Link to={ehSuper ? "/super?aba=bi" : "/manager?aba=bi"} className={atual === "bi" ? "on" : undefined}
           aria-current={atual === "bi" ? "page" : undefined}>
           <svg viewBox="0 0 24 24"><path d={ICONES.bi} /></svg>B.I.
         </Link>

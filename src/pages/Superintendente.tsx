@@ -16,7 +16,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import { useConsolidadoSuper, type LinhaConsolidado } from "@/hooks/useConsolidadoSuper";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSuperintendenteRollup, useCampanhasNaoLead, type GerenteRollup, type CorretorRollup, type CampanhaNaoLead } from "@/hooks/useSuperintendente";
@@ -34,7 +34,10 @@ export default function Superintendente() {
   const superId = session?.user?.id;
   const nav = useNavigate();
   const [dias, setDias] = useState(30);
-  const [aba, setAba] = useState<"consolidado" | "time" | "bi" | "campanhas">("consolidado");
+  const [params] = useSearchParams();
+  const abaUrl = params.get("aba");
+  const [aba, setAba] = useState<"consolidado" | "time" | "bi" | "campanhas">(
+    abaUrl === "time" || abaUrl === "bi" || abaUrl === "campanhas" ? abaUrl : "consolidado");
   // quais gerentes estão expandidos (mostrando os corretores)
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
   const toggleGer = (id: string) => setAberto((v) => ({ ...v, [id]: !v[id] }));
