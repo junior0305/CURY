@@ -15,6 +15,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
+import { useConsolidadoSuper, type LinhaConsolidado } from "@/hooks/useConsolidadoSuper";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -103,6 +104,8 @@ export default function Superintendente() {
                 <div className="sup-k bom"><span>Vendas no mês</span><b>{t!.vendas_mes}</b></div>
               </div>
 
+              <ConsolidadoFontes superId={superId} dias={dias} onAbrir={abrir} />
+
               {/* a estrutura inteira: cada gerente abre a lista dos corretores dele;
                   "Abrir painel" entra no painel completo do gerente */}
               <div className="sup-h">Suas equipes <span>toque para ver os corretores · "Abrir painel" entra no gerente</span></div>
@@ -161,6 +164,91 @@ export default function Superintendente() {
       </main>
       </Boundary>
     </div>
+  );
+}
+
+/* Todas as fontes por gerente, numa tabela: C2S (plantão/visita), Junix (venda,
+ * VGV, pastas), Facebook (gasto, leads, custo) e Comandra (leads por origem e a
+ * carteira que ninguém tocou). Clicar no gerente entra no painel dele. */
+const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
+const nf = (n: number) => n.toLocaleString("pt-BR");
+const vgvCurto = (n: number) => n >= 1e6 ? `R$ ${(n / 1e6).toFixed(1).replace(".", ",")} mi` : n ? `R$ ${Math.round(n / 1e3)} mil` : "—";
+
+function ConsolidadoFontes({ superId, dias, onAbrir }: { superId: string | undefined; dias: number; onAbrir: (id: string) => void }) {
+  const { data, isLoading, error } = useConsolidadoSuper(superId, dias);
+  if (isLoading) return <p className="sup-vazio">Juntando C2S, Junix, Facebook e Comandra…</p>;
+  if (error || !data) return <p className="sup-vazio" style={{ color: "var(--red)" }}>Não consegui juntar as fontes agora.</p>;
+  const t = data.total;
+  const totalLeads = (x: LinhaConsolidado["leads"]) => x.anuncio + x.disparo + x.pescados + x.outros;
+  const cpl = (g: number | null, l: number | null) => (g && l ? brl(g / l) : "—");
+  const cpv = (g: number | null, v: number) => (g && v ? brl(g / v) : "—");
+  const per = dias === 1 ? "hoje" : `últimos ${dias} dias`;
+  const celulas = (x: LinhaConsolidado | (typeof t & { id?: string })) => {
+    const gasto = "gasto" in x ? (x as any).gasto : null;
+    const leadsFb = (x as any).leadsFb;
+    return (
+      <>
+        <td className="sep">{nf(x.plantaoDias)}</td>
+        <td>{nf(x.visitas)}</td>
+        <td className={`sep${x.vendas ? " bom" : ""}`}>{nf(x.vendas)}</td>
+        <td>{vgvCurto(x.vgv)}</td>
+        <td>{nf(x.pastas)}</td>
+        <td className={x.pastasTravadas ? "ruim" : "dim"}>{nf(x.pastasTravadas)}</td>
+        <td className="sep">{gasto == null ? <span className="dim" title={(x as any).fbErro || "sem conta de anúncio"}>—</span> : brl(gasto)}</td>
+        <td>{leadsFb == null ? "—" : nf(leadsFb)}</td>
+        <td>{cpl(gasto, leadsFb)}</td>
+        <td>{cpv(gasto, x.vendas)}</td>
+        <td className="sep">{nf(x.leads.anuncio)}</td>
+        <td>{nf(x.leads.disparo)}</td>
+        <td>{nf(x.leads.pescados)}</td>
+        <td>{nf(totalLeads(x.leads))}</td>
+        <td className={x.nuncaFalaram ? "ruim" : "dim"}>{nf(x.nuncaFalaram)}</td>
+      </>
+    );
+  };
+  return (
+    <>
+      <div className="sup-h">Resultado das equipes <span>{per} · clique no gerente para entrar no painel dele</span></div>
+      <div className="sup-src"><em>C2S · plantão e visita</em><em>Junix · venda e pastas</em><em>Facebook · anúncio</em><em>Comandra · leads</em></div>
+      <div className="sup-kpis">
+        <div className="sup-k bom"><span>Vendas (Junix)</span><b>{nf(t.vendas)}</b><i>{vgvCurto(t.vgv)} em VGV</i></div>
+        <div className="sup-k"><span>Visitas (C2S)</span><b>{nf(t.visitas)}</b><i>{nf(t.plantaoDias)} corretor-dias no plantão</i></div>
+        <div className="sup-k"><span>Pastas (Junix)</span><b>{nf(t.pastas)}</b><i>{nf(t.pastasTravadas)} paradas há 7+ dias</i></div>
+        <div className="sup-k"><span>Anúncio (Facebook)</span><b>{brl(t.gasto)}</b><i>{nf(t.leadsFb)} leads · {cpl(t.gasto, t.leadsFb)} cada</i></div>
+        <div className="sup-k"><span>Custo por venda</span><b>{cpv(t.gasto, t.vendas)}</b><i>gasto ÷ vendas do Junix</i></div>
+        <div className="sup-k"><span>Nunca contatados</span><b style={t.nuncaFalaram ? { color: "var(--red)" } : undefined}>{nf(t.nuncaFalaram)}</b><i>carteira ativa sem nenhum toque</i></div>
+      </div>
+      <div className="sup-tabw">
+        <table className="sup-tab">
+          <thead>
+            <tr>
+              <th />
+              <th className="grp sep" colSpan={2}>C2S</th>
+              <th className="grp sep" colSpan={4}>Junix</th>
+              <th className="grp sep" colSpan={4}>Facebook</th>
+              <th className="grp sep" colSpan={5}>Leads no Comandra</th>
+            </tr>
+            <tr>
+              <th>Gerente</th>
+              <th className="sep">Plantão</th><th>Visitas</th>
+              <th className="sep">Vendas</th><th>VGV</th><th>Pastas</th><th>Paradas</th>
+              <th className="sep">Gasto</th><th>Leads</th><th>Custo/lead</th><th>Custo/venda</th>
+              <th className="sep">Anúncio</th><th>Disparo</th><th>Pescados</th><th>Total</th><th>Sem toque</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.linhas.map((x) => (
+              <tr key={x.id} className={x.id !== "super" && x.id !== "outros" ? "gr" : ""}
+                onClick={() => x.id !== "super" && x.id !== "outros" && onAbrir(x.id)}>
+                <td><b>{x.nome}</b></td>
+                {celulas(x)}
+              </tr>
+            ))}
+            <tr className="tot"><td>Superintendência</td>{celulas(t as any)}</tr>
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

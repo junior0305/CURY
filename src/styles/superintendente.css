@@ -62,3 +62,20 @@
   .mgr10 .sup-ger-h{flex-wrap:wrap}
   .mgr10 .sup-abrir{order:5}
 }
+/* consolidado: todas as fontes por gerente */
+.mgr10 .sup-src{display:flex;gap:6px;flex-wrap:wrap;margin:-14px 0 14px}
+.mgr10 .sup-src em{font:700 10.5px Archivo,sans-serif;font-style:normal;letter-spacing:.04em;padding:3px 8px;border-radius:99px;background:var(--sunk);color:var(--ink-3)}
+.mgr10 .sup-tabw{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--lift);overflow-x:auto;margin-bottom:26px}
+.mgr10 .sup-tab{width:100%;border-collapse:collapse;font-size:13px;min-width:980px}
+.mgr10 .sup-tab th{font:700 10px Archivo,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);
+  text-align:right;padding:10px 10px 8px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:bottom}
+.mgr10 .sup-tab th:first-child,.mgr10 .sup-tab td:first-child{text-align:left;padding-left:16px}
+.mgr10 .sup-tab th.grp{text-align:center;border-bottom:0;padding-bottom:0;color:var(--ink-2)}
+.mgr10 .sup-tab td{padding:10px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mgr10 .sup-tab tr.gr td{cursor:pointer}
+.mgr10 .sup-tab tr.gr:hover td{background:var(--sunk)}
+.mgr10 .sup-tab tr.tot td{font-weight:800;border-bottom:0;background:var(--sunk)}
+.mgr10 .sup-tab td.bom{color:var(--good);font-weight:700}
+.mgr10 .sup-tab td.ruim{color:var(--red);font-weight:700}
+.mgr10 .sup-tab td.dim{color:var(--ink-3)}
+.mgr10 .sup-tab .sep{border-left:1px solid var(--line)}
