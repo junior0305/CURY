@@ -12,6 +12,9 @@
  *
  * Havera 3+ superintendentes; cada um ve so os gerentes dele (a RPC ja escopa).*/
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -30,7 +33,7 @@ export default function Superintendente() {
   const superId = session?.user?.id;
   const nav = useNavigate();
   const [dias, setDias] = useState(30);
-  const [aba, setAba] = useState<"consolidado" | "bi" | "campanhas">("consolidado");
+  const [aba, setAba] = useState<"consolidado" | "time" | "bi" | "campanhas">("consolidado");
   // quais gerentes estão expandidos (mostrando os corretores)
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
   const toggleGer = (id: string) => setAberto((v) => ({ ...v, [id]: !v[id] }));
@@ -44,12 +47,13 @@ export default function Superintendente() {
     <div className="mgr10 app2 sup">
       <Boundary>
       <RailV10
-        atual={aba === "bi" ? "bi" : "tempo"}
+        atual={aba === "bi" ? "bi" : aba === "time" ? "time" : "tempo"}
         mode={mode}
         toggle={toggle}
         onAba={(k) => {
-          // Tempo real / Time do super = o consolidado; B.I. = a aba B.I.
+          // Tempo real = o consolidado; Time = a estrutura inteira (e o cadastro); B.I. = a aba B.I.
           if (k === "bi") setAba("bi");
+          else if (k === "time") setAba("time");
           else setAba("consolidado");
         }}
       />
@@ -62,6 +66,7 @@ export default function Superintendente() {
             </div>
             <div className="sup-per">
               <button className={aba === "consolidado" ? "on" : ""} onClick={() => setAba("consolidado")}>Consolidado</button>
+              <button className={aba === "time" ? "on" : ""} onClick={() => setAba("time")}>Time</button>
               <button className={aba === "campanhas" ? "on" : ""} onClick={() => setAba("campanhas")}>Campanhas</button>
               <button className={aba === "bi" ? "on" : ""} onClick={() => setAba("bi")}>B.I.</button>
               {aba === "consolidado" ? PERIODOS.map(([n, r]) => (
@@ -72,6 +77,9 @@ export default function Superintendente() {
 
           {aba === "campanhas" ? (
             <CampanhasNaoLead superId={superId} />
+          ) : aba === "time" ? (
+            <TimeSuper superId={superId} plantaoHoje={new Set((data?.gerentes ?? [])
+              .flatMap((g) => g.corretores_lista.filter((c) => c.plantao_hoje).map((c) => c.id)))} />
           ) : aba === "bi" ? (
             <BiTab scope="super" managerId={superId} />
           ) : error ? (
@@ -153,6 +161,148 @@ export default function Superintendente() {
       </main>
       </Boundary>
     </div>
+  );
+}
+
+/* TIME do superintendente: todos os gerentes abaixo dele e os corretores de cada
+ * um que têm cadastro (ativos e desligados), mais quem bate ponto no plantão (C2S)
+ * e ainda não tem login. Cadastra corretor escolhendo o gerente — o create-user
+ * aceita o manager_id vindo do super (para gerente, o servidor força o dele). */
+type PessoaTime = { id: string; first_name: string | null; last_name: string | null; email: string | null;
+  phone: string | null; is_active: boolean | null; last_seen_at: string | null;
+  lead_assignment_enabled: boolean | null; manager_id: string | null; role: string };
+
+function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plantaoHoje: Set<string> }) {
+  const qc = useQueryClient();
+  const [aberto, setAberto] = useState<Record<string, boolean>>({});
+  const [cadastro, setCadastro] = useState<{ gerente: string; nome?: string } | null>(null);
+  const { data, isLoading } = useQuery({
+    queryKey: ["super-time", superId],
+    enabled: !!superId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const campos = "id,first_name,last_name,email,phone,is_active,last_seen_at,lead_assignment_enabled,manager_id,role";
+      const { data: gers } = await supabase.from("profiles").select(campos)
+        .eq("manager_id", superId!).eq("role", "MANAGER").order("first_name");
+      const gerentes = ((gers ?? []) as PessoaTime[]).filter((g) => g.is_active !== false);
+      const ids = [superId!, ...gerentes.map((g) => g.id)];
+      const { data: cors } = await supabase.from("profiles").select(campos)
+        .in("manager_id", ids).eq("role", "BROKER").order("first_name");
+      // quem bate ponto no C2S e não tem login (metricas.py grava sem profile_id)
+      const { data: econ } = await supabase.from("cury_pessoas").select("cury_id,profile_id")
+        .eq("escopo", "gerente").in("profile_id", gerentes.map((g) => g.id));
+      const gerDeEcon = new Map(((econ ?? []) as any[]).map((e) => [e.cury_id, e.profile_id]));
+      const semLogin = new Map<string, string[]>();
+      if (gerDeEcon.size) {
+        const desde = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+        const { data: sl } = await supabase.from("cury_metricas_diarias").select("nome,gerente_cury_id")
+          .eq("escopo", "corretor").is("profile_id", null).gt("checkins", 0).gte("data", desde)
+          .in("gerente_cury_id", [...gerDeEcon.keys()]);
+        for (const r of (sl ?? []) as any[]) {
+          const g = gerDeEcon.get(r.gerente_cury_id); if (!g) continue;
+          const n = String(r.nome || "").replace(/\s+Bn$/i, "").trim();
+          const l = semLogin.get(g) ?? []; if (n && !l.includes(n)) l.push(n); semLogin.set(g, l);
+        }
+      }
+      return { gerentes, corretores: (cors ?? []) as PessoaTime[], semLogin };
+    },
+  });
+
+  if (isLoading || !data) return <p className="sup-vazio">Carregando o time…</p>;
+  const nome = (p: PessoaTime) => [p.first_name, p.last_name].filter(Boolean).join(" ") || "—";
+  const quando = (iso: string | null) => {
+    if (!iso) return "nunca entrou";
+    const h = (Date.now() - new Date(iso).getTime()) / 36e5;
+    return h < 0.25 ? "online agora" : h < 24 ? `há ${Math.round(h)}h` : `há ${Math.round(h / 24)}d`;
+  };
+  const listaGer = data.gerentes.map((g) => ({ id: g.id, nome: g.first_name || "—" }));
+  const blocos = [...data.gerentes.map((g) => ({ id: g.id, titulo: g.first_name || "—", sub: g.email })),
+    ...(data.corretores.some((c) => c.manager_id === superId) ? [{ id: superId!, titulo: "Direto com você", sub: null }] : [])];
+  const totalAtivos = data.corretores.filter((c) => c.is_active !== false).length;
+  const totalSem = [...data.semLogin.values()].reduce((a, l) => a + l.length, 0);
+
+  return (
+    <>
+      <div className="sup-kpis">
+        <div className="sup-k"><span>Gerentes</span><b>{data.gerentes.length}</b></div>
+        <div className="sup-k"><span>Corretores cadastrados</span><b>{totalAtivos}</b>
+          <i>{data.corretores.length - totalAtivos} desligados</i></div>
+        <div className="sup-k"><span>Batem ponto sem login</span><b>{totalSem}</b>
+          <i>no plantão (C2S) · últimos 30 dias</i></div>
+      </div>
+      <div className="sup-h" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        Seu time <span>toque no gerente para ver os corretores</span>
+        {listaGer.length ? (
+          <button className="sup-abrir" style={{ marginLeft: "auto" }}
+            onClick={() => setCadastro({ gerente: listaGer[0].id })}>+ Cadastrar corretor</button>
+        ) : null}
+      </div>
+      <div className="sup-estrutura">
+        {blocos.map((b) => {
+          const meus = data.corretores.filter((c) => c.manager_id === b.id);
+          const ativos = meus.filter((c) => c.is_active !== false);
+          const sem = data.semLogin.get(b.id) ?? [];
+          const exp = !!aberto[b.id];
+          return (
+            <div className={`sup-ger${exp ? " exp" : ""}`} key={b.id}>
+              <div className="sup-ger-h" role="button" tabIndex={0}
+                onClick={() => setAberto((v) => ({ ...v, [b.id]: !v[b.id] }))}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setAberto((v) => ({ ...v, [b.id]: !v[b.id] })); } }}>
+                <span className="sup-caret" aria-hidden="true">{exp ? "▾" : "▸"}</span>
+                <b>{b.titulo}</b>
+                <span className="sup-ger-cor">{ativos.length} corretores</span>
+                <span className="sup-ger-nums">
+                  <em><b>{ativos.filter((c) => plantaoHoje.has(c.id)).length}</b> no plantão hoje</em>
+                  <em><b>{ativos.filter((c) => c.lead_assignment_enabled !== false).length}</b> recebem lead</em>
+                  {sem.length ? <em style={{ color: "var(--red)" }}><b>{sem.length}</b> sem login</em> : null}
+                </span>
+                {b.id !== superId ? (
+                  <button className="sup-abrir" onClick={(e) => { e.stopPropagation(); setCadastro({ gerente: b.id }); }}>
+                    + corretor</button>
+                ) : null}
+              </div>
+              {exp ? (
+                <div className="sup-cors">
+                  {meus.map((c) => (
+                    <div className="sup-cor" key={c.id} style={c.is_active === false ? { opacity: 0.5 } : undefined}>
+                      <span className="sup-cor-nm">
+                        <s className={c.last_seen_at && Date.now() - new Date(c.last_seen_at).getTime() < 9e5 ? "on" : "off"} />
+                        {nome(c)}
+                        {plantaoHoje.has(c.id) ? <em style={{ marginLeft: 6, fontStyle: "normal", fontSize: 11, color: "var(--good)", fontWeight: 700 }}>• no plantão</em> : null}
+                      </span>
+                      <span className="sup-cor-nums">
+                        <em>{c.email ?? "—"}</em>
+                        <em>{c.phone ?? "sem telefone"}</em>
+                        <em>{quando(c.last_seen_at)}</em>
+                        <em className={c.lead_assignment_enabled !== false && c.is_active !== false ? "bom" : ""}>
+                          <b>{c.is_active === false ? "desligado" : c.lead_assignment_enabled !== false ? "recebe lead" : "fora da roleta"}</b></em>
+                      </span>
+                    </div>
+                  ))}
+                  {!meus.length ? <p className="sup-vazio" style={{ padding: "10px 0" }}>Nenhum corretor cadastrado.</p> : null}
+                  {sem.map((n) => (
+                    <div className="sup-cor" key={"sem-" + n}>
+                      <span className="sup-cor-nm"><s className="off" />{n}
+                        <em style={{ marginLeft: 6, fontStyle: "normal", fontSize: 11, color: "var(--red)", fontWeight: 700 }}>• bate ponto no C2S, sem login</em></span>
+                      <span className="sup-cor-nums">
+                        <button className="sup-abrir" onClick={() => setCadastro({ gerente: b.id, nome: n })}>Cadastrar</button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+        {!blocos.length ? <p className="sup-vazio">Nenhum gerente ligado a você ainda.</p> : null}
+      </div>
+      {cadastro ? (
+        <CadastrarCorretor key={cadastro.gerente + (cadastro.nome ?? "")} managerId={cadastro.gerente}
+          nomeInicial={cadastro.nome ?? ""} gerentes={listaGer}
+          onFechar={() => setCadastro(null)}
+          onPronto={() => { setCadastro(null); qc.invalidateQueries({ queryKey: ["super-time", superId] }); }} />
+      ) : null}
+    </>
   );
 }
 

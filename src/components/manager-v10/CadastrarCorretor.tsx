@@ -20,19 +20,23 @@ const semAcento = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
 export default function CadastrarCorretor({
-  managerId, onFechar, onPronto, nomeInicial = "",
+  managerId: gerenteInicial, onFechar, onPronto, nomeInicial = "", gerentes,
 }: {
   managerId: string;
   onFechar: () => void;
   onPronto: () => void;
   nomeInicial?: string;
+  /** Superintendente: escolhe abaixo de qual gerente o corretor fica. Sem isso,
+   *  é o gerente cadastrando na própria equipe (o servidor força o manager_id). */
+  gerentes?: { id: string; nome: string }[];
 }) {
+  const [managerId, setManagerId] = useState(gerenteInicial);
   const [nome, setNome] = useState(nomeInicial);
   const [tel, setTel] = useState("");
   const [foto, setFoto] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [gerente, setGerente] = useState<{ nome: string; equipe: string | null; fila: string | null }>(
-    { nome: "", equipe: null, fila: null });
+  const [gerente, setGerente] = useState<{ nome: string; equipe: string | null; teamId: string | null; fila: string | null }>(
+    { nome: "", equipe: null, teamId: null, fila: null });
   const [conflito, setConflito] = useState(false);
 
   useEffect(() => {
@@ -51,7 +55,7 @@ export default function CadastrarCorretor({
         const { data: t } = await supabase.from("teams").select("name").eq("id", (p as any).team_id).maybeSingle();
         equipe = (t as any)?.name ?? null;
       }
-      setGerente({ nome: nomeGer, equipe, fila: `EQ_${semAcento(nomeGer).toUpperCase()}` });
+      setGerente({ nome: nomeGer, equipe, teamId: (p as any)?.team_id ?? null, fila: `EQ_${semAcento(nomeGer).toUpperCase()}` });
     })();
   }, [managerId]);
 
@@ -88,6 +92,8 @@ export default function CadastrarCorretor({
           role: "BROKER",
           phone: tel.replace(/\D/g, "") || null,
           leadAssignmentEnabled: true,
+          // só o super/admin manda gerente e equipe; para o gerente o servidor ignora
+          ...(gerentes ? { managerId, teamId: gerente.teamId } : {}),
         },
       });
       if (error) throw error;
@@ -104,7 +110,7 @@ export default function CadastrarCorretor({
       <div className="tm-scrim on" onClick={onFechar} />
       <div className="tm-modal on" role="dialog" aria-modal="true" aria-labelledby="cc-t">
         <h3 id="cc-t">Cadastrar corretor</h3>
-        <p>Ele entra na sua equipe, com você como gerente.</p>
+        <p>{gerentes ? "Escolha o gerente — ele entra na equipe dele." : "Ele entra na sua equipe, com você como gerente."}</p>
 
         <div className="tm-fotol">
           <label className="tm-foto">
@@ -134,7 +140,13 @@ export default function CadastrarCorretor({
           </div>
           <div className="tm-f">
             <label htmlFor="cc-ger">Gerente</label>
-            <input id="cc-ger" value={`${gerente.nome} (você)`} readOnly />
+            {gerentes ? (
+              <select id="cc-ger" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+                {gerentes.map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
+              </select>
+            ) : (
+              <input id="cc-ger" value={`${gerente.nome} (você)`} readOnly />
+            )}
           </div>
         </div>
 
