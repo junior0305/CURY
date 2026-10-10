@@ -9,13 +9,13 @@ import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useLeads, redistribuir, descartar, type LeadLinha } from "@/hooks/useLeads";
+import { useLeads, redistribuir, descartar, cobrarFila, type LeadLinha } from "@/hooks/useLeads";
 import OrigemDrawer from "@/components/manager-v10/OrigemDrawer";
 import { usePeriodo } from "@/hooks/usePeriodo";
 import { Sec, Blank } from "@/components/manager-v10/ui";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import "@/styles/manager-v10.css";
 
 const brl = (n: number) => "R$ " + n.toFixed(2).replace(".", ",");
@@ -30,6 +30,23 @@ export default function Leads() {
   const { periodo } = usePeriodo();
   const qc = useQueryClient();
   const { data, isLoading } = useLeads(userId, periodo);
+  const navigate = useNavigate();
+  const [cobrando, setCobrando] = useState<string | null>(null);
+
+  // Cobrar = WhatsApp para cada corretor com os leads parados dele (uma mensagem
+  // por corretor). Quem cobra é quem está logado — o super cobrando no painel do gerente.
+  async function cobrar(chave: string, ids: string[]) {
+    if (!ids.length || !session?.user?.id) return;
+    setCobrando(chave);
+    try {
+      const r = await cobrarFila(ids, session.user.id, chave);
+      const ok = r.corretores.filter((c) => c.avisado_no_whats);
+      const falhou = r.corretores.filter((c) => !c.avisado_no_whats);
+      toast.success(`${ok.length} corretor${ok.length === 1 ? "" : "es"} cobrado${ok.length === 1 ? "" : "s"} no WhatsApp`
+        + (falhou.length ? ` · sem WhatsApp: ${falhou.map((c) => c.corretor).join(", ")} (avisados só no painel)` : ""));
+    } catch (e: any) { toast.error(e?.message ?? "Não consegui cobrar."); }
+    finally { setCobrando(null); }
+  }
 
   const [abertas, setAbertas] = useState<Set<string>>(new Set());
   const [sel, setSel] = useState<Record<string, Set<string>>>({});
@@ -189,9 +206,11 @@ export default function Leads() {
                       <button className="mini solid" onClick={(e) => {
                         e.stopPropagation();
                         if (f.acoes[0].startsWith("Redistribuir") || f.acoes[0] === "Distribuir")
-                          setRed({ ids: f.leads.map((l) => l.id) });
-                        else toast.info(`${f.acoes[0]} — em construção`);
-                      }}>{f.acoes[0]}</button>) : null}</span>
+                          setRed({ ids: f.ids });
+                        else if (f.acoes[0] === "Cobrar os corretores") cobrar(f.chave, f.ids);
+                        else if (f.acoes[0] === "Disparar reativação") navigate(`/manager/whatsapp?publico=${f.chave}`);
+                      }} disabled={cobrando === f.chave}>
+                        {cobrando === f.chave ? "Cobrando…" : f.acoes[0]}</button>) : null}</span>
                     <svg className="ld-car" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M6 9l6 6 6-6" /></svg>
                   </div>
@@ -203,7 +222,7 @@ export default function Leads() {
                           <span><b>{f.disparo.qtd} pessoas</b> · pela API oficial, cerca de{" "}
                             <b>{brl(f.disparo.custo)}</b> o disparo inteiro</span>
                           <button className="mini solid" onClick={() =>
-                            toast.info("Montar o disparo — leva para a aba Disparar")}>Montar o disparo</button>
+                            navigate(`/manager/whatsapp?publico=${f.chave}`)}>Montar o disparo</button>
                         </div>
                       )}
                       {f.leads.length === 0 ? (
@@ -221,7 +240,7 @@ export default function Leads() {
                             <button className="mini solid" disabled={!marcadosFila.size}
                               onClick={() => setRed({ ids: [...marcadosFila] })}>Redistribuir</button>
                             <button className="mini" disabled={!marcadosFila.size}
-                              onClick={() => toast.info("Cobrar — em construção")}>Cobrar o corretor</button>
+                              onClick={() => cobrar(f.chave, [...marcadosFila])}>Cobrar o corretor</button>
                             <button className="mini danger" disabled={!marcadosFila.size}
                               onClick={() => descartarLote(f.chave)}>Descartar</button>
                             <small>{marcadosFila.size

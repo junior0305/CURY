@@ -32,7 +32,10 @@ export interface Fila {
   titulo: string;
   porque: string;
   total: number;
+  /** amostra para a tela (os mais antigos) */
   leads: LeadLinha[];
+  /** a fila inteira — é sobre ela que cobrar/redistribuir agem */
+  ids: string[];
   acoes: string[];
   /** quando vale sugerir disparo em massa pela API oficial */
   disparo?: { qtd: number; custo: number };
@@ -276,18 +279,21 @@ export function useLeads(managerId: string | undefined,
           titulo: "O cliente perguntou e ninguém voltou",
           porque: "Levantaram a mão e estão esperando. O convencimento já foi feito.",
           total: respSemVolta.length,
+          ids: respSemVolta.map((l) => l.id),
           leads: respSemVolta.map((l) => linha(l, l.last_lead_response_at)).sort(ord).slice(0, 8),
           acoes: ["Cobrar os corretores", "Redistribuir", "Descartar"] },
         { chave: "nunca", tom: "warn",
           titulo: "Ninguém nunca falou com esse cliente",
           porque: "Chegaram, foram para um corretor e nenhuma mensagem foi enviada. São leads pagos parados na mão.",
           total: nuncaFalaram.length,
+          ids: nuncaFalaram.map((l) => l.id),
           leads: nuncaFalaram.map((l) => linha(l, l.created_at)).sort(ord).slice(0, 8),
           acoes: ["Cobrar os corretores", "Redistribuir", "Descartar"] },
         { chave: "sem7", tom: "warn",
           titulo: "Sem movimento há mais de 7 dias",
           porque: "Esfriaram mas ainda são recentes. Um disparo pela API oficial reaquece a lista inteira.",
           total: sem7.length,
+          ids: sem7.map((l) => l.id),
           leads: sem7.map((l) => linha(l, parado(l))).sort(ord).slice(0, 8),
           acoes: ["Disparar reativação", "Cobrar os corretores", "Redistribuir"],
           disparo: sem7.length ? { qtd: sem7.length, custo: sem7.length * PRECO_MSG } : undefined },
@@ -295,6 +301,7 @@ export function useLeads(managerId: string | undefined,
           titulo: "Sem movimento há mais de 15 dias",
           porque: "Não é fila para resolver hoje. O disparo em massa é o único jeito de falar com todos.",
           total: sem15.length,
+          ids: sem15.map((l) => l.id),
           leads: sem15.map((l) => linha(l, parado(l))).sort(ord).slice(0, 8),
           acoes: ["Disparar reativação", "Redistribuir", "Descartar"],
           disparo: sem15.length ? { qtd: sem15.length, custo: sem15.length * PRECO_MSG } : undefined },
@@ -304,6 +311,7 @@ export function useLeads(managerId: string | undefined,
             ? "Chegaram e não foram para ninguém. Cada hora aqui é lead esfriando."
             : "Nenhum lead da sua equipe está órfão agora. Quando aparecer um aqui, ele volta para o rodízio com um clique.",
           total: semCorretor.length,
+          ids: semCorretor.map((l) => l.id),
           leads: semCorretor.map((l) => linha(l, l.created_at)).sort(ord).slice(0, 8),
           acoes: ["Distribuir"] },
       ].filter((f) => f.total > 0 || f.chave === "orfao");
@@ -457,6 +465,16 @@ export function useConversaLead(leadId: string | null) {
 
 /** Cobra o corretor — empurrão pelo WhatsApp (chip do gerente, fallback Junior)
  *  mais o aviso no painel dele. `quem` é o dono do painel/logado. */
+/** Cobra a fila inteira: UMA mensagem por corretor com os leads parados dele. */
+export async function cobrarFila(leadIds: string[], quem: string, motivo: string) {
+  const { data, error } = await supabase.functions.invoke("cobrar-corretor", {
+    body: { lead_ids: leadIds, quem, motivo },
+  });
+  if (error) throw error;
+  if ((data as any)?.error) throw new Error((data as any).error);
+  return data as { corretores: { corretor: string; leads: number; avisado_no_whats: boolean }[] };
+}
+
 export async function cobrarCorretor(leadId: string, quem: string) {
   const { data, error } = await supabase.functions.invoke("cobrar-corretor", {
     body: { lead_id: leadId, quem },

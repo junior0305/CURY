@@ -17,6 +17,7 @@
 //    obrigatório, não opcional.
 
 import { Fragment, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
 import { useEffectiveManagerId, useSuperintendenteRollup } from "@/hooks/useSuperintendente";
 import { useQueryClient } from "@tanstack/react-query";
@@ -127,7 +128,10 @@ export default function Disparar() {
   const qc = useQueryClient();
   const { data, isLoading } = useDisparar(userId, teamIds);
 
-  const [etapa, setEtapa] = useState<Etapa>("bm");
+  // Vindo da aba Leads ("Disparar reativação"): abre direto no disparo com a fila marcada.
+  const [params] = useSearchParams();
+  const publicoInicial = params.get("publico");
+  const [etapa, setEtapa] = useState<Etapa>(publicoInicial ? "disp" : "bm");
   loadFonts();
 
   /* ── etapa 1 ── */
@@ -150,7 +154,7 @@ export default function Disparar() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   /* ── etapa 3 · disparo ── */
-  const [pubs, setPubs] = useState<Set<string>>(new Set());
+  const [pubs, setPubs] = useState<Set<string>>(() => new Set(publicoInicial ? [publicoInicial] : []));
   const [tplSel, setTplSel] = useState<string>("");
   // Começa VAZIO. Antes vinha com exemplos meus ("Cidade Lapa — Perdizes",
   // "março") e a prévia do celular exibia isso como se fosse escolha do
