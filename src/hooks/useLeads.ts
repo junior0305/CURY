@@ -81,7 +81,7 @@ export interface DadosLeads {
 }
 
 /* ── de onde veio o lead ───────────────────────────────────────────────
-   Quatro origens que o gerente reconhece: anúncio, app da Cury, disparo e
+   Quatro origens que o gerente reconhece: anúncio, plantão (C2S), disparo e
    próprio. Dentro de anúncio, a rede — hoje só Facebook chega pelo Make, mas
    a estrutura já separa Google e TikTok para quando entrarem, em vez de somar
    tudo em "anúncio" e ter que refazer depois.
@@ -245,9 +245,15 @@ export function useLeads(managerId: string | undefined,
         esperando: 0, parado: 1, boas_vindas: 2, primeiro_toque: 3, conversando: 4 };
       for (const k of ["anuncio", "app", "disparo", "proprio"] as const)
         origem.leads[k].sort((a, b) => ordem[a.situacao] - ordem[b.situacao]);
-      // Lead barrado pelo geo é anúncio que a Cury não deixou entrar.
+      // Lead barrado pelo geo é anúncio que o filtro de região não deixou entrar.
       origem.anuncio += bloq.length;
       origem.redes.facebook += bloq.length;
+      // Plantão (C2S): cliente atendido no estande. Não vira lead no Comandra —
+      // vem contado do C2S por corretor (cury_metricas_diarias.atendimentos).
+      for (const c of ((curyRes as any).data ?? []) as any[]) {
+        origem.app += c.atendimentos ?? 0;
+        if (c.data === hoje) origem.hoje.app += c.atendimentos ?? 0;
+      }
       const encaminhados = doPeriodo.filter((l) => l.broker_id).length;
 
       /* ── onde a conversa está ── */

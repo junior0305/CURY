@@ -17,7 +17,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Sec, Panel, Blank } from "@/components/manager-v10/ui";
-import { casarCheckinsComEquipe, type BrokerProfile, type C2SCheckinRow } from "@/utils/c2sMatching";
+import { casarCheckinsComEquipe, type BrokerProfile, type C2SCheckinRow, buscarPlantao } from "@/utils/c2sMatching";
 
 type Origem = "anuncio" | "disparo" | "repescagem" | "propria";
 const ROT: Record<Origem, string> = {
@@ -70,9 +70,7 @@ export function useFunilSemana(managerId: string | undefined, _gerenteCuryId?: s
       // 2. RPC funil_origem (se disponível), Check-ins C2S e Vendas concluídas
       const [funilRes, ckRes, vendasRes] = await Promise.all([
         supabase.rpc("funil_origem", { p_manager: managerId!, p_de: de, p_ate: ate }),
-        supabase.from("c2s_checkins")
-          .select("corretor,gerente,created_at")
-          .gte("created_at", deIso),
+        buscarPlantao(deIso).then((data) => ({ data })),
         supabase.from("leads")
           .select("id,broker_id,updated_at,last_interaction_at,created_at")
           .eq("manager_id", managerId!)

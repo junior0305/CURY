@@ -97,12 +97,12 @@ export default function Leads() {
           <div className="orig">
             {([
               ["anuncio", "Anúncio", "pago no Meta / Google", d.origem.anuncio, d.origem.hoje.anuncio],
-              ["app", "App da Cury", "lead do plantão", d.origem.app, d.origem.hoje.app],
+              ["app", "Plantão (C2S)", "atendido no estande", d.origem.app, d.origem.hoje.app],
               ["disparo", "Disparo", "WhatsApp oficial", d.origem.disparo, d.origem.hoje.disparo],
               ["proprio", "Próprio", "repescagem e manual", d.origem.proprio, d.origem.hoje.proprio],
             ] as [string, string, string, number, number][]).map(([k, titulo, sub, n, hoje]) => (
               <button className={`or-c or-${k}`} key={k} type="button"
-                onClick={() => n > 0 && setOrigAberta(k as any)}
+                onClick={() => n > 0 && k !== "app" && setOrigAberta(k as any)}
                 title={n > 0 ? "Abrir e ver os leads um a um" : "Nenhum lead nesta origem"}>
                 <span className="or-t">{titulo}</span>
                 <b className="mono">{n}</b>
@@ -123,11 +123,10 @@ export default function Leads() {
               </button>
             ))}
           </div>
-          {d.origem.app === 0 && d.origem.anuncio + d.origem.disparo > 0 ? (
+          {d.origem.app > 0 ? (
             <p className="ld-say">
-              O lead do <b>app da Cury</b> ainda não entra no Comandra — o corretor
-              atende esse fora daqui. Quando ligarmos, ele aparece neste card e cai
-              na conta do corretor como qualquer outro.
+              O cliente do <b>plantão</b> é atendido no estande e registrado no C2S —
+              aqui ele aparece contado por corretor, sem ficha no Comandra.
             </p>
           ) : null}
         </Sec>
@@ -138,7 +137,7 @@ export default function Leads() {
           <div className="ld-box">
             <div className="ld-cam">
               <div className="ld-cm"><b className="mono">{d.chegaram}</b>
-                <span>chegaram<br />de anúncio, disparo e da Cury</span><i className="seta">→</i></div>
+                <span>chegaram<br />de anúncio e disparo</span><i className="seta">→</i></div>
               <div className="ld-cm"><b className="mono">{d.encaminhados}</b>
                 <span>foram para um corretor<br />distribuídos no rodízio</span><i className="seta">→</i></div>
               <div className={`ld-cm${d.perdidos ? " perdeu" : ""}`}><b className="mono">{d.perdidos}</b>
@@ -263,7 +262,7 @@ export default function Leads() {
                 <button key={k as string} className="ld-rs" aria-pressed={res === k}
                   onClick={() => setRes((v) => (v === k ? null : (k as string)))}>
                   <b className="mono">{n as number}</b><span>{rot as string}</span>
-                  <span className={`fonte ${f}`}>{f === "cury" ? "medido na Cury" : "subnotificado"}</span>
+                  <span className={`fonte ${f}`}>{f === "cury" ? "medido no C2S/Junix" : "subnotificado"}</span>
                 </button>
               ))}
             </div>
@@ -282,14 +281,14 @@ export default function Leads() {
                   ))}
                 <p className="ld-mais">
                   {res === "vis" || res === "ven"
-                    ? "Vem da Cury com o nome do corretor, não com o do cliente — não dá para dizer qual lead virou qual."
+                    ? "Vem do C2S/Junix com o nome do corretor, não com o do cliente — não dá para dizer qual lead virou qual."
                     : "O estágio depende do corretor mexer no status. Quem está há muito tempo aqui pode já ter comprado em outro lugar."}
                 </p>
               </div>
             )}
 
             <p className="ld-say">
-              <b>Visita e venda vêm da Cury</b>, contadas sozinhas — são o número confiável.
+              <b>Visita vem do C2S e venda do Junix</b>, contadas sozinhas — são o número confiável.
               <b> Negociação e documentos dependem do corretor mexer no status</b>, e por isso
               vêm por baixo do que realmente aconteceu.
             </p>
@@ -443,7 +442,7 @@ export default function Leads() {
 
         {origAberta && userId ? (
           <OrigemDrawer
-            titulo={{ anuncio: "Leads de anúncio", app: "Leads do app da Cury",
+            titulo={{ anuncio: "Leads de anúncio", app: "Atendidos no plantão (C2S)",
                       disparo: "Leads de disparo", proprio: "Leads próprios" }[origAberta]}
             leads={d.origem.leads[origAberta]}
             verConversa={d.verConversa}

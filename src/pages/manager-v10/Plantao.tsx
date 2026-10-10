@@ -1,7 +1,7 @@
 // PLANTÃO — check-in dos corretores (Contact2Sale).
 //
 // Quem bateu ponto no plantão, de qual gerente/diretor, e quantas vezes no
-// período. Dado do C2S (/sales_stand/leads → c2s_checkins). Serve gerente,
+// período. Dado do C2S (/sales_stand/attendance_summaries → c2s_plantao). Serve gerente,
 // super e diretor — cada um filtra pela sua equipe pelo gerente.
 // Ver memory/reference_contact2sale_api.md.
 
@@ -92,7 +92,7 @@ export default function Plantao() {
             ) : lista.length === 0 ? (
               <Blank title="Nenhum check-in no período.">Os check-ins aparecem aqui conforme os corretores batem ponto no plantão (C2S).</Blank>
             ) : (
-              <Tbl cols={cols} head={["Corretor", "Gerente", "Check-ins", "Último", "Tipo de visita"]}>
+              <Tbl cols={cols} head={["Corretor", "Gerente", "Dias no plantão", "Último ponto", "Estande"]}>
                 {lista.map((c: CheckinCorretor) => (
                   <Tr key={c.corretor} cols={cols}>
                     <span style={{ fontWeight: 700 }}>{c.corretor.trim()}</span>

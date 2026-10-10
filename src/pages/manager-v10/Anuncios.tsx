@@ -45,7 +45,7 @@ export default function Anuncios() {
     if (!data) return null;
 
     const { chegaram, usaveis, bloqueados, responderam, perdidoBloqueio, porDia,
-            custo, meuCpl, mediaOutros, campanhas, produtos, capi,
+            custo, meuCpl, mediaOutros, campanhas, produtos, capi, capiParado,
             visitasReais, vendasReais, avisos, gestor } = data;
 
     const maxDia = Math.max(1, ...porDia.map((d) => d.n));
@@ -94,7 +94,7 @@ export default function Anuncios() {
                   <i>{fb.cpl ? `${brl(fb.cpl)} cada` : "—"}</i>
                 </div>
                 <div className="cell">
-                  <span className="tag">chegaram aqui</span>
+                  <span className="tag">leads no Comandra</span>
                   <b>{chegaram}</b>
                   <i>{fb.leads ? `${Math.round((chegaram / fb.leads) * 100)}% do que foi pago` : "—"}</i>
                 </div>
@@ -188,7 +188,9 @@ export default function Anuncios() {
 
         {/* 2 · quanto você paga */}
         {custo.length > 1 && (
-          <Sec title="Quanto você paga por lead" tag={<span className="dim">comparado com as outras equipes</span>}>
+          <Sec title="Quanto você paga por lead"
+               tag={<span className="dim">comparado com as outras equipes · {periodo.rotulo}</span>}
+               sub="Custo por lead de cada conta de gerente, lido no Facebook no mesmo período. Conta sem gasto ou sem lead fica de fora.">
             <div className="an-box">
               <div className="an-cst">
                 {custo.map((c) => (
@@ -257,7 +259,8 @@ export default function Anuncios() {
           </Sec>
         )}
 
-        {/* 5 · o que o sistema faz pelo anúncio */}
+        {/* 5 · o que o sistema faz pelo anúncio — parado há mais de 7 dias, some */}
+        {!capiParado && (
         <Sec title="O que o sistema faz pelo seu anúncio">
           <div className="an-box an-capi">
             <div>
@@ -278,14 +281,15 @@ export default function Anuncios() {
               <div className={`an-cn${visitasReais > capi.visitas * 2 ? " falta" : ""}`}>
                 <b className="mono">{capi.visitas}</b>
                 <span>visitas avisadas{visitasReais > capi.visitas * 2
-                  ? ` — mas foram ${visitasReais} de verdade` : ""}</span></div>
+                  ? ` — mas foram ${visitasReais} no C2S` : ""}</span></div>
               <div className={`an-cn${vendasReais > capi.compras * 2 ? " falta" : ""}`}>
                 <b className="mono">{capi.compras}</b>
                 <span>compras avisadas{vendasReais > capi.compras * 2
-                  ? ` — mas foram ${vendasReais} vendas de verdade` : ""}</span></div>
+                  ? ` — mas foram ${vendasReais} vendas no Junix` : ""}</span></div>
             </div>
           </div>
         </Sec>
+        )}
 
         {/* 6 · avisos prontos */}
         <Sec title="O que avisar para o gestor de tráfego"

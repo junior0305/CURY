@@ -12,7 +12,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { casarCheckinsComEquipe } from "@/utils/c2sMatching";
+import { casarCheckinsComEquipe, buscarPlantao } from "@/utils/c2sMatching";
 
 export type Nivel = "crit" | "trav" | "warn" | "ok";
 export type Origem = "anuncio" | "disparo" | "repescagem" | "propria";
@@ -99,23 +99,23 @@ export function status(p: Pessoa): Status {
   // outro número dessa pessoa é confiável — ela não recebe lead pelo rodízio,
   // não tem carteira aqui e o gerente não consegue cobrar nada dela.
   if (p.cadastro === "sem_cadastro")
-    return { nivel: "trav", rotulo: "Travado", porque: "Trabalha na sua equipe na Cury e não tem login no Comandra.",
+    return { nivel: "trav", rotulo: "Travado", porque: "Trabalha na sua equipe no C2S e não tem login no Comandra.",
       regra: ["Bateu ponto hoje", "Sem cadastro aqui"], acao: "Criar login", chave: "semcad" };
 
   if (p.cadastro === "outra_equipe")
     return { nivel: "trav", rotulo: "Travado",
-      porque: `Já é da sua equipe na Cury, mas aqui ainda consta ${p.gerenteAtual ? "com " + p.gerenteAtual : "com outro gerente"}.`,
+      porque: `Já é da sua equipe no C2S, mas aqui ainda consta ${p.gerenteAtual ? "com " + p.gerenteAtual : "com outro gerente"}.`,
       regra: ["Bateu ponto hoje na sua equipe", "Cadastro em outra equipe aqui",
               "Não entra no seu rodízio"], acao: "Trazer para a equipe", chave: "outraeq" };
 
   if (p.cadastro === "desativado")
-    return { nivel: "trav", rotulo: "Travado", porque: "Voltou a trabalhar na Cury e o cadastro aqui está desativado.",
+    return { nivel: "trav", rotulo: "Travado", porque: "Voltou a bater ponto no C2S e o cadastro aqui está desativado.",
       regra: ["Bateu ponto hoje", "Cadastro desativado aqui", "Não recebe lead"],
       acao: "Reativar cadastro", chave: "desativado" };
 
   if (!p.profileId)
-    return { nivel: "trav", rotulo: "Travado", porque: "Bate ponto na Cury e não tem login no Comandra.",
-      regra: ["Aparece na Cury", "Sem cadastro aqui"], acao: "Criar login", chave: "semcad" };
+    return { nivel: "trav", rotulo: "Travado", porque: "Bate ponto no C2S e não tem login no Comandra.",
+      regra: ["Aparece no C2S", "Sem cadastro aqui"], acao: "Criar login", chave: "semcad" };
 
   if (p.ponto && !p.recebeLead)
     return { nivel: "trav", rotulo: "Travado", porque: "Veio trabalhar e não está recebendo lead.",
@@ -130,7 +130,7 @@ export function status(p: Pessoa): Status {
 
   if (p.ponto && p.perdidos > 0)
     return { nivel: "warn", rotulo: "Atenção", porque: "Estava no plantão e deixou lead expirar sem atender.",
-      regra: ["Bateu ponto hoje", `${p.perdidos} lead${p.perdidos > 1 ? "s" : ""} expirou na Cury`],
+      regra: ["Bateu ponto hoje", `${p.perdidos} lead${p.perdidos > 1 ? "s" : ""} expirou no C2S`],
       acao: "Cobrar agora", chave: "perdeu" };
 
   if (!p.ponto && p.carteira >= 15 && horas(p.ultimoAcesso) > 72)
@@ -177,9 +177,8 @@ export function useTempoReal(
           .select("broker_id,source,original_broker_id,status")
           .eq("manager_id", managerId!)
           .not("status", "in", "(CONCLUDED,EXCLUDED,ABANDONED)"),
-        // Plantão/atendimento vêm do C2S (check-in), com corretor e gerente para matching seguro.
-        supabase.from("c2s_checkins")
-          .select("corretor,gerente,created_at").gte("created_at", minIso),
+        // Ponto no plantão vem do C2S (c2s_plantao), com corretor e gerente para matching seguro.
+        buscarPlantao(minIso).then((data) => ({ data })),
         // Vendas concluídas (nativas do Comandra)
         supabase.from("leads")
           .select("broker_id,updated_at,last_interaction_at,created_at")

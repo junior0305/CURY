@@ -20,7 +20,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { casarCheckinsComEquipe, type BrokerProfile, type C2SCheckinRow } from "@/utils/c2sMatching";
+import { casarCheckinsComEquipe, type BrokerProfile, type C2SCheckinRow, buscarPlantao } from "@/utils/c2sMatching";
 
 const diaSP = (d = new Date()) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo",
@@ -88,7 +88,7 @@ export function useMetaSemana(managerId: string | undefined, _gerenteCuryId?: st
       const teamId = mgr?.team_id ?? null;
       const brokers = (brokersRes.data ?? []) as BrokerProfile[];
 
-      // 2. Metas (team_goals), Vendas nativas do Comandra (leads CONCLUDED) e Check-ins C2S (c2s_checkins)
+      // 2. Metas (team_goals), Vendas nativas do Comandra (leads CONCLUDED) e Check-ins do plantão (C2S, c2s_plantao)
       const [metasRes, vendasRes, ckRes] = await Promise.all([
         teamId
           ? supabase.from("team_goals").select("sales_target,goal_type,week_start,month")
@@ -100,10 +100,8 @@ export function useMetaSemana(managerId: string | undefined, _gerenteCuryId?: st
           .eq("manager_id", managerId!)
           .eq("status", "CONCLUDED")
           .gte("updated_at", de60iso),
-        // Check-ins C2S dos últimos 60 dias
-        supabase.from("c2s_checkins")
-          .select("corretor,gerente,created_at")
-          .gte("created_at", de60iso),
+        // Ponto no plantão (C2S) dos últimos 60 dias
+        buscarPlantao(de60iso).then((data) => ({ data })),
       ]);
 
       const metas = ((metasRes as any).data ?? []) as any[];
@@ -206,7 +204,7 @@ export default function MetaSemana({
 
         {/* O número grande é a META, não o quanto já foi feito. Mostrar
             "2 de 7" fazia o 2 ser lido como placar de vendas realizadas — e
-            quando o dado da Cury atrasa, o gerente vê um número que nao
+            quando o dado do C2S atrasa, o gerente vê um número que nao
             reconhece no lugar mais visível da tela. */}
         <div className="ms-k">
           <span className="ms-n mono">{alvoMes}</span>

@@ -9,6 +9,11 @@
 // A régua de qualidade é SÓ a taxa de resposta. "Qualificados" e "renda
 // preenchida" medem o formulário, não o lead — foi por aí que o time concluiu
 // que Butantã era lixo quando respondia igual à Lapa.
+//
+// Fontes (desde a saída da Cury, 26/09): custo vem das contas de anúncio no
+// Facebook (fb_contas_gerentes + edge fb-conta-gerente), visitas do C2S e
+// vendas do Junix — as duas gravadas em cury_pessoas/cury_metricas_diarias.
+// capi_effect_snapshots ficou de fora: são as equipes antigas da Cury, parado.
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,7 +38,7 @@ export interface DadosAnuncios {
   /** R$ jogados fora nos bloqueados */
   perdidoBloqueio: number;
   porDia: { dia: string; n: number }[];
-  /** custo por lead, por equipe */
+  /** custo por lead, por conta de gerente no Facebook, no mesmo período */
   custo: { equipe: string; cpl: number; eu: boolean }[];
   meuCpl: number | null;
   cplAntes: number | null;
@@ -41,7 +46,9 @@ export interface DadosAnuncios {
   campanhas: { nome: string; leads: number; resp: number }[];
   produtos: { nome: string; leads: number; gente: number | null }[];
   capi: { enviados: number; visitas: number; compras: number; erros: number; ultimo: string | null };
-  /** visitas e vendas REAIS da Cury, para mostrar o buraco do CAPI */
+  /** CAPI parado há mais de 7 dias (ou nunca rodou): o bloco some */
+  capiParado: boolean;
+  /** visitas REAIS (C2S) e vendas REAIS (Junix), para mostrar o buraco do CAPI */
   visitasReais: number;
   vendasReais: number;
   avisos: AvisoTrafego[];
@@ -55,6 +62,26 @@ const diaSP = (d = new Date()) =>
 const menos = (n: number) => diaSP(new Date(Date.now() - n * 86_400_000));
 const brl = (n: number) => "R$ " + n.toFixed(2).replace(".", ",");
 
+type Fb = { gasto?: number; leads?: number; semConta?: boolean; error?: string };
+type ContaGerente = { owner_id: string; nome: string; cargo: string };
+
+/** Lê a conta de um dono no Facebook. Falha vira null — nunca um número inventado. */
+async function lerConta(ownerId: string, de: string, ate: string) {
+  const { data, error } = await supabase.functions.invoke("fb-conta-gerente", {
+    body: { owner_id: ownerId, de, ate },
+  });
+  const d = data as Fb | null;
+  if (error || !d || d.error || d.semConta) return null;
+  return { gasto: Number(d.gasto ?? 0), leads: Number(d.leads ?? 0) };
+}
+const cplDe = (c: { gasto: number; leads: number } | null) =>
+  c && c.gasto > 0 && c.leads > 0 ? c.gasto / c.leads : null;
+
+/** Lead de anúncio: veio do Facebook. Pescado (cold_pool) e outras origens não contam. */
+const deAnuncio = (l: any) =>
+  l.source !== "cold_pool" &&
+  ((l.source ?? "").toLowerCase().startsWith("facebook") || !!l.fb_page_id || !!l.fb_campaign_id);
+
 export function useAnuncios(managerId: string | undefined, janela: { de: string; ate: string; dias: number }) {
   const { de, ate, dias } = janela;
   return useQuery<DadosAnuncios>({
@@ -64,6 +91,7 @@ export function useAnuncios(managerId: string | undefined, janela: { de: string;
     queryFn: async () => {
       // o período anterior tem o mesmo tamanho, para a comparação ser justa
       const deAntes = diaSP(new Date(new Date(de + "T12:00:00Z").getTime() - dias * 86_400_000));
+      const ateAntes = diaSP(new Date(new Date(de + "T12:00:00Z").getTime() - 86_400_000));
       const fim = ate + "T23:59:59";
 
       const { data: perfil } = await supabase.from("profiles")
@@ -74,13 +102,23 @@ export function useAnuncios(managerId: string | undefined, janela: { de: string;
         .select("cury_id").eq("escopo", "gerente").eq("profile_id", managerId!).maybeSingle();
       const gerenteCuryId = (euCury as any)?.cury_id ?? null;
 
-      const [leadsRes, snapRes, capiRes, curyRes, gestorRes, plantaoRes] = await Promise.all([
+      const { data: equipe } = await supabase.from("profiles")
+        .select("id").eq("manager_id", managerId!).eq("role", "BROKER");
+      const corretores = ((equipe ?? []) as any[]).map((p) => p.id as string);
+
+      // A equipe é o gerente ou um corretor dele. O nome na campanha entra só
+      // para achar o bloqueado pelo geo-guard (ver abaixo).
+      const nomeLimpo = meuNome.replace(/[^\p{L}0-9]/gu, "");
+      const daEquipe = [
+        `manager_id.eq.${managerId}`,
+        corretores.length ? `broker_id.in.(${corretores.join(",")})` : null,
+        nomeLimpo ? `fb_campaign.ilike.*${nomeLimpo}*` : null,
+      ].filter(Boolean).join(",");
+
+      const [leadsRes, capiRes, curyRes, gestorRes, contasRes, fbAntes] = await Promise.all([
         supabase.from("leads")
-          .select("created_at,geo_status,fb_campaign,product,last_lead_response_at,source,manager_id")
-          .gte("created_at", deAntes),
-        supabase.from("capi_effect_snapshots")
-          .select("snapshot_date,equipe,gasto,leads_fb,cpl,pct_resposta")
-          .order("snapshot_date", { ascending: false }).limit(60),
+          .select("created_at,geo_status,fb_campaign,fb_campaign_id,fb_page_id,product,last_lead_response_at,source,manager_id,broker_id")
+          .gte("created_at", deAntes).lte("created_at", fim).or(daEquipe),
         supabase.from("capi_events_log")
           .select("event_name,status,created_at").order("created_at", { ascending: false }).limit(600),
         gerenteCuryId
@@ -89,19 +127,23 @@ export function useAnuncios(managerId: string | undefined, janela: { de: string;
           : Promise.resolve({ data: [] as any[] }),
         supabase.from("system_settings").select("value")
           .eq("key", `gestor_trafego_${managerId}`).maybeSingle(),
-        supabase.from("profiles").select("id").eq("manager_id", managerId!).eq("role", "BROKER"),
+        supabase.rpc("fb_contas_gerentes" as any, { p_de: de }),
+        lerConta(managerId!, deAntes, ateAntes),
       ]);
 
       const todos = (leadsRes.data ?? []) as any[];
+      const time = new Set([managerId!, ...corretores]);
 
       // ⚠️ Lead bloqueado pelo geo-guard perde o corretor E o gerente: o trigger
       // zera broker_id e o manager_id fica nulo. Filtrar por gerente nunca
-      // acharia nenhum. A dona é a CAMPANHA — EQ_DUDU, DUDU_ZS etc.
+      // acharia nenhum. Para ESSES a dona é a CAMPANHA — EQ_DUDU, DUDU_ZS etc.
       const minhaCampanha = (c: string | null) =>
-        !!c && c.toUpperCase().includes(meuNome.toUpperCase());
-      const meu = (l: any) => l.manager_id === managerId || minhaCampanha(l.fb_campaign);
+        !!nomeLimpo && !!c && c.toUpperCase().includes(nomeLimpo.toUpperCase());
+      const meu = (l: any) =>
+        time.has(l.manager_id) || time.has(l.broker_id) ||
+        (l.geo_status === "fora_regiao" && minhaCampanha(l.fb_campaign));
 
-      const leads = todos.filter(meu);
+      const leads = todos.filter((l) => deAnuncio(l) && meu(l));
       const doPeriodo = leads.filter((l) => (l.created_at ?? "") >= de && (l.created_at ?? "") <= fim);
 
       const bloqueados = doPeriodo.filter((l) => l.geo_status === "fora_regiao").length;
@@ -109,26 +151,28 @@ export function useAnuncios(managerId: string | undefined, janela: { de: string;
       const usaveis = chegaram - bloqueados;
       const responderam = doPeriodo.filter((l) => l.last_lead_response_at).length;
 
-      /* ── custo por equipe: a última semana com gasto de cada uma ── */
-      const snaps = ((snapRes as any).data ?? []) as any[];
-      const porEquipe = new Map<string, any[]>();
-      for (const s of snaps) {
-        if (!s.equipe || !s.gasto) continue;
-        const a = porEquipe.get(s.equipe) ?? []; a.push(s); porEquipe.set(s.equipe, a);
-      }
-      const custo = [...porEquipe.entries()]
-        .map(([equipe, ls]) => ({ equipe, cpl: Number(ls[0].cpl ?? 0),
-          eu: equipe.toLowerCase() === meuNome.toLowerCase() }))
-        .filter((c) => c.cpl > 0)
-        .sort((a, b) => a.cpl - b.cpl);
+      /* ── custo por lead: cada conta de gerente no Facebook, no MESMO período ── */
+      // Só entra conta de GERENTE com gasto e lead — super soma várias equipes e
+      // conta parada daria CPL zero ou infinito. Uma conta por dono: a edge lê
+      // pelo owner_id.
+      const contas = ((((contasRes as any).data ?? []) as ContaGerente[]))
+        .filter((c, i, a) => a.findIndex((x) => x.owner_id === c.owner_id) === i)
+        .filter((c) => c.owner_id === managerId || c.cargo === "MANAGER");
+      const lidas = await Promise.all(contas.map(async (c) =>
+        ({ c, cpl: cplDe(await lerConta(c.owner_id, de, ate)) })));
 
-      const meus = porEquipe.get(
-        [...porEquipe.keys()].find((k) => k.toLowerCase() === meuNome.toLowerCase()) ?? "") ?? [];
-      const meuCpl = meus[0]?.cpl ? Number(meus[0].cpl) : null;
-      const cplAntes = meus[2]?.cpl ? Number(meus[2].cpl) : null;   // ~3 semanas atrás
-      const outros = custo.filter((c) => !c.eu);
-      const mediaOutros = outros.length
-        ? outros.reduce((a, c) => a + c.cpl, 0) / outros.length : null;
+      const meuCpl = lidas.find((l) => l.c.owner_id === managerId)?.cpl ?? null;
+      const cplAntes = cplDe(fbAntes);
+      const outros = lidas.filter((l) => l.c.owner_id !== managerId && l.cpl != null);
+      // Média SIMPLES entre as contas: é "quanto paga uma equipe típica".
+      const mediaOutros = meuCpl != null && outros.length >= 1
+        ? outros.reduce((a, l) => a + l.cpl!, 0) / outros.length : null;
+      // Sem a minha conta ou sem ninguém para comparar, a comparação some —
+      // número de mentira é pior que nenhum.
+      const custo = mediaOutros == null ? [] : [
+        { equipe: meuNome || "Você", cpl: meuCpl!, eu: true },
+        ...outros.map((l) => ({ equipe: l.c.nome, cpl: l.cpl!, eu: false })),
+      ].sort((a, b) => a.cpl - b.cpl);
 
       /* ── campanhas pela taxa de RESPOSTA, que é o sinal limpo ── */
       const camp = new Map<string, { leads: number; resp: number }>();
@@ -170,6 +214,9 @@ export function useAnuncios(managerId: string | undefined, janela: { de: string;
         erros: ev.filter((e) => e.status === "error").length,
         ultimo: ev[0]?.created_at ?? null,
       };
+      const capiParado = !capi.ultimo ||
+        Date.now() - new Date(capi.ultimo).getTime() > 7 * 86_400_000;
+      // atendimentos = visitas do C2S; vendas = Junix (tabelas antigas, dado novo)
       const cury = ((curyRes as any).data ?? []) as any[];
       const visitasReais = cury.reduce((a, c) => a + (c.atendimentos ?? 0), 0);
       const vendasReais = cury.reduce((a, c) => a + (c.vendas ?? 0), 0);
@@ -191,7 +238,7 @@ export function useAnuncios(managerId: string | undefined, janela: { de: string;
       return {
         chegaram, usaveis, bloqueados, responderam, perdidoBloqueio, porDia,
         custo, meuCpl, cplAntes, mediaOutros, campanhas, produtos,
-        capi, visitasReais, vendasReais,
+        capi, capiParado, visitasReais, vendasReais,
         avisos: montarAvisos({
           meuNome, gestor, chegaram, chegaramAntes, bloqueados, perdidoBloqueio,
           meuCpl, cplAntes, mediaOutros, campanhas, dias,
@@ -231,10 +278,10 @@ function montarAvisos(x: {
   // custo subindo — o sintoma é medido, a causa é hipótese
   if (x.meuCpl && x.cplAntes && x.meuCpl > x.cplAntes * 1.3) {
     const pct = Math.round(((x.meuCpl - x.cplAntes) / x.cplAntes) * 100);
-    out.push({ chave: "subindo", tom: "warn", titulo: `O custo subiu ${pct}% em três semanas`,
-      corpo: `Era ${brl(x.cplAntes)} há três semanas, agora está em ${brl(x.meuCpl)}.`,
-      hipotese: "Custo subindo semana após semana costuma ser criativo cansado ou público saturado. Quem confirma é você — eu só vejo o custo.",
-      mensagem: `${oi}${eu}. O custo do meu lead subiu de ${brl(x.cplAntes)} pra ${brl(x.meuCpl)} em três semanas. Pode ser criativo cansado? Vale trocar a peça ou abrir o público?` });
+    out.push({ chave: "subindo", tom: "warn", titulo: `O custo subiu ${pct}% contra os ${x.dias} dias anteriores`,
+      corpo: `Era ${brl(x.cplAntes)} no período anterior, agora está em ${brl(x.meuCpl)}.`,
+      hipotese: "Custo subindo de um período para o outro costuma ser criativo cansado ou público saturado. Quem confirma é você — eu só vejo o custo.",
+      mensagem: `${oi}${eu}. O custo do meu lead subiu de ${brl(x.cplAntes)} pra ${brl(x.meuCpl)} nos últimos ${x.dias} dias. Pode ser criativo cansado? Vale trocar a peça ou abrir o público?` });
   }
 
   // DDD de fora: o número principal mente sem isso

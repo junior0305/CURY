@@ -1,249 +1,175 @@
-// PASTAS — o que entrou em pasta, onde está, e o que travou.
+// PASTAS — onde estão as propostas da equipe e quais travaram.
 //
-// A tela responde três perguntas, nesta ordem, porque é a ordem em que elas
-// importam para o gerente:
+// A tela responde três perguntas, nesta ordem:
 //
-//   1. quantas subiram?      → produção, o que a equipe fez
-//   2. onde estão?           → fila, onde o dinheiro está parado
-//   3. quais estão paradas?  → ação, com o telefone do cliente na mão
+//   1. onde estão?        → as pastas da equipe por etapa do kanban
+//   2. de quem são?       → quantas cada corretor carrega, e quantas travaram
+//   3. o que ficou fora?  → pastas que não casaram com lead da equipe
 //
-// Vem do Salesforce, então mede o que a operação fez de fato — não depende de
-// ninguém registrar nada no Comandra.
+// Vem do Junix (espelho de hora em hora), então mede o processo de crédito de
+// fato — não depende de ninguém registrar nada no Comandra.
 
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { useTheme } from "@/contexts/ThemeContext";
-import {
-  usePastas, linkWhats, registrarToque, TIPOS_TOQUE, type Parada,
-} from "@/hooks/usePastas";
-import { Sec, Blank, Cell, ScoreRow, Bars } from "@/components/manager-v10/ui";
+import { usePastas, DIAS_TRAVADA, type Pasta } from "@/hooks/usePastas";
+import { Sec, Blank, Cell, ScoreRow, Bars, Tbl, Tr } from "@/components/manager-v10/ui";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import "@/styles/manager-v10.css";
 import "@/styles/pastas.css";
 
 const ini = (s: string) => s.trim().slice(0, 2).toUpperCase();
-const ddmm = (iso: string) => iso.slice(8, 10) + "/" + iso.slice(5, 7);
-const hoje = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo",
-  year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-const emDias = (n: number) => {
-  const d = new Date(); d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
-};
-/** "há 3 dias" — quem lê a fila quer a distância, não a data. */
-const desde = (iso: string) => {
-  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  return d <= 0 ? "hoje" : d === 1 ? "ontem" : `há ${d} dias`;
-};
-const ROTULO = Object.fromEntries(TIPOS_TOQUE.map((t) => [t.k, t.rotulo]));
+const hhmm = (iso: string) => new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit",
+}).format(new Date(iso));
 
-type Corte = 30 | 45 | 60;
+/** Uma linha de pasta. Travada (DIAS_TRAVADA+) ganha a faixa âmbar. */
+function Linha({ p, mostraEtapa }: { p: Pasta; mostraEtapa?: boolean }) {
+  const travada = p.dias >= DIAS_TRAVADA;
+  return (
+    <div className={`pa-li${travada ? " vencido" : ""}`}>
+      <span className="pa-av">{ini(p.cliente)}</span>
+      <div className="pa-b">
+        <b>{p.cliente}</b>
+        <span>
+          {mostraEtapa ? <>{p.etapa}<em className="sep">·</em></> : null}
+          {p.daEquipe
+            ? (p.corretor ?? <em className="ruim">sem corretor no Comandra</em>)
+            : <em className="ruim">sem dono identificado</em>}
+          {p.status ? <><em className="sep">·</em>{p.status}</> : null}
+        </span>
+      </div>
+      <span className="pa-dias mono" title="dias nesta etapa">{p.dias}d</span>
+      <span className="pa-tel">{p.fluxo ?? ""}</span>
+      <span />
+    </div>
+  );
+}
 
 export default function Pastas() {
   const { session } = useAuth();
-  const userId = session?.user?.id;
+  // super/admin abrem as pastas de um gerente via ?manager=<id>, como no resto do painel
+  const userId = useEffectiveManagerId() ?? session?.user?.id;
   const { mode, toggle } = useTheme();
-  const { data, isLoading } = usePastas(userId);
-  const [corte, setCorte] = useState<Corte>(45);
-  const [soOrfas, setSoOrfas] = useState(false);
-  const [aberta, setAberta] = useState<string | null>(null);
-  const [tipo, setTipo] = useState<string>("ligou");
-  const [nota, setNota] = useState("");
-  const [voltar, setVoltar] = useState<string>("");
-  const [salvando, setSalvando] = useState(false);
-  const qc = useQueryClient();
+  const { data, isLoading, error } = usePastas(userId);
+  const [etapa, setEtapa] = useState<string | null>(null);
+  const [soTravadas, setSoTravadas] = useState(false);
+  const [verSemDono, setVerSemDono] = useState(false);
   loadFonts();
 
-  function abrir(id: string) {
-    setAberta((v) => (v === id ? null : id));
-    setTipo("ligou"); setNota(""); setVoltar("");
-  }
-
-  async function salvar(p: Parada) {
-    if (!userId) return;
-    setSalvando(true);
-    try {
-      await registrarToque({
-        propostaId: p.id, autorId: userId, tipo,
-        nota, voltarEm: voltar || null,
-      });
-      toast.success(voltar
-        ? `Registrado. Volta para o topo em ${ddmm(voltar)}.`
-        : "Registrado.");
-      setAberta(null);
-      qc.invalidateQueries({ queryKey: ["pastas"] });
-    } catch (e: any) {
-      toast.error(`Não consegui registrar: ${e?.message ?? e}`);
-    } finally { setSalvando(false); }
-  }
-
   const corpo = () => {
-    if (isLoading) return <Blank title="Carregando as propostas…" />;
-    if (!data) return null;
-    if (!data.apelido) {
-      return (
-        <Blank title="Não encontrei você no Salesforce">
-          O seu login não está ligado a um gerente da Cury, e é essa ligação que
-          diz quais propostas são da sua equipe. Fale com o administrador.
-        </Blank>
-      );
+    if (isLoading) return <Blank title="Carregando as pastas…" />;
+    if (error) {
+      return <Blank title="Não consegui ler as pastas">{String((error as any)?.message ?? error)}</Blank>;
     }
+    if (!data) return null;
 
     const d = data;
-    const semanas = d.porSemana.slice(-10);
-    const pico = Math.max(1, ...semanas.map((s) => s.n));
-    const maiorEtapa = Math.max(1, ...d.estoque.map((e) => e.n));
+    const travadas = d.minhas.filter((p) => p.dias >= DIAS_TRAVADA).length;
+    const semCorretor = d.minhas.filter((p) => !p.corretorId).length;
+    const maiorEtapa = Math.max(1, ...d.etapas.map((e) => e.n));
 
-    const fila: Parada[] = d.paradas
-      .filter((p) => p.dias >= corte)
-      .filter((p) => (soOrfas ? p.orfa : true));
-    const orfas = d.paradas.filter((p) => p.dias >= corte && p.orfa).length;
+    // Filtro por etapa (clique na barra/célula) e por travadas.
+    const lista = d.minhas
+      .filter((p) => (etapa ? p.etapa === etapa : true))
+      .filter((p) => (soTravadas ? p.dias >= DIAS_TRAVADA : true));
+    // Agrupada na ordem do kanban; dentro do grupo, a mais parada primeiro.
+    const grupos = d.etapas
+      .map((e) => ({ ...e, pastas: lista.filter((p) => p.etapa === e.etapa) }))
+      .filter((g) => g.pastas.length);
 
-    // Média por dia útil da última semana cheia, para o "subiram hoje" ter
-    // contra o que ser lido. Um número sozinho não diz se é bom.
-    const ult = semanas.length > 1 ? semanas[semanas.length - 2].n : 0;
+    const cols = "minmax(0,1.1fr) 64px 84px minmax(0,2.4fr)";
 
     return (
       <>
-        <Sec title="Subiram" tag="entradas em montagem de pasta"
-          sub="Quantas propostas passaram para montagem de pasta. É produção — vem do Salesforce, não de registro no Comandra.">
+        <Sec title="Onde estão" tag={`${d.minhas.length} da equipe`}
+          sub="As pastas da sua equipe em cada etapa do kanban, agora. O dono sai do nome do cliente casado com os leads da equipe.">
           <ScoreRow>
-            <Cell label="hoje" value={d.subiramHoje} />
-            <Cell label="esta semana" value={d.subiramSemana}
-              sub={ult ? `semana passada ${ult}` : undefined}
-              tone={ult && d.subiramSemana < ult / 2 ? "alert" : undefined} />
-            <Cell label="este mês" value={d.subiramMes} />
-            <Cell label="em 90 dias" value={d.porDia.reduce((a, x) => a + x.n, 0)} />
+            <Cell label="pastas da equipe" value={d.minhas.length} />
+            <Cell label={`travadas (${DIAS_TRAVADA}+ dias)`} value={travadas}
+              tone={travadas ? "alert" : undefined}
+              onClick={() => setSoTravadas((v) => !v)} active={soTravadas} />
+            <Cell label="sem corretor" value={semCorretor}
+              sub="lead sem corretor no Comandra" tone={semCorretor ? "alert" : undefined} />
+            <Cell label="sem dono identificado" value={d.semDono.length}
+              sub="da diretoria inteira"
+              onClick={() => setVerSemDono((v) => !v)} active={verSemDono} />
           </ScoreRow>
 
-          {semanas.length ? (
-            <div className="pa-serie">
-              {semanas.map((s) => (
-                <div className="pa-col" key={s.semana} title={`semana de ${ddmm(s.semana)}: ${s.n}`}>
-                  <span className="pa-n">{s.n}</span>
-                  <i style={{ height: `${Math.max(4, (s.n / pico) * 100)}%` }} />
-                  <span className="pa-d">{ddmm(s.semana)}</span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </Sec>
-
-        <Sec title="Onde estão" tag={`${d.estoque.reduce((a, e) => a + e.n, 0)} abertas`}
-          sub="O estoque parado em cada etapa, agora. Fila grande pode ser muito entrando ou nada saindo — por isso ela vem depois da produção.">
-          {d.estoque.length ? (
-            <Bars rows={d.estoque.map((e) => ({
-              label: e.etapa, pct: e.n / maiorEtapa, value: e.n,
+          {d.etapas.length ? (
+            <Bars rows={d.etapas.map((e) => ({
+              label: e.etapa, pct: e.n / maiorEtapa,
+              value: e.travadas ? `${e.n} · ${e.travadas} travadas` : e.n,
+              tone: etapa && etapa !== e.etapa ? "weak" : undefined,
             }))} />
-          ) : <Blank title="Nenhuma proposta aberta" />}
-
-          <ScoreRow>
-            <Cell label="vendas ganhas" value={d.ganhas} tone="good" />
-            <Cell label="vendas perdidas" value={d.perdidas} tone={d.perdidas ? "alert" : undefined} />
-            <Cell label="distratos" value={d.distratos} tone={d.distratos ? "alert" : undefined} />
-            <Cell label="sem corretor ativo" value={orfas}
-              sub="o corretor saiu" tone={orfas ? "alert" : undefined} />
-          </ScoreRow>
+          ) : <Blank title="Nenhuma pasta da equipe no Junix" />}
         </Sec>
 
-        <Sec title="Paradas" tag={`${fila.length} com telefone`}
-          sub="Com o contato do cliente na mão. Registre o que fez — quem tem retorno marcado para hoje sobe para o topo, e quem nunca foi tocado vem antes de quem já foi.">
+        <Sec title="Pastas" tag={`${lista.length}${etapa || soTravadas ? " no filtro" : ""}`}
+          sub={`Agrupadas por etapa. Faixa âmbar = ${DIAS_TRAVADA} dias ou mais na mesma etapa — é por ela que a conversa com o corretor começa.`}>
           <div className="pa-filtros">
             <div className="seg">
-              {([30, 45, 60] as Corte[]).map((c) => (
-                <button key={c} className={corte === c ? "on" : undefined}
-                  onClick={() => setCorte(c)}>+{c} dias</button>
+              <button className={!etapa ? "on" : undefined} onClick={() => setEtapa(null)}>todas</button>
+              {d.etapas.map((e) => (
+                <button key={e.etapa} className={etapa === e.etapa ? "on" : undefined}
+                  onClick={() => setEtapa(etapa === e.etapa ? null : e.etapa)}>
+                  {e.etapa} ({e.n})
+                </button>
               ))}
             </div>
-            <button className={`mini${soOrfas ? " key" : ""}`} onClick={() => setSoOrfas((v) => !v)}>
-              {soOrfas ? "mostrando só as sem corretor" : `só as sem corretor (${orfas})`}
+            <button className={`mini${soTravadas ? " key" : ""}`} onClick={() => setSoTravadas((v) => !v)}>
+              {soTravadas ? "mostrando só as travadas" : `só as travadas (${travadas})`}
             </button>
           </div>
 
-          {fila.length ? (
-            <div className="pa-lista">
-              {fila.slice(0, 80).map((p) => {
-                const wa = linkWhats(p.telefone, p.cliente);
-                return (
-                  <div className={`pa-li${p.orfa ? " orfa" : ""}${p.vencido ? " vencido" : ""}${aberta === p.id ? " on" : ""}`} key={p.id}>
-                    <span className="pa-av">{ini(p.cliente ?? "?")}</span>
-                    <div className="pa-b">
-                      <b>{p.cliente ?? "sem nome"}</b>
-                      <span>
-                        {p.status}
-                        <em className="sep">·</em>
-                        {p.orfa ? <em className="ruim">corretor saiu</em> : (p.corretor ?? "sem corretor")}
-                        {p.semDocumento ? <><em className="sep">·</em><em className="ruim">sem documento</em></> : null}
-                      </span>
-                      {/* O que já foi feito. Sem esta linha a fila volta idêntica
-                          amanhã e o gerente refaz o mesmo trabalho. */}
-                      {p.toque ? (
-                        <span className="pa-toque">
-                          {p.vencido ? <em className="alvo">voltar hoje</em> : null}
-                          {ROTULO[p.toque.tipo] ?? p.toque.tipo} {desde(p.toque.quando)}
-                          {p.toque.autor ? ` · ${p.toque.autor}` : ""}
-                          {p.toque.nota ? <em className="nota"> — {p.toque.nota}</em> : null}
-                        </span>
-                      ) : null}
-                    </div>
-                    <span className="pa-dias mono">{p.dias}d</span>
-                    <span className="pa-tel mono">{p.telefone}</span>
-                    <div className="acts">
-                      {wa ? (
-                        <a className="mini key" href={wa} target="_blank" rel="noreferrer">
-                          WhatsApp
-                        </a>
-                      ) : null}
-                      <button className="mini" onClick={() => abrir(p.id)}>
-                        {aberta === p.id ? "fechar" : "Registrar"}
-                      </button>
-                    </div>
-
-                    {aberta === p.id ? (
-                      <div className="pa-form">
-                        <div className="pa-tipos">
-                          {TIPOS_TOQUE.map((t) => (
-                            <button key={t.k} className={`pa-chip${tipo === t.k ? " on" : ""}`}
-                              onClick={() => setTipo(t.k)}>{t.rotulo}</button>
-                          ))}
-                        </div>
-                        <input className="pa-nota" value={nota} maxLength={180}
-                          placeholder="o que aconteceu (opcional)"
-                          onChange={(e) => setNota(e.target.value)} />
-                        <div className="pa-volta">
-                          <span>Voltar em</span>
-                          {[
-                            ["amanhã", emDias(1)],
-                            ["3 dias", emDias(3)],
-                            ["1 semana", emDias(7)],
-                          ].map(([rot, val]) => (
-                            <button key={rot} className={`pa-chip${voltar === val ? " on" : ""}`}
-                              onClick={() => setVoltar(voltar === val ? "" : val)}>{rot}</button>
-                          ))}
-                          <input type="date" value={voltar} min={hoje()}
-                            onChange={(e) => setVoltar(e.target.value)} />
-                          <button className="mini solid" disabled={salvando}
-                            onClick={() => salvar(p)}>
-                            {salvando ? "salvando…" : "Registrar"}
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-              {fila.length > 80 ? (
-                <p className="sec-sub" style={{ margin: "12px 0 0" }}>
-                  Mostrando as 80 mais antigas de {fila.length}.
-                </p>
-              ) : null}
+          {grupos.length ? grupos.map((g) => (
+            <div key={g.etapa} style={{ marginBottom: 18 }}>
+              <p className="sec-sub" style={{ margin: "0 0 8px" }}>
+                <b>{g.etapa}</b> · {g.pastas.length}
+                {g.travadas ? ` · ${g.travadas} travadas` : ""}
+              </p>
+              <div className="pa-lista">
+                {g.pastas.map((p) => <Linha key={p.id} p={p} />)}
+              </div>
             </div>
-          ) : (
-            <Blank title={`Nenhuma parada há mais de ${corte} dias`}>
-              {soOrfas ? "Nenhuma sem corretor ativo neste corte." : "A fila está em dia."}
+          )) : (
+            <Blank title="Nenhuma pasta neste filtro">
+              {soTravadas ? `Nada parado há ${DIAS_TRAVADA} dias ou mais.` : "Sem pastas da equipe no momento."}
             </Blank>
           )}
+        </Sec>
+
+        <Sec title="Por corretor" tag={`${d.porCorretor.filter((c) => c.id).length} com pasta`}
+          sub="Quantas pastas cada corretor carrega e em que etapa. Travadas é quem pede cobrança hoje.">
+          {d.porCorretor.length ? (
+            <Tbl cols={cols} head={["Corretor", "Pastas", "Travadas", "Por etapa"]}>
+              {d.porCorretor.map((c) => (
+                <Tr key={c.id ?? "sem"} cols={cols}>
+                  <span>{c.id ? c.nome : <span style={{ color: "var(--red)", fontWeight: 600 }}>{c.nome}</span>}</span>
+                  <span className="mono">{c.total}</span>
+                  <span className="mono">{c.travadas || "—"}</span>
+                  <span>{c.porEtapa.map((e) => `${e.n} ${e.etapa}`).join(" · ")}</span>
+                </Tr>
+              ))}
+            </Tbl>
+          ) : <Blank title="Nenhum corretor com pasta" />}
+        </Sec>
+
+        <Sec title="Pastas da diretoria sem dono identificado" tag={`${d.semDono.length}`}
+          sub="O nome do cliente não casou com nenhum lead da sua equipe. Podem ser de outra equipe ou ter o nome escrito diferente — ficam aqui para nada sumir.">
+          <div className="pa-filtros">
+            <button className={`mini${verSemDono ? " key" : ""}`} onClick={() => setVerSemDono((v) => !v)}>
+              {verSemDono ? "esconder" : `mostrar as ${d.semDono.length}`}
+            </button>
+          </div>
+          {verSemDono ? (
+            d.semDono.length ? (
+              <div className="pa-lista">
+                {d.semDono.map((p) => <Linha key={p.id} p={p} mostraEtapa />)}
+              </div>
+            ) : <Blank title="Todas as pastas têm dono" />
+          ) : null}
         </Sec>
       </>
     );
@@ -256,7 +182,10 @@ export default function Pastas() {
         <header className="top2">
           <div>
             <h1>Pastas</h1>
-            <p>O que entrou em pasta, onde está, e o que travou</p>
+            <p>
+              Onde estão as propostas da equipe, e quais travaram
+              {data?.atualizadoEm ? <> · Fonte: Junix · atualizado {hhmm(data.atualizadoEm)}</> : null}
+            </p>
           </div>
         </header>
         <section className="view">{corpo()}</section>

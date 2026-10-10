@@ -158,7 +158,7 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
 
       <Sec title={`Plantão — check-in (Contact2Sale · ${diasCheckin} dias)`}
         tag={<span className="dim">C2S</span>}
-        sub="Quem do seu time bateu ponto no plantão, vindo do Contact2Sale.">
+        sub="Quem do seu time bateu ponto no plantão e em qual estande, vindo do Contact2Sale.">
         {!checkins?.length ? (
           <Blank title={`Ninguém do time bateu ponto nos últimos ${diasCheckin} dias.`}>
             Os check-ins aparecem aqui conforme os corretores batem ponto no plantão (sincroniza a cada 30 min).
@@ -173,7 +173,7 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
                 <div key={c.corretor} className="tr-kpi">
                   <span className="tag">{c.corretor.trim()}</span>
                   <b className="win">{c.n_checkins}</b>
-                  <i>check-in{c.n_checkins > 1 ? "s" : ""} · último {quando}</i>
+                  <i>dia{c.n_checkins > 1 ? "s" : ""} no plantão · último {quando}{c.tipos ? ` · ${c.tipos}` : ""}</i>
                 </div>
               );
             })}

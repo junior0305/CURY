@@ -28,21 +28,21 @@ interface Grupo {
 
 const GRUPOS: Grupo[] = [
   { chave: "semcad", tom: "trav", titulo: "batem ponto e não têm login aqui",
-    porque: "Aparecem na Cury e não existem no Comandra — não recebem lead nem entram na cobrança individual. " +
-            "Antes de criar login, confira se já não é alguém daqui com outro nome: a Cury às vezes pede para " +
+    porque: "Aparecem no C2S e não existem no Comandra — não recebem lead nem entram na cobrança individual. " +
+            "Antes de criar login, confira se já não é alguém daqui com outro nome: o C2S às vezes pede para " +
             "trocar o apelido depois que o acesso foi criado, e dois cadastros para a mesma pessoa dividem a carteira em duas.",
     acao: "Conferir um a um" },
   // Transferência que aconteceu na Cury e não aconteceu aqui. É o caso mais
   // comum e o mais invisível: a pessoa trabalha para o gerente e some do painel
   // dele, que passa a cobrar uma equipe menor do que a que tem.
-  { chave: "outraeq", tom: "trav", titulo: "já são seus na Cury e não aqui",
+  { chave: "outraeq", tom: "trav", titulo: "já são seus no C2S e não aqui",
     porque: "Batem ponto na sua equipe e o cadastro daqui ainda está com outro gerente — não entram no seu rodízio e não aparecem nos seus números.",
     acao: "Trazer para a equipe",
     lote: async (gente, managerId) => {
       for (const p of gente) if (p.profileId) await trazerParaEquipe(p.profileId, managerId);
     } },
   { chave: "desativado", tom: "trav", titulo: "voltaram a trabalhar com cadastro desativado",
-    porque: "Bateram ponto na Cury e o login aqui está desligado — não recebem lead, não contam em nada e não conseguem entrar.",
+    porque: "Bateram ponto no C2S e o login aqui está desligado — não recebem lead, não contam em nada e não conseguem entrar.",
     acao: "Reativar e trazer",
     lote: async (gente, managerId) => {
       for (const p of gente) if (p.profileId) await trazerParaEquipe(p.profileId, managerId);
@@ -57,7 +57,7 @@ const GRUPOS: Grupo[] = [
     porque: "Vários dias de plantão sem atender e sem vender. Presença sem trabalho.",
     acao: "Conversar hoje" },
   { chave: "perdeu", tom: "warn", titulo: "deixaram lead expirar no plantão",
-    porque: "Estavam no balcão e o lead da Cury venceu sem atendimento.",
+    porque: "Estavam no balcão e o lead do C2S venceu sem atendimento.",
     acao: "Cobrar agora" },
   { chave: "sumido", tom: "warn", titulo: "sumidos com carteira cheia",
     porque: "Não vieram e não abrem o Comandra. Os leads estão parados na mão deles.",

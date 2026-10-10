@@ -80,7 +80,7 @@ export default function VincularCorretor({
         <div className="vinc-h">
           <div>
             <b>{pessoa.nome}</b>
-            <i>na Cury aparece como <b>{pessoa.apelido}</b> · bateu ponto hoje</i>
+            <i>no C2S aparece como <b>{pessoa.apelido}</b> · bateu ponto hoje</i>
           </div>
           <button className="vinc-x" onClick={onFechar} aria-label="Fechar">✕</button>
         </div>
@@ -101,7 +101,7 @@ export default function VincularCorretor({
           <>
             <p className="vinc-n">
               Pode ser que ela já tenha cadastro aqui com <b>outro nome</b> — é o que
-              acontece quando a Cury pede para trocar o apelido depois que o acesso
+              acontece quando o C2S pede para trocar o apelido depois que o acesso
               já foi criado. Confira antes de criar um login novo: dois cadastros
               para a mesma pessoa dividem a carteira dela em duas.
             </p>
@@ -121,7 +121,7 @@ export default function VincularCorretor({
                     <em>bate em: {c.casou.join(", ")}</em>
                   </span>
                   {c.ja_vinculado
-                    ? <span className="vinc-ja">já é de outra pessoa na Cury</span>
+                    ? <span className="vinc-ja">já é de outra pessoa no C2S</span>
                     : null}
                 </label>
               ))}

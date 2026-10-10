@@ -1,95 +1,74 @@
-// PASTAS — o que entrou em pasta e onde travou.
+// PASTAS — quais propostas a equipe tem no Junix, em que etapa, e há quanto
+// tempo paradas.
 //
-// Duas fontes, e a diferença entre elas é o ponto da tela:
+// Fonte: junix_pastas, espelho de hora em hora do kanban do Junix. O kanban
+// não diz de quem é a pasta — só o nome do cliente. A atribuição sai daqui:
+// casa o nome do cliente com os leads da equipe no Comandra.
 //
-//   salesforce_movimentos → FLUXO. Quantas subiram na terça. É produção.
-//   salesforce_propostas  → ESTOQUE. Quantas estão paradas agora. É fila.
+//   1. nome normalizado idêntico        → casou
+//   2. primeiro E último nome iguais    → casou (pega "MARIA S. SOUZA" x "MARIA SOUZA")
 //
-// Medir só o estoque engana: uma fila grande pode ser muito trabalho entrando
-// ou nenhum trabalho saindo, e as duas pedem coisas opostas do gerente.
-//
-// A chave do gerente é a mesma da Cury ("DUDU - PDV"), sem tabela de-para: o
-// Salesforce guarda em GerenteFormula__c e o Comandra em cury_pessoas.apelido.
+// O que não casa com ninguém NÃO some: vai para "sem dono identificado", que
+// todo gestor vê. Esconder pasta por falha de nome é pior que mostrar a mais.
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-const diaSP = (d = new Date()) =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo",
-    year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+/** Pasta parada há esse tanto de dias na mesma etapa merece cobrança. */
+export const DIAS_TRAVADA = 7;
 
-function segunda() {
-  const d = (new Date().getDay() + 6) % 7;
-  return diaSP(new Date(Date.now() - d * 86_400_000));
-}
-
-/** As etapas na ordem em que a proposta anda. Nomes exatos do Salesforce. */
-export const ETAPAS = [
-  "Negociação",
-  "Montagem de Pasta",
-  "Solicitar Análise Bancária",
-  "Análise Bancária",
-  "Análise de Crédito",
-  "Validação Financeira - CAR",
-  "Geração de Contrato",
-  "Assinatura de Contrato",
-  "Conferência de Contrato - Cury Vendas",
-] as const;
-
-const PERDIDAS = ["Venda Perdida", "Em Distrato", "Distratado"];
-
-/** O que o gerente já fez nesta proposta. */
-export interface Toque {
-  tipo: string;
-  nota: string | null;
-  voltarEm: string | null;
-  quando: string;
-  autor: string | null;
-}
-
-export const TIPOS_TOQUE: { k: string; rotulo: string }[] = [
-  { k: "ligou", rotulo: "Liguei" },
-  { k: "whatsapp", rotulo: "Mandei mensagem" },
-  { k: "sem_resposta", rotulo: "Não respondeu" },
-  { k: "documento", rotulo: "Cobrei documento" },
-  { k: "passou", rotulo: "Passei para outro" },
-  { k: "resolvido", rotulo: "Resolvido" },
-];
-
-export interface Parada {
+export interface Pasta {
   id: string;
-  nome: string;
-  status: string;
-  cliente: string | null;
-  telefone: string | null;
-  corretor: string | null;
+  cliente: string;
+  etapa: string;
+  etapaOrdem: number;
+  status: string | null;
   dias: number;
-  semDocumento: boolean;
-  toque: Toque | null;
-  /** o retorno combinado venceu — sobe para o topo da fila */
-  vencido: boolean;
-  /** o corretor saiu da empresa — a proposta não anda sozinha */
-  orfa: boolean;
+  fluxo: string | null;
+  corretorId: string | null;
+  /** first_name do corretor; null = lead sem corretor ou pasta sem lead */
+  corretor: string | null;
+  /** casou com algum lead da equipe */
+  daEquipe: boolean;
 }
 
 export interface DadosPastas {
-  apelido: string | null;
-  /** quantas ENTRARAM em montagem de pasta */
-  subiramHoje: number;
-  subiramSemana: number;
-  subiramMes: number;
-  /** série por semana, da mais velha para a mais nova */
-  porSemana: { semana: string; n: number }[];
-  porDia: { dia: string; n: number }[];
-  /** quantas estão paradas em cada etapa, agora */
-  estoque: { etapa: string; n: number }[];
-  ganhas: number;
-  perdidas: number;
-  distratos: number;
-  paradas: Parada[];
+  /** pastas casadas com leads da equipe */
+  minhas: Pasta[];
+  /** pastas que não casaram com lead de ninguém da equipe */
+  semDono: Pasta[];
+  /** etapas na ordem do kanban, com contagem das MINHAS */
+  etapas: { etapa: string; ordem: number; n: number; travadas: number }[];
+  porCorretor: { id: string | null; nome: string; total: number; travadas: number;
+    porEtapa: { etapa: string; n: number }[] }[];
+  /** max(atualizado_em) — quando o espelho rodou pela última vez */
+  atualizadoEm: string | null;
 }
 
-const soDigitos = (t: string | null) => (t ?? "").replace(/\D/g, "");
+/** Sem acento, maiúsculo, espaço único. O Junix grava tudo em CAIXA ALTA. */
+export const normNome = (s: string | null) =>
+  (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toUpperCase().replace(/[^A-Z ]/g, " ").replace(/\s+/g, " ").trim();
+
+const pontas = (n: string) => {
+  const t = n.split(" ");
+  return t.length >= 2 ? `${t[0]}|${t[t.length - 1]}` : null;
+};
+
+/** PostgREST corta em 1000 linhas: pagina até acabar. */
+async function todas<T>(q: (de: number, ate: number) => PromiseLike<{ data: unknown; error: any }>) {
+  const out: T[] = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await q(de, de + 999);
+    if (error) throw error;
+    const rows = (data ?? []) as T[];
+    out.push(...rows);
+    if (rows.length < 1000) break;
+  }
+  return out;
+}
+
+type LeadRow = { name: string | null; broker_id: string | null; created_at: string };
 
 export function usePastas(managerId: string | undefined) {
   return useQuery<DadosPastas>({
@@ -97,125 +76,96 @@ export function usePastas(managerId: string | undefined) {
     enabled: !!managerId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const vazio: DadosPastas = {
-        apelido: null, subiramHoje: 0, subiramSemana: 0, subiramMes: 0,
-        porSemana: [], porDia: [], estoque: [], ganhas: 0, perdidas: 0,
-        distratos: 0, paradas: [],
-      };
+      const { data: equipe } = await supabase.from("profiles")
+        .select("id,first_name").eq("manager_id", managerId!);
+      const nomes = new Map<string, string>(
+        ((equipe ?? []) as any[]).map((p) => [p.id, (p.first_name ?? "").trim() || "sem nome"]));
+      const ids = [...nomes.keys()];
 
-      const { data: eu } = await supabase.from("cury_pessoas")
-        .select("apelido").eq("escopo", "gerente").eq("profile_id", managerId!).maybeSingle();
-      const apelido = (eu as any)?.apelido ?? null;
-      if (!apelido) return vazio;
+      // Leads da equipe: os do gerente e os dos corretores dele. O `or` com
+      // in.(...) fica num pedido só; sem corretor, basta o manager_id.
+      const filtro = ids.length
+        ? `manager_id.eq.${managerId},broker_id.in.(${ids.join(",")})`
+        : `manager_id.eq.${managerId}`;
 
-      const hoje = diaSP(), inicioSemana = segunda();
-      const inicioMes = hoje.slice(0, 8) + "01";
-      const de90 = diaSP(new Date(Date.now() - 90 * 86_400_000));
-
-      const [movRes, propRes, toqueRes] = await Promise.all([
-        supabase.from("salesforce_movimentos")
-          .select("dia,para").eq("gerente_apelido", apelido)
-          .eq("para", "Montagem de Pasta").gte("dia", de90),
-        supabase.from("salesforce_propostas")
-          .select("sf_id,nome,status,corretor_apelido,cliente_nome,cliente_telefone,status_desde,documentos_entregues")
-          .eq("gerente_apelido", apelido),
-        supabase.from("proposta_ultimo_toque").select("*"),
+      const [leads, pastas] = await Promise.all([
+        todas<LeadRow>((de, ate) => supabase.from("leads")
+          .select("name,broker_id,created_at").or(filtro)
+          .order("created_at", { ascending: false }).range(de, ate)),
+        todas<any>((de, ate) => supabase.from("junix_pastas" as any)
+          .select("proposta_id,cliente,etapa,etapa_ordem,status_texto,dias,fluxo,atualizado_em")
+          .order("proposta_id").range(de, ate)),
       ]);
 
-      const mov = ((movRes as any).data ?? []) as any[];
-      const props = ((propRes as any).data ?? []) as any[];
-      const toques = new Map<string, Toque>(
-        (((toqueRes as any).data ?? []) as any[]).map((t) => [t.sf_proposta_id, {
-          tipo: t.tipo, nota: t.nota, voltarEm: t.voltar_em,
-          quando: t.created_at, autor: t.autor_nome || null,
-        }]));
-
-      const porDiaMap = new Map<string, number>();
-      for (const m of mov) porDiaMap.set(m.dia, (porDiaMap.get(m.dia) ?? 0) + 1);
-      const porDia = [...porDiaMap.entries()].sort().map(([dia, n]) => ({ dia, n }));
-
-      // Semana de segunda a domingo, igual ao resto do painel.
-      const porSemanaMap = new Map<string, number>();
-      for (const [dia, n] of porDiaMap) {
-        const d = new Date(dia + "T12:00:00");
-        const seg = new Date(d); seg.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-        const k = seg.toISOString().slice(0, 10);
-        porSemanaMap.set(k, (porSemanaMap.get(k) ?? 0) + n);
-      }
-      const porSemana = [...porSemanaMap.entries()].sort()
-        .map(([semana, n]) => ({ semana, n }));
-
-      const conta = (de: string) => mov.filter((m) => m.dia >= de).length;
-
-      const estoque = ETAPAS
-        .map((etapa) => ({ etapa, n: props.filter((p) => p.status === etapa).length }))
-        .filter((x) => x.n > 0);
-
-      const dias = (d: string | null) =>
-        d ? Math.floor((Date.now() - new Date(d + "T12:00:00").getTime()) / 86_400_000) : 0;
-
-      // Só as abertas entram na fila de retrabalho: venda ganha não se retrabalha,
-      // e perdida/distrato é outra conversa (e outro botão).
-      const abertas = new Set<string>(ETAPAS as readonly string[]);
-      const paradas: Parada[] = props
-        .filter((p) => abertas.has(p.status) && p.cliente_telefone)
-        .map((p) => ({
-          id: p.sf_id, nome: p.nome, status: p.status,
-          cliente: p.cliente_nome, telefone: p.cliente_telefone,
-          corretor: p.corretor_apelido, dias: dias(p.status_desde),
-          semDocumento: p.documentos_entregues !== true,
-          toque: toques.get(p.sf_id) ?? null,
-          vencido: !!toques.get(p.sf_id)?.voltarEm && toques.get(p.sf_id)!.voltarEm! <= hoje,
-          // O Salesforce marca o corretor desligado com "Z - INATIVO" no apelido.
-          // Sem isso o gerente cobra alguém que não trabalha mais aqui.
-          orfa: /^\s*Z\s*-\s*INATIVO/i.test(p.corretor_apelido ?? ""),
-        }))
-        // Ordem que o dia pede: o retorno combinado que venceu vem primeiro,
-        // depois quem nunca foi tocado, e só então o mais velho. Ordenar só
-        // por idade faria a lista mostrar todo dia as mesmas de dois anos.
-        .sort((a, b) => {
-          if (a.vencido !== b.vencido) return a.vencido ? -1 : 1;
-          const at = !!a.toque, bt = !!b.toque;
-          if (at !== bt) return at ? 1 : -1;
-          return b.dias - a.dias;
-        });
-
-      return {
-        apelido,
-        subiramHoje: conta(hoje),
-        subiramSemana: conta(inicioSemana),
-        subiramMes: conta(inicioMes),
-        porSemana, porDia, estoque,
-        ganhas: props.filter((p) => p.status === "Venda Ganha").length,
-        perdidas: props.filter((p) => p.status === "Venda Perdida").length,
-        distratos: props.filter((p) => PERDIDAS.slice(1).includes(p.status)).length,
-        paradas,
+      // Índices de nome → corretor. Lead mais novo primeiro: se o mesmo cliente
+      // entrou duas vezes, vale quem atende agora. Lead com corretor vence lead
+      // sem corretor, senão um cadastro antigo "sem dono" apagaria a atribuição.
+      const exato = new Map<string, string | null>();
+      const porPontas = new Map<string, string | null>();
+      const guarda = (m: Map<string, string | null>, k: string, b: string | null) => {
+        if (!m.has(k) || (m.get(k) === null && b)) m.set(k, b);
       };
+      for (const l of leads) {
+        const n = normNome(l.name);
+        if (!n) continue;
+        guarda(exato, n, l.broker_id);
+        const p = pontas(n);
+        if (p) guarda(porPontas, p, l.broker_id);
+      }
+
+      const todasPastas: Pasta[] = pastas.map((r) => {
+        const n = normNome(r.cliente);
+        const p = pontas(n);
+        const achou = exato.has(n) ? exato.get(n)! : p && porPontas.has(p) ? porPontas.get(p)! : undefined;
+        const corretorId = achou ?? null;
+        return {
+          id: r.proposta_id, cliente: r.cliente ?? "sem nome",
+          etapa: r.etapa ?? "sem etapa", etapaOrdem: r.etapa_ordem ?? -1,
+          status: r.status_texto || null, dias: r.dias ?? 0, fluxo: r.fluxo || null,
+          corretorId,
+          corretor: corretorId ? nomes.get(corretorId) ?? null : null,
+          daEquipe: achou !== undefined,
+        };
+      });
+
+      // Mais parada primeiro: é por ela que a conversa com o corretor começa.
+      todasPastas.sort((a, b) => b.dias - a.dias);
+      const minhas = todasPastas.filter((x) => x.daEquipe);
+      const semDono = todasPastas.filter((x) => !x.daEquipe);
+
+      // Ordem do kanban; etapa desconhecida (-1) vai para o fim.
+      const ord = (o: number) => (o < 0 ? 9999 : o);
+      const etapaMap = new Map<string, { etapa: string; ordem: number; n: number; travadas: number }>();
+      for (const x of minhas) {
+        const e = etapaMap.get(x.etapa) ?? { etapa: x.etapa, ordem: x.etapaOrdem, n: 0, travadas: 0 };
+        e.n++; if (x.dias >= DIAS_TRAVADA) e.travadas++;
+        etapaMap.set(x.etapa, e);
+      }
+      const etapas = [...etapaMap.values()].sort((a, b) => ord(a.ordem) - ord(b.ordem));
+      const posEtapa = new Map(etapas.map((e, i) => [e.etapa, i]));
+
+      const corMap = new Map<string, DadosPastas["porCorretor"][number]>();
+      for (const x of minhas) {
+        const k = x.corretorId ?? "";
+        const c = corMap.get(k) ?? {
+          id: x.corretorId, nome: x.corretor ?? "sem corretor no Comandra",
+          total: 0, travadas: 0, porEtapa: [],
+        };
+        c.total++; if (x.dias >= DIAS_TRAVADA) c.travadas++;
+        const e = c.porEtapa.find((y) => y.etapa === x.etapa);
+        if (e) e.n++; else c.porEtapa.push({ etapa: x.etapa, n: 1 });
+        corMap.set(k, c);
+      }
+      const porCorretor = [...corMap.values()]
+        .map((c) => ({ ...c, porEtapa: c.porEtapa.sort((a, b) =>
+          (posEtapa.get(a.etapa) ?? 0) - (posEtapa.get(b.etapa) ?? 0)) }))
+        // "sem corretor" por último: não é alguém para cobrar.
+        .sort((a, b) => (a.id ? 0 : 1) - (b.id ? 0 : 1) || b.total - a.total);
+
+      const atualizadoEm = pastas.reduce<string | null>(
+        (m, r) => (r.atualizado_em && (!m || r.atualizado_em > m) ? r.atualizado_em : m), null);
+
+      return { minhas, semDono, etapas, porCorretor, atualizadoEm };
     },
   });
-}
-
-/** Grava o que foi feito. Não escreve no Salesforce de propósito: o Comandra
- *  não é dono daquele dado e não deve mexer no processo de contrato da Cury. */
-export async function registrarToque(t: {
-  propostaId: string; autorId: string; tipo: string;
-  nota?: string | null; voltarEm?: string | null;
-}) {
-  const { error } = await supabase.from("proposta_toques").insert({
-    sf_proposta_id: t.propostaId, autor_id: t.autorId, tipo: t.tipo,
-    nota: t.nota?.trim() || null, voltar_em: t.voltarEm || null,
-  });
-  if (error) throw error;
-}
-
-/** Link de WhatsApp para o gerente retomar o cliente na hora. */
-export function linkWhats(telefone: string | null, cliente: string | null) {
-  const t = soDigitos(telefone);
-  if (!t) return null;
-  const numero = t.length <= 11 ? "55" + t : t;
-  const nome = (cliente ?? "").split(" ")[0];
-  const texto = nome
-    ? `Olá ${nome}, tudo bem? Aqui é da Cury. Vi que o seu processo ficou parado com a gente e queria retomar de onde paramos.`
-    : "Olá! Aqui é da Cury. Vi que o seu processo ficou parado com a gente e queria retomar.";
-  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
 }
