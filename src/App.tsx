@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "./components/AuthProvider";
 import { WhatsAppGatekeeper } from "./components/WhatsAppGatekeeper";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useEffect } from "react";
+import { toast } from "sonner";
 import { syncAudioSettings } from "@/hooks/use-audio-arena";
 import { supabase } from "@/integrations/supabase/client";
 import Index from "./pages/Index";
@@ -128,6 +129,37 @@ const ProtectedSecretaryRoute = ({ children }: { children: React.ReactNode }) =>
   return <>{children}</>;
 };
 
+// Versão nova no ar: o Comandra é SPA e quem deixa a aba aberta fica na versão
+// antiga até recarregar (caso "Pescar ainda 15", 10/10). A cada 5 min e ao voltar
+// para a aba, compara o bundle do index.html servido com o desta página.
+function AvisoVersaoNova() {
+  useEffect(() => {
+    const atual = document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/index-"]')?.src
+      .match(/index-[^/]+\.js/)?.[0];
+    if (!atual) return; // dev server
+    let avisado = false;
+    const checar = async () => {
+      if (avisado || document.visibilityState !== "visible") return;
+      try {
+        const html = await (await fetch("/", { cache: "no-store" })).text();
+        const novo = html.match(/assets\/(index-[^"]+\.js)/)?.[1];
+        if (novo && novo !== atual) {
+          avisado = true;
+          toast("Nova versão do Comandra no ar", {
+            description: "Atualize para ver as últimas mudanças.",
+            duration: Infinity,
+            action: { label: "Atualizar", onClick: () => location.reload() },
+          });
+        }
+      } catch { /* sem rede: tenta na próxima */ }
+    };
+    const t = setInterval(checar, 5 * 60_000);
+    document.addEventListener("visibilitychange", checar);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", checar); };
+  }, []);
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -135,6 +167,7 @@ const App = () => (
         <AuthProvider>
           <ThemeProvider>
           <AudioSyncOnLoad />
+          <AvisoVersaoNova />
           <Toaster />
           <Sonner />
           <Routes>
