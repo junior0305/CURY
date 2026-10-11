@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
+import MetaCascata from "@/components/manager-v10/MetaCascata";
 import { useConsolidadoSuper, type LinhaConsolidado } from "@/hooks/useConsolidadoSuper";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
@@ -109,6 +110,8 @@ export default function Superintendente() {
                   <i>{t!.em_conversa} em conversa</i></div>
                 <div className="sup-k bom"><span>Vendas no mês</span><b>{t!.vendas_mes}</b></div>
               </div>
+
+              <MetaCascata dono={superId} />
 
               <ConsolidadoFontes superId={superId} dias={dias} onAbrir={abrir} />
 

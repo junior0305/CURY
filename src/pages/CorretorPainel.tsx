@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchLeadsForDashboard, updateLeadStatus, setLeadNegotiating } from "@/integrations/supabase/leads";
 import { fetchLeadNotes, addLeadNote, waLink } from "@/integrations/supabase/atender";
 import { DisparoCorretor } from "@/components/broker/DisparoCorretor";
+import MetaCascata from "@/components/manager-v10/MetaCascata";
 import type { Lead, LeadStatus, LostReason } from "@/types/lead";
 import { TIPO_TRABALHO_LABEL, LOST_REASON_LABEL } from "@/types/lead";
 import { useUnidadesFecha } from "@/hooks/useEstrategia";
@@ -387,6 +388,8 @@ const CorretorPainel = () => {
                   <span className="sidebar-title">Atendimento</span>
                   <span className="roleta-tag">{counts.todos} fichas</span>
                 </div>
+                {/* meta do mês que o gerente definiu (some se não houver) */}
+                <div style={{ margin: "8px 0" }}><MetaCascata compacto /></div>
                 <div className="filter-bar">
                   <button className={`f-pill${filter === "prio" ? " on" : ""}`} onClick={() => setFilter("prio")}>Prioridade ({counts.prio})</button>
                   <button className={`f-pill${filter === "pescados" ? " on" : ""}`} onClick={() => setFilter("pescados")}>🎣 Pescados ({counts.pescados})</button>

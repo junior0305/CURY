@@ -21,6 +21,7 @@ import Briefing from "@/components/manager-v10/Briefing";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
 import EquipeLista from "@/components/manager-v10/EquipeLista";
+import MetaCascata from "@/components/manager-v10/MetaCascata";
 
 const ini = (n: string) => n.trim().slice(0, 2).toUpperCase();
 const um = (n: number | null) => (n == null ? "—" : n.toFixed(1).replace(".", ","));
@@ -78,6 +79,9 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
 
   return (
     <section className="view tm">
+      {/* meta do mês: a minha (vinda do super) e a de cada corretor (eu defino) */}
+      {managerId ? <MetaCascata dono={managerId} /> : null}
+
       {/* 0 ─ quem é quem entre C2S/Junix e o Comandra (some quando não há nome) */}
       <VincularNomes managerId={managerId} />
 
