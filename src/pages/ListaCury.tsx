@@ -1,5 +1,6 @@
-// Lista de clientes da base que baixamos do app da Cury (visitantes de plantão,
-// 2023–2025, ~19 mil). Página de IMPRESSÃO: filtra e manda para a impressora.
+// Listas para IMPRESSÃO: a base de clientes baixada do app da Cury (visitantes
+// de plantão 2023–2025, ~19 mil, cury_clientes) e o pool de leads do Pescar
+// (cold_contacts). Filtra, separa em lotes e manda para a impressora.
 // Só ADMIN abre a página (a tabela cury_clientes tem RLS para admin/diretor).
 import { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
@@ -11,6 +12,14 @@ import { useAuth } from "@/components/AuthProvider";
 type Cliente = { nome: string | null; celular: string | null; telefone: string | null;
   corretor_apelido: string | null; imovel_nome: string | null; plantao_criado: string | null };
 type Colunas = "nome" | "nome_tel" | "tudo";
+type Fonte = "cury" | "pool";
+// O pool reaproveita as mesmas colunas: região no lugar do empreendimento,
+// situação no lugar do corretor, data de entrada no lugar do plantão.
+const SITUACAO: Record<string, string> = { available: "Disponível", claimed: "Pescado", promoted: "Virou lead" };
+const ROTULO: Record<Fonte, { titulo: string; grupo: string; quem: string; data: string }> = {
+  cury: { titulo: "Clientes da base Cury", grupo: "Empreendimento", quem: "Corretor", data: "Plantão" },
+  pool: { titulo: "Pool de leads", grupo: "Região", quem: "Situação", data: "Entrou" },
+};
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const anoDe = (d: string | null) => (d ?? "").slice(-4);
@@ -19,6 +28,8 @@ const titulo = (s: string | null) => (s ?? "").trim().toLowerCase().replace(/(^|
 
 export default function ListaCury() {
   const { session, role, loading } = useAuth();
+  const [fonte, setFonte] = useState<Fonte>("cury");
+  const R = ROTULO[fonte];
   const [empreendimento, setEmpreendimento] = useState("");
   const [corretor, setCorretor] = useState("");
   const [ano, setAno] = useState("");
@@ -32,17 +43,24 @@ export default function ListaCury() {
   const [lote, setLote] = useState(0);
 
   const { data: todos = [], isLoading } = useQuery({
-    queryKey: ["lista-cury"],
+    queryKey: ["lista-imprimir", fonte],
     enabled: role === "ADMIN",
     staleTime: 30 * 60_000,
     queryFn: async () => {
       const out: Cliente[] = [];
       for (let de = 0; ; de += 1000) {
-        const { data, error } = await supabase.from("cury_clientes" as any)
-          .select("nome,celular,telefone,corretor_apelido,imovel_nome,plantao_criado")
-          .order("cury_id").range(de, de + 999);
+        const { data, error } = fonte === "cury"
+          ? await supabase.from("cury_clientes" as any)
+              .select("nome,celular,telefone,corretor_apelido,imovel_nome,plantao_criado")
+              .order("cury_id").range(de, de + 999)
+          : await supabase.from("cold_contacts")
+              .select("name,phone,tag,status,created_at").order("id").range(de, de + 999);
         if (error) throw error;
-        out.push(...((data ?? []) as Cliente[]));
+        out.push(...(fonte === "cury" ? (data ?? []) as Cliente[] : ((data ?? []) as any[]).map((c) => ({
+          nome: c.name, celular: c.phone, telefone: null, imovel_nome: c.tag,
+          corretor_apelido: SITUACAO[c.status] ?? c.status,
+          plantao_criado: c.created_at ? new Date(c.created_at).toLocaleDateString("pt-BR") : null,
+        }))));
         if (!data || data.length < 1000) break;
       }
       return out;
@@ -73,7 +91,7 @@ export default function ListaCury() {
     return r.sort((a, b) => (a.nome ?? "").localeCompare(b.nome ?? "", "pt-BR"));
   }, [todos, empreendimento, corretor, ano, busca, unicos]);
 
-  const chaveFiltro = [empreendimento, corretor, ano, busca.trim(), unicos ? "u" : "t", tamanho].join("|");
+  const chaveFiltro = [fonte, empreendimento, corretor, ano, busca.trim(), unicos ? "u" : "t", tamanho].join("|");
   useEffect(() => { setLote(0); }, [chaveFiltro]);
   const totalLotes = tamanho ? Math.max(1, Math.ceil(lista.length / tamanho)) : 1;
   const ini = tamanho ? lote * tamanho : 0;
@@ -103,7 +121,7 @@ export default function ListaCury() {
     </div>
   );
 
-  const filtro = [empreendimento, corretor && `corretor ${corretor}`, ano, busca && `"${busca}"`].filter(Boolean).join(" · ") || "todos";
+  const filtro = [empreendimento, corretor && (fonte === "cury" ? `corretor ${corretor}` : corretor), ano, busca && `"${busca}"`].filter(Boolean).join(" · ") || "todos";
   const paginas = Math.max(1, Math.ceil(visiveis.length / (colunas === "nome" ? 120 : 45)));
 
   return (
@@ -123,18 +141,25 @@ export default function ListaCury() {
       <div className="no-print sticky top-0 z-10 border-b bg-slate-50 px-4 py-3">
         <div className="mx-auto flex max-w-6xl flex-wrap items-end gap-3">
           <div className="mr-auto">
-            <h1 className="text-lg font-extrabold">Clientes da base Cury</h1>
+            <h1 className="text-lg font-extrabold">{R.titulo}</h1>
             <p className="text-xs text-slate-500">
               {isLoading ? "Carregando…" : `${lista.length.toLocaleString("pt-BR")} na lista · este lote: ${visiveis.length.toLocaleString("pt-BR")} nomes, ~${paginas} página${paginas > 1 ? "s" : ""} A4`}
             </p>
           </div>
-          <label className="text-xs font-semibold text-slate-600">Empreendimento
+          <label className="text-xs font-semibold text-slate-600">Lista
+            <select className="mt-1 block w-40 rounded border bg-white px-2 py-1.5 text-sm" value={fonte}
+              onChange={(e) => { setFonte(e.target.value as Fonte); setEmpreendimento(""); setCorretor(""); setAno(""); }}>
+              <option value="cury">Base Cury</option>
+              <option value="pool">Pool de leads</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-slate-600">{R.grupo}
             <select className="mt-1 block w-52 rounded border bg-white px-2 py-1.5 text-sm" value={empreendimento} onChange={(e) => setEmpreendimento(e.target.value)}>
               <option value="">Todos</option>
               {opcoes.emp.map(([k, n]) => <option key={k} value={k}>{k} ({n})</option>)}
             </select>
           </label>
-          <label className="text-xs font-semibold text-slate-600">Corretor
+          <label className="text-xs font-semibold text-slate-600">{R.quem}
             <select className="mt-1 block w-40 rounded border bg-white px-2 py-1.5 text-sm" value={corretor} onChange={(e) => setCorretor(e.target.value)}>
               <option value="">Todos</option>
               {opcoes.cor.map(([k, n]) => <option key={k} value={k}>{k} ({n})</option>)}
@@ -185,11 +210,11 @@ export default function ListaCury() {
 
       <div className="mx-auto max-w-6xl px-4 py-4 text-[11px] leading-tight">
         <div className="mb-2 flex justify-between border-b pb-1 text-[10px] text-slate-500">
-          <span><b className="text-slate-800">Clientes da base Cury</b> · {filtro}
+          <span><b className="text-slate-800">{R.titulo}</b> · {filtro}
             {tamanho && totalLotes > 1 ? <> · <b className="text-slate-800">Lote {lote + 1} de {totalLotes}</b> (nº {faixa(lote)})</> : null}</span>
           <span>{visiveis.length.toLocaleString("pt-BR")} nomes · impresso em {new Date().toLocaleDateString("pt-BR")}</span>
         </div>
-        {isLoading ? <p className="py-10 text-center text-slate-500">Carregando os 19 mil nomes…</p>
+        {isLoading ? <p className="py-10 text-center text-slate-500">Carregando a lista…</p>
           : colunas === "nome" ? (
             <ol className="lc-nomes list-decimal pl-6" start={ini + 1}>
               {visiveis.map((c, i) => <li key={i} className="break-inside-avoid py-[1px]">{titulo(c.nome) || "—"}</li>)}
@@ -199,7 +224,7 @@ export default function ListaCury() {
               <thead>
                 <tr className="border-b text-left text-[10px] uppercase text-slate-500">
                   <th className="w-10 py-1 pr-2 text-right">#</th><th className="py-1 pr-2">Nome</th><th className="py-1 pr-2">Telefone</th>
-                  {colunas === "tudo" ? <><th className="py-1 pr-2">Empreendimento</th><th className="py-1 pr-2">Corretor</th><th className="py-1">Plantão</th></> : null}
+                  {colunas === "tudo" ? <><th className="py-1 pr-2">{R.grupo}</th><th className="py-1 pr-2">{R.quem}</th><th className="py-1">{R.data}</th></> : null}
                 </tr>
               </thead>
               <tbody>
