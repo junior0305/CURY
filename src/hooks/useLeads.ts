@@ -294,7 +294,7 @@ export function useLeads(managerId: string | undefined,
       const semCorretor = ativos.filter((l) => !l.broker_id);
 
       const ord = (a: LeadLinha, b: LeadLinha) => b.dias - a.dias;
-      const filas: Fila[] = [
+      const filas: Fila[] = ([
         { chave: "respondeu", tom: "crit",
           titulo: "O cliente perguntou e ninguém voltou",
           porque: "Levantaram a mão e estão esperando. O convencimento já foi feito.",
@@ -334,7 +334,7 @@ export function useLeads(managerId: string | undefined,
           ids: semCorretor.map((l) => l.id),
           leads: semCorretor.map((l) => linha(l, l.created_at)).sort(ord).slice(0, 8),
           acoes: ["Distribuir"] },
-      ].filter((f) => f.total > 0 || f.chave === "orfao");
+      ] as Fila[]).filter((f) => f.total > 0 || f.chave === "orfao");
 
       /* ── no que deu ── */
       const cury = ((curyRes as any).data ?? []) as any[];
