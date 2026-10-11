@@ -185,7 +185,7 @@ const App = () => (
             {/* O painel do gerente agora é o v10. O v2 fica em /manager-v2 como
                 volta rápida — trocar estas duas linhas reverte. */}
             {/* base de clientes baixada do app da Cury — impressão; a página só abre para o admin */}
-            <Route path="/lista-cury" element={<ListaCury />} />
+            <Route path="/admin/lista-cury" element={<ListaCury />} />
             <Route path="/super" element={<ProtectedSuperRoute><Boundary><Superintendente /></Boundary></ProtectedSuperRoute>} />
             <Route path="/manager" element={<ProtectedManagerRoute><ManagerV10 /></ProtectedManagerRoute>} />
             <Route path="/integracoes" element={<ProtectedManagerRoute><IntegracaoFacebook /></ProtectedManagerRoute>} />
