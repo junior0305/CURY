@@ -1,6 +1,6 @@
 // Lista de clientes da base que baixamos do app da Cury (visitantes de plantão,
 // 2023–2025, ~19 mil). Página de IMPRESSÃO: filtra e manda para a impressora.
-// Só diretor/admin — a tabela cury_clientes tem RLS que só libera esses dois.
+// Só ADMIN abre a página (a tabela cury_clientes tem RLS para admin/diretor).
 import { useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -18,7 +18,7 @@ const fone = (c: Cliente) => c.celular || c.telefone || "";
 const titulo = (s: string | null) => (s ?? "").trim().toLowerCase().replace(/(^|\s)\S/g, (x) => x.toUpperCase());
 
 export default function ListaCury() {
-  const { role, loading } = useAuth();
+  const { session, role, loading } = useAuth();
   const [empreendimento, setEmpreendimento] = useState("");
   const [corretor, setCorretor] = useState("");
   const [ano, setAno] = useState("");
@@ -28,7 +28,7 @@ export default function ListaCury() {
 
   const { data: todos = [], isLoading } = useQuery({
     queryKey: ["lista-cury"],
-    enabled: role === "ADMIN" || role === "DIRECTOR",
+    enabled: role === "ADMIN",
     staleTime: 30 * 60_000,
     queryFn: async () => {
       const out: Cliente[] = [];
@@ -68,8 +68,16 @@ export default function ListaCury() {
     return r.sort((a, b) => (a.nome ?? "").localeCompare(b.nome ?? "", "pt-BR"));
   }, [todos, empreendimento, corretor, ano, busca, unicos]);
 
-  if (loading) return null;
-  if (role !== "ADMIN" && role !== "DIRECTOR") return <Navigate to="/" replace />;
+  // logo após o login a sessão chega antes do perfil: espera o papel, senão
+  // "ainda sem papel" vira "não é admin" e a página expulsa quem é.
+  if (loading || (session && !role)) return <p className="p-10 text-center text-slate-500">Carregando…</p>;
+  if (!session) return <Navigate to="/login" replace />;
+  if (role !== "ADMIN") return (
+    <div className="p-10 text-center">
+      <p className="text-lg font-bold text-slate-800">Esta lista é só do administrador.</p>
+      <p className="mt-1 text-sm text-slate-500">Entre com o login de admin para ver e imprimir.</p>
+    </div>
+  );
 
   const filtro = [empreendimento, corretor && `corretor ${corretor}`, ano, busca && `"${busca}"`].filter(Boolean).join(" · ") || "todos";
   const paginas = Math.max(1, Math.ceil(lista.length / (colunas === "nome" ? 120 : 45)));

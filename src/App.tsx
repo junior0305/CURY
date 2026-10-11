@@ -184,7 +184,7 @@ const App = () => (
             {/* /manager = v2 completo + console Jarvis no topo (escolha do gerente). /manager-v3 = experimento overview. /manager-v1 = antigo. */}
             {/* O painel do gerente agora é o v10. O v2 fica em /manager-v2 como
                 volta rápida — trocar estas duas linhas reverte. */}
-            {/* base de clientes baixada do app da Cury — impressão; a página só abre para diretor/admin */}
+            {/* base de clientes baixada do app da Cury — impressão; a página só abre para o admin */}
             <Route path="/lista-cury" element={<ListaCury />} />
             <Route path="/super" element={<ProtectedSuperRoute><Boundary><Superintendente /></Boundary></ProtectedSuperRoute>} />
             <Route path="/manager" element={<ProtectedManagerRoute><ManagerV10 /></ProtectedManagerRoute>} />
