@@ -20,6 +20,7 @@ import { usePeriodo } from "@/hooks/usePeriodo";
 import Briefing from "@/components/manager-v10/Briefing";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
+import EquipeLista from "@/components/manager-v10/EquipeLista";
 
 const ini = (n: string) => n.trim().slice(0, 2).toUpperCase();
 const um = (n: number | null) => (n == null ? "—" : n.toFixed(1).replace(".", ","));
@@ -78,7 +79,10 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
   return (
     <section className="view tm">
       {/* 0 ─ quem é quem entre C2S/Junix e o Comandra (some quando não há nome) */}
-      <VincularNomes managerId={managerId} onCadastrar={(n) => setCadastrar(n)} />
+      <VincularNomes managerId={managerId} />
+
+      {/* 0b ─ a equipe, com resetar senha e desligar à vista */}
+      <EquipeLista managerId={managerId} />
 
       {/* 1 ─ como está o time */}
       <Sec title="Como está o time" tag={<span className="dim">{periodo.rotulo}</span>}>

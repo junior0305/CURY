@@ -24,7 +24,8 @@ export default function CadastrarCorretor({
 }: {
   managerId: string;
   onFechar: () => void;
-  onPronto: () => void;
+  /** recebe o id do corretor criado (para quem precisa ligar algo a ele, ex.: vínculo de nome) */
+  onPronto: (novoId?: string) => void;
   nomeInicial?: string;
   /** Superintendente: escolhe abaixo de qual gerente o corretor fica. Sem isso,
    *  é o gerente cadastrando na própria equipe (o servidor força o manager_id). */
@@ -99,7 +100,7 @@ export default function CadastrarCorretor({
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success(`${nome.trim()} cadastrado. A senha é mudar@123 e ele troca no primeiro acesso.`);
-      onPronto();
+      onPronto((data as any)?.user?.id);
     } catch (e: any) {
       toast.error(`Não consegui cadastrar: ${e?.message ?? e}`);
     } finally { setSalvando(false); }

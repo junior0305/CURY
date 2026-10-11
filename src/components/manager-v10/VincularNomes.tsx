@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Sec } from "@/components/manager-v10/ui";
+import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 
 type Nome = { nome_chave: string; exibicao: string; fontes: string; profile_auto: string | null;
   ultimo_dia: string | null; dias_60: number };
@@ -16,9 +17,12 @@ type Vinculo = { nome_chave: string; acao: "corretor" | "sem_login" | "nao_e_da_
 
 const SEM_LOGIN = "__sem_login", NAO = "__nao";
 
-export default function VincularNomes({ managerId, onCadastrar }: {
-  managerId: string | undefined; onCadastrar?: (nome: string) => void;
+export default function VincularNomes({ managerId, gerenteFixo }: {
+  managerId: string | undefined;
+  /** super/diretor cadastrando pelo gerente: o create-user só aceita o gerente vindo de cima */
+  gerenteFixo?: { id: string; nome: string };
 }) {
+  const [cadastrando, setCadastrando] = useState<Nome | null>(null);
   const qc = useQueryClient();
   const [escolha, setEscolha] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState<string | null>(null);
@@ -92,8 +96,8 @@ export default function VincularNomes({ managerId, onCadastrar }: {
                 </select>
                 <button className="mini solid" disabled={!valor || salvando === n.nome_chave} onClick={() => confirmar(n, valor)}>
                   {salvando === n.nome_chave ? "…" : "Confirmar"}</button>
-                {valor === SEM_LOGIN && onCadastrar ? (
-                  <button className="mini key" onClick={() => onCadastrar(n.exibicao)}>Cadastrar</button>) : null}
+                {!n.profile_auto || valor === SEM_LOGIN ? (
+                  <button className="mini key" onClick={() => setCadastrando(n)}>Cadastrar</button>) : null}
               </div>
             </div>
           );
@@ -117,6 +121,17 @@ export default function VincularNomes({ managerId, onCadastrar }: {
           );
         })}
       </div>
+      {cadastrando && managerId ? (
+        <CadastrarCorretor managerId={managerId} nomeInicial={cadastrando.exibicao.replace(/\s+Bn$/i, "")}
+          gerentes={gerenteFixo ? [gerenteFixo] : undefined}
+          onFechar={() => setCadastrando(null)}
+          onPronto={async (novoId) => {
+            const n = cadastrando; setCadastrando(null);
+            // cadastrou a partir do nome do C2S/Junix: já fica associado, sem passo extra
+            if (novoId) await supabase.rpc("confirmar_vinculo" as any, { p_nome: n.nome_chave, p_acao: "corretor", p_profile: novoId });
+            qc.invalidateQueries({ queryKey: ["vincular-nomes", managerId] });
+          }} />
+      ) : null}
     </Sec>
   );
 }

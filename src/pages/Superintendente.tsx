@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
+import VincularNomes from "@/components/manager-v10/VincularNomes";
 import { useConsolidadoSuper, type LinhaConsolidado } from "@/hooks/useConsolidadoSuper";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
@@ -393,15 +394,12 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
                     </div>
                   ))}
                   {!meus.length ? <p className="sup-vazio" style={{ padding: "10px 0" }}>Nenhum corretor cadastrado.</p> : null}
-                  {sem.map((n) => (
-                    <div className="sup-cor" key={"sem-" + n}>
-                      <span className="sup-cor-nm"><s className="off" />{n}
-                        <em style={{ marginLeft: 6, fontStyle: "normal", fontSize: 11, color: "var(--red)", fontWeight: 700 }}>• bate ponto no C2S, sem login</em></span>
-                      <span className="sup-cor-nums">
-                        <button className="sup-abrir" onClick={() => setCadastro({ gerente: b.id, nome: n })}>Cadastrar</button>
-                      </span>
+                  {/* quem é quem no C2S/Junix deste gerente: associar ou cadastrar daqui mesmo */}
+                  {b.id !== superId ? (
+                    <div style={{ padding: "0 4px 6px" }}>
+                      <VincularNomes managerId={b.id} gerenteFixo={{ id: b.id, nome: b.titulo }} />
                     </div>
-                  ))}
+                  ) : null}
                 </div>
               ) : null}
             </div>
