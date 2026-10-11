@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
+import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import { useConsolidadoSuper, type LinhaConsolidado } from "@/hooks/useConsolidadoSuper";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
@@ -269,6 +270,7 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
   const [cadastro, setCadastro] = useState<{ gerente: string; nome?: string } | null>(null);
   const [resetando, setResetando] = useState<string | null>(null);
+  const [desligar, setDesligar] = useState<string | null>(null);
   // quem cadastra também reseta: volta para mudar@123 e a pessoa troca no próximo acesso
   async function resetarSenha(id: string, nome: string) {
     setResetando(id);
@@ -384,6 +386,9 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
                           <b>{c.is_active === false ? "desligado" : c.lead_assignment_enabled !== false ? "recebe lead" : "fora da roleta"}</b></em>
                         <button className="sup-abrir" disabled={resetando === c.id} onClick={() => resetarSenha(c.id, nome(c))}>
                           {resetando === c.id ? "…" : "Resetar senha"}</button>
+                        {c.is_active !== false ? (
+                          <button className="sup-abrir" style={{ color: "var(--red)" }} onClick={() => setDesligar(c.id)}>Desligar</button>
+                        ) : null}
                       </span>
                     </div>
                   ))}
@@ -404,6 +409,10 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
         })}
         {!blocos.length ? <p className="sup-vazio">Nenhum gerente ligado a você ainda.</p> : null}
       </div>
+      {desligar ? (
+        <DesligarCorretor brokerId={desligar} onFechar={() => setDesligar(null)}
+          onPronto={() => { setDesligar(null); qc.invalidateQueries({ queryKey: ["super-time", superId] }); }} />
+      ) : null}
       {cadastro ? (
         <CadastrarCorretor key={cadastro.gerente + (cadastro.nome ?? "")} managerId={cadastro.gerente}
           nomeInicial={cadastro.nome ?? ""} gerentes={listaGer}

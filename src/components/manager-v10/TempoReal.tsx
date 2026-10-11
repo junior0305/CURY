@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { cobrarFila } from "@/hooks/useLeads";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
+import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import { toast } from "sonner";
 import { useTempoReal, definirRecebimento, trazerParaEquipe, status,
          type Pessoa, type Nivel, type Origem } from "@/hooks/useTempoReal";
@@ -89,6 +90,7 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
   const [aberto, setAberto] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [cadastrar, setCadastrar] = useState<string | null>(null);
+  const [desligar, setDesligar] = useState<string | null>(null);
   const navigate = useNavigate();
   const { session } = useAuth();
 
@@ -329,6 +331,8 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
                       <div style={{ marginTop: 12 }}>
                         <button type="button" className="mini key" disabled={ocupado === p.profileId}
                           onClick={(e) => { e.stopPropagation(); resetarSenha(p); }}>Resetar senha (mudar@123)</button>
+                        <button type="button" className="mini" style={{ marginLeft: 8, color: "var(--red)" }}
+                          onClick={(e) => { e.stopPropagation(); setDesligar(p.profileId); }}>Desligar corretor</button>
                       </div>
                     ) : null}
                   </div>
@@ -340,6 +344,10 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
       </Sec>
 
       <PrecisaDeVoce gente={gente} managerId={managerId} />
+      {desligar ? (
+        <DesligarCorretor brokerId={desligar} onFechar={() => setDesligar(null)}
+          onPronto={() => { setDesligar(null); qc.invalidateQueries({ queryKey: ["tempo-real"] }); }} />
+      ) : null}
       {cadastrar !== null && managerId ? (
         <CadastrarCorretor managerId={managerId} nomeInicial={cadastrar} onFechar={() => setCadastrar(null)}
           onPronto={() => { setCadastrar(null); qc.invalidateQueries({ queryKey: ["tempo-real"] }); }} />
