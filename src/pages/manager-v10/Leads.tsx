@@ -9,7 +9,7 @@ import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useLeads, redistribuir, descartar, cobrarFila, type LeadLinha } from "@/hooks/useLeads";
+import { useLeads, redistribuir, descartar, cobrarFila, useCobrancasHoje, type LeadLinha, type JaCobrado, type Cobranca } from "@/hooks/useLeads";
 import OrigemDrawer from "@/components/manager-v10/OrigemDrawer";
 import { usePeriodo } from "@/hooks/usePeriodo";
 import { Sec, Blank } from "@/components/manager-v10/ui";
@@ -32,21 +32,41 @@ export default function Leads() {
   const { data, isLoading } = useLeads(userId, periodo);
   const navigate = useNavigate();
   const [cobrando, setCobrando] = useState<string | null>(null);
+  const { data: cobrancas = [] } = useCobrancasHoje();
+  // "Você já cobrou isso" — aguardando o gerente decidir se cobra de novo
+  const [jaCobrou, setJaCobrou] = useState<{ chave: string; ids: string[]; ja: JaCobrado[] } | null>(null);
 
   // Cobrar = WhatsApp para cada corretor com os leads parados dele (uma mensagem
   // por corretor). Quem cobra é quem está logado — o super cobrando no painel do gerente.
-  async function cobrar(chave: string, ids: string[]) {
+  // Quem já foi cobrado do mesmo assunto em 12h não recebe de novo sem confirmação.
+  async function cobrar(chave: string, ids: string[], forcar = false) {
     if (!ids.length || !session?.user?.id) return;
     setCobrando(chave);
     try {
-      const r = await cobrarFila(ids, session.user.id, chave);
+      const r = await cobrarFila(ids, session.user.id, chave, forcar);
       const ok = r.corretores.filter((c) => c.avisado_no_whats);
       const falhou = r.corretores.filter((c) => !c.avisado_no_whats);
-      toast.success(`${ok.length} corretor${ok.length === 1 ? "" : "es"} cobrado${ok.length === 1 ? "" : "s"} no WhatsApp`
-        + (falhou.length ? ` · sem WhatsApp: ${falhou.map((c) => c.corretor).join(", ")} (avisados só no painel)` : ""));
+      if (r.corretores.length) {
+        toast.success(`${ok.length} corretor${ok.length === 1 ? "" : "es"} cobrado${ok.length === 1 ? "" : "s"} no WhatsApp`
+          + (falhou.length ? ` · sem WhatsApp: ${falhou.map((c) => c.corretor).join(", ")} (avisados só no painel)` : ""));
+      }
+      if (r.ja_cobrados?.length) setJaCobrou({ chave, ids, ja: r.ja_cobrados });
+      qc.invalidateQueries({ queryKey: ["cobrancas-hoje"] });
     } catch (e: any) { toast.error(e?.message ?? "Não consegui cobrar."); }
     finally { setCobrando(null); }
   }
+  const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  // última cobrança (24h) de cada corretor por motivo, e o resumo de cada fila
+  const ultimaCobranca = (brokerId: string | null, motivo: string): Cobranca | undefined =>
+    brokerId ? cobrancas.find((c) => c.para_id === brokerId && c.motivo === motivo) : undefined;
+  const resumoFila = (motivo: string) => {
+    const doMotivo = cobrancas.filter((c) => c.motivo === motivo);
+    const pessoas = new Map<string, Cobranca>();
+    for (const c of doMotivo) if (!pessoas.has(c.para_id)) pessoas.set(c.para_id, c);
+    const lista = [...pessoas.values()];
+    return lista.length ? { quando: hhmm(lista[lista.length - 1].enviada_em), total: lista.length,
+      responderam: lista.filter((c) => c.respondida_em).length } : null;
+  };
 
   const [abertas, setAbertas] = useState<Set<string>>(new Set());
   const [sel, setSel] = useState<Record<string, Set<string>>>({});
@@ -210,7 +230,11 @@ export default function Leads() {
                         else if (f.acoes[0] === "Cobrar os corretores") cobrar(f.chave, f.ids);
                         else if (f.acoes[0] === "Disparar reativação") navigate(`/manager/whatsapp?publico=${f.chave}`);
                       }} disabled={cobrando === f.chave}>
-                        {cobrando === f.chave ? "Cobrando…" : f.acoes[0]}</button>) : null}</span>
+                        {cobrando === f.chave ? "Cobrando…"
+                          : f.acoes[0] === "Cobrar os corretores" && resumoFila(f.chave) ? "Cobrar de novo" : f.acoes[0]}</button>) : null}
+                      {f.acoes[0] === "Cobrar os corretores" && resumoFila(f.chave) ? (() => { const r = resumoFila(f.chave)!; return (
+                        <small style={{ display: "block", marginTop: 4, fontSize: 11.5, color: r.responderam === r.total ? "var(--good)" : "var(--ink-3)", fontWeight: 600 }}>
+                          cobrado às {r.quando} · {r.responderam} de {r.total} responderam</small>); })() : null}</span>
                     <svg className="ld-car" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M6 9l6 6 6-6" /></svg>
                   </div>
@@ -253,7 +277,13 @@ export default function Leads() {
                                 onChange={() => marcar(f.chave, l.id)} />
                               <span><b>{l.nome ?? "sem nome"}</b>
                                 <span className="tel">{l.telefone ?? "—"}</span></span>
-                              <span className="cor">{l.corretor ? `com ${l.corretor}` : "sem corretor"}</span>
+                              <span className="cor">{l.corretor ? `com ${l.corretor}` : "sem corretor"}
+                                {(() => { const c = ultimaCobranca(l.brokerId, f.chave); return c ? (
+                                  <em style={{ display: "block", fontStyle: "normal", fontSize: 11.5, fontWeight: 600,
+                                    color: c.respondida_em ? "var(--good)" : "var(--amber, #b7791f)" }}
+                                    title={c.resposta ?? undefined}>
+                                    {c.respondida_em ? `✓ respondeu às ${hhmm(c.respondida_em)}` : `cobrado às ${hhmm(c.enviada_em)} · sem resposta`}
+                                  </em>) : null; })()}</span>
                               <span className={`qd${l.dias > 30 ? " hot" : ""}`}>{l.dias} dias</span>
                             </div>
                           ))}
@@ -454,6 +484,52 @@ export default function Leads() {
                   onClick={confirmarRedistribuicao}>
                   {salvando ? "redistribuindo…" : "Redistribuir"}
                 </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* cobranças das últimas 24h: quem foi cobrado e se respondeu */}
+        {cobrancas.length ? (
+          <Sec title="Cobranças de hoje" tag={<span className="dim">
+            {cobrancas.filter((c) => c.respondida_em).length} de {cobrancas.length} responderam</span>}
+            sub="A resposta aparece quando a pessoa responde no WhatsApp do chip que cobrou.">
+            <div className="ld-box">
+              {cobrancas.map((c) => (
+                <div key={c.id} className="ld-lr sem-check">
+                  <span><b>{c.para_nome}</b>
+                    <span className="tel">{({ respondeu: "cliente esperando", nunca: "nunca falou", sem7: "7 dias parado", sem15: "15 dias parado" } as Record<string, string>)[c.motivo] ?? c.motivo} · {c.qtd} lead{c.qtd === 1 ? "" : "s"}</span></span>
+                  <span className="cor">{c.canal === "whatsapp" ? `WhatsApp às ${hhmm(c.enviada_em)}` : `só no painel às ${hhmm(c.enviada_em)}`}</span>
+                  <span className="qd" style={{ color: c.respondida_em ? "var(--good)" : undefined, fontWeight: 600 }}
+                    title={c.resposta ?? undefined}>
+                    {c.respondida_em ? `✓ "${(c.resposta ?? "").slice(0, 40)}"` : c.canal === "whatsapp" ? "sem resposta" : "—"}</span>
+                </div>
+              ))}
+            </div>
+          </Sec>
+        ) : null}
+
+        {/* já cobrou: confirma antes de mandar de novo */}
+        {jaCobrou && (
+          <>
+            <div className="tm-scrim on" onClick={() => setJaCobrou(null)} />
+            <div className="tm-modal on" role="dialog" aria-modal="true" aria-labelledby="jc-t">
+              <h3 id="jc-t">Você já cobrou {jaCobrou.ja.length === 1 ? "esse corretor" : "esses corretores"}</h3>
+              <p>Mesmo assunto, nas últimas 12 horas:</p>
+              <div style={{ display: "grid", gap: 8, margin: "10px 0" }}>
+                {jaCobrou.ja.map((j, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, fontSize: 14 }}>
+                    <b>{j.corretor}</b>
+                    <span style={{ color: "var(--ink-3)" }}>às {hhmm(j.quando)}</span>
+                    <span style={{ marginLeft: "auto", fontWeight: 600, color: j.respondeu ? "var(--good)" : "var(--ink-3)" }}>
+                      {j.respondeu ? `✓ respondeu${j.resposta ? `: "${j.resposta.slice(0, 30)}"` : ""}` : "ainda sem resposta"}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="tm-modala">
+                <button className="mini" onClick={() => setJaCobrou(null)}>Não, deixa</button>
+                <button className="mini solid" onClick={() => { const j = jaCobrou; setJaCobrou(null); cobrar(j.chave, j.ids, true); }}>
+                  Cobrar de novo</button>
               </div>
             </div>
           </>

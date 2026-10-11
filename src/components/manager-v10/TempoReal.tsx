@@ -91,6 +91,7 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [cadastrar, setCadastrar] = useState<string | null>(null);
   const [desligar, setDesligar] = useState<string | null>(null);
+  const [confirmarDeNovo, setConfirmarDeNovo] = useState<string | null>(null);
   const navigate = useNavigate();
   const { session } = useAuth();
 
@@ -135,9 +136,21 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
           (l.last_lead_response_at && (!l.last_broker_whatsapp_at || l.last_broker_whatsapp_at < l.last_lead_response_at))
           || (!l.last_broker_whatsapp_at && !l.contact_attempts));
         if (!esperando.length) { toast.info(`${nome} não tem lead esperando agora`); return; }
-        const r = await cobrarFila(esperando.map((l) => l.id), session!.user.id, "respondeu");
+        // já cobrado do mesmo assunto em 12h? mostra quando e se respondeu; o 2º toque em 30s reenvia
+        const forcar = confirmarDeNovo === p.profileId;
+        const r = await cobrarFila(esperando.map((l) => l.id), session!.user.id, "respondeu", forcar);
+        if (r.ja_cobrados?.length) {
+          const j = r.ja_cobrados[0];
+          const h = new Date(j.quando).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+          toast.info(`Você já cobrou ${nome} às ${h} — ${j.respondeu ? "ele respondeu" : "ainda sem resposta"}. Toque de novo para cobrar outra vez.`);
+          setConfirmarDeNovo(p.profileId);
+          setTimeout(() => setConfirmarDeNovo((v) => (v === p.profileId ? null : v)), 30000);
+          return;
+        }
+        setConfirmarDeNovo(null);
         toast.success(r.corretores[0]?.avisado_no_whats
           ? `${nome} cobrado no WhatsApp (${esperando.length} leads)` : `${nome} avisado no painel (sem WhatsApp)`);
+        qc.invalidateQueries({ queryKey: ["cobrancas-hoje"] });
       }
       qc.invalidateQueries({ queryKey: ["tempo-real"] });
     } catch (e: any) { toast.error(e?.message ?? "Não consegui."); }

@@ -486,13 +486,41 @@ export function useConversaLead(leadId: string | null) {
 /** Cobra o corretor — empurrão pelo WhatsApp (chip do gerente, fallback Junior)
  *  mais o aviso no painel dele. `quem` é o dono do painel/logado. */
 /** Cobra a fila inteira: UMA mensagem por corretor com os leads parados dele. */
-export async function cobrarFila(leadIds: string[], quem: string, motivo: string) {
+export type JaCobrado = { corretor: string; quando: string; respondeu: boolean; resposta: string | null };
+
+/** Quem já foi cobrado do mesmo assunto em 12h volta em `ja_cobrados` (sem envio)
+ *  até a tela confirmar com `forcar`. */
+export async function cobrarFila(leadIds: string[], quem: string, motivo: string, forcar = false) {
   const { data, error } = await supabase.functions.invoke("cobrar-corretor", {
-    body: { lead_ids: leadIds, quem, motivo },
+    body: { lead_ids: leadIds, quem, motivo, forcar },
   });
   if (error) throw error;
   if ((data as any)?.error) throw new Error((data as any).error);
-  return data as { corretores: { corretor: string; leads: number; avisado_no_whats: boolean }[] };
+  return data as { corretores: { corretor: string; leads: number; avisado_no_whats: boolean }[]; ja_cobrados: JaCobrado[] };
+}
+
+export type Cobranca = { id: string; para_id: string; para_nome: string; motivo: string; canal: string;
+  enviada_em: string; respondida_em: string | null; resposta: string | null; qtd: number };
+
+/** Cobranças das últimas 24h que eu enxergo (RLS: as minhas e as da minha árvore).
+ *  Antes de ler, marca as respondidas (o corretor mandou mensagem no chip que cobrou). */
+export function useCobrancasHoje() {
+  return useQuery<Cobranca[]>({
+    queryKey: ["cobrancas-hoje"],
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    queryFn: async () => {
+      await supabase.rpc("cobrancas_marcar_respostas" as any);
+      const { data } = await supabase.from("cobrancas" as any)
+        .select("id,para_id,motivo,canal,enviada_em,respondida_em,resposta,lead_ids")
+        .gte("enviada_em", new Date(Date.now() - 24 * 3600e3).toISOString()).order("enviada_em", { ascending: false });
+      const rows = (data ?? []) as any[];
+      const ids = [...new Set(rows.map((r) => r.para_id))];
+      const { data: ps } = ids.length ? await supabase.from("profiles").select("id,first_name").in("id", ids) : { data: [] as any[] };
+      const nome = new Map(((ps ?? []) as any[]).map((p) => [p.id, p.first_name ?? "—"]));
+      return rows.map((r) => ({ ...r, para_nome: nome.get(r.para_id) ?? "—", qtd: (r.lead_ids ?? []).length }));
+    },
+  });
 }
 
 export async function cobrarCorretor(leadId: string, quem: string) {
