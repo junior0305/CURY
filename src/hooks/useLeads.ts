@@ -150,26 +150,46 @@ export function useLeads(managerId: string | undefined,
       const verConversa = String((cfgVer as any)?.value ?? "true").replace(/"/g, "") === "true";
 
       const { data: perfil } = await supabase.from("profiles")
-        .select("first_name").eq("id", managerId!).maybeSingle();
+        .select("first_name,role").eq("id", managerId!).maybeSingle();
       const meuNome = (perfil as any)?.first_name ?? "";
 
+      // Superintendente/diretor: a aba soma TODOS os gerentes abaixo dele — os
+      // leads ficam no manager_id do gerente, não no do super.
+      const ehSuper = ["SUPERINTENDENT", "DIRECTOR"].includes((perfil as any)?.role ?? "");
+      const { data: gersSup } = ehSuper
+        ? await supabase.from("profiles").select("id,first_name").eq("manager_id", managerId!).eq("role", "MANAGER")
+        : { data: [] as any[] };
+      const donos = [managerId!, ...((gersSup ?? []) as any[]).map((g) => g.id)];
+      const nomesDonos = [meuNome, ...((gersSup ?? []) as any[]).map((g) => g.first_name ?? "")]
+        .map((n) => n.toUpperCase()).filter(Boolean);
+
       const { data: euCury } = await supabase.from("cury_pessoas")
-        .select("cury_id").eq("escopo", "gerente").eq("profile_id", managerId!).maybeSingle();
-      const gerenteCuryId = (euCury as any)?.cury_id ?? null;
+        .select("cury_id").eq("escopo", "gerente").in("profile_id", donos);
+      const gerenteCuryIds = ((euCury ?? []) as any[]).map((e) => e.cury_id);
 
       const [timeRes, leadsRes, todosRes, curyRes, campRes, thrRes, poolRes, welcRes] = await Promise.all([
         supabase.from("profiles")
-          .select("id,first_name,last_name,last_seen_at").eq("manager_id", managerId!).eq("role", "BROKER"),
-        supabase.from("leads")
-          .select("id,name,phone,status,broker_id,created_at,last_lead_response_at,last_broker_whatsapp_at,last_interaction_at,contact_attempts,lost_reason,fb_campaign,tag,source,original_broker_id,negotiating_since")
-          .eq("manager_id", managerId!),
+          .select("id,first_name,last_name,last_seen_at").in("manager_id", donos).eq("role", "BROKER"),
+        // PostgREST corta em 1000: pagina (a superintendência passa disso fácil)
+        (async () => {
+          const out: any[] = [];
+          for (let a = 0; ; a += 1000) {
+            const { data, error } = await supabase.from("leads")
+              .select("id,name,phone,status,broker_id,created_at,last_lead_response_at,last_broker_whatsapp_at,last_interaction_at,contact_attempts,lost_reason,fb_campaign,tag,source,original_broker_id,negotiating_since")
+              .in("manager_id", donos).order("created_at", { ascending: false }).range(a, a + 999);
+            if (error) throw error;
+            out.push(...(data ?? []));
+            if (!data || data.length < 1000) break;
+          }
+          return { data: out };
+        })(),
         // os bloqueados perdem o gerente — a dona é a campanha
         supabase.from("leads").select("geo_status,fb_campaign,created_at")
           .eq("geo_status", "fora_regiao").gte("created_at", de),
-        gerenteCuryId
+        gerenteCuryIds.length
           ? supabase.from("cury_metricas_diarias")
               .select("apelido,profile_id,atendimentos,vendas,checkins,data")
-              .eq("escopo", "corretor").eq("gerente_cury_id", gerenteCuryId)
+              .eq("escopo", "corretor").in("gerente_cury_id", gerenteCuryIds)
               .gte("data", de).lte("data", ate)
           : Promise.resolve({ data: [] as any[] }),
         supabase.from("whatsapp_campaigns")
@@ -203,7 +223,7 @@ export function useLeads(managerId: string | undefined,
 
       /* ── o caminho: chegou → foi para alguém → se perdeu ── */
       const bloq = ((todosRes as any).data ?? []).filter((l: any) =>
-        (l.fb_campaign ?? "").toUpperCase().includes(meuNome.toUpperCase()));
+        nomesDonos.some((n) => (l.fb_campaign ?? "").toUpperCase().includes(n)));
       const chegaram = doPeriodo.length + bloq.length;
 
       // Boas-vindas que o sistema mandou sozinho, por lead. É o que separa

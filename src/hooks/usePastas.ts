@@ -81,8 +81,15 @@ export function usePastas(managerId: string | undefined) {
         supabase.from("profiles").select("first_name,last_name,role").eq("id", managerId!).maybeSingle(),
         supabase.from("profiles").select("id,first_name").eq("manager_id", managerId!),
       ]);
+      // Super: a equipe dele são gerentes; os corretores estão um nível abaixo.
+      let gente = (equipe ?? []) as any[];
+      if (["SUPERINTENDENT", "DIRECTOR", "ADMIN"].includes((eu as any)?.role ?? "") && gente.length) {
+        const { data: cors } = await supabase.from("profiles").select("id,first_name")
+          .in("manager_id", gente.map((g) => g.id));
+        gente = [...gente, ...((cors ?? []) as any[])];
+      }
       const nomes = new Map<string, string>(
-        ((equipe ?? []) as any[]).map((p) => [p.id, (p.first_name ?? "").trim() || "sem nome"]));
+        gente.map((p) => [p.id, (p.first_name ?? "").trim() || "sem nome"]));
       // corretor do Junix ("GALILEIA BN") → profile da equipe, pelo 1º nome
       const porPrimeiro = new Map<string, string>();
       for (const [id, n] of nomes) porPrimeiro.set(chave(n), id);
