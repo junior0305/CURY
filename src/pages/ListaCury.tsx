@@ -1,7 +1,7 @@
 // Lista de clientes da base que baixamos do app da Cury (visitantes de plantão,
 // 2023–2025, ~19 mil). Página de IMPRESSÃO: filtra e manda para a impressora.
 // Só ADMIN abre a página (a tabela cury_clientes tem RLS para admin/diretor).
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
@@ -25,6 +25,11 @@ export default function ListaCury() {
   const [busca, setBusca] = useState("");
   const [colunas, setColunas] = useState<Colunas>("nome_tel");
   const [unicos, setUnicos] = useState(true);
+  // Lotes: a lista filtrada vira blocos (1 a 1.000, 1.001 a 2.000…) e só o bloco
+  // escolhido vai para a impressora. A ordem é sempre a mesma (alfabética), então
+  // o lote 3 de hoje é o mesmo lote 3 de amanhã.
+  const [tamanho, setTamanho] = useState(1000);
+  const [lote, setLote] = useState(0);
 
   const { data: todos = [], isLoading } = useQuery({
     queryKey: ["lista-cury"],
@@ -68,6 +73,25 @@ export default function ListaCury() {
     return r.sort((a, b) => (a.nome ?? "").localeCompare(b.nome ?? "", "pt-BR"));
   }, [todos, empreendimento, corretor, ano, busca, unicos]);
 
+  const chaveFiltro = [empreendimento, corretor, ano, busca.trim(), unicos ? "u" : "t", tamanho].join("|");
+  useEffect(() => { setLote(0); }, [chaveFiltro]);
+  const totalLotes = tamanho ? Math.max(1, Math.ceil(lista.length / tamanho)) : 1;
+  const ini = tamanho ? lote * tamanho : 0;
+  const visiveis = tamanho ? lista.slice(ini, ini + tamanho) : lista;
+
+  // quais lotes já foram impressos com este filtro — fica neste navegador
+  const [impressos, setImpressos] = useState<Record<string, number[]>>(() => {
+    try { return JSON.parse(localStorage.getItem("lista-cury-impressos") || "{}"); } catch { return {}; }
+  });
+  const jaImpresso = (i: number) => (impressos[chaveFiltro] ?? []).includes(i);
+  const imprimir = () => {
+    window.print();
+    const novo = { ...impressos, [chaveFiltro]: [...new Set([...(impressos[chaveFiltro] ?? []), lote])] };
+    setImpressos(novo);
+    try { localStorage.setItem("lista-cury-impressos", JSON.stringify(novo)); } catch { /* sem storage: só não lembra */ }
+  };
+  const faixa = (i: number) => `${(i * tamanho + 1).toLocaleString("pt-BR")} a ${Math.min((i + 1) * tamanho, lista.length).toLocaleString("pt-BR")}`;
+
   // logo após o login a sessão chega antes do perfil: espera o papel, senão
   // "ainda sem papel" vira "não é admin" e a página expulsa quem é.
   if (loading || (session && !role)) return <p className="p-10 text-center text-slate-500">Carregando…</p>;
@@ -80,7 +104,7 @@ export default function ListaCury() {
   );
 
   const filtro = [empreendimento, corretor && `corretor ${corretor}`, ano, busca && `"${busca}"`].filter(Boolean).join(" · ") || "todos";
-  const paginas = Math.max(1, Math.ceil(lista.length / (colunas === "nome" ? 120 : 45)));
+  const paginas = Math.max(1, Math.ceil(visiveis.length / (colunas === "nome" ? 120 : 45)));
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -101,7 +125,7 @@ export default function ListaCury() {
           <div className="mr-auto">
             <h1 className="text-lg font-extrabold">Clientes da base Cury</h1>
             <p className="text-xs text-slate-500">
-              {isLoading ? "Carregando…" : `${lista.length.toLocaleString("pt-BR")} na lista · ~${paginas} página${paginas > 1 ? "s" : ""} A4`}
+              {isLoading ? "Carregando…" : `${lista.length.toLocaleString("pt-BR")} na lista · este lote: ${visiveis.length.toLocaleString("pt-BR")} nomes, ~${paginas} página${paginas > 1 ? "s" : ""} A4`}
             </p>
           </div>
           <label className="text-xs font-semibold text-slate-600">Empreendimento
@@ -132,10 +156,27 @@ export default function ListaCury() {
               <option value="tudo">Completo</option>
             </select>
           </label>
+          <label className="text-xs font-semibold text-slate-600">Por lote
+            <select className="mt-1 block w-28 rounded border bg-white px-2 py-1.5 text-sm" value={tamanho} onChange={(e) => setTamanho(Number(e.target.value))}>
+              <option value={500}>500</option>
+              <option value={1000}>1.000</option>
+              <option value={2000}>2.000</option>
+              <option value={0}>tudo junto</option>
+            </select>
+          </label>
+          {tamanho && totalLotes > 1 ? (
+            <label className="text-xs font-semibold text-slate-600">Lote
+              <select className="mt-1 block w-52 rounded border bg-white px-2 py-1.5 text-sm" value={lote} onChange={(e) => setLote(Number(e.target.value))}>
+                {Array.from({ length: totalLotes }, (_, i) => (
+                  <option key={i} value={i}>{jaImpresso(i) ? "✓ " : ""}Lote {i + 1} · {faixa(i)}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="flex items-center gap-1.5 pb-2 text-xs font-semibold text-slate-600">
             <input type="checkbox" checked={unicos} onChange={(e) => setUnicos(e.target.checked)} /> sem repetidos
           </label>
-          <button type="button" disabled={isLoading || !lista.length} onClick={() => window.print()}
+          <button type="button" disabled={isLoading || !lista.length} onClick={imprimir}
             className="flex items-center gap-2 rounded bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">
             <Printer size={16} /> Imprimir
           </button>
@@ -144,13 +185,14 @@ export default function ListaCury() {
 
       <div className="mx-auto max-w-6xl px-4 py-4 text-[11px] leading-tight">
         <div className="mb-2 flex justify-between border-b pb-1 text-[10px] text-slate-500">
-          <span><b className="text-slate-800">Clientes da base Cury</b> · {filtro}</span>
-          <span>{lista.length.toLocaleString("pt-BR")} nomes · impresso em {new Date().toLocaleDateString("pt-BR")}</span>
+          <span><b className="text-slate-800">Clientes da base Cury</b> · {filtro}
+            {tamanho && totalLotes > 1 ? <> · <b className="text-slate-800">Lote {lote + 1} de {totalLotes}</b> (nº {faixa(lote)})</> : null}</span>
+          <span>{visiveis.length.toLocaleString("pt-BR")} nomes · impresso em {new Date().toLocaleDateString("pt-BR")}</span>
         </div>
         {isLoading ? <p className="py-10 text-center text-slate-500">Carregando os 19 mil nomes…</p>
           : colunas === "nome" ? (
-            <ol className="lc-nomes list-decimal pl-6">
-              {lista.map((c, i) => <li key={i} className="break-inside-avoid py-[1px]">{titulo(c.nome) || "—"}</li>)}
+            <ol className="lc-nomes list-decimal pl-6" start={ini + 1}>
+              {visiveis.map((c, i) => <li key={i} className="break-inside-avoid py-[1px]">{titulo(c.nome) || "—"}</li>)}
             </ol>
           ) : (
             <table className="w-full border-collapse">
@@ -161,9 +203,9 @@ export default function ListaCury() {
                 </tr>
               </thead>
               <tbody>
-                {lista.map((c, i) => (
+                {visiveis.map((c, i) => (
                   <tr key={i} className="border-b border-slate-100">
-                    <td className="py-[3px] pr-2 text-right text-slate-400">{i + 1}</td>
+                    <td className="py-[3px] pr-2 text-right text-slate-400">{ini + i + 1}</td>
                     <td className="py-[3px] pr-2">{titulo(c.nome) || "—"}</td>
                     <td className="whitespace-nowrap py-[3px] pr-2">{fone(c) || "—"}</td>
                     {colunas === "tudo" ? <>
