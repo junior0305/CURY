@@ -65,7 +65,7 @@ export default function AnunciosGerentes({ diasInicial = 30 }: { diasInicial?: n
       if (error) throw error;
       const lista = (contas || []) as Conta[];
       const { data: vs } = await supabase.from("junix_vendas" as any).select("gerente, superintendente, vgv, qtd")
-        .eq("ativo", true).gte("data_contrato", de);
+        .eq("ativo", true).gte("data_venda", de);
       const fb = await Promise.all(lista.map(async (c) => {
         const { data: r, error: e } = await supabase.functions.invoke("fb-conta-gerente", { body: { owner_id: c.owner_id, de, ate } });
         return (e ? { error: e.message } : r) as Fb;

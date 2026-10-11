@@ -2,7 +2,7 @@
 // da operação lado a lado — sem precisar entrar em painel por painel.
 //
 //   Plantão e visita  ← C2S   (cury_metricas_diarias escopo gerente, enchida por /root/econ/metricas.py)
-//   Venda e VGV       ← Junix (junix_vendas, por data de contrato)
+//   Venda e VGV       ← Junix (junix_vendas.data_venda: contrato, ou assinatura do cliente enquanto não há contrato)
 //   Pastas            ← Junix (junix_pastas, o kanban de agora — dono pela Pesquisa de Proposta)
 //   Anúncio           ← Facebook (conta de cada gerente, fb-conta-gerente)
 //   Leads por origem  ← Comandra (leads)
@@ -97,7 +97,7 @@ export function useConsolidadoSuper(superId: string | undefined, dias: number) {
         ids.length ? supabase.from("cury_metricas_diarias").select("profile_id,checkins,atendimentos")
           .eq("escopo", "gerente").in("profile_id", ids).gte("data", de).lte("data", ate) : Promise.resolve({ data: [] }),
         supabase.from("junix_vendas" as any).select("gerente,superintendente,vgv,qtd")
-          .eq("ativo", true).gte("data_contrato", de).lte("data_contrato", ate),
+          .eq("ativo", true).gte("data_venda", de).lte("data_venda", ate),
         supabase.from("junix_pastas" as any).select("gerente,superintendente,dias"),
         ids.length ? todas<any>((a, b) => supabase.from("leads")
           .select("manager_id,source,original_broker_id,fb_page_id,fb_campaign_id")

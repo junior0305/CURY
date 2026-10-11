@@ -152,8 +152,8 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
     queryFn: async () => {
       const desde = new Date(Date.now() - 3 * 3600 * 1000 - (dias - 1) * 86400000).toISOString().slice(0, 10);
       const { data, error } = await supabase.from("junix_vendas" as any)
-        .select("oc, empreendimento, bloco, unidade, fase, data_contrato, diretor, superintendente, gerente, corretor, vgv, qtd, sinal_status")
-        .eq("ativo", true).gte("data_contrato", desde).order("data_contrato", { ascending: false });
+        .select("oc, empreendimento, bloco, unidade, fase, data_contrato, data_venda, diretor, superintendente, gerente, corretor, vgv, qtd, sinal_status")
+        .eq("ativo", true).gte("data_venda", desde).order("data_venda", { ascending: false });
       if (error) throw error;
       return (data || []) as any[];
     },
@@ -254,7 +254,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
       const ate = new Date(agora - dias * ms).toISOString().slice(0, 10);          // último dia do anterior
       const de = new Date(agora - (2 * dias - 1) * ms).toISOString().slice(0, 10);  // primeiro dia do anterior
       const { data: vs } = await supabase.from("junix_vendas" as any).select("vgv, qtd")
-        .eq("ativo", true).gte("data_contrato", de).lte("data_contrato", ate);
+        .eq("ativo", true).gte("data_venda", de).lte("data_venda", ate);
       const plantao: any[] = [];
       for (let from = 0; ; from += 1000) {
         const { data, error } = await supabase.from("c2s_plantao" as any).select("dia, corretor, gerente")
@@ -404,7 +404,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                       <tbody>
                         {vendasJunix.length ? vendasJunix.map((v) => (
                           <tr key={`${v.oc}-${v.unidade}`}>
-                            <td>{v.data_contrato ? new Date(v.data_contrato + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</td>
+                            <td>{v.data_venda ? new Date(v.data_venda + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</td>
                             <td><b>{v.corretor || "—"}</b></td>
                             <td>{v.gerente || "—"}</td>
                             <td>{v.superintendente || "—"}</td>
