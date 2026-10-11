@@ -19,6 +19,7 @@ import { useTime, assumirMeta, type PessoaTime } from "@/hooks/useTime";
 import { usePeriodo } from "@/hooks/usePeriodo";
 import Briefing from "@/components/manager-v10/Briefing";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
+import VincularNomes from "@/components/manager-v10/VincularNomes";
 
 const ini = (n: string) => n.trim().slice(0, 2).toUpperCase();
 const um = (n: number | null) => (n == null ? "—" : n.toFixed(1).replace(".", ","));
@@ -30,7 +31,8 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
   const qc = useQueryClient();
   const [mu, setMu] = useState<"up" | "down" | null>(null);
   const [brief, setBrief] = useState<PessoaTime | null>(null);
-  const [cadastrar, setCadastrar] = useState(false);
+  // false = fechado; string = aberto (com o nome já preenchido quando vem do "Confirme quem é quem")
+  const [cadastrar, setCadastrar] = useState<string | false>(false);
   const [alvo, setAlvo] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
 
@@ -75,6 +77,9 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
 
   return (
     <section className="view tm">
+      {/* 0 ─ quem é quem entre C2S/Junix e o Comandra (some quando não há nome) */}
+      <VincularNomes managerId={managerId} onCadastrar={(n) => setCadastrar(n)} />
+
       {/* 1 ─ como está o time */}
       <Sec title="Como está o time" tag={<span className="dim">{periodo.rotulo}</span>}>
         <div className="tm-box tm-conc">
@@ -284,7 +289,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                   {" "}· {novatos.filter((n) => n.primeiroPonto == null).length} nunca apareceram</span>
               )}
             </span>
-            <button className="mini solid" style={{ marginLeft: "auto" }} onClick={() => setCadastrar(true)}>
+            <button className="mini solid" style={{ marginLeft: "auto" }} onClick={() => setCadastrar("")}>
               Cadastrar corretor
             </button>
           </div>
@@ -319,7 +324,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       </Sec>
 
       {brief && <Briefing pessoa={brief} gente={gente} onFechar={() => setBrief(null)} />}
-      {cadastrar && <CadastrarCorretor managerId={managerId!} onFechar={() => setCadastrar(false)}
+      {cadastrar !== false && <CadastrarCorretor managerId={managerId!} nomeInicial={cadastrar} onFechar={() => setCadastrar(false)}
         onPronto={() => { setCadastrar(false); qc.invalidateQueries({ queryKey: ["aba-time"] }); }} />}
     </section>
   );
