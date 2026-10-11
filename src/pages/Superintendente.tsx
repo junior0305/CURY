@@ -12,6 +12,7 @@
  *
  * Havera 3+ superintendentes; cada um ve so os gerentes dele (a RPC ja escopa).*/
 import { useState } from "react";
+import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
@@ -267,6 +268,17 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
   const qc = useQueryClient();
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
   const [cadastro, setCadastro] = useState<{ gerente: string; nome?: string } | null>(null);
+  const [resetando, setResetando] = useState<string | null>(null);
+  // quem cadastra também reseta: volta para mudar@123 e a pessoa troca no próximo acesso
+  async function resetarSenha(id: string, nome: string) {
+    setResetando(id);
+    try {
+      const { data: r, error } = await supabase.functions.invoke("create-user", { body: { action: "reset-password", userId: id } });
+      if (error || (r as any)?.error) throw new Error((r as any)?.error || error?.message);
+      toast.success(`Senha de ${nome} voltou para mudar@123 — troca no próximo acesso`);
+    } catch (e: any) { toast.error(e?.message ?? "Não consegui resetar."); }
+    finally { setResetando(null); }
+  }
   const { data, isLoading } = useQuery({
     queryKey: ["super-time", superId],
     enabled: !!superId,
@@ -347,10 +359,13 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
                   <em><b>{ativos.filter((c) => c.lead_assignment_enabled !== false).length}</b> recebem lead</em>
                   {sem.length ? <em style={{ color: "var(--red)" }}><b>{sem.length}</b> sem login</em> : null}
                 </span>
-                {b.id !== superId ? (
+                {b.id !== superId ? (<>
+                  <button className="sup-abrir" disabled={resetando === b.id} title="Resetar a senha do gerente para mudar@123"
+                    onClick={(e) => { e.stopPropagation(); resetarSenha(b.id, b.titulo); }}>
+                    {resetando === b.id ? "…" : "Senha"}</button>
                   <button className="sup-abrir" onClick={(e) => { e.stopPropagation(); setCadastro({ gerente: b.id }); }}>
                     + corretor</button>
-                ) : null}
+                </>) : null}
               </div>
               {exp ? (
                 <div className="sup-cors">
@@ -367,6 +382,8 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
                         <em>{quando(c.last_seen_at)}</em>
                         <em className={c.lead_assignment_enabled !== false && c.is_active !== false ? "bom" : ""}>
                           <b>{c.is_active === false ? "desligado" : c.lead_assignment_enabled !== false ? "recebe lead" : "fora da roleta"}</b></em>
+                        <button className="sup-abrir" disabled={resetando === c.id} onClick={() => resetarSenha(c.id, nome(c))}>
+                          {resetando === c.id ? "…" : "Resetar senha"}</button>
                       </span>
                     </div>
                   ))}

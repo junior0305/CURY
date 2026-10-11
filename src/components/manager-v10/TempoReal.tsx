@@ -15,8 +15,13 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/components/AuthProvider";
+import { cobrarFila } from "@/hooks/useLeads";
+import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import { toast } from "sonner";
-import { useTempoReal, definirRecebimento, status,
+import { useTempoReal, definirRecebimento, trazerParaEquipe, status,
          type Pessoa, type Nivel, type Origem } from "@/hooks/useTempoReal";
 import { Sec, Panel, Blank } from "@/components/manager-v10/ui";
 import MetaSemana from "@/components/manager-v10/MetaSemana";
@@ -83,6 +88,9 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
   const [filtro, setFiltro] = useState<Nivel | null>(null);
   const [aberto, setAberto] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const [cadastrar, setCadastrar] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { session } = useAuth();
 
   if (isLoading) return <Blank title="Carregando o plantão…" />;
   if (!data) return <Blank title="Ainda não há plantão para mostrar." />;
@@ -99,6 +107,50 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
     } catch (e: any) {
       toast.error(`Não consegui alterar: ${e?.message ?? e}`);
     } finally { setOcupado(null); }
+  }
+
+  // O botão da linha faz o que diz (antes: "em construção" em todos).
+  async function agir(p: Pessoa, chave: string) {
+    const nome = p.apelido ?? p.nome;
+    try {
+      if (chave === "semcad") { setCadastrar(nome ?? ""); return; }
+      if (chave === "rodizio") { await alternar(p); return; }
+      if (chave === "ok" || chave === "fora" || chave === "sumido") { navigate("/manager/leads"); return; }
+      if (!p.profileId) return;
+      setOcupado(p.profileId);
+      if (chave === "outraeq") {
+        await trazerParaEquipe(p.profileId, managerId);
+        toast.success(`${nome} agora está na sua equipe`);
+      } else if (chave === "desativado") {
+        const { data: r, error } = await supabase.functions.invoke("create-user", { body: { action: "unblock", userId: p.profileId } });
+        if (error || (r as any)?.error) throw new Error((r as any)?.error || error?.message);
+        toast.success(`Cadastro de ${nome} reativado`);
+      } else if (chave === "parado" || chave === "perdeu") {
+        // os leads dele que esperam: o cliente respondeu e ele não voltou, ou nunca foi tocado
+        const { data: ls } = await supabase.from("leads").select("id,last_lead_response_at,last_broker_whatsapp_at,contact_attempts")
+          .eq("broker_id", p.profileId).not("status", "in", "(CONCLUDED,EXCLUDED,ABANDONED)").limit(500);
+        const esperando = ((ls ?? []) as any[]).filter((l) =>
+          (l.last_lead_response_at && (!l.last_broker_whatsapp_at || l.last_broker_whatsapp_at < l.last_lead_response_at))
+          || (!l.last_broker_whatsapp_at && !l.contact_attempts));
+        if (!esperando.length) { toast.info(`${nome} não tem lead esperando agora`); return; }
+        const r = await cobrarFila(esperando.map((l) => l.id), session!.user.id, "respondeu");
+        toast.success(r.corretores[0]?.avisado_no_whats
+          ? `${nome} cobrado no WhatsApp (${esperando.length} leads)` : `${nome} avisado no painel (sem WhatsApp)`);
+      }
+      qc.invalidateQueries({ queryKey: ["tempo-real"] });
+    } catch (e: any) { toast.error(e?.message ?? "Não consegui."); }
+    finally { setOcupado(null); }
+  }
+
+  async function resetarSenha(p: Pessoa) {
+    if (!p.profileId) return;
+    setOcupado(p.profileId);
+    try {
+      const { data: r, error } = await supabase.functions.invoke("create-user", { body: { action: "reset-password", userId: p.profileId } });
+      if (error || (r as any)?.error) throw new Error((r as any)?.error || error?.message);
+      toast.success(`Senha de ${p.apelido ?? p.nome} voltou para mudar@123 — troca no próximo acesso`);
+    } catch (e: any) { toast.error(e?.message ?? "Não consegui resetar."); }
+    finally { setOcupado(null); }
   }
 
   const { gente, totais, atualizadoEm } = data;
@@ -251,7 +303,8 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
 
                   <span className="tr-acao">
                     <button type="button" className={`mini${st.nivel === "crit" || st.nivel === "trav" ? " solid" : ""}`}
-                      onClick={(e) => { e.stopPropagation(); toast.info(`${st.acao} — em construção`); }}>
+                      disabled={!!p.profileId && ocupado === p.profileId}
+                      onClick={(e) => { e.stopPropagation(); agir(p, st.chave); }}>
                       {st.acao}
                     </button>
                   </span>
@@ -272,6 +325,12 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
                         </div>
                       </div>
                     ) : null}
+                    {p.profileId ? (
+                      <div style={{ marginTop: 12 }}>
+                        <button type="button" className="mini key" disabled={ocupado === p.profileId}
+                          onClick={(e) => { e.stopPropagation(); resetarSenha(p); }}>Resetar senha (mudar@123)</button>
+                      </div>
+                    ) : null}
                   </div>
                 </div></div>
               </div>
@@ -281,6 +340,10 @@ export default function TempoReal({ managerId }: { managerId: string | undefined
       </Sec>
 
       <PrecisaDeVoce gente={gente} managerId={managerId} />
+      {cadastrar !== null && managerId ? (
+        <CadastrarCorretor managerId={managerId} nomeInicial={cadastrar} onFechar={() => setCadastrar(null)}
+          onPronto={() => { setCadastrar(null); qc.invalidateQueries({ queryKey: ["tempo-real"] }); }} />
+      ) : null}
     </section>
   );
 }
