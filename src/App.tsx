@@ -24,6 +24,7 @@ import ManagerV2 from "./pages/ManagerV2";
 import ManagerV3 from "./pages/ManagerV3";
 import ManagerV10 from "./pages/ManagerV10";
 import Superintendente from "./pages/Superintendente";
+import ListaCury from "./pages/ListaCury";
 import { Boundary } from "./components/manager-v10/Boundary";
 import AnunciosV10 from "./pages/manager-v10/Anuncios";
 import LeadsV10 from "./pages/manager-v10/Leads";
@@ -183,6 +184,8 @@ const App = () => (
             {/* /manager = v2 completo + console Jarvis no topo (escolha do gerente). /manager-v3 = experimento overview. /manager-v1 = antigo. */}
             {/* O painel do gerente agora é o v10. O v2 fica em /manager-v2 como
                 volta rápida — trocar estas duas linhas reverte. */}
+            {/* base de clientes baixada do app da Cury — impressão; a página só abre para diretor/admin */}
+            <Route path="/lista-cury" element={<ListaCury />} />
             <Route path="/super" element={<ProtectedSuperRoute><Boundary><Superintendente /></Boundary></ProtectedSuperRoute>} />
             <Route path="/manager" element={<ProtectedManagerRoute><ManagerV10 /></ProtectedManagerRoute>} />
             <Route path="/integracoes" element={<ProtectedManagerRoute><IntegracaoFacebook /></ProtectedManagerRoute>} />
