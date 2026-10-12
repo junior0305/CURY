@@ -46,6 +46,7 @@ export default function Superintendente() {
       return (data?.id as string | undefined) ?? null;
     },
   });
+  const ehDiretoria = role === "DIRECTOR" || role === "ADMIN";
   const superId = role === "ADMIN" ? (diretorId ?? undefined) : session?.user?.id;
   const nav = useNavigate();
   const [dias, setDias] = useState(30);
@@ -80,8 +81,9 @@ export default function Superintendente() {
         <div className="sup-wrap">
           <div className="sup-top">
             <div>
-              <h1>Superintendência</h1>
-              <p>A operação inteira das suas equipes, num lugar só</p>
+              <h1>{ehDiretoria ? "Diretoria" : "Superintendência"}</h1>
+              <p>{ehDiretoria ? "A empresa inteira — todas as superintendências e equipes, num lugar só"
+                : "A operação inteira das suas equipes, num lugar só"}</p>
             </div>
             <div className="sup-per">
               <button className={aba === "consolidado" ? "on" : ""} onClick={() => setAba("consolidado")}>Consolidado</button>
@@ -264,7 +266,7 @@ function ConsolidadoFontes({ superId, dias, onAbrir }: { superId: string | undef
                 {celulas(x)}
               </tr>
             ))}
-            <tr className="tot"><td>Superintendência</td>{celulas(t as any)}</tr>
+            <tr className="tot"><td>Total</td>{celulas(t as any)}</tr>
           </tbody>
         </table>
       </div>
