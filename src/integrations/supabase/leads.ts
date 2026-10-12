@@ -435,6 +435,8 @@ export const setLeadNegotiating = async (leadId: string) => {
       status:            "NEGOTIATING",
       negotiating_since: now,
       last_interaction_at: now,
+      // o corretor confirmou que o cliente respondeu: mede resposta nos painéis e vira sinal de qualidade pro Facebook
+      last_lead_response_at: now,
     })
     .eq("id", leadId);
   if (error) throw error;
