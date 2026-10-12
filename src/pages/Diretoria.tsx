@@ -11,10 +11,13 @@ import { useAuth } from "@/components/AuthProvider";
 import { useConsolidadoSuper, type LinhaConsolidado } from "@/hooks/useConsolidadoSuper";
 import { useDiretorId, useDiretoria, useMetasDiretoria, donoJunix, chaveGerente,
   type SuperDiretoria, type PastaJunix } from "@/hooks/useDiretoria";
+import PlanoEstrategico from "@/components/plano/PlanoEstrategico";
+import GastosPlano from "@/components/plano/GastosPlano";
+import { usePlanos, atrasada } from "@/hooks/usePlano";
 import "@/styles/diretoria.css";
 
-type Aba = "hoje" | "equipes" | "leads" | "pastas" | "gastos";
-const ABAS: [Aba, string][] = [["hoje", "Hoje"], ["equipes", "Equipes"], ["leads", "Leads e investimento"], ["pastas", "Pastas"], ["gastos", "Gastos e plano"]];
+type Aba = "hoje" | "equipes" | "leads" | "pastas" | "plano" | "gastos";
+const ABAS: [Aba, string][] = [["hoje", "Hoje"], ["equipes", "Equipes"], ["leads", "Leads e investimento"], ["pastas", "Pastas"], ["plano", "Plano estratégico"], ["gastos", "Gastos"]];
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "7 dias"], [30, "30 dias"]];
 
 const nf = (n: number) => n.toLocaleString("pt-BR");
@@ -52,6 +55,7 @@ export default function Diretoria() {
   const [aba, setAba] = useState<Aba>("hoje");
   const [dias, setDias] = useState(30);
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
+  const [deslocMes, setDeslocMes] = useState(0);
   const tog = (k: string) => setAberto((v) => ({ ...v, [k]: !v[k] }));
   const abrirPainel = (id: string) => nav(`/manager?manager=${id}`);
 
@@ -59,6 +63,8 @@ export default function Diretoria() {
   const { data: dir, isLoading } = useDiretoria(diretorId, dias);
   const { data: cons, isLoading: carregandoCons } = useConsolidadoSuper(diretorId ?? undefined, dias);
 
+  // anúncio do MÊS corrente (dia 1 até hoje) para o realizado dos gastos
+  const { data: consMes } = useConsolidadoSuper(aba === "gastos" ? diretorId ?? undefined : undefined, new Date().getDate());
   const porId = useMemo(() => new Map((cons?.linhas ?? []).map((l) => [l.id, l])), [cons]);
   const supers = dir?.supers ?? [];
   // linhas do consolidado de cada super: gerentes + "direto com o super" + "sem gerente no Comandra"
@@ -89,7 +95,16 @@ export default function Diretoria() {
       </header>
 
       <main className="dir-wrap">
-        {aba !== "hoje" ? (
+        {aba === "plano" || aba === "gastos" ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span className="dir-lbl">Mês</span>
+            <div className="dir-per">
+              <button className={deslocMes === 0 ? "on" : ""} onClick={() => setDeslocMes(0)}>{nomeMes(inicioMes(0))}</button>
+              <button className={deslocMes === 1 ? "on" : ""} onClick={() => setDeslocMes(1)}>{nomeMes(inicioMes(1))}</button>
+            </div>
+            <span className="dir-nota">{aba === "plano" ? "O plano da diretoria é a prioridade; cada super desdobra o dele a partir dele." : "Cada super lança os gastos dele; aqui soma tudo com os gastos da diretoria."}</span>
+          </div>
+        ) : aba !== "hoje" ? (
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span className="dir-lbl">Período</span>
             <div className="dir-per">{PERIODOS.map(([n, t]) => <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{t}</button>)}</div>
@@ -105,7 +120,15 @@ export default function Diretoria() {
             {aba === "equipes" && <Equipes supers={supers} linhasDoSuper={linhasDoSuper} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
             {aba === "leads" && <Leads supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
             {aba === "pastas" && <Pastas supers={supers} pastas={dir.pastas} aberto={aberto} tog={tog} />}
-            {aba === "gastos" && <Gastos supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} carregandoCons={carregandoCons} />}
+            {aba === "plano" && diretorId && session?.user?.id && <PlanoEstrategico raizId={diretorId} meuId={session.user.id} mes={inicioMes(deslocMes)} />}
+            {aba === "gastos" && diretorId && (<>
+              <GastosPlano raizId={diretorId} mes={inicioMes(deslocMes)} podeCriarCategoria
+                anuncio={deslocMes === 0 && consMes ? new Map<string, number>([
+                  [diretorId, consMes.linhas.find((l) => l.id === "super")?.gasto ?? 0],
+                  ...supers.map((s) => [s.id, consMes.linhas.filter((l) => l.id === s.id || l.id === `outros:${s.id}` || s.gerentes.some((g) => g.id === l.id))
+                    .reduce((a, l) => a + (l.gasto ?? 0), 0)] as [string, number])]) : new Map()} />
+              {deslocMes === 0 ? <Gastos supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} carregandoCons={carregandoCons} /> : null}
+            </>)}
           </>
         )}
         <p className="dir-nota">Fontes: Junix (venda, VGV, pastas) · C2S (plantão, visita) · Facebook (anúncio) · Comandra (leads, login).</p>
@@ -131,6 +154,7 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
   const [desloc, setDesloc] = useState(0);
   const mes = inicioMes(desloc);
   const { data: metas } = useMetasDiretoria(diretorId, mes);
+  const { data: planosMes } = usePlanos(inicioMes());
   async function definir(id: string, n: number, nome: string) {
     const { error } = await supabase.rpc("definir_meta" as any, { p_mes: mes, p_dono: id, p_vendas: n });
     if (error) { toast.error(error.message); return; }
@@ -176,6 +200,11 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
   if (travadas >= 3) decs.push({ peso: travadas * 3, cls: "c-blue", tipo: "pasta parada", quem: "empresa toda",
     titulo: `${travadas} pastas paradas há 7 dias ou mais no Junix`, porque: "Venda quase feita que pode cair — cobre o gerente de cada uma.",
     acoes: [["Ver pastas", () => irPara("pastas")]] });
+  const atrasadasPlano = (planosMes ?? []).flatMap((p) => p.acoes.filter(atrasada));
+  if (atrasadasPlano.length) decs.push({ peso: 1000 + atrasadasPlano.length, cls: "c-red", tipo: "plano atrasado", quem: "plano estratégico",
+    titulo: `${atrasadasPlano.length} ${atrasadasPlano.length === 1 ? "ação do plano passou" : "ações do plano passaram"} do prazo`,
+    porque: "O Jarvis já cobra os responsáveis às 9h — veja quem e decida se ajusta o prazo ou o responsável.",
+    acoes: [["Ver plano", () => irPara("plano")]] });
   const decida = decs.sort((a, b) => b.peso - a.peso).slice(0, 3);
 
   const leadsTot = total ? totLeads(total) : 0;
@@ -588,14 +617,6 @@ function Gastos({ supers, linhasDoSuper, total, carregandoCons }: { supers: Supe
             </tbody>
           </table>
         </div>
-      </div>
-      <div className="dir-card" style={{ padding: 18 }}>
-        <div className="dir-h"><b>Plano de ação e outros gastos</b><span className="dir-chip c-blue">próxima entrega</span></div>
-        <p style={{ fontSize: 14, color: "var(--ink-2)", marginTop: 8, lineHeight: 1.55 }}>
-          Ainda não construído. Vai entrar aqui: gastos por categoria (anúncio, panfleto, ação de rua, evento, brinde, chip, ferramentas) com um campo para você criar categorias novas;
-          planejado × realizado, com o super somando para você mais os seus próprios gastos; e o plano estratégico (lançamentos e estoque) com ações, responsável e prazo,
-          que o Jarvis cobra só quando atrasar.
-        </p>
       </div>
     </>
   );

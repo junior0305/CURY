@@ -29,6 +29,9 @@ import BiTab from "@/components/manager-v10/BiTab";
 import { Boundary } from "@/components/manager-v10/Boundary";
 import "@/styles/manager-v10.css";
 import "@/styles/superintendente.css";
+import "@/styles/diretoria.css";
+import PlanoEstrategico from "@/components/plano/PlanoEstrategico";
+import GastosPlano from "@/components/plano/GastosPlano";
 
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "Semana"], [30, "Mês"]];
 
@@ -52,8 +55,8 @@ export default function Superintendente() {
   const [dias, setDias] = useState(30);
   const [params] = useSearchParams();
   const abaUrl = params.get("aba");
-  const [aba, setAba] = useState<"consolidado" | "time" | "bi" | "campanhas">(
-    abaUrl === "time" || abaUrl === "bi" || abaUrl === "campanhas" ? abaUrl : "consolidado");
+  const [aba, setAba] = useState<"consolidado" | "time" | "bi" | "campanhas" | "plano" | "gastos">(
+    abaUrl === "time" || abaUrl === "bi" || abaUrl === "campanhas" || abaUrl === "plano" || abaUrl === "gastos" ? abaUrl : "consolidado");
   // quais gerentes estão expandidos (mostrando os corretores)
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
   const toggleGer = (id: string) => setAberto((v) => ({ ...v, [id]: !v[id] }));
@@ -93,6 +96,8 @@ export default function Superintendente() {
               <button className={aba === "consolidado" ? "on" : ""} onClick={() => setAba("consolidado")}>Consolidado</button>
               <button className={aba === "time" ? "on" : ""} onClick={() => setAba("time")}>Time</button>
               <button className={aba === "campanhas" ? "on" : ""} onClick={() => setAba("campanhas")}>Campanhas</button>
+              <button className={aba === "plano" ? "on" : ""} onClick={() => setAba("plano")}>Plano</button>
+              <button className={aba === "gastos" ? "on" : ""} onClick={() => setAba("gastos")}>Gastos</button>
               <button className={aba === "bi" ? "on" : ""} onClick={() => setAba("bi")}>B.I.</button>
               {aba === "consolidado" ? PERIODOS.map(([n, r]) => (
                 <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{r}</button>
@@ -100,7 +105,9 @@ export default function Superintendente() {
             </div>
           </div>
 
-          {aba === "campanhas" ? (
+          {(aba === "plano" || aba === "gastos") && superId && session?.user?.id ? (
+            <PlanoSuper aba={aba} superId={superId} meuId={session.user.id} />
+          ) : aba === "campanhas" ? (
             <CampanhasNaoLead superId={superId} />
           ) : aba === "time" ? (
             <TimeSuper superId={superId} plantaoHoje={new Set((data?.gerentes ?? [])
@@ -487,6 +494,29 @@ function CampanhasNaoLead({ superId }: { superId: string | undefined }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* Plano e gastos do super — os mesmos componentes da diretoria, na estrutura dele. */
+function PlanoSuper({ aba, superId, meuId }: { aba: "plano" | "gastos"; superId: string; meuId: string }) {
+  const [desloc, setDesloc] = useState(0);
+  const d = new Date();
+  const mes = new Date(d.getFullYear(), d.getMonth() + desloc, 1).toISOString().slice(0, 10);
+  const nome = (n: number) => new Date(d.getFullYear(), d.getMonth() + n, 1).toLocaleDateString("pt-BR", { month: "long" });
+  const { data: cons } = useConsolidadoSuper(aba === "gastos" && desloc === 0 ? superId : undefined, d.getDate());
+  const anuncio = new Map<string, number>(cons ? [[superId, cons.linhas.reduce((a, l) => a + (l.gasto ?? 0), 0)]] : []);
+  return (
+    <div className="dir" style={{ minHeight: 0, background: "transparent", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <span className="dir-lbl">Mês</span>
+        <div className="dir-per">
+          <button className={desloc === 0 ? "on" : ""} onClick={() => setDesloc(0)}>{nome(0)}</button>
+          <button className={desloc === 1 ? "on" : ""} onClick={() => setDesloc(1)}>{nome(1)}</button>
+        </div>
+      </div>
+      {aba === "plano" ? <PlanoEstrategico raizId={superId} meuId={meuId} mes={mes} />
+        : <GastosPlano raizId={superId} mes={mes} anuncio={anuncio} podeCriarCategoria={false} />}
     </div>
   );
 }
