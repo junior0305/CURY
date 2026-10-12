@@ -77,7 +77,7 @@ export default function ManagerV10() {
 
   useEffect(loadFonts, []);
   // Super/diretor sem ?manager= não tem painel de gerente: o dele é o /super.
-  const semDrill = (role === "SUPERINTENDENT" || role === "DIRECTOR") && !params.get("manager");
+  const semDrill = (role === "SUPERINTENDENT" || role === "DIRECTOR" || role === "ADMIN") && !params.get("manager");
 
   const calc = useMemo(() => {
     if (!data) return null;

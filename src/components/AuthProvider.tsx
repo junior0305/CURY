@@ -290,7 +290,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }
         } else if (role === 'ADMIN') {
           // Whitelist: rotas admin + telas de gestão (cold-pool, atribuir-chips, etc).
-          const ADMIN_ALLOWED_PREFIXES = ['/admin'];
+          // /super e /manager: o admin abre a tela do diretor (age como o perfil DIRECTOR).
+          const ADMIN_ALLOWED_PREFIXES = ['/admin', '/super', '/manager'];
           const ADMIN_ALLOWED_EXACT = [
             '/command-center',
             '/user-management',

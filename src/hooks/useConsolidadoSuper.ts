@@ -72,14 +72,19 @@ export function useConsolidadoSuper(superId: string | undefined, dias: number) {
       const de = diaSP(Date.now() - (dias - 1) * 864e5);
       const deIso = `${de}T03:00:00Z`;
 
-      const [{ data: eu }, { data: gers }] = await Promise.all([
-        supabase.from("profiles").select("first_name,last_name").eq("id", superId!).maybeSingle(),
-        supabase.from("profiles").select("id,first_name").eq("manager_id", superId!).eq("role", "MANAGER")
-          .eq("is_active", true).order("first_name"),
+      // diretor: os supers abaixo dele também são "chefes" — a linha vira a empresa inteira
+      const [{ data: eu }, { data: subs }] = await Promise.all([
+        supabase.from("profiles").select("first_name,last_name,role").eq("id", superId!).maybeSingle(),
+        supabase.from("profiles").select("id").eq("manager_id", superId!).eq("role", "SUPERINTENDENT").eq("is_active", true),
       ]);
+      const ehDiretor = (eu as any)?.role === "DIRECTOR";
+      const { data: gers } = await supabase.from("profiles").select("id,first_name")
+        .in("manager_id", [superId!, ...((subs ?? []) as { id: string }[]).map((x) => x.id)]).eq("role", "MANAGER")
+        .eq("is_active", true).order("first_name");
       const gerentes = (gers ?? []) as { id: string; first_name: string | null }[];
       const meusTokens = [chave((eu as any)?.first_name), chave((eu as any)?.last_name)].filter((t) => t.length >= 3);
       const daMinhaSuper = (s: string | null) => {
+        if (ehDiretor) return true;
         const k = (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z]/g, "");
         return meusTokens.some((t) => k.includes(t));
       };

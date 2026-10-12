@@ -57,7 +57,7 @@ export function RailV10({
   const { signOut, role } = useAuth();
   // Superintendente/diretor: "Tempo real", "Time" e "B.I." são o painel DELE (/super),
   // não o painel de gerente — senão ele cai num /manager com o próprio nome e vazio.
-  const ehSuper = role === "SUPERINTENDENT" || role === "DIRECTOR";
+  const ehSuper = role === "SUPERINTENDENT" || role === "DIRECTOR" || role === "ADMIN";
   const destino = (a: { k: Aba; to: string }) =>
     !ehSuper ? a.to : a.k === "tempo" ? "/super" : a.k === "time" ? "/super?aba=time" : a.to;
   return (
@@ -103,6 +103,12 @@ export function RailV10({
           <svg viewBox="0 0 24 24"><path d={ICONES.bi} /></svg>B.I.
         </Link>
       )}
+
+      {role === "ADMIN" ? (
+        <Link to="/admin" title="Voltar para a área de admin">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M15 18l-6-6 6-6" /></svg>Admin
+        </Link>
+      ) : null}
 
       <div className="rail-foot">
         {/* Sair não existia em tela nenhuma do v10: quem entrava no painel do

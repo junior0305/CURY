@@ -33,9 +33,20 @@ import "@/styles/superintendente.css";
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "Semana"], [30, "Mês"]];
 
 export default function Superintendente() {
-  const { session } = useAuth();
+  const { session, role } = useAuth();
   const { mode, toggle } = useTheme();
-  const superId = session?.user?.id;
+  // Admin abre a tela do diretor: enxerga a empresa pelo perfil DIRECTOR (supers abaixo dele).
+  const { data: diretorId } = useQuery({
+    queryKey: ["perfil-diretor"],
+    enabled: role === "ADMIN",
+    staleTime: Infinity,
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("id").eq("role", "DIRECTOR").eq("is_active", true)
+        .order("created_at").limit(1).maybeSingle();
+      return (data?.id as string | undefined) ?? null;
+    },
+  });
+  const superId = role === "ADMIN" ? (diretorId ?? undefined) : session?.user?.id;
   const nav = useNavigate();
   const [dias, setDias] = useState(30);
   const [params] = useSearchParams();
@@ -291,8 +302,11 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
     staleTime: 60_000,
     queryFn: async () => {
       const campos = "id,first_name,last_name,email,phone,is_active,last_seen_at,lead_assignment_enabled,manager_id,role";
+      // diretor: inclui os gerentes dos supers abaixo dele
+      const { data: subs } = await supabase.from("profiles").select("id")
+        .eq("manager_id", superId!).eq("role", "SUPERINTENDENT").eq("is_active", true);
       const { data: gers } = await supabase.from("profiles").select(campos)
-        .eq("manager_id", superId!).eq("role", "MANAGER").order("first_name");
+        .in("manager_id", [superId!, ...((subs ?? []) as { id: string }[]).map((x) => x.id)]).eq("role", "MANAGER").order("first_name");
       const gerentes = ((gers ?? []) as PessoaTime[]).filter((g) => g.is_active !== false);
       const ids = [superId!, ...gerentes.map((g) => g.id)];
       const { data: cors } = await supabase.from("profiles").select(campos)
