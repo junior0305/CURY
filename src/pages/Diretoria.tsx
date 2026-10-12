@@ -11,13 +11,12 @@ import { useAuth } from "@/components/AuthProvider";
 import { useConsolidadoSuper, type LinhaConsolidado } from "@/hooks/useConsolidadoSuper";
 import { useDiretorId, useDiretoria, useMetasDiretoria, donoJunix, chaveGerente,
   type SuperDiretoria, type PastaJunix } from "@/hooks/useDiretoria";
-import PlanoEstrategico from "@/components/plano/PlanoEstrategico";
-import GastosPlano from "@/components/plano/GastosPlano";
+import Estrategia from "@/components/estrategia/Estrategia";
 import { usePlanos, atrasada } from "@/hooks/usePlano";
 import "@/styles/diretoria.css";
 
-type Aba = "hoje" | "equipes" | "leads" | "pastas" | "plano" | "gastos";
-const ABAS: [Aba, string][] = [["hoje", "Hoje"], ["equipes", "Equipes"], ["leads", "Leads e investimento"], ["pastas", "Pastas"], ["plano", "Plano estratégico"], ["gastos", "Gastos"]];
+type Aba = "hoje" | "equipes" | "leads" | "pastas" | "estrategia";
+const ABAS: [Aba, string][] = [["hoje", "Hoje"], ["equipes", "Equipes"], ["leads", "Leads e investimento"], ["pastas", "Pastas"], ["estrategia", "Estratégia"]];
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "7 dias"], [30, "30 dias"]];
 
 const nf = (n: number) => n.toLocaleString("pt-BR");
@@ -55,7 +54,6 @@ export default function Diretoria() {
   const [aba, setAba] = useState<Aba>("hoje");
   const [dias, setDias] = useState(30);
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
-  const [deslocMes, setDeslocMes] = useState(0);
   const tog = (k: string) => setAberto((v) => ({ ...v, [k]: !v[k] }));
   const abrirPainel = (id: string) => nav(`/manager?manager=${id}`);
 
@@ -63,8 +61,6 @@ export default function Diretoria() {
   const { data: dir, isLoading } = useDiretoria(diretorId, dias);
   const { data: cons, isLoading: carregandoCons } = useConsolidadoSuper(diretorId ?? undefined, dias);
 
-  // anúncio do MÊS corrente (dia 1 até hoje) para o realizado dos gastos
-  const { data: consMes } = useConsolidadoSuper(aba === "gastos" ? diretorId ?? undefined : undefined, new Date().getDate());
   const porId = useMemo(() => new Map((cons?.linhas ?? []).map((l) => [l.id, l])), [cons]);
   const supers = dir?.supers ?? [];
   // linhas do consolidado de cada super: gerentes + "direto com o super" + "sem gerente no Comandra"
@@ -95,16 +91,7 @@ export default function Diretoria() {
       </header>
 
       <main className="dir-wrap">
-        {aba === "plano" || aba === "gastos" ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <span className="dir-lbl">Mês</span>
-            <div className="dir-per">
-              <button className={deslocMes === 0 ? "on" : ""} onClick={() => setDeslocMes(0)}>{nomeMes(inicioMes(0))}</button>
-              <button className={deslocMes === 1 ? "on" : ""} onClick={() => setDeslocMes(1)}>{nomeMes(inicioMes(1))}</button>
-            </div>
-            <span className="dir-nota">{aba === "plano" ? "O plano da diretoria é a prioridade; cada super desdobra o dele a partir dele." : "Cada super lança os gastos dele; aqui soma tudo com os gastos da diretoria."}</span>
-          </div>
-        ) : aba !== "hoje" ? (
+        {aba !== "hoje" && aba !== "estrategia" ? (
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span className="dir-lbl">Período</span>
             <div className="dir-per">{PERIODOS.map(([n, t]) => <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{t}</button>)}</div>
@@ -120,15 +107,7 @@ export default function Diretoria() {
             {aba === "equipes" && <Equipes supers={supers} linhasDoSuper={linhasDoSuper} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
             {aba === "leads" && <Leads supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
             {aba === "pastas" && <Pastas supers={supers} pastas={dir.pastas} aberto={aberto} tog={tog} />}
-            {aba === "plano" && diretorId && session?.user?.id && <PlanoEstrategico raizId={diretorId} meuId={session.user.id} mes={inicioMes(deslocMes)} />}
-            {aba === "gastos" && diretorId && (<>
-              <GastosPlano raizId={diretorId} mes={inicioMes(deslocMes)} podeCriarCategoria
-                anuncio={deslocMes === 0 && consMes ? new Map<string, number>([
-                  [diretorId, consMes.linhas.find((l) => l.id === "super")?.gasto ?? 0],
-                  ...supers.map((s) => [s.id, consMes.linhas.filter((l) => l.id === s.id || l.id === `outros:${s.id}` || s.gerentes.some((g) => g.id === l.id))
-                    .reduce((a, l) => a + (l.gasto ?? 0), 0)] as [string, number])]) : new Map()} />
-              {deslocMes === 0 ? <Gastos supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} carregandoCons={carregandoCons} /> : null}
-            </>)}
+            {aba === "estrategia" && diretorId && <Estrategia diretorId={diretorId} supers={supers} pastas={dir.pastas} />}
           </>
         )}
         <p className="dir-nota">Fontes: Junix (venda, VGV, pastas) · C2S (plantão, visita) · Facebook (anúncio) · Comandra (leads, login).</p>
@@ -155,11 +134,48 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
   const mes = inicioMes(desloc);
   const { data: metas } = useMetasDiretoria(diretorId, mes);
   const { data: planosMes } = usePlanos(inicioMes());
+
+  // Modal de cobrança direta
+  const [modalCobranca, setModalCobranca] = useState<{
+    destinatarioNome: string;
+    destinatarioId: string;
+    telefone: string | null;
+    motivo: string;
+    mensagem: string;
+  } | null>(null);
+
   async function definir(id: string, n: number, nome: string) {
     const { error } = await supabase.rpc("definir_meta" as any, { p_mes: mes, p_dono: id, p_vendas: n });
     if (error) { toast.error(error.message); return; }
     toast.success(`Meta de ${nome} em ${nomeMes(mes)}: ${n} venda${n === 1 ? "" : "s"}`);
     qc.invalidateQueries({ queryKey: ["metas-painel"] });
+  }
+
+  async function dispararCobranca(destId: string, destNome: string, motivo: string, mensagem: string, telefone: string | null) {
+    try {
+      await supabase.from("cobrancas" as any).insert({
+        de_id: diretorId,
+        para_id: destId,
+        motivo,
+        canal: "whatsapp",
+        enviada_em: new Date().toISOString(),
+      });
+      qc.invalidateQueries({ queryKey: ["diretoria"] });
+      toast.success(`Cobrança registrada para ${destNome}!`);
+
+      if (telefone) {
+        const cleanPhone = telefone.replace(/\D/g, "");
+        const fullPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+        const url = `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(mensagem)}`;
+        window.open(url, "_blank");
+      } else {
+        toast.info(`${destNome} não possui telefone cadastrado. Cobrança salva apenas no histórico interno.`);
+      }
+    } catch (err: any) {
+      toast.error("Erro ao registrar cobrança: " + err.message);
+    } finally {
+      setModalCobranca(null);
+    }
   }
 
   const hoje = new Date();
@@ -170,6 +186,13 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
   const pct = d?.meta ? Math.min(100, (realizado / d.meta) * 100) : 0;
   const ritmo = desloc === 0 ? (hoje.getDate() / diasMes) * 100 : 0;
   const somaSupers = (metas?.filhos ?? []).reduce((a, f) => a + (f.meta ?? 0), 0);
+
+  // Cálculo realista de Pipeline de Pastas (Junix)
+  const analiseCount = pastas.filter((p) => /laudo|an[aá]lise/i.test(p.etapa ?? "")).length;
+  const propostaCount = pastas.filter((p) => /proposta|simular|emiss|documento/i.test(p.etapa ?? "")).length;
+  const cadastroCount = pastas.filter((p) => /cadastro|unidade/i.test(p.etapa ?? "")).length;
+  const potencialPastas = Math.round(analiseCount * 0.70 + propostaCount * 0.40 + cadastroCount * 0.15);
+  const projecaoPipeline = realizado + potencialPastas;
 
   // pessoas
   const gerentes = supers.flatMap((s) => s.gerentes.map((g) => ({ s, g })));
@@ -185,26 +208,95 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
   const decs: (Dec & { peso: number })[] = [];
   for (const { s, g } of gerentes) {
     const l = cons.find((x) => x.id === g.id);
-    if (l && l.nuncaFalaram >= 10) decs.push({ peso: l.nuncaFalaram, cls: "c-red", tipo: "dinheiro na mesa", quem: `${s.nome} › ${g.nome}`,
-      titulo: `${nf(l.nuncaFalaram)} leads na equipe do ${g.nome} sem nenhum toque`, porque: "Lead pago parado na mão do corretor — esfria em 2 dias.",
-      acoes: [[`Abrir painel do ${g.nome}`, () => abrirPainel(g.id)], ["Ver leads", () => irPara("leads", `s:${s.id}`)]] });
+    if (l && l.nuncaFalaram >= 10) {
+      decs.push({
+        peso: l.nuncaFalaram,
+        cls: "c-red",
+        tipo: "dinheiro na mesa",
+        quem: `${s.nome} › ${g.nome}`,
+        titulo: `${nf(l.nuncaFalaram)} leads na equipe do ${g.nome} sem nenhum toque`,
+        porque: "Lead pago parado na mão do corretor — esfria em 2 dias.",
+        acoes: [
+          [`📱 Cobrar ${s.nome}`, () => setModalCobranca({
+            destinatarioNome: s.nome,
+            destinatarioId: s.id,
+            telefone: s.phone ?? null,
+            motivo: `${nf(l.nuncaFalaram)} leads sem toque na equipe do ${g.nome}`,
+            mensagem: `Fala ${s.nome}, no Comandra constam ${nf(l.nuncaFalaram)} leads pagos da equipe do ${g.nome} sem nenhum toque do corretor. Dinheiro de mídia esfria em 48h. Por favor, alinhe com o ${g.nome} para rodar a roleta ou redistribuir hoje antes das 14h.`
+          })],
+          [`Abrir painel do ${g.nome}`, () => abrirPainel(g.id)],
+          ["Ver leads", () => irPara("leads", `s:${s.id}`)]
+        ]
+      });
+    }
     const sl = s.plantaoSemLogin[g.id]?.length ?? 0;
-    if (sl >= 2) decs.push({ peso: sl * 8, cls: "c-org", tipo: "equipe invisível", quem: `${s.nome} › ${g.nome}`,
-      titulo: `${sl} corretores do ${g.nome} no plantão hoje sem login no Comandra`, porque: "Estão trabalhando, mas não recebem lead nem aparecem nos números.",
-      acoes: [["Ver nomes", () => irPara("equipes", `s:${s.id}`)], [`Abrir painel do ${g.nome}`, () => abrirPainel(g.id)]] });
-    if (l && l.plantaoDias >= 15 && l.visitas === 0) decs.push({ peso: l.plantaoDias, cls: "c-org", tipo: "plantão sem visita", quem: `${s.nome} › ${g.nome}`,
-      titulo: `${g.nome}: ${l.plantaoDias} dias de plantão e nenhuma visita registrada`, porque: "Ou a visita não está sendo lançada no C2S, ou o plantão não converte.",
-      acoes: [[`Abrir painel do ${g.nome}`, () => abrirPainel(g.id)], ["Ver equipe", () => irPara("equipes", `s:${s.id}`)]] });
+    if (sl >= 2) {
+      decs.push({
+        peso: sl * 8,
+        cls: "c-org",
+        tipo: "equipe invisível",
+        quem: `${s.nome} › ${g.nome}`,
+        titulo: `${sl} corretores do ${g.nome} no plantão hoje sem login no Comandra`,
+        porque: "Estão trabalhando, mas não recebem lead nem aparecem nos números.",
+        acoes: [
+          [`📱 Cobrar ${s.nome}`, () => setModalCobranca({
+            destinatarioNome: s.nome,
+            destinatarioId: s.id,
+            telefone: s.phone ?? null,
+            motivo: `${sl} corretores do ${g.nome} no plantão sem login`,
+            mensagem: `Fala ${s.nome}, verifiquei no Comandra que há ${sl} corretores do ${g.nome} no plantão pelo C2S hoje sem login no Comandra. Estão atendendo mas invisíveis para a distribuição. Pode acionar o ${g.nome} para cobrar o login da equipe agora?`
+          })],
+          ["Ver nomes", () => irPara("equipes", `s:${s.id}`)],
+          [`Abrir painel do ${g.nome}`, () => abrirPainel(g.id)]
+        ]
+      });
+    }
+    if (l && l.plantaoDias >= 15 && l.visitas === 0) {
+      decs.push({
+        peso: l.plantaoDias,
+        cls: "c-org",
+        tipo: "plantão sem visita",
+        quem: `${s.nome} › ${g.nome}`,
+        titulo: `${g.nome}: ${l.plantaoDias} dias de plantão e nenhuma visita registrada`,
+        porque: "Ou a visita não está sendo lançada no C2S, ou o plantão não converte.",
+        acoes: [
+          [`📱 Cobrar ${s.nome}`, () => setModalCobranca({
+            destinatarioNome: s.nome,
+            destinatarioId: s.id,
+            telefone: s.phone ?? null,
+            motivo: `${g.nome}: ${l.plantaoDias} dias de plantão e zero visitas no C2S`,
+            mensagem: `Fala ${s.nome}, a equipe do ${g.nome} acumulou ${l.plantaoDias} dias de plantão no C2S mas nenhuma visita lançada. Ou não estão cadastrando atendimento ou a conversão de plantão está travada. Como está essa cobrança?`
+          })],
+          [`Abrir painel do ${g.nome}`, () => abrirPainel(g.id)],
+          ["Ver equipe", () => irPara("equipes", `s:${s.id}`)]
+        ]
+      });
+    }
   }
   const travadas = pastas.filter((p) => (p.dias ?? 0) >= 7).length;
-  if (travadas >= 3) decs.push({ peso: travadas * 3, cls: "c-blue", tipo: "pasta parada", quem: "empresa toda",
-    titulo: `${travadas} pastas paradas há 7 dias ou mais no Junix`, porque: "Venda quase feita que pode cair — cobre o gerente de cada uma.",
-    acoes: [["Ver pastas", () => irPara("pastas")]] });
+  if (travadas >= 3) {
+    decs.push({
+      peso: travadas * 3,
+      cls: "c-blue",
+      tipo: "pasta parada",
+      quem: "empresa toda",
+      titulo: `${travadas} pastas paradas há 7 dias ou mais no Junix`,
+      porque: "Venda quase feita que pode cair — cobre o superintendente de cada uma.",
+      acoes: [["Ver pastas", () => irPara("pastas")]]
+    });
+  }
   const atrasadasPlano = (planosMes ?? []).flatMap((p) => p.acoes.filter(atrasada));
-  if (atrasadasPlano.length) decs.push({ peso: 1000 + atrasadasPlano.length, cls: "c-red", tipo: "plano atrasado", quem: "plano estratégico",
-    titulo: `${atrasadasPlano.length} ${atrasadasPlano.length === 1 ? "ação do plano passou" : "ações do plano passaram"} do prazo`,
-    porque: "O Jarvis já cobra os responsáveis às 9h — veja quem e decida se ajusta o prazo ou o responsável.",
-    acoes: [["Ver plano", () => irPara("plano")]] });
+  if (atrasadasPlano.length) {
+    decs.push({
+      peso: 1000 + atrasadasPlano.length,
+      cls: "c-red",
+      tipo: "plano atrasado",
+      quem: "plano estratégico",
+      titulo: `${atrasadasPlano.length} ${atrasadasPlano.length === 1 ? "ação do plano passou" : "ações do plano passaram"} do prazo`,
+      porque: "O Jarvis já cobra os responsáveis às 9h — veja quem e decida se ajusta o prazo ou o responsável.",
+      acoes: [["Ver estratégia", () => irPara("estrategia")]]
+    });
+  }
   const decida = decs.sort((a, b) => b.peso - a.peso).slice(0, 3);
 
   const leadsTot = total ? totLeads(total) : 0;
@@ -232,10 +324,57 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap", fontSize: 14, color: "var(--ink-3)" }}>
               Meta da empresa {d?.pode_editar ? <MetaInput key={`${mes}-${d.meta}`} valor={d.meta} onSalvar={(n) => definir(d.id, n, "a empresa")} /> : <b className="mono">{d?.meta ?? "—"}</b>}
-              {projecao != null && d?.meta ? <span>· no ritmo atual fecha em <b style={{ color: "var(--ink)" }}>{projecao}</b></span> : null}
+              {projecao != null && d?.meta ? <span>· ritmo linear fecha em <b style={{ color: "var(--ink)" }}>{projecao}</b></span> : null}
               {projecao != null && d?.meta ? <span className={`dir-chip ${projecao >= d.meta ? "c-grn" : "c-red"}`}>{projecao >= d.meta ? "no ritmo" : "abaixo do ritmo"}</span> : null}
             </div>
             {d?.meta ? <div className="dir-bar" style={{ marginTop: 14 }}><i style={{ width: `${pct}%` }} />{ritmo ? <em style={{ left: `${ritmo}%` }} title="onde deveria estar hoje" /> : null}</div> : null}
+
+            {/* Projeção Realista por Estoque de Pastas Junix */}
+            {desloc === 0 && d?.meta ? (
+              <div className="dir-pipeline-card">
+                <div className="dir-pipeline-title">
+                  <span>📊 <b>Projeção Realista por Pipeline (Estoque Junix)</b></span>
+                  <span className={`dir-chip ${projecaoPipeline >= d.meta ? "c-grn" : "c-red"}`}>
+                    {projecaoPipeline >= d.meta ? "Estoque Sustenta a Meta" : "Estoque Insuficiente"}
+                  </span>
+                </div>
+                <div className="dir-pipeline-grid">
+                  <div className="dir-pipeline-item">
+                    <small>Vendas Feitas</small>
+                    <b>{realizado}</b>
+                  </div>
+                  <div className="dir-pipeline-item">
+                    <small>Em Análise (70%)</small>
+                    <b>{analiseCount} <span style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 400 }}>(~{Math.round(analiseCount * 0.70)})</span></b>
+                  </div>
+                  <div className="dir-pipeline-item">
+                    <small>Em Proposta (40%)</small>
+                    <b>{propostaCount} <span style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 400 }}>(~{Math.round(propostaCount * 0.40)})</span></b>
+                  </div>
+                  <div className="dir-pipeline-item">
+                    <small>Em Cadastro (15%)</small>
+                    <b>{cadastroCount} <span style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 400 }}>(~{Math.round(cadastroCount * 0.15)})</span></b>
+                  </div>
+                  <div className="dir-pipeline-item" style={{ background: "#EEF4F8" }}>
+                    <small>Potencial Fechamento</small>
+                    <b style={{ color: "var(--teal)" }}>{projecaoPipeline} <span style={{ fontSize: 11, fontWeight: 500 }}>vendas</span></b>
+                  </div>
+                </div>
+                <p className="dir-nota" style={{ marginTop: 8, marginBottom: 0 }}>
+                  Regra de 3 aritmética projeta <b>{projecao ?? "—"}</b> vendas. O estoque de <b>{pastas.length}</b> pastas ativas no Junix tem potencial estimado de fechar em <b>{projecaoPipeline}</b> vendas.
+                  {projecaoPipeline < d.meta ? (
+                    <span style={{ color: "var(--red)", fontWeight: 700, display: "block", marginTop: 3 }}>
+                      ⚠️ Déficit de {d.meta - projecaoPipeline} vendas: injete novas pastas na esteira de crédito para não perder a meta.
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--grn)", fontWeight: 700, display: "block", marginTop: 3 }}>
+                      ✓ O volume de crédito em esteira é suficiente para fechar a meta do mês se não houver destrato.
+                    </span>
+                  )}
+                </p>
+              </div>
+            ) : null}
+
             <div className="dir-list" style={{ marginTop: 14 }}>
               {(metas?.filhos ?? []).map((f) => (
                 <div key={f.id}>
@@ -296,6 +435,123 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
         </div>
       </div>
 
+      {/* ── SCORECARD EXECUTIVO DAS 4 SUPERINTENDÊNCIAS ── */}
+      <div className="dir-card dir-scorecard-card">
+        <div className="dir-h" style={{ marginBottom: 14 }}>
+          <b>Scorecard Executivo das Superintendências</b>
+          <span>Comparativo lado a lado de metas, VGV, capacidade produtiva da tropa e pastas travadas</span>
+        </div>
+        <table className="dir-scorecard-table">
+          <thead>
+            <tr>
+              <th>Superintendência</th>
+              <th>Meta / Realizado</th>
+              <th>% Meta</th>
+              <th>VGV 30d</th>
+              <th>Ativação da Tropa</th>
+              <th>Mídia Facebook</th>
+              <th>Custo/Venda</th>
+              <th>Pastas Travadas (7d+)</th>
+              <th>Saúde</th>
+              <th>Ação Direta</th>
+            </tr>
+          </thead>
+          <tbody>
+            {supers.map((s) => {
+              const ls = cons.filter((l) => s.gerentes.some((g) => g.id === l.id) || l.id === s.id || l.id === `outros:${s.id}`);
+              const t = somar(s.nome, ls);
+              const f = (metas?.filhos ?? []).find((x) => x.id === s.id);
+              const metaQtd = f?.meta ?? 0;
+              const pctMeta = metaQtd ? Math.round((f?.realizado ?? t.vendas) / metaQtd * 100) : null;
+
+              // Ativação da tropa: corretores que venderam pelo menos 1 unidade
+              const todosCorret = s.gerentes.flatMap((g) => g.corretores_lista);
+              const ativosComVenda = todosCorret.filter((c) => (c.vendas_mes ?? 0) > 0).length;
+              const pctAtivacao = todosCorret.length ? Math.round((ativosComVenda / todosCorret.length) * 100) : 0;
+
+              // Pastas do super
+              const pastasDoSuper = pastas.filter((p) => donoJunix(supers, p.superintendente, p.gerente).superId === s.id);
+              const travadasSuper = pastasDoSuper.filter((p) => (p.dias ?? 0) >= 7).length;
+
+              // Facebook e Custo por venda
+              const gastoSuper = t.gasto ?? 0;
+              const custoPorVenda = t.vendas && gastoSuper ? Math.round(gastoSuper / t.vendas) : null;
+
+              // Indicador de Saúde Executivo
+              let saudeCls = "dir-health-green";
+              let saudeTxt = "🟢 Alta";
+              if ((pctMeta != null && pctMeta < 50 && hoje.getDate() > 15) || travadasSuper >= 6 || (pctAtivacao < 20 && todosCorret.length > 5)) {
+                saudeCls = "dir-health-red";
+                saudeTxt = "🔴 Crítica";
+              } else if ((pctMeta != null && pctMeta < 70 && hoje.getDate() > 10) || travadasSuper >= 3 || pctAtivacao < 35) {
+                saudeCls = "dir-health-yellow";
+                saudeTxt = "🟡 Atenção";
+              }
+
+              return (
+                <tr key={s.id}>
+                  <td>
+                    <b>{s.nome}</b>
+                    <div style={{ fontSize: 11.5, color: "var(--ink-3)", marginTop: 2 }}>
+                      {s.gerentes.length} gerentes · {todosCorret.length} corretores
+                    </div>
+                  </td>
+                  <td>
+                    <b>{f?.realizado ?? t.vendas}</b> / {metaQtd || "—"}
+                  </td>
+                  <td>
+                    {pctMeta != null ? (
+                      <span className={`dir-chip ${pctMeta >= 100 ? "c-grn" : pctMeta >= 65 ? "c-blue" : "c-red"}`}>
+                        {pctMeta}%
+                      </span>
+                    ) : <span className="z">—</span>}
+                  </td>
+                  <td>
+                    <b>{curto(t.vgv)}</b>
+                  </td>
+                  <td>
+                    <span>{ativosComVenda} de {todosCorret.length}</span>
+                    <span style={{ fontSize: 11, color: pctAtivacao < 25 ? "var(--red)" : "var(--ink-3)", marginLeft: 6, fontWeight: 700 }}>
+                      ({pctAtivacao}%)
+                    </span>
+                  </td>
+                  <td>
+                    <Z n={gastoSuper} fmt={brl} />
+                  </td>
+                  <td>
+                    {custoPorVenda ? brl(custoPorVenda) : <span className="z">—</span>}
+                  </td>
+                  <td>
+                    {travadasSuper > 0 ? (
+                      <span className="r" style={{ fontWeight: 800 }}>{travadasSuper}</span>
+                    ) : <span className="g">0</span>}
+                  </td>
+                  <td>
+                    <span className={`dir-health-badge ${saudeCls}`}>
+                      {saudeTxt}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      className="dir-btn-action"
+                      onClick={() => setModalCobranca({
+                        destinatarioNome: s.nome,
+                        destinatarioId: s.id,
+                        telefone: s.phone ?? null,
+                        motivo: `Alinhamento de meta: ${f?.realizado ?? t.vendas}/${metaQtd} vendas · ${travadasSuper} pastas travadas`,
+                        mensagem: `Fala ${s.nome}, revisando os números de fechamento da sua superintendência: temos ${f?.realizado ?? t.vendas} vendas realizadas de uma meta de ${metaQtd || "—"} (${pctMeta ?? 0}% atingido). Temos ${travadasSuper} pastas paradas há 7d+ no Junix. Vamos focar em destravar essas pastas para puxar o VGV esta semana?`
+                      })}
+                    >
+                      📱 Cobrar Super
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
       <div className="dir-grid3">
         <div className="dir-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ fontSize: 16, fontWeight: 800 }}>Funil da empresa · 30 dias</div>
@@ -308,24 +564,36 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
             </div>
           ))}
         </div>
-        <div className="dir-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>Superintendências · 30 dias</div>
+
+        {/* Pipeline por Etapa Junix */}
+        <div className="dir-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>Pipeline de Pastas (Junix)</div>
+          <span style={{ fontSize: 12, color: "var(--ink-3)" }}>{pastas.length} pastas ativas na esteira hoje</span>
           <div className="dir-list">
-            {supers.map((s) => {
-              const ls = cons.filter((l) => s.gerentes.some((g) => g.id === l.id) || l.id === s.id || l.id === `outros:${s.id}`);
-              const t = somar(s.nome, ls);
-              return (
-                <div key={s.id} style={{ cursor: "pointer" }} onClick={() => irPara("equipes", `s:${s.id}`)}>
-                  <span style={{ flex: 1 }}><b>{s.nome}</b><br /><span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>{s.gerentes.length} gerentes · {s.gerentes.reduce((a, g) => a + g.corretores, 0)} corretores</span></span>
-                  <span style={{ textAlign: "right", fontSize: 12.5, color: "var(--ink-3)" }}><b className="mono" style={{ fontSize: 18, color: "var(--ink)" }}>{t.vendas}</b> vendas<br />{curto(t.vgv)}</span>
-                </div>
-              );
-            })}
+            {[
+              ["Análise / Laudo (Crédito CEF)", analiseCount, "var(--teal)", "70% de chance"],
+              ["Proposta / Documentos", propostaCount, "var(--ink)", "40% de chance"],
+              ["Cadastro / Unidade", cadastroCount, "var(--ink-3)", "15% de chance"],
+              ["Pastas Travadas (7d+)", travadas, "var(--red)", "risco de distrato"],
+            ].map(([et, count, cor, prob]) => (
+              <div key={et as string}>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>
+                  {et as string} <small style={{ color: "var(--ink-3)", fontWeight: 400, marginLeft: 4 }}>({prob})</small>
+                </span>
+                <span className="mono" style={{ fontSize: 17, fontWeight: 700, color: cor as string }}>
+                  {count as number}
+                </span>
+              </div>
+            ))}
           </div>
+          <button className="dir-btn" style={{ marginTop: 8 }} onClick={() => irPara("pastas")}>
+            Ver todas as pastas ›
+          </button>
         </div>
+
         <div className="dir-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>Cobranças · 7 dias</div>
-          {!cobrancas.length ? <span className="dir-nota">Nenhuma cobrança enviada nos últimos 7 dias.</span> : (
+          <div style={{ fontSize: 16, fontWeight: 800 }}>Cobranças Executivas · 7 dias</div>
+          {!cobrancas.length ? <span className="dir-nota">Nenhuma cobrança registrada nos últimos 7 dias.</span> : (
             <div className="dir-list">
               {cobrancas.slice(0, 6).map((c) => (
                 <div key={c.id} style={{ display: "block" }}>
@@ -341,6 +609,69 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
           )}
         </div>
       </div>
+
+      {/* MODAL DE COBRANÇA EXECUTIVA DIRETA */}
+      {modalCobranca && (
+        <div className="dir-modal-backdrop" onClick={() => setModalCobranca(null)}>
+          <div className="dir-modal-box" onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <span className="dir-lbl">Ação Direta da Diretoria</span>
+                <h3 style={{ fontSize: 18, fontWeight: 800, margin: "4px 0 0", color: "var(--ink)" }}>
+                  Cobrar {modalCobranca.destinatarioNome}
+                </h3>
+              </div>
+              <button
+                onClick={() => setModalCobranca(null)}
+                style={{ background: "none", border: 0, fontSize: 20, cursor: "pointer", color: "var(--ink-3)" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ fontSize: 13, color: "var(--ink-2)", background: "var(--sunk)", padding: "10px 12px", borderRadius: 8 }}>
+              <b>Motivo detectado pelo sistema:</b><br />
+              {modalCobranca.motivo}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase" }}>
+                Mensagem WhatsApp (editável antes de enviar)
+              </label>
+              <textarea
+                rows={5}
+                value={modalCobranca.mensagem}
+                onChange={(e) => setModalCobranca({ ...modalCobranca, mensagem: e.target.value })}
+                style={{
+                  width: "100%",
+                  padding: 10,
+                  borderRadius: 8,
+                  border: "1px solid var(--line)",
+                  fontFamily: "inherit",
+                  fontSize: 13.5,
+                  resize: "vertical"
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+              <button className="dir-btn" onClick={() => setModalCobranca(null)}>Cancelar</button>
+              <button
+                className="dir-btn-wpp"
+                onClick={() => dispararCobranca(
+                  modalCobranca.destinatarioId,
+                  modalCobranca.destinatarioNome,
+                  modalCobranca.motivo,
+                  modalCobranca.mensagem,
+                  modalCobranca.telefone
+                )}
+              >
+                <span>📱 Abrir no WhatsApp & Registrar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -446,11 +777,19 @@ function Leads({ supers, linhasDoSuper, total, aberto, tog, abrirPainel, carrega
     .sort((a, b) => (b.l.gasto ?? 0) - (a.l.gasto ?? 0));
   const maxG = Math.max(1, ...gers.map((x) => x.l.gasto ?? 0));
 
+  // Conciliação matemática de leads de anúncio
+  const leadsFbTotal = total.leadsFb ?? 0;
+  const leadsAnuncioComandra = total.leads.anuncio;
+  const leadsSemContaMonitorada = Math.max(0, leadsAnuncioComandra - leadsFbTotal);
+
   return (
     <>
       <div className="dir-grid3">
         <div className="dir-card" style={{ padding: 18 }}>
-          <div className="dir-h" style={{ marginBottom: 8 }}><b>Quem mais investiu</b><span>Facebook no período · em vermelho, custo por lead 30% acima da média ({cplEmpresa ? brl(cplEmpresa) : "—"})</span></div>
+          <div className="dir-h" style={{ marginBottom: 8 }}>
+            <b>Investimento por Conta de Anúncio</b>
+            <span>Lido via API do Facebook ({gers.length} contas conectadas) · Média CPL: {cplEmpresa ? brl(cplEmpresa) : "—"}</span>
+          </div>
           <div className="dir-barras">
             {!gers.length ? <span className="dir-nota">Nenhuma conta de anúncio com gasto no período.</span> : gers.map(({ s, l }) => {
               const cpl = l.leadsFb ? (l.gasto ?? 0) / l.leadsFb : 0;
@@ -458,26 +797,73 @@ function Leads({ supers, linhasDoSuper, total, aberto, tog, abrirPainel, carrega
                 <div key={l.id}>
                   <span title={s.nome}><b>{l.nome}</b></span>
                   <span className="tr"><i className={cplEmpresa && cpl > cplEmpresa * 1.3 ? "ruim" : ""} style={{ width: `${((l.gasto ?? 0) / maxG) * 100}%` }} /></span>
-                  <span className="mono" style={{ textAlign: "right", fontSize: 12.5 }}>{brl(l.gasto ?? 0)}<br /><span style={{ color: "var(--ink-3)" }}>{l.leadsFb ?? 0} · {cpl ? brl(cpl) : "—"}</span></span>
+                  <span className="mono" style={{ textAlign: "right", fontSize: 12.5 }}>{brl(l.gasto ?? 0)}<br /><span style={{ color: "var(--ink-3)" }}>{l.leadsFb ?? 0} leads · {cpl ? brl(cpl) : "—"}</span></span>
                 </div>
               );
             })}
+            {leadsSemContaMonitorada > 0 && (
+              <div style={{ borderTop: "1px dashed var(--line)", marginTop: 6, paddingTop: 6, opacity: 0.85 }}>
+                <span title="Outras equipes">
+                  <b style={{ color: "var(--ink-2)", fontSize: 12 }}>Outras equipes (sem API)</b>
+                </span>
+                <span className="tr"><i style={{ width: "10%", background: "#94A3B8" }} /></span>
+                <span className="mono" style={{ textAlign: "right", fontSize: 12 }}>
+                  <span style={{ color: "var(--ink-3)" }}>gasto não rastreado</span><br />
+                  <b>+{leadsSemContaMonitorada} leads</b>
+                </span>
+              </div>
+            )}
+          </div>
+          <div style={{ marginTop: 12, paddingTop: 8, borderTop: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
+            <span style={{ color: "var(--ink-3)" }}>Total em Anúncios:</span>
+            <b>{leadsAnuncioComandra} leads ({leadsFbTotal} monitorados + {leadsSemContaMonitorada} sem API)</b>
           </div>
         </div>
+
         <div className="dir-card" style={{ padding: 18 }}>
-          <div className="dir-h" style={{ marginBottom: 8 }}><b>De onde vieram os leads</b><span>chegaram no Comandra no período</span></div>
+          <div className="dir-h" style={{ marginBottom: 8 }}>
+            <b>Canais de Entrada no Comandra</b>
+            <span>Total real de leads que entraram na base no período ({nf(totLeads(total))} leads)</span>
+          </div>
           <div className="dir-barras">
-            {([["Anúncio", total.leads.anuncio], ["Disparo", total.leads.disparo], ["Pescados", total.leads.pescados], ["Outros", total.leads.outros]] as [string, number][]).map(([t, n]) => (
-              <div key={t}><span><b>{t}</b></span><span className="tr"><i style={{ width: `${(n / Math.max(1, totLeads(total))) * 100}%` }} /></span>
-                <span className="mono" style={{ textAlign: "right" }}>{nf(n)}</span></div>
+            {([
+              ["Anúncios (Facebook)", total.leads.anuncio],
+              ["Pesca (Carteira Fria)", total.leads.pescados],
+              ["Disparos WhatsApp", total.leads.disparo],
+              ["Outros", total.leads.outros]
+            ] as [string, number][]).map(([t, n]) => (
+              <div key={t}>
+                <span><b>{t}</b></span>
+                <span className="tr"><i style={{ width: `${(n / Math.max(1, totLeads(total))) * 100}%` }} /></span>
+                <span className="mono" style={{ textAlign: "right", fontWeight: 700 }}>{nf(n)}</span>
+              </div>
             ))}
           </div>
-          <p className="dir-nota" style={{ marginTop: 10 }}>O Facebook conta {nf(total.leadsFb ?? 0)} leads; chegaram {nf(total.leads.anuncio)} de anúncio no Comandra. A diferença é lead que não passou pela integração.</p>
+
+          {/* Conciliação explicativa transparente */}
+          <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--sunk)", borderRadius: 10, fontSize: 12, lineHeight: 1.5 }}>
+            {leadsAnuncioComandra === leadsFbTotal ? (
+              <span style={{ color: "var(--grn)", fontWeight: 600 }}>
+                ✓ <b>100% Conciliado:</b> Todos os {leadsAnuncioComandra} leads faturados pelo Facebook foram recebidos no Comandra.
+              </span>
+            ) : leadsAnuncioComandra > leadsFbTotal ? (
+              <span>
+                💡 <b>Conciliação de Anúncios:</b> Chegaram <b>{leadsAnuncioComandra} leads de anúncio</b> no Comandra. Desses, <b>{leadsFbTotal} leads</b> vieram das {gers.length} contas de anúncio com API conectada ({brl(total.gasto ?? 0)} investidos). Os outros <b>{leadsSemContaMonitorada} leads</b> vieram de equipes/campanhas de gerentes que ainda não cadastraram o token do Facebook no Comandra.
+              </span>
+            ) : (
+              <span style={{ color: "var(--red)" }}>
+                ⚠️ <b>Atenção:</b> O Facebook registrou <b>{leadsFbTotal} leads</b> faturados nas contas, mas apenas <b>{leadsAnuncioComandra}</b> entraram no Comandra ({leadsFbTotal - leadsAnuncioComandra} leads não integrados).
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="dir-card" style={{ padding: "18px 0 6px" }}>
-        <div className="dir-h" style={{ padding: "0 18px 10px" }}><b>Leads por equipe</b><span>abra a superintendência e o gerente · no corretor: leads recebidos e conversas</span></div>
+        <div className="dir-h" style={{ padding: "0 18px 10px" }}>
+          <b>Leads por equipe</b>
+          <span>abra a superintendência e o gerente · traço (—) no investimento indica gerente sem conta do Facebook conectada</span>
+        </div>
         <div className="dir-tree">
           <table>
             <thead><tr><th>Equipe</th><th>Investimento</th><th>Leads Facebook</th><th>Custo/lead</th><th>Anúncio</th><th>Disparo</th><th>Pescados</th><th>Outros</th><th>Total</th><th>Sem toque</th><th>Em conversa 24h</th><th>Visitas</th></tr></thead>
@@ -587,37 +973,5 @@ function Pastas({ supers, pastas, aberto, tog }: { supers: SuperDiretoria[]; pas
         </table>
       </div>
     </div>
-  );
-}
-
-/* ───────────────────────── GASTOS ───────────────────────── */
-function Gastos({ supers, linhasDoSuper, total, carregandoCons }: { supers: SuperDiretoria[]; linhasDoSuper: (s: SuperDiretoria) => LinhaConsolidado[]; total: LinhaConsolidado | null; carregandoCons: boolean }) {
-  if (carregandoCons || !total) return <div className="dir-card dir-vazio">Buscando o gasto de anúncio de cada equipe…</div>;
-  return (
-    <>
-      <div className="dir-kpis">
-        <div className="dir-card dir-kpi"><div className="dir-lbl">Anúncio no período</div><span className="mono">{brl(total.gasto ?? 0)}</span><small>Facebook, todas as contas</small></div>
-        <div className="dir-card dir-kpi"><div className="dir-lbl">Custo por lead</div><span className="mono">{total.leadsFb ? brl((total.gasto ?? 0) / total.leadsFb) : "—"}</span><small>{nf(total.leadsFb ?? 0)} leads</small></div>
-        <div className="dir-card dir-kpi"><div className="dir-lbl">Custo por visita</div><span className="mono">{total.visitas ? brl((total.gasto ?? 0) / total.visitas) : "—"}</span><small>{nf(total.visitas)} visitas (C2S)</small></div>
-        <div className="dir-card dir-kpi"><div className="dir-lbl">Custo por venda</div><span className="mono">{total.vendas ? brl((total.gasto ?? 0) / total.vendas) : "—"}</span><small>{total.vendas} vendas · VGV {curto(total.vgv)}</small></div>
-      </div>
-      <div className="dir-card" style={{ padding: "18px 0 6px" }}>
-        <div className="dir-h" style={{ padding: "0 18px 10px" }}><b>Anúncio por superintendência</b><span>o que já é automático (Facebook)</span></div>
-        <div className="dir-tree">
-          <table>
-            <thead><tr><th>Equipe</th><th>Gasto</th><th>Leads</th><th>Custo/lead</th><th>Visitas</th><th>Custo/visita</th><th>Vendas</th><th>Custo/venda</th></tr></thead>
-            <tbody>
-              {supers.map((s) => { const t = somar(s.nome, linhasDoSuper(s)); const g = t.gasto ?? 0; return (
-                <tr key={s.id} className="n0" style={{ cursor: "default" }}>
-                  <td>{s.nome}</td><td><Z n={g} fmt={brl} /></td><td><Z n={t.leadsFb} /></td>
-                  <td>{t.leadsFb ? brl(g / t.leadsFb) : <span className="z">—</span>}</td><td><Z n={t.visitas} /></td>
-                  <td>{t.visitas && g ? brl(g / t.visitas) : <span className="z">—</span>}</td><td><Z n={t.vendas} /></td>
-                  <td>{t.vendas && g ? brl(g / t.vendas) : <span className="z">—</span>}</td>
-                </tr>); })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
   );
 }

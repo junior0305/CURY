@@ -28,6 +28,7 @@ export interface PastaJunix {
 }
 export interface SuperDiretoria {
   id: string; nome: string; tokens: string[];
+  phone?: string | null;
   gerentes: GerenteRollup[];
   logadosHoje: Record<string, boolean>;         // corretor id → entrou hoje
   plantaoSemLogin: Record<string, string[]>;    // gerente id → nomes no plantão sem login
@@ -56,10 +57,11 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
     staleTime: 2 * 60_000,
     queryFn: async () => {
       const hoje = diaSP(Date.now());
-      const { data: subs } = await supabase.from("profiles").select("id,first_name,last_name")
+      const { data: subs } = await supabase.from("profiles").select("id,first_name,last_name,phone")
         .eq("manager_id", diretorId!).eq("role", "SUPERINTENDENT").eq("is_active", true).order("first_name");
       const supersBase = ((subs ?? []) as any[]).map((s) => ({
         id: s.id as string, nome: String(s.first_name ?? "—"),
+        phone: (s.phone ? String(s.phone) : null) as string | null,
         tokens: [...String(s.first_name ?? "").split(/\s+/), ...String(s.last_name ?? "").split(/\s+/)].map(colado).filter((t) => t.length >= 4),
       }));
 

@@ -11,6 +11,7 @@
  * o seletor de gerente); Leads/Pastas são usados entrando num gerente pelo card.
  *
  * Havera 3+ superintendentes; cada um ve so os gerentes dele (a RPC ja escopa).*/
+import MinhasTarefas from "@/components/estrategia/MinhasTarefas";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -105,6 +106,7 @@ export default function Superintendente() {
             </div>
           </div>
 
+          {!ehDiretoria ? <MinhasTarefas donoId={superId ?? undefined} /> : null}
           {(aba === "plano" || aba === "gastos") && superId && session?.user?.id ? (
             <PlanoSuper aba={aba} superId={superId} meuId={session.user.id} />
           ) : aba === "campanhas" ? (

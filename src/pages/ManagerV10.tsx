@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { useTheme } from "@/contexts/ThemeContext";
+import MinhasTarefas from "@/components/estrategia/MinhasTarefas";
 import { useManagerV10, diasUteisRestantes, type V10Lead } from "@/hooks/useManagerV10";
 import { useCruzamentoCury } from "@/hooks/useCruzamentoCury";
 import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/components/manager-v10/ui";
@@ -229,6 +230,7 @@ export default function ManagerV10() {
                : "Vendas × Visitas × Documentos — a operação em números"}</p></div>
           {view !== "bi" ? <div className="top2-r"><SeletorPeriodo /></div> : null}
         </header>
+        <MinhasTarefas donoId={userId} nome={userId !== session?.user?.id ? nome : undefined} />
         {view === "tempo" ? (
           <TempoReal managerId={userId} />
         ) : view === "time" ? (
