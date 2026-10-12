@@ -4,7 +4,7 @@
  * Gastos: anúncio real por equipe; plano e outros gastos chegam na próxima entrega. */
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
@@ -105,7 +105,7 @@ export default function Diretoria() {
               carregandoCons={carregandoCons} plantaoHojeTotal={dir.plantaoHojeTotal} cobrancas={dir.cobrancas} pastas={dir.pastas}
               irPara={(a, k) => { setAba(a); if (k) setAberto((v) => ({ ...v, [k]: true })); }} abrirPainel={abrirPainel} />}
             {aba === "equipes" && <Equipes supers={supers} linhasDoSuper={linhasDoSuper} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
-            {aba === "leads" && <Leads supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
+            {aba === "leads" && <Leads dias={dias} supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
             {aba === "pastas" && <Pastas supers={supers} pastas={dir.pastas} aberto={aberto} tog={tog} />}
             {aba === "estrategia" && diretorId && <Estrategia diretorId={diretorId} supers={supers} pastas={dir.pastas} />}
           </>
@@ -753,7 +753,16 @@ function Equipes({ supers, linhasDoSuper, aberto, tog, abrirPainel, carregandoCo
 }
 
 /* ───────────────────────── LEADS ───────────────────────── */
-function Leads({ supers, linhasDoSuper, total, aberto, tog, abrirPainel, carregandoCons }: ArvoreProps & { total: LinhaConsolidado | null }) {
+function Leads({ supers, linhasDoSuper, total, aberto, tog, abrirPainel, carregandoCons, dias }: ArvoreProps & { total: LinhaConsolidado | null; dias: number }) {
+  // anúncio que chegou mas ficou sem gerente (barrado pela região, ou página sem corretor na fila) — a árvore não enxerga
+  const { data: semDono } = useQuery({
+    queryKey: ["leads-anuncio-sem-dono", dias], staleTime: 2 * 60_000,
+    queryFn: async () => {
+      const de = new Date(Date.now() - 3 * 3600e3 - (dias - 1) * 864e5).toISOString().slice(0, 10);
+      const { data } = await supabase.rpc("leads_anuncio_sem_dono" as any, { p_de: `${de}T03:00:00Z` });
+      return (data ?? {}) as { fora_regiao?: number; sem_dono?: number };
+    },
+  });
   if (carregandoCons || !total) return <div className="dir-card dir-vazio">Buscando gasto no Facebook e leads de cada equipe…</div>;
   const cplEmpresa = total.leadsFb ? (total.gasto ?? 0) / total.leadsFb : 0;
   const cel = (l: LinhaConsolidado, emConversa?: number) => {
@@ -781,6 +790,8 @@ function Leads({ supers, linhasDoSuper, total, aberto, tog, abrirPainel, carrega
   const leadsFbTotal = total.leadsFb ?? 0;
   const leadsAnuncioComandra = total.leads.anuncio;
   const leadsSemContaMonitorada = Math.max(0, leadsAnuncioComandra - leadsFbTotal);
+  const foraRegiao = semDono?.fora_regiao ?? 0, orfaos = semDono?.sem_dono ?? 0;
+  const chegaram = leadsAnuncioComandra + foraRegiao + orfaos;
 
   return (
     <>
@@ -816,7 +827,7 @@ function Leads({ supers, linhasDoSuper, total, aberto, tog, abrirPainel, carrega
           </div>
           <div style={{ marginTop: 12, paddingTop: 8, borderTop: "1px solid var(--line-2)", display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
             <span style={{ color: "var(--ink-3)" }}>Total em Anúncios:</span>
-            <b>{leadsAnuncioComandra} leads ({leadsFbTotal} monitorados + {leadsSemContaMonitorada} sem API)</b>
+            <b>{leadsAnuncioComandra} com as equipes · Facebook registrou {leadsFbTotal}</b>
           </div>
         </div>
 
@@ -842,19 +853,19 @@ function Leads({ supers, linhasDoSuper, total, aberto, tog, abrirPainel, carrega
 
           {/* Conciliação explicativa transparente */}
           <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--sunk)", borderRadius: 10, fontSize: 12, lineHeight: 1.5 }}>
-            {leadsAnuncioComandra === leadsFbTotal ? (
-              <span style={{ color: "var(--grn)", fontWeight: 600 }}>
-                ✓ <b>100% Conciliado:</b> Todos os {leadsAnuncioComandra} leads faturados pelo Facebook foram recebidos no Comandra.
-              </span>
-            ) : leadsAnuncioComandra > leadsFbTotal ? (
-              <span>
-                💡 <b>Conciliação de Anúncios:</b> Chegaram <b>{leadsAnuncioComandra} leads de anúncio</b> no Comandra. Desses, <b>{leadsFbTotal} leads</b> vieram das {gers.length} contas de anúncio com API conectada ({brl(total.gasto ?? 0)} investidos). Os outros <b>{leadsSemContaMonitorada} leads</b> vieram de equipes/campanhas de gerentes que ainda não cadastraram o token do Facebook no Comandra.
-              </span>
+            <div>Chegaram <b>{chegaram} leads de anúncio</b>: <b>{leadsAnuncioComandra}</b> com as equipes
+              {foraRegiao ? <> · <b>{foraRegiao}</b> barrados por estar fora da região</> : null}
+              {orfaos ? <> · <b style={{ color: "var(--red)" }}>{orfaos} sem dono</b></> : null}.</div>
+            {leadsFbTotal > chegaram ? (
+              <div style={{ color: "var(--red)", marginTop: 4 }}>
+                ⚠️ <b>Atenção:</b> o Facebook registrou <b>{leadsFbTotal}</b> leads nas contas e <b>{leadsFbTotal - chegaram}</b> não chegaram ao Comandra. Confira o cenário do Make dessa conta.
+              </div>
             ) : (
-              <span style={{ color: "var(--red)" }}>
-                ⚠️ <b>Atenção:</b> O Facebook registrou <b>{leadsFbTotal} leads</b> faturados nas contas, mas apenas <b>{leadsAnuncioComandra}</b> entraram no Comandra ({leadsFbTotal - leadsAnuncioComandra} leads não integrados).
-              </span>
+              <div style={{ color: "var(--grn)", fontWeight: 600, marginTop: 4 }}>
+                ✓ Todos os {leadsFbTotal} leads registrados pelo Facebook chegaram ao Comandra{chegaram > leadsFbTotal ? ` (mais ${chegaram - leadsFbTotal} de contas sem API ou contados em outro dia pelo Facebook)` : ""}.
+              </div>
             )}
+            {orfaos ? <div style={{ color: "var(--red)", marginTop: 4 }}>Lead sem dono = a página do anúncio não tem corretor na fila. Ninguém foi avisado.</div> : null}
           </div>
         </div>
       </div>
