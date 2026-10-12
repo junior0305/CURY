@@ -104,6 +104,11 @@ export function RailV10({
         </Link>
       )}
 
+      {role === "ADMIN" || role === "DIRECTOR" ? (
+        <Link to="/diretor" title="Tela do diretor">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6" /></svg>Diretoria
+        </Link>
+      ) : null}
       {role === "ADMIN" ? (
         <Link to="/admin" title="Voltar para a área de admin">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M15 18l-6-6 6-6" /></svg>Admin

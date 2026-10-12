@@ -24,6 +24,7 @@ import ManagerV2 from "./pages/ManagerV2";
 import ManagerV3 from "./pages/ManagerV3";
 import ManagerV10 from "./pages/ManagerV10";
 import Superintendente from "./pages/Superintendente";
+import Diretoria from "./pages/Diretoria";
 import ListaCury from "./pages/ListaCury";
 import { Boundary } from "./components/manager-v10/Boundary";
 import AnunciosV10 from "./pages/manager-v10/Anuncios";
@@ -103,6 +104,15 @@ const ProtectedSuperRoute = ({ children }: { children: React.ReactNode }) => {
     if (role === "MANAGER") return <Navigate to="/manager" />;
     return <Navigate to="/dashboard" />;
   }
+  return <>{children}</>;
+};
+
+// Tela do diretor: só diretor e admin (o admin enxerga pelo perfil DIRECTOR).
+const ProtectedDiretorRoute = ({ children }: { children: React.ReactNode }) => {
+  const { session, role, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!session) return <Navigate to="/login" />;
+  if (role !== "DIRECTOR" && role !== "ADMIN") return <Navigate to="/super" />;
   return <>{children}</>;
 };
 
@@ -186,6 +196,7 @@ const App = () => (
                 volta rápida — trocar estas duas linhas reverte. */}
             {/* base de clientes baixada do app da Cury — impressão; a página só abre para o admin */}
             <Route path="/admin/lista-cury" element={<ListaCury />} />
+            <Route path="/diretor" element={<ProtectedDiretorRoute><Boundary><Diretoria /></Boundary></ProtectedDiretorRoute>} />
             <Route path="/super" element={<ProtectedSuperRoute><Boundary><Superintendente /></Boundary></ProtectedSuperRoute>} />
             <Route path="/manager" element={<ProtectedManagerRoute><ManagerV10 /></ProtectedManagerRoute>} />
             <Route path="/integracoes" element={<ProtectedManagerRoute><IntegracaoFacebook /></ProtectedManagerRoute>} />

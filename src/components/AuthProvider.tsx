@@ -280,18 +280,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // Super/Diretor: painel de HIERARQUIA (/super, estilo gerente, com drill
           // nos gerentes via /manager?manager=<id>). NÃO caem mais no /admin cru.
           // Mantêm acesso às telas de admin (cadastro, filas...) quando precisarem.
-          const SUP_ALLOWED_PREFIXES = ['/super', '/manager', '/admin'];
+          const SUP_ALLOWED_PREFIXES = ['/super', '/manager', '/admin', ...(role === 'DIRECTOR' ? ['/diretor'] : [])];
           const SUP_ALLOWED_EXACT = ['/command-center', '/user-management', '/atribuir-chips', '/cold-pool'];
           const isAllowed =
             SUP_ALLOWED_PREFIXES.some((p) => path === p || path.startsWith(p + '/')) ||
             SUP_ALLOWED_EXACT.includes(path);
           if (!isAllowed) {
-            navigate('/super', { replace: true });
+            // diretor cai na tela dele (/diretor); super no consolidado (/super)
+            navigate(role === 'DIRECTOR' ? '/diretor' : '/super', { replace: true });
           }
         } else if (role === 'ADMIN') {
           // Whitelist: rotas admin + telas de gestão (cold-pool, atribuir-chips, etc).
           // /super e /manager: o admin abre a tela do diretor (age como o perfil DIRECTOR).
-          const ADMIN_ALLOWED_PREFIXES = ['/admin', '/super', '/manager'];
+          const ADMIN_ALLOWED_PREFIXES = ['/admin', '/super', '/manager', '/diretor'];
           const ADMIN_ALLOWED_EXACT = [
             '/command-center',
             '/user-management',

@@ -75,11 +75,20 @@ export function useConsolidadoSuper(superId: string | undefined, dias: number) {
       // diretor: os supers abaixo dele também são "chefes" — a linha vira a empresa inteira
       const [{ data: eu }, { data: subs }] = await Promise.all([
         supabase.from("profiles").select("first_name,last_name,role").eq("id", superId!).maybeSingle(),
-        supabase.from("profiles").select("id").eq("manager_id", superId!).eq("role", "SUPERINTENDENT").eq("is_active", true),
+        supabase.from("profiles").select("id,first_name,last_name").eq("manager_id", superId!).eq("role", "SUPERINTENDENT").eq("is_active", true),
       ]);
       const ehDiretor = (eu as any)?.role === "DIRECTOR";
+      const subIds = ((subs ?? []) as { id: string }[]).map((x) => x.id);
+      // diretor: o que o Junix tem sem gerente no Comandra vai para o super certo pelo nome
+      const tokensSub = ((subs ?? []) as any[]).map((x) => ({ id: x.id as string,
+        t: [chave(x.first_name), chave(x.last_name), ...String(x.first_name ?? "").split(/\s+/).slice(1).map(chave)].filter((t) => t.length >= 4) }));
+      const outrosDe = (sup: string | null) => {
+        const k = (sup ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z]/g, "");
+        const s2 = ehDiretor ? tokensSub.find((x) => x.t.some((t) => k.includes(t))) : undefined;
+        return s2 ? linha(`outros:${s2.id}`, "Sem gerente no Comandra") : linha("outros", "Outros no Junix");
+      };
       const { data: gers } = await supabase.from("profiles").select("id,first_name")
-        .in("manager_id", [superId!, ...((subs ?? []) as { id: string }[]).map((x) => x.id)]).eq("role", "MANAGER")
+        .in("manager_id", [superId!, ...subIds]).eq("role", "MANAGER")
         .eq("is_active", true).order("first_name");
       const gerentes = (gers ?? []) as { id: string; first_name: string | null }[];
       const meusTokens = [chave((eu as any)?.first_name), chave((eu as any)?.last_name)].filter((t) => t.length >= 3);
@@ -106,7 +115,7 @@ export function useConsolidadoSuper(superId: string | undefined, dias: number) {
         supabase.from("junix_pastas" as any).select("gerente,superintendente,dias"),
         ids.length ? todas<any>((a, b) => supabase.from("leads")
           .select("manager_id,source,original_broker_id,fb_page_id,fb_campaign_id")
-          .in("manager_id", [superId!, ...ids]).gte("created_at", deIso).range(a, b)) : Promise.resolve([]),
+          .in("manager_id", [superId!, ...subIds, ...ids]).gte("created_at", deIso).range(a, b)) : Promise.resolve([]),
         supabase.rpc("fb_contas_gerentes" as any, { p_de: de }),
         supabase.from("profiles").select("id,manager_id").in("manager_id", [superId!, ...ids]).eq("role", "BROKER"),
       ]);
@@ -118,17 +127,18 @@ export function useConsolidadoSuper(superId: string | undefined, dias: number) {
       for (const v of ((vendas as any).data ?? []) as any[]) {
         const gid = porChave.get(chaveGer(v.gerente));
         if (!gid && !daMinhaSuper(v.superintendente)) continue;
-        const l = gid ? linhas.get(gid)! : linha("outros", "Outros no Junix");
+        const l = gid ? linhas.get(gid)! : outrosDe(v.superintendente);
         l.vendas += Number(v.qtd ?? 1); l.vgv += Number(v.vgv ?? 0);
       }
       for (const p of ((pastas as any).data ?? []) as any[]) {
         const gid = porChave.get(chaveGer(p.gerente));
         if (!gid && !daMinhaSuper(p.superintendente)) continue;
-        const l = gid ? linhas.get(gid)! : linha("outros", "Outros no Junix");
+        const l = gid ? linhas.get(gid)! : outrosDe(p.superintendente);
         l.pastas += 1; if ((p.dias ?? 0) >= 7) l.pastasTravadas += 1;
       }
       for (const ld of leads as any[]) {
-        const l = ld.manager_id === superId ? linha("super", "Direto com você") : linhas.get(ld.manager_id);
+        const l = ld.manager_id === superId ? linha("super", "Direto com você")
+          : subIds.includes(ld.manager_id) ? linha(ld.manager_id, "Direto com o super") : linhas.get(ld.manager_id);
         if (l) l.leads[origemDe(ld)] += 1;
       }
 
@@ -142,17 +152,18 @@ export function useConsolidadoSuper(superId: string | undefined, dias: number) {
 
       // Facebook: a conta de cada gerente e a do próprio super
       const minhasContas = (((contas as any).data ?? []) as any[])
-        .filter((c) => c.owner_id === superId || ids.includes(c.owner_id));
+        .filter((c) => c.owner_id === superId || subIds.includes(c.owner_id) || ids.includes(c.owner_id));
       await Promise.all(minhasContas.map(async (c) => {
         const { data: r, error } = await supabase.functions.invoke("fb-conta-gerente", { body: { owner_id: c.owner_id, de, ate } });
-        const l = c.owner_id === superId ? linha("super", "Direto com você") : linhas.get(c.owner_id)!;
+        const l = c.owner_id === superId ? linha("super", "Direto com você")
+          : subIds.includes(c.owner_id) ? linha(c.owner_id, "Direto com o super") : linhas.get(c.owner_id)!;
         const fb = (r ?? {}) as any;
         if (error || fb.error || fb.semConta) { l.fbErro = error?.message || fb.motivo || fb.error || "sem acesso"; return; }
         l.gasto = (l.gasto ?? 0) + Number(fb.gasto ?? 0);
         l.leadsFb = (l.leadsFb ?? 0) + Number(fb.leads ?? 0);
       }));
 
-      const ordem = (x: LinhaConsolidado) => (x.id === "super" ? 1 : x.id === "outros" ? 2 : 0);
+      const ordem = (x: LinhaConsolidado) => (x.id === "super" || subIds.includes(x.id) ? 1 : x.id.startsWith("outros") ? 2 : 0);
       const lista = [...linhas.values()].sort((a, b) => ordem(a) - ordem(b) || b.vendas - a.vendas || b.visitas - a.visitas);
       const soma = (f: (x: LinhaConsolidado) => number) => lista.reduce((a, x) => a + f(x), 0);
       const total = {

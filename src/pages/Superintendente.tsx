@@ -260,8 +260,8 @@ function ConsolidadoFontes({ superId, dias, onAbrir }: { superId: string | undef
           </thead>
           <tbody>
             {data.linhas.map((x) => (
-              <tr key={x.id} className={x.id !== "super" && x.id !== "outros" ? "gr" : ""}
-                onClick={() => x.id !== "super" && x.id !== "outros" && onAbrir(x.id)}>
+              <tr key={x.id} className={x.id !== "super" && !x.id.startsWith("outros") ? "gr" : ""}
+                onClick={() => x.id !== "super" && !x.id.startsWith("outros") && onAbrir(x.id)}>
                 <td><b>{x.nome}</b></td>
                 {celulas(x)}
               </tr>

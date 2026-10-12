@@ -326,7 +326,7 @@ function AdminLayoutInner() {
               <ThemeToggle />
               {normalizedRole === "ADMIN" && (
                 <Button asChild size="sm" className="gap-1.5">
-                  <Link to="/super"><Crown className="w-4 h-4" />
+                  <Link to="/diretor"><Crown className="w-4 h-4" />
                     <span className="hidden sm:inline text-xs">Painel do diretor</span></Link>
                 </Button>
               )}
