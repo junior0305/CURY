@@ -324,7 +324,7 @@ function AdminLayoutInner() {
             {/* Direita: seletor + usuário + sair */}
             <div className="flex items-center gap-3">
               <ThemeToggle />
-              {normalizedRole === "ADMIN" && (
+              {(normalizedRole === "ADMIN" || normalizedRole === "DIRECTOR") && (
                 <Button asChild size="sm" className="gap-1.5">
                   <Link to="/diretor"><Crown className="w-4 h-4" />
                     <span className="hidden sm:inline text-xs">Painel do diretor</span></Link>
