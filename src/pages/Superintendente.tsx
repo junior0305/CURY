@@ -20,7 +20,7 @@ import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
 import MetaCascata from "@/components/manager-v10/MetaCascata";
 import { useConsolidadoSuper, type LinhaConsolidado } from "@/hooks/useConsolidadoSuper";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSuperintendenteRollup, useCampanhasNaoLead, type GerenteRollup, type CorretorRollup, type CampanhaNaoLead } from "@/hooks/useSuperintendente";
@@ -62,6 +62,10 @@ export default function Superintendente() {
 
   const abrir = (id: string) => nav(`/manager?manager=${id}`);
   const t = data?.total;
+
+  // Diretor/admin: o consolidado é a tela /diretor (uma tela só, venha de onde vier).
+  // Aqui fica só a gestão do time (?aba=time), BI e campanhas.
+  if (ehDiretoria && (!abaUrl || abaUrl === "consolidado")) return <Navigate to="/diretor" replace />;
 
   return (
     <div className="mgr10 app2 sup">

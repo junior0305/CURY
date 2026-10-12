@@ -59,7 +59,7 @@ export function RailV10({
   // não o painel de gerente — senão ele cai num /manager com o próprio nome e vazio.
   const ehSuper = role === "SUPERINTENDENT" || role === "DIRECTOR" || role === "ADMIN";
   const destino = (a: { k: Aba; to: string }) =>
-    !ehSuper ? a.to : a.k === "tempo" ? "/super" : a.k === "time" ? "/super?aba=time" : a.to;
+    !ehSuper ? a.to : a.k === "tempo" ? (role === "SUPERINTENDENT" ? "/super" : "/diretor") : a.k === "time" ? "/super?aba=time" : a.to;
   return (
     <nav className="rail" aria-label="Seções">
       <div className="rail-brand">

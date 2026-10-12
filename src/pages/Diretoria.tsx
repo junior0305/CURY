@@ -85,7 +85,7 @@ export default function Diretoria() {
           {ABAS.map(([k, t]) => <button key={k} className={aba === k ? "on" : ""} aria-current={aba === k ? "page" : undefined} onClick={() => setAba(k)}>{t}</button>)}
         </nav>
         {role === "ADMIN" ? <Link to="/admin" className="dir-ghost">Admin</Link> : null}
-        <Link to="/super" className="dir-ghost" title="Tela anterior, com cadastro e desligamento">Gestão do time</Link>
+        <Link to="/super?aba=time" className="dir-ghost" title="Tela anterior, com cadastro e desligamento">Gestão do time</Link>
       </header>
 
       <main className="dir-wrap">
