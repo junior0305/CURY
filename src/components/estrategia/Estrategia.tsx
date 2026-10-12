@@ -211,7 +211,7 @@ function Pergunta2({ pastas, supers, metaDir, abrir }: { pastas: PastaJunix[]; s
   for (const p of pastas) {
     if ((p.dias ?? 0) < 7) continue;
     const k = p.gerente ?? "sem gerente";
-    const d = donoJunix(supers, p.superintendente, p.gerente);
+    const d = donoJunix(supers, p.superintendente, p.gerente, p.corretor);
     const e = paradas.get(k) ?? { nome: k, gerenteId: d.gerenteId, n: 0, etapas: new Set<string>() };
     e.n++; e.etapas.add(p.etapa ?? "—"); paradas.set(k, e);
   }

@@ -110,28 +110,37 @@ export function useConsolidadoSuper(superId: string | undefined, dias: number) {
       const [c2s, vendas, pastas, leads, contas, corretores] = await Promise.all([
         ids.length ? supabase.from("cury_metricas_diarias").select("profile_id,checkins,atendimentos")
           .eq("escopo", "gerente").in("profile_id", ids).gte("data", de).lte("data", ate) : Promise.resolve({ data: [] }),
-        supabase.from("junix_vendas" as any).select("gerente,superintendente,vgv,qtd")
+        supabase.from("junix_vendas" as any).select("gerente,superintendente,corretor,vgv,qtd")
           .eq("ativo", true).gte("data_venda", de).lte("data_venda", ate),
-        supabase.from("junix_pastas" as any).select("gerente,superintendente,dias"),
+        supabase.from("junix_pastas" as any).select("gerente,superintendente,corretor,dias"),
         ids.length ? todas<any>((a, b) => supabase.from("leads")
           .select("manager_id,source,original_broker_id,fb_page_id,fb_campaign_id")
           .in("manager_id", [superId!, ...subIds, ...ids]).gte("created_at", deIso).range(a, b)) : Promise.resolve([]),
         supabase.rpc("fb_contas_gerentes" as any, { p_de: de }),
-        supabase.from("profiles").select("id,manager_id").in("manager_id", [superId!, ...ids]).eq("role", "BROKER"),
+        supabase.from("profiles").select("id,manager_id,first_name").in("manager_id", [superId!, ...ids]).eq("role", "BROKER"),
       ]);
 
       for (const r of ((c2s as any).data ?? []) as any[]) {
         const l = linhas.get(r.profile_id); if (!l) continue;
         l.plantaoDias += r.checkins ?? 0; l.visitas += r.atendimentos ?? 0;
       }
+      // gerente do Junix desconhecido no Comandra (pasta/venda aberta noutra equipe): segue o corretor
+      const porCorretor = new Map<string, string | null>();
+      for (const c of (((corretores as any).data ?? []) as any[])) {
+        const k = chave(c.first_name); if (!k) continue;
+        porCorretor.set(k, porCorretor.has(k) && porCorretor.get(k) !== c.manager_id ? null : c.manager_id);
+      }
+      const comLinha = (id?: string | null) => (id && linhas.has(id) ? id : undefined);
+      const gerDe = (r: any): string | undefined => porChave.get(chaveGer(r.gerente))
+        ?? comLinha(porCorretor.get(chave(r.corretor))) ?? porChave.get(chaveGer(r.corretor));
       for (const v of ((vendas as any).data ?? []) as any[]) {
-        const gid = porChave.get(chaveGer(v.gerente));
+        const gid = gerDe(v);
         if (!gid && !daMinhaSuper(v.superintendente)) continue;
         const l = gid ? linhas.get(gid)! : outrosDe(v.superintendente);
         l.vendas += Number(v.qtd ?? 1); l.vgv += Number(v.vgv ?? 0);
       }
       for (const p of ((pastas as any).data ?? []) as any[]) {
-        const gid = porChave.get(chaveGer(p.gerente));
+        const gid = gerDe(p);
         if (!gid && !daMinhaSuper(p.superintendente)) continue;
         const l = gid ? linhas.get(gid)! : outrosDe(p.superintendente);
         l.pastas += 1; if ((p.dias ?? 0) >= 7) l.pastasTravadas += 1;

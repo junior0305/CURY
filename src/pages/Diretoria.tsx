@@ -470,7 +470,7 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
               const pctAtivacao = todosCorret.length ? Math.round((ativosComVenda / todosCorret.length) * 100) : 0;
 
               // Pastas do super
-              const pastasDoSuper = pastas.filter((p) => donoJunix(supers, p.superintendente, p.gerente).superId === s.id);
+              const pastasDoSuper = pastas.filter((p) => donoJunix(supers, p.superintendente, p.gerente, p.corretor).superId === s.id);
               const travadasSuper = pastasDoSuper.filter((p) => (p.dias ?? 0) >= 7).length;
 
               // Facebook e Custo por venda
@@ -926,8 +926,8 @@ function Pastas({ supers, pastas, aberto, tog }: { supers: SuperDiretoria[]; pas
   // super → gerente (nome do Junix) → corretor → pastas
   const arv = new Map<string, Map<string, Map<string, PastaJunix[]>>>();
   for (const p of pastas) {
-    const { superId } = donoJunix(supers, p.superintendente, p.gerente);
-    const gNome = p.gerente ? (supers.flatMap((s) => s.gerentes).find((g) => chaveGerente(g.nome) === chaveGerente(p.gerente))?.nome ?? p.gerente) : "Sem gerente";
+    const { superId, gerenteId } = donoJunix(supers, p.superintendente, p.gerente, p.corretor);
+    const gNome = supers.flatMap((s) => s.gerentes).find((g) => g.id === gerenteId)?.nome ?? p.gerente ?? "Sem gerente";
     const cNome = (p.corretor ?? "Sem corretor").replace(/\s+BN\s*$/i, "");
     if (!arv.has(superId)) arv.set(superId, new Map());
     const ms = arv.get(superId)!; if (!ms.has(gNome)) ms.set(gNome, new Map());
