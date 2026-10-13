@@ -125,6 +125,8 @@ export default function IntegracaoFacebook() {
 
       {temConexao ? <MapaFormularios /> : null}
 
+      <LeadsTeste />
+
       <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
         <b>Em breve:</b> ligar o <b>CAPI</b> (otimização de anúncios) reaproveitando esta conexão.
       </div>
@@ -212,6 +214,51 @@ function MapaFormularios() {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Leads de teste da Meta (ferramenta de teste de Lead Ads): o Comandra recebe, mostra aqui
+// e NÃO manda para corretor. Serve para provar que a conexão funciona.
+type Teste = { id: string; created_at: string; payload: { via?: string; pagina?: string; page_id?: string;
+  formulario?: string; form_id?: string; campanha?: string; campos?: Record<string, string> } };
+function LeadsTeste() {
+  const [itens, setItens] = useState<Teste[]>([]);
+  async function carregar() {
+    const { data } = await supabase.from("webhook_logs").select("id,created_at,payload")
+      .eq("integration_key", "fb_teste").order("created_at", { ascending: false }).limit(10);
+    setItens(((data ?? []) as unknown as Teste[]).filter((t) => t.payload?.via !== "teste-claude"));
+  }
+  useEffect(() => { carregar(); const t = setInterval(carregar, 5000); return () => clearInterval(t); }, []);
+  return (
+    <div>
+      <div className="text-sm font-semibold mb-1">Leads de teste recebidos</div>
+      <div className="text-xs text-muted-foreground mb-2">
+        Crie um lead na ferramenta de teste da Meta e ele aparece aqui em segundos. Lead de teste não vai para corretor.
+      </div>
+      {!itens.length ? (
+        <div className="text-sm text-muted-foreground rounded-lg border border-dashed p-4 text-center">Nenhum lead de teste ainda.</div>
+      ) : (
+        <div className="space-y-2">
+          {itens.map((t) => (
+            <div key={t.id} className="rounded-lg border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-medium">{t.payload.formulario || t.payload.form_id || "formulário"}</div>
+                <Badge variant="outline">{t.payload.via === "direto" ? "direto do Facebook" : "via Make"}</Badge>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {new Date(t.created_at).toLocaleString("pt-BR")} · {t.payload.pagina || t.payload.page_id}
+                {t.payload.campanha ? ` · ${t.payload.campanha}` : ""}
+              </div>
+              {t.payload.campos ? (
+                <div className="text-xs mt-1 text-muted-foreground">
+                  {Object.entries(t.payload.campos).map(([k, v]) => `${k}: ${v}`).join(" · ")}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
