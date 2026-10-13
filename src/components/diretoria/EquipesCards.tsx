@@ -74,7 +74,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
       };
       for (const r of rows) {
         const c = chaveNome(r.corretor);
-        if (/gilberto/i.test(String(r.diretor ?? ""))) add(`g:${chaveGerente(r.gerente)}`, r.dia, c);
+        if (/gilberto/i.test(String(r.diretor ?? ""))) add(`g:${chaveGerente(gerenteC2S(r.gerente))}`, r.dia, c);
         add(`s:${r.superintendente}|${gerenteC2S(r.gerente)}`, r.dia, c);
       }
       return new Map([...m.entries()].map(([k, v]) => [k, v.map((x) => x.size)]));
@@ -174,7 +174,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
           <div className="eqc-leg">{metaEmp ? <span>devia ter {v1(espEmp)} até hoje</span> : <span>defina as metas na aba Estratégia</span>}
             {placarEmp !== vendasEmp ? <span><b>{v1(placarEmp)}</b> no placar da diretoria</span> : null}</div>
         </div>
-        <div><div className="dir-lbl">Presença hoje</div><div className="eqc-v">{corEmp ? `${hojeEmp} de ${corEmp}` : "—"}</div>
+        <div><div className="dir-lbl">Presença hoje</div><div className="eqc-v">{corEmp && !semPontoHoje ? `${hojeEmp} de ${corEmp}` : "—"}</div>
           <div className="eqc-s">{semPontoHoje ? "C2S ainda sem ponto de hoje" : corEmp ? `${Math.round(hojeEmp / corEmp * 100)}% · ref ${REF.presenca * 100}%` : ""}{semPl.length ? ` · sem ${semPl.join(", ")} (fora do C2S)` : ""}</div></div>
         <div><div className="dir-lbl">Gargalo mais comum</div><div className="eqc-v">{topG ? GARGALO[topG[0]][0] : "—"}</div>
           <div className="eqc-s">{topG ? `${topG[1]} de ${cards.length} superintendências · ${perTxt}` : carregandoCons ? "carregando…" : ""}</div></div>
@@ -238,7 +238,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
                       <tr key={g.id ?? g.nome}>
                         <td>{g.nome}{g.id ? <button className="dir-abrir" onClick={() => abrirPainel(g.id!)}>painel ›</button> : <span className="eqc-s"> · sem conta</span>}</td>
                         <td>{g.corretores}</td>
-                        <td className={g.corretores && g.hoje / g.corretores < 0.3 && !c.semPlantao ? "r" : ""}>{c.semPlantao ? "—" : g.hoje}</td>
+                        <td className={g.corretores && g.hoje / g.corretores < 0.3 && !c.semPlantao && !semPontoHoje ? "r" : ""}>{c.semPlantao || semPontoHoje ? "—" : g.hoje}</td>
                         <td><Spark v={g.spark} max={Math.max(1, g.corretores * REF.presenca, ...g.spark)} /></td>
                         <td>{c.semPlantao ? "—" : g.plantoes}</td>
                         <td>{g.visitas == null ? "—" : g.visitas}</td>
