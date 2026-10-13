@@ -4,12 +4,14 @@
  *   1. Placar de Metas da Reunião (Ritmo, Projeção, Devedores e edição inline) no topo;
  *   2. Campanha de Incentivo Oficial com Premiações da Tropa (banners nos dashboards);
  *   3. Alocação de Verba por Superintendente & Cesta de Produtos (Lançamentos Futuros e Estoques Junix);
- *   4. Inteligência Preditiva Comandra com ROI e Engenharia Reversa ("Como chegar em XX vendas?");
+ *   4. Inteligência Preditiva Comandra com Viabilidade da Meta Oficial ("É possível chegar nessa meta?") e Engenharia Reversa;
  *   5. Fechamento formal de acordo e envio no WhatsApp de cada Superintendente.
  *
- * Todas as abas iniciam minimizadas por padrão e podem ser expandidas individualmente ou em bloco.
+ * Todas as metas sincronizadas com o banco de dados (metas_painel / definir_meta)
+ * e refletem diretamente no dashboard dos Superintendentes para derramarem aos gerentes.
  */
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { SuperDiretoria } from "@/hooks/useDiretoria";
@@ -110,14 +112,62 @@ export default function SalaDeGuerraCampanha({
   abrir?: (c: Combinar) => void;
   onSalvo?: () => void;
 }) {
+  const qc = useQueryClient();
   const { data: estoque = [] } = useEstoque();
 
   const mesAtual = inicioMes();
   const [mes, setMes] = useState(mesAtual);
 
   const [titulo, setTitulo] = useState(`Campanha de Incentivo · ${nomeMes(mesAtual)}`);
-  const [metaVendas, setMetaVendas] = useState(40);
   const [ticketMedio, setTicketMedio] = useState(250000);
+
+  // Soma das metas oficiais dos Superintendentes no banco de dados (tabela metas_painel)
+  const somaMetasSupers = useMemo(() => {
+    return supers.reduce((acc, s) => {
+      const m = metaSuper?.get(s.id)?.dono.meta;
+      return acc + (m ?? 0);
+    }, 0);
+  }, [supers, metaSuper]);
+
+  // Meta Oficial da Diretoria (Meta Principal do Sistema)
+  const metaOficialDiretoria = useMemo(() => {
+    return metaDir?.dono.meta || somaMetasSupers || 65;
+  }, [metaDir, somaMetasSupers]);
+
+  const [metaVendasManual, setMetaVendasManual] = useState<number | null>(null);
+  const metaVendas = metaVendasManual ?? metaOficialDiretoria;
+
+  // Atualizar Meta Oficial de um Superintendente no Supabase (já reflete no dashboard dele para derramar)
+  const salvarMetaSuper = async (superId: string, superNome: string, valor: number) => {
+    if (Number.isNaN(valor) || valor < 0) return;
+    const { error } = await supabase.rpc("definir_meta" as any, {
+      p_mes: mes,
+      p_dono: superId,
+      p_vendas: valor,
+    });
+    if (error) {
+      toast.error(`Erro ao salvar meta de ${superNome}: ${error.message}`);
+      return;
+    }
+    toast.success(`Meta de ${superNome} definida em ${valor} vendas! Ela já aparece no dashboard do Superintendente para derramar aos gerentes.`);
+    qc.invalidateQueries({ queryKey: ["metas-painel"] });
+  };
+
+  // Salvar Meta Oficial da Diretoria no Supabase
+  const salvarMetaOficialDiretoria = async (valor: number) => {
+    if (Number.isNaN(valor) || valor < 0) return;
+    const { error } = await supabase.rpc("definir_meta" as any, {
+      p_mes: mes,
+      p_dono: diretorId,
+      p_vendas: valor,
+    });
+    if (error) {
+      toast.error(`Erro ao salvar meta da diretoria: ${error.message}`);
+      return;
+    }
+    toast.success(`Meta oficial da diretoria atualizada para ${valor} vendas no placar!`);
+    qc.invalidateQueries({ queryKey: ["metas-painel"] });
+  };
 
   // Premiações e Sorteios da Campanha
   const [regrasPremios, setRegrasPremios] = useState<RegraPremio[]>([
@@ -411,7 +461,7 @@ export default function SalaDeGuerraCampanha({
     toast.success(`Verba global ajustada para ${brl(totalAlocado)}.`);
   };
 
-  // Cálculos matemáticos de ROI & Projeção
+  // Cálculos matemáticos de ROI & Projeção da Inteligência Preditiva Comandra
   const projecoes = useMemo(() => {
     const aAnuncio = alocacoes.anuncio || 0;
     const aRua = alocacoes.rua || 0;
@@ -434,9 +484,20 @@ export default function SalaDeGuerraCampanha({
     const bonusPremios = aPremios > 0 ? Math.min(0.30, aPremios / 15000) : 0;
 
     const vendasBase = vendasAnuncio + vendasRua + vendasPap + vendasAtiva;
-    const vendasTotais = Math.round(vendasBase * (1 + bonusPremios));
+    const vendasGeradasPorAcoes = Math.round(vendasBase * (1 + bonusPremios));
+
+    // Vendas já confirmadas no Junix neste mês pela diretoria
+    const vendidoDiretoria = metaDir?.dono.realizado ?? supers.reduce((acc, s) => acc + (metaSuper?.get(s.id)?.dono.realizado ?? 0), 0);
+    const faltamParaMeta = Math.max(0, metaVendas - vendidoDiretoria);
+
+    // Projeção total: vendas já realizadas + vendas geradas pelas ações planejadas
+    const vendasTotais = Math.round(vendidoDiretoria + vendasGeradasPorAcoes);
     const vgvProjetado = vendasTotais * ticketMedio;
-    const custoPorVenda = vendasTotais > 0 ? Math.round(totalAlocado / vendasTotais) : 0;
+    const custoPorVenda = vendasGeradasPorAcoes > 0 ? Math.round(totalAlocado / vendasGeradasPorAcoes) : 0;
+
+    const possivelBater = vendasTotais >= metaVendas;
+    const gapVendas = metaVendas - vendasTotais;
+    const probabilidadeSucesso = metaVendas > 0 ? Math.min(100, Math.round((vendasTotais / metaVendas) * 100)) : 100;
 
     return {
       leadsAnuncio,
@@ -447,14 +508,76 @@ export default function SalaDeGuerraCampanha({
       vendasPap,
       vendasAtiva,
       bonusPremios,
+      vendidoDiretoria,
+      faltamParaMeta,
+      vendasGeradasPorAcoes,
       vendasTotais,
       vgvProjetado,
       custoPorVenda,
+      possivelBater,
+      gapVendas,
+      probabilidadeSucesso,
     };
-  }, [alocacoes, totalAlocado, ticketMedio]);
+  }, [alocacoes, totalAlocado, ticketMedio, metaDir, metaSuper, supers, metaVendas]);
+
+  // Análise de viabilidade da meta oficial SUPER A SUPER
+  const analisePorSuper = useMemo(() => {
+    return equipesAtivas.map((s) => {
+      const metaPessoa = metaSuper?.get(s.id)?.dono.meta ?? 0;
+      const vendidoPessoa = metaSuper?.get(s.id)?.dono.realizado ?? 0;
+      const faltamPessoa = Math.max(0, metaPessoa - vendidoPessoa);
+      const itens = itensPorSuper[s.id] || [];
+
+      let vAnuncio = 0, vRua = 0, vPap = 0, vAtiva = 0, vPremios = 0;
+      for (const it of itens) {
+        if (it.canal === "anuncio") vAnuncio += it.valor || 0;
+        else if (it.canal === "rua") vRua += it.valor || 0;
+        else if (it.canal === "pap") vPap += it.valor || 0;
+        else if (it.canal === "oferta_ativa") vAtiva += it.valor || 0;
+        else if (it.canal === "premios") vPremios += it.valor || 0;
+      }
+
+      const bonusP = vPremios > 0 ? Math.min(0.30, vPremios / 10000) : 0;
+      const vBase =
+        (vAnuncio / 28) * 0.022 +
+        (vRua / 500) * 6 * 0.12 +
+        (vPap / 400) * 0.40 +
+        vAtiva / 650;
+      const vendasVerba = Math.round(vBase * (1 + bonusP));
+
+      const vendasProjetadasSuper = vendidoPessoa + vendasVerba;
+      const atingimento = metaPessoa > 0 ? Math.round((vendasProjetadasSuper / metaPessoa) * 100) : 100;
+      const viabilidade = metaPessoa === 0 ? "sem_meta" : vendasProjetadasSuper >= metaPessoa ? "viavel" : "risco";
+
+      let recomendacao = "";
+      if (viabilidade === "viavel") {
+        recomendacao = `Mix equilibrado: projeta ${vendasProjetadasSuper} vendas contra a meta oficial de ${metaPessoa} un (sustenta a cota).`;
+      } else if (viabilidade === "risco") {
+        const deficit = metaPessoa - vendasProjetadasSuper;
+        const verbaExtra = Math.round((deficit * 650) / 500) * 500;
+        recomendacao = `Déficit de ${deficit} un contra a meta de ${metaPessoa}. Sugestão: reforçar verba em ~${brl(verbaExtra)} (Meta Ads/Rua) ou destravar pastas paradas.`;
+      } else {
+        recomendacao = "Defina a meta oficial do superintendente para ativar o diagnóstico.";
+      }
+
+      return {
+        superId: s.id,
+        nome: s.nome,
+        meta: metaPessoa,
+        vendido: vendidoPessoa,
+        faltam: faltamPessoa,
+        verbaAlocada: itens.reduce((a, b) => a + (b.valor || 0), 0),
+        vendasVerba,
+        vendasProjetadas: vendasProjetadasSuper,
+        atingimento,
+        viabilidade,
+        recomendacao,
+      };
+    });
+  }, [equipesAtivas, metaSuper, itensPorSuper]);
 
   // Simulador de Meta Alvo da IA ("Como chegar em XX vendas?")
-  const [metaAlvoSimulacao, setMetaAlvoSimulacao] = useState(50);
+  const [metaAlvoSimulacao, setMetaAlvoSimulacao] = useState(metaVendas || 65);
   const [mostrarSimulador, setMostrarSimulador] = useState(false);
 
   const sugestaoIA = useMemo(() => {
@@ -496,7 +619,7 @@ export default function SalaDeGuerraCampanha({
 
   const aplicarSugestaoIA = () => {
     setVerbaTotal(sugestaoIA.verbaSugeridaTotal);
-    setMetaVendas(sugestaoIA.alvo);
+    setMetaVendasManual(sugestaoIA.alvo);
     toast.success(`Meta de ${sugestaoIA.alvo} vendas e verba sugerida de ${brl(sugestaoIA.verbaSugeridaTotal)} aplicadas!`);
   };
 
@@ -667,7 +790,7 @@ export default function SalaDeGuerraCampanha({
 🎯 *Campanha de Incentivo:* ${titulo}
 📅 *Período:* ${nomeMes(mes)}
 💰 *Verba Total Alocada para sua equipe:* ${brl(sub.total)}
-🏁 *Sua Meta de Vendas:* ${metaPessoa} unidades
+🏁 *Sua Meta de Vendas Oficial:* ${metaPessoa} unidades (já definida no seu dashboard)
 👥 *Sua Tropa:* ${corretoresSuper} corretores escalados
 
 🚀 *Lançamentos Futuros (${brl(sub.lancamentos)}):*
@@ -724,9 +847,14 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
           border: "1px solid var(--line)",
         }}
       >
-        <span style={{ fontSize: 13, color: "var(--ink-2)", fontWeight: 600 }}>
-          📁 <b>Painel Modular:</b> Cada etapa está minimizada para leitura executiva. Clique em qualquer etapa para expandir seus detalhes.
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, color: "var(--ink-2)", fontWeight: 600 }}>
+            📁 <b>Painel Modular:</b> Cada etapa está minimizada para leitura executiva.
+          </span>
+          <span className="dir-chip c-blue" style={{ fontWeight: 700 }}>
+            🎯 Meta Oficial do Sistema: {metaVendas} vendas
+          </span>
+        </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button
             type="button"
@@ -759,11 +887,14 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
               <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
                 1. Placar de Metas da Reunião (Ritmo, Projeção & Devedores)
               </h3>
-              <span className={`dir-chip ${metaDir.dono.realizado >= (metaDir.dono.meta ?? 0) ? "c-grn" : "c-blue"}`}>
-                Vendido {metaDir.dono.realizado} de {metaDir.dono.meta ?? 0} ({metaDir.dono.meta ? Math.round((metaDir.dono.realizado / metaDir.dono.meta) * 100) : 0}%)
+              <span className={`dir-chip ${metaDir.dono.realizado >= metaVendas ? "c-grn" : "c-blue"}`}>
+                Vendido {metaDir.dono.realizado} de {metaVendas} ({metaVendas ? Math.round((metaDir.dono.realizado / metaVendas) * 100) : 0}%)
               </span>
               <span className="dir-chip c-gray" style={{ fontSize: 11 }}>
-                Faltam {Math.max(0, (metaDir.dono.meta ?? 0) - metaDir.dono.realizado)} vendas em {diasMes - diaHoje} dias
+                Faltam {Math.max(0, metaVendas - metaDir.dono.realizado)} vendas em {diasMes - diaHoje} dias
+              </span>
+              <span className="dir-chip c-org" style={{ fontSize: 11 }}>
+                Supers somam: {somaMetasSupers} vendas
               </span>
             </div>
 
@@ -816,7 +947,7 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
               2. Campanha de Incentivo Oficial & Premiação da Tropa
             </h3>
             <span className="dir-chip c-blue">
-              🎯 Meta: {metaVendas} vendas
+              🎯 Meta Principal: {metaVendas} vendas
             </span>
             <span className="dir-chip c-grn">
               💰 Verba: {brl(verbaTotal)}
@@ -870,18 +1001,45 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
               </div>
 
               <div className="sdg-box">
-                <label className="dir-lbl">Meta Geral de Vendas</label>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <label className="dir-lbl">Meta Geral de Vendas</label>
+                  {metaVendasManual !== null && (
+                    <button
+                      type="button"
+                      style={{ fontSize: 11, background: "none", border: 0, color: "var(--teal)", cursor: "pointer", fontWeight: 700 }}
+                      onClick={() => setMetaVendasManual(null)}
+                      title="Voltar para a meta oficial do placar"
+                    >
+                      ↩ Reverter p/ Oficial ({metaOficialDiretoria})
+                    </button>
+                  )}
+                </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input
                     type="number"
                     min={1}
                     className="sdg-input mono"
                     value={metaVendas}
-                    onChange={(e) => setMetaVendas(Number(e.target.value))}
+                    onChange={(e) => setMetaVendasManual(Number(e.target.value))}
                   />
                   <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
                     VGV ~ <b>{brl(metaVendas * ticketMedio)}</b>
                   </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                  <span style={{ fontSize: 11, color: "var(--ink-3)" }}>
+                    Meta Oficial do Placar: <b>{metaOficialDiretoria} vendas</b> ({somaMetasSupers} somadas dos Supers)
+                  </span>
+                  {metaVendas !== metaOficialDiretoria && (
+                    <button
+                      type="button"
+                      className="dir-btn"
+                      style={{ fontSize: 10.5, padding: "2px 6px", color: "var(--teal)", borderColor: "var(--teal)" }}
+                      onClick={() => salvarMetaOficialDiretoria(metaVendas)}
+                    >
+                      💾 Gravar Oficial
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1112,22 +1270,41 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
                     {/* Cabeçalho do Super */}
                     <div className="sdg-super-card-hd">
                       <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 18 }}>👤</span>
                           <h3 style={{ fontSize: 17, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
                             {s.nome}
                           </h3>
-                          {metaSuperPessoa != null && (
-                            <span className="dir-chip c-blue" style={{ fontWeight: 700 }}>
-                              🎯 Meta: {metaSuperPessoa} vendas
-                            </span>
-                          )}
+
+                          {/* META OFICIAL DO SUPERINTENDENTE (APARECE NO DASHBOARD DELE) */}
+                          <div className="sdg-meta-inline-box" title="Esta meta aparece diretamente no dashboard do Superintendente para ele derramar aos gerentes">
+                            <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--teal)" }}>🎯 Meta Oficial:</span>
+                            <input
+                              type="number"
+                              min={0}
+                              className="sdg-input mono"
+                              style={{ width: 55, padding: "2px 4px", fontSize: 13, fontWeight: 800, textAlign: "center", background: "#fff", borderColor: "var(--teal)" }}
+                              defaultValue={metaSuperPessoa ?? ""}
+                              placeholder="—"
+                              onBlur={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                if (!Number.isNaN(val) && val !== metaSuperPessoa) {
+                                  salvarMetaSuper(s.id, s.nome, val);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                              }}
+                            />
+                            <span style={{ fontSize: 11, color: "var(--ink-3)" }}>un</span>
+                          </div>
+
                           <span className="dir-chip c-gray" style={{ fontSize: 11 }}>
                             {s.gerentes.length} gerentes · {corrSuper} corretores
                           </span>
                         </div>
-                        <div style={{ fontSize: 12.5, color: "var(--ink-3)", marginTop: 4 }}>
-                          Distribua a verba do superintendente entre Lançamentos Futuros e Produtos de Estoque Junix:
+                        <div style={{ fontSize: 12, color: "var(--ink-3)", marginTop: 4 }}>
+                          Altere a meta acima para salvar direto no dashboard do Super. Distribua a verba entre Lançamentos Futuros e Estoque:
                         </div>
                       </div>
 
@@ -1338,379 +1515,452 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
                   const pct = totalAlocado > 0 ? Math.round((v / totalAlocado) * 100) : 0;
                   return (
                     <div key={a.key} style={{ background: "#fff", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: 12, fontWeight: 700 }}>{a.icone} {a.nome.split(" ")[0]}</span>
-                        <span className="dir-chip c-gray" style={{ fontSize: 10 }}>{pct}%</span>
-                      </div>
-                      <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: "var(--ink)", marginTop: 4 }}>
-                        {brl(v)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>{a.icone} {a.nome.split(" ")[0]}</span>
+                    <span className="dir-chip c-gray" style={{ fontSize: 10 }}>{pct}%</span>
+                  </div>
+                  <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: "var(--ink)", marginTop: 4 }}>
+                    {brl(v)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
+      </div>
+    )}
+  </div>
+
+  {/* ── 4. PAINEL PREDITIVO DA IA (ACOMPANHAMENTO DA META PRINCIPAL & VIABILIDADE) ── */}
+  <div className={`sdg-accordion-card${secoesAbertas.preditivo ? " ativo" : ""}`}>
+    <div
+      className={`sdg-accordion-hd${secoesAbertas.preditivo ? " aberto" : ""}`}
+      onClick={() => toggleSecao("preditivo")}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 18 }}>🧠</span>
+        <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
+          4. Inteligência Preditiva Comandra & Viabilidade da Meta Oficial
+        </h3>
+        <span className={`dir-chip ${projecoes.possivelBater ? "c-grn" : "c-org"}`} style={{ fontWeight: 800 }}>
+          {projecoes.possivelBater ? "✓ Meta Viável" : "⚠️ Risco de Déficit"}
+        </span>
+        <span className="dir-chip c-blue">
+          🎯 Meta Oficial: {metaVendas} vendas
+        </span>
+        <span className="dir-chip c-grn">
+          🔮 Projeção Total: {projecoes.vendasTotais} vendas
+        </span>
+        <span className="dir-chip c-gray" style={{ fontSize: 11 }}>
+          {projecoes.probabilidadeSucesso}% da meta garantida
+        </span>
       </div>
 
-      {/* ── 4. PAINEL PREDITIVO DA IA (RETORNO ESTIMADO & ROI) ── */}
-      <div className={`sdg-accordion-card${secoesAbertas.preditivo ? " ativo" : ""}`}>
-        <div
-          className={`sdg-accordion-hd${secoesAbertas.preditivo ? " aberto" : ""}`}
-          onClick={() => toggleSecao("preditivo")}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 18 }}>🧠</span>
-            <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
-              4. Inteligência Preditiva Comandra & ROI do Mix Estratégico
+      <button
+        type="button"
+        className="dir-btn"
+        style={{
+          fontSize: 12,
+          padding: "4px 10px",
+          borderColor: secoesAbertas.preditivo ? "var(--teal)" : "#CBD5E1",
+          background: "#fff",
+          fontWeight: 700,
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleSecao("preditivo");
+        }}
+      >
+        {secoesAbertas.preditivo ? "▲ Minimizar Aba" : "▼ Expandir Aba"}
+      </button>
+    </div>
+
+    {secoesAbertas.preditivo && (
+      <div className="sdg-accordion-body" style={{ background: "#0F1B2D", borderRadius: 12, padding: 18, margin: 10 }}>
+        {/* Cabeçalho de Viabilidade da Meta Oficial */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+          <div>
+            <span className="dir-lbl" style={{ color: "#9FB3CC" }}>Inteligência Preditiva Comandra</span>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: "#fff", margin: "4px 0 0" }}>
+              Avaliação de Viabilidade da Meta Oficial ({metaVendas} Vendas)
             </h3>
-            <span className={`dir-chip ${projecoes.vendasTotais >= metaVendas ? "c-grn" : "c-org"}`}>
-              🔮 Projeção: {projecoes.vendasTotais} vendas
-            </span>
-            <span className="dir-chip c-blue">
-              VGV ~{brl(projecoes.vgvProjetado)}
-            </span>
-            <span className="dir-chip c-gray" style={{ fontSize: 11 }}>
-              Custo/venda: {projecoes.custoPorVenda ? brl(projecoes.custoPorVenda) : "—"}
+            <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9FB3CC" }}>
+              Avaliando se a verba e os produtos alocados sustentam a entrega das metas oficiais de Adajes, Felipe, Liliane e Silva.
+            </p>
+          </div>
+          <div className="sdg-roi-chips">
+            <span className={`dir-chip ${projecoes.possivelBater ? "c-grn" : "c-org"}`} style={{ fontSize: 13, padding: "6px 12px", fontWeight: 800 }}>
+              {projecoes.possivelBater
+                ? `✓ É POSSÍVEL BATER A META! (${projecoes.vendasTotais} de ${metaVendas})`
+                : `⚠️ RISCO: Déficit de ${projecoes.gapVendas} vendas contra a meta de ${metaVendas}`}
             </span>
           </div>
-
-          <button
-            type="button"
-            className="dir-btn"
-            style={{
-              fontSize: 12,
-              padding: "4px 10px",
-              borderColor: secoesAbertas.preditivo ? "var(--teal)" : "#CBD5E1",
-              background: "#fff",
-              fontWeight: 700,
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleSecao("preditivo");
-            }}
-          >
-            {secoesAbertas.preditivo ? "▲ Minimizar Aba" : "▼ Expandir Aba"}
-          </button>
         </div>
 
-        {secoesAbertas.preditivo && (
-          <div className="sdg-accordion-body" style={{ background: "#0F1B2D", borderRadius: 12, padding: 18, margin: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
-              <div>
-                <span className="dir-lbl" style={{ color: "#9FB3CC" }}>Inteligência Preditiva Comandra</span>
-                <h3 style={{ fontSize: 18, fontWeight: 800, color: "#fff", margin: "4px 0 0" }}>
-                  Projeção de Retorno do Mix Estratégico
-                </h3>
+        {/* 4 Métricas Principais da Inteligência Preditiva */}
+        <div className="sdg-roi-grid" style={{ marginTop: 14 }}>
+          <div className="sdg-roi-metric">
+            <small>Meta Oficial do Sistema</small>
+            <div className="val" style={{ color: "#38BDF8" }}>
+              {metaVendas} <span style={{ fontSize: 14, fontWeight: 500, color: "#9FB3CC" }}>vendas</span>
+            </div>
+            <div className="sub">
+              {projecoes.vendidoDiretoria} vendidas no Junix · faltam {projecoes.faltamParaMeta}
+            </div>
+          </div>
+
+          <div className="sdg-roi-metric">
+            <small>Vendas Projetadas (Total)</small>
+            <div className="val" style={{ color: projecoes.possivelBater ? "#34D399" : "#FBBF24" }}>
+              {projecoes.vendasTotais} <span style={{ fontSize: 14, fontWeight: 500, color: "#9FB3CC" }}>unidades</span>
+            </div>
+            <div className="sub">
+              {projecoes.vendidoDiretoria} base + {projecoes.vendasGeradasPorAcoes} geradas pelas ações
+            </div>
+          </div>
+
+          <div className="sdg-roi-metric">
+            <small>VGV Oficial Estimado</small>
+            <div className="val">{brl(metaVendas * ticketMedio)}</div>
+            <div className="sub">ticket médio de {brl(ticketMedio)}</div>
+          </div>
+
+          <div className="sdg-roi-metric">
+            <small>Sustentação da Meta</small>
+            <div className="val" style={{ color: projecoes.possivelBater ? "#34D399" : "#F87171" }}>
+              {projecoes.probabilidadeSucesso}%
+            </div>
+            <div className="sub">
+              {projecoes.possivelBater ? "plano com folga" : "exige reforço tático"}
+            </div>
+          </div>
+        </div>
+
+        {/* DIAGNÓSTICO SUPER A SUPER: QUEM BATE E QUEM ESTÁ EM RISCO */}
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#FBBF24", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>👥 Diagnóstico Preditivo por Superintendente (Metas Oficiais):</span>
+            <small style={{ color: "#9FB3CC", fontWeight: 400 }}>Metas gravadas em metas_painel no banco</small>
+          </div>
+
+          <div className="sdg-viabilidade-grid">
+            {analisePorSuper.map((a) => (
+              <div key={a.superId} className={`sdg-viabilidade-card ${a.viabilidade}`}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <b style={{ fontSize: 14.5, color: "#fff" }}>{a.nome}</b>
+                  <span className={`dir-chip ${a.viabilidade === "viavel" ? "c-grn" : a.viabilidade === "risco" ? "c-org" : "c-gray"}`}>
+                    {a.viabilidade === "viavel" ? "Bate a Meta ✓" : a.viabilidade === "risco" ? "Em Risco ⚠️" : "Sem Meta"}
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#E2E8F0", marginTop: 4 }}>
+                  <span>Meta Oficial: <b>{a.meta || "—"} un</b></span>
+                  <span>Vendeu Junix: <b>{a.vendido} un</b></span>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#E2E8F0" }}>
+                  <span>Verba Alocada: <b>{brl(a.verbaAlocada)}</b></span>
+                  <span>Projeção Final: <b style={{ color: a.viabilidade === "viavel" ? "#34D399" : "#FBBF24" }}>{a.vendasProjetadas} un</b></span>
+                </div>
+
+                <div style={{ fontSize: 11.5, color: "#9FB3CC", marginTop: 4, lineHeight: 1.35, borderTop: "1px dashed rgba(255,255,255,0.1)", paddingTop: 6 }}>
+                  {a.recomendacao}
+                </div>
               </div>
-              <div className="sdg-roi-chips">
-                <span className={`dir-chip ${projecoes.vendasTotais >= metaVendas ? "c-grn" : "c-org"}`}>
-                  {projecoes.vendasTotais >= metaVendas ? "✓ Mix Sustenta a Meta" : "⚠️ Mix Abaixo da Meta"}
+            ))}
+          </div>
+        </div>
+
+        {/* Parecer Estratégico da IA */}
+        <div className="sdg-ia-box" style={{ marginTop: 14 }}>
+          <b>🧠 Veredito da Inteligência Preditiva Comandra:</b>
+          <p style={{ margin: "4px 0 0", fontSize: 13, lineHeight: 1.5, color: "#E2E8F0" }}>
+            {projecoes.possivelBater ? (
+              <>
+                <b>✓ Sim, é possível atingir a Meta Oficial de {metaVendas} vendas!</b> O investimento total de <b>{brl(totalAlocado)}</b> distribuído nos Lançamentos e Estoques dos Superintendentes somado ao realizado de {projecoes.vendidoDiretoria} vendas fecha o mês em <b>{projecoes.vendasTotais} vendas</b> ({projecoes.probabilidadeSucesso}% da meta).
+                As equipes ativas somam {totalCorretoresAtivos} corretores na escala, garantindo capacidade operacional para absorver os ~{projecoes.leadsAnuncio} leads e ~{projecoes.visitasRua} visitas presenciais geradas.
+              </>
+            ) : (
+              <>
+                <b>⚠️ Alerta: o mix atual projeta {projecoes.vendasTotais} vendas, restando um déficit de {projecoes.gapVendas} vendas para a Meta Oficial de {metaVendas}.</b>
+                Para garantir a entrega da meta, recomenda-se reforçar a verba nas equipes que estão com maior gap ou usar o simulador de engenharia reversa abaixo para dimensionar o aporte ideal.
+              </>
+            )}
+          </p>
+        </div>
+
+        {/* Simulador Interativo de Meta Alvo ("Quero Chegar em XX Vendas") */}
+        <div className="sdg-reversa-box" style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <span className="dir-lbl" style={{ color: "#FBBF24" }}>Simulador de Engenharia Reversa da IA</span>
+              <h4 style={{ fontSize: 16, fontWeight: 800, margin: "2px 0 0", color: "#fff" }}>
+                🎯 O que é necessário para bater qualquer meta específica?
+              </h4>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                className="dir-btn"
+                style={{
+                  background: "#F59E0B",
+                  color: "#0F1B2D",
+                  fontWeight: 800,
+                  border: 0,
+                  fontSize: 12,
+                }}
+                onClick={() => {
+                  setMetaAlvoSimulacao(metaVendas);
+                  setMostrarSimulador(true);
+                }}
+              >
+                🎯 Simular Meta Oficial ({metaVendas} un)
+              </button>
+              <button
+                type="button"
+                className="dir-btn"
+                style={{
+                  background: "rgba(255, 255, 255, 0.1)",
+                  color: "#fff",
+                  borderColor: "rgba(255, 255, 255, 0.2)",
+                  fontSize: 12,
+                }}
+                onClick={() => setMostrarSimulador(!mostrarSimulador)}
+              >
+                {mostrarSimulador ? "Recolher Simulador ▲" : "Outros Cenários ▼"}
+              </button>
+            </div>
+          </div>
+
+          {mostrarSimulador && (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, color: "#9FB3CC", fontWeight: 600 }}>Quero chegar em:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  className="sdg-input-valor mono"
+                  style={{ background: "#fff", color: "var(--ink)", width: 90 }}
+                  value={metaAlvoSimulacao}
+                  onChange={(e) => setMetaAlvoSimulacao(Number(e.target.value))}
+                />
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>vendas</span>
+                <div className="sdg-preset-btns">
+                  {[metaVendas, 50, 65, 75, 100].map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      style={{
+                        background: metaAlvoSimulacao === v ? "var(--teal)" : "rgba(255,255,255,0.1)",
+                        color: "#fff",
+                        borderColor: "rgba(255,255,255,0.2)",
+                        fontWeight: metaAlvoSimulacao === v ? 800 : 500,
+                      }}
+                      onClick={() => setMetaAlvoSimulacao(v)}
+                    >
+                      {v === metaVendas ? `Meta (${v})` : `${v} un`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Resultado do Plano Sugerido pela IA */}
+              <div className="sdg-reversa-grid">
+                <div className="sdg-reversa-card">
+                  <small>Verba Total Recomendada</small>
+                  <b>{brl(sugestaoIA.verbaSugeridaTotal)}</b>
+                  <span>Custo por venda ~{brl(sugestaoIA.custoPorVenda)}</span>
+                </div>
+                <div className="sdg-reversa-card">
+                  <small>Volume Mínimo no Funil</small>
+                  <b>~{sugestaoIA.leadsEst} leads · ~{sugestaoIA.visitasEst} visitas</b>
+                  <span>exige ~{sugestaoIA.pastasEst} pastas montadas</span>
+                </div>
+                <div className="sdg-reversa-card">
+                  <small>Força de Vendas Exigida</small>
+                  <b>{sugestaoIA.corretoresMinimos} corretores ativos</b>
+                  <span>bônus de prêmio sugerido: +{sugestaoIA.bonusTropa}%</span>
+                </div>
+              </div>
+
+              {/* Tabela comparativa do mix sugerido */}
+              <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 12, fontSize: 12.5 }}>
+                <div style={{ fontWeight: 700, color: "#FBBF24", marginBottom: 6 }}>
+                  Divisão Recomendada do Orçamento para {sugestaoIA.alvo} Vendas:
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
+                  <div>📢 Anúncios: <b>{brl(sugestaoIA.alocacoes.anuncio)}</b></div>
+                  <div>🎪 Rua & Tenda: <b>{brl(sugestaoIA.alocacoes.rua)}</b></div>
+                  <div>🚪 PAP: <b>{brl(sugestaoIA.alocacoes.pap)}</b></div>
+                  <div>📞 Oferta Ativa: <b>{brl(sugestaoIA.alocacoes.oferta_ativa)}</b></div>
+                  <div>🏆 Prêmios Tropa: <b>{brl(sugestaoIA.alocacoes.premios)}</b></div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, color: "#9FB3CC" }}>
+                  Aplica a meta de {sugestaoIA.alvo} vendas e a verba recomendada no orçamento:
                 </span>
-              </div>
-            </div>
-
-            <div className="sdg-roi-grid">
-              <div className="sdg-roi-metric">
-                <small>Vendas Projetadas</small>
-                <div className="val">{projecoes.vendasTotais} <span style={{ fontSize: 14, fontWeight: 500, color: "#9FB3CC" }}>vendas</span></div>
-                <div className="sub">
-                  {projecoes.vendasAnuncio} anúncio · {projecoes.vendasRua} rua · {projecoes.vendasPap} pap · {projecoes.vendasAtiva} ativa
-                </div>
-              </div>
-
-              <div className="sdg-roi-metric">
-                <small>VGV Estimado</small>
-                <div className="val">{brl(projecoes.vgvProjetado)}</div>
-                <div className="sub">ticket médio de {brl(ticketMedio)}</div>
-              </div>
-
-              <div className="sdg-roi-metric">
-                <small>Custo por Venda</small>
-                <div className="val">{projecoes.custoPorVenda ? brl(projecoes.custoPorVenda) : "—"}</div>
-                <div className="sub">investimento total ÷ vendas projetadas</div>
-              </div>
-
-              <div className="sdg-roi-metric">
-                <small>Gás de Premiação</small>
-                <div className="val" style={{ color: "#34D399" }}>
-                  +{Math.round(projecoes.bonusPremios * 100)}%
-                </div>
-                <div className="sub">estímulo direto na ativação da tropa</div>
-              </div>
-            </div>
-
-            {/* Parecer Estratégico da IA */}
-            <div className="sdg-ia-box">
-              <b>🧠 Veredito da IA para esta Reunião:</b>
-              <p style={{ margin: "4px 0 0", fontSize: 13, lineHeight: 1.5, color: "#E2E8F0" }}>
-                {projecoes.vendasTotais >= metaVendas ? (
-                  <>
-                    O mix de <b>{brl(totalAlocado)}</b> está matematicamente dimensionado para atingir <b>{projecoes.vendasTotais} vendas</b> (superando a meta de {metaVendas}).
-                    As {equipesAtivas.length} equipes selecionadas somam {totalCorretoresAtivos} corretores, garantindo braço suficiente para atender os ~{projecoes.leadsAnuncio} leads digitais e as ~{projecoes.visitasRua} visitas presenciais nos produtos alocados.
-                  </>
-                ) : (
-                  <>
-                    Atenção: com a configuração atual, o mix projeta <b>{projecoes.vendasTotais} vendas</b>, o que deixa um <b>déficit de {metaVendas - projecoes.vendasTotais} vendas</b> contra a meta de {metaVendas}.
-                    {alocacoes.premios === 0 ? " Sugestão: adicione verba de premiação para a tropa para acelerar aprovação de crédito na Caixa." : " Sugestão: adicione mais lançamentos futuros ou aumente a verba de anúncios digitais e ações de rua."}
-                  </>
-                )}
-              </p>
-            </div>
-
-            {/* Simulador Interativo de Meta Alvo ("Quero Chegar em XX Vendas") */}
-            <div className="sdg-reversa-box">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                <div>
-                  <span className="dir-lbl" style={{ color: "#FBBF24" }}>Simulador de Engenharia Reversa da IA</span>
-                  <h4 style={{ fontSize: 16, fontWeight: 800, margin: "2px 0 0", color: "#fff" }}>
-                    🎯 E se eu quiser bater uma meta específica? O que a IA sugere?
-                  </h4>
-                </div>
                 <button
                   type="button"
                   className="dir-btn"
                   style={{
-                    background: "rgba(255, 255, 255, 0.1)",
-                    color: "#fff",
-                    borderColor: "rgba(255, 255, 255, 0.2)",
-                    fontSize: 12.5,
+                    background: "#F59E0B",
+                    color: "#0F1B2D",
+                    fontWeight: 800,
+                    border: 0,
+                    padding: "8px 16px",
                   }}
-                  onClick={() => setMostrarSimulador(!mostrarSimulador)}
+                  onClick={aplicarSugestaoIA}
                 >
-                  {mostrarSimulador ? "Recolher Simulador ▲" : "Simular Meta Alvo (ex: 50, 60 vendas) ▼"}
+                  ✨ Aplicar Sugestão da IA no Orçamento
                 </button>
               </div>
-
-              {mostrarSimulador && (
-                <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", gap: 14 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 13, color: "#9FB3CC", fontWeight: 600 }}>Quero chegar em:</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={200}
-                      className="sdg-input-valor mono"
-                      style={{ background: "#fff", color: "var(--ink)", width: 90 }}
-                      value={metaAlvoSimulacao}
-                      onChange={(e) => setMetaAlvoSimulacao(Number(e.target.value))}
-                    />
-                    <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>vendas</span>
-                    <div className="sdg-preset-btns">
-                      {[35, 45, 50, 60, 75, 100].map((v) => (
-                        <button
-                          key={v}
-                          type="button"
-                          style={{
-                            background: metaAlvoSimulacao === v ? "var(--teal)" : "rgba(255,255,255,0.1)",
-                            color: "#fff",
-                            borderColor: "rgba(255,255,255,0.2)",
-                          }}
-                          onClick={() => setMetaAlvoSimulacao(v)}
-                        >
-                          {v} un
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Resultado do Plano Sugerido pela IA */}
-                  <div className="sdg-reversa-grid">
-                    <div className="sdg-reversa-card">
-                      <small>Verba Total Recomendada</small>
-                      <b>{brl(sugestaoIA.verbaSugeridaTotal)}</b>
-                      <span>Custo por venda ~{brl(sugestaoIA.custoPorVenda)}</span>
-                    </div>
-                    <div className="sdg-reversa-card">
-                      <small>Volume Mínimo no Funil</small>
-                      <b>~{sugestaoIA.leadsEst} leads · ~{sugestaoIA.visitasEst} visitas</b>
-                      <span>exige ~{sugestaoIA.pastasEst} pastas montadas</span>
-                    </div>
-                    <div className="sdg-reversa-card">
-                      <small>Força de Vendas Exigida</small>
-                      <b>{sugestaoIA.corretoresMinimos} corretores ativos</b>
-                      <span>bônus de prêmio sugerido: +{sugestaoIA.bonusTropa}%</span>
-                    </div>
-                  </div>
-
-                  {/* Tabela comparativa do mix sugerido */}
-                  <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 12, fontSize: 12.5 }}>
-                    <div style={{ fontWeight: 700, color: "#FBBF24", marginBottom: 6 }}>
-                      Divisão Recomendada do Orçamento para {sugestaoIA.alvo} Vendas:
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
-                      <div>📢 Anúncios: <b>{brl(sugestaoIA.alocacoes.anuncio)}</b></div>
-                      <div>🎪 Rua & Tenda: <b>{brl(sugestaoIA.alocacoes.rua)}</b></div>
-                      <div>🚪 PAP: <b>{brl(sugestaoIA.alocacoes.pap)}</b></div>
-                      <div>📞 Oferta Ativa: <b>{brl(sugestaoIA.alocacoes.oferta_ativa)}</b></div>
-                      <div>🏆 Prêmios Tropa: <b>{brl(sugestaoIA.alocacoes.premios)}</b></div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 12, color: "#9FB3CC" }}>
-                      Aplica a meta de {sugestaoIA.alvo} vendas e a verba recomendada no orçamento:
-                    </span>
-                    <button
-                      type="button"
-                      className="dir-btn"
-                      style={{
-                        background: "#F59E0B",
-                        color: "#0F1B2D",
-                        fontWeight: 800,
-                        border: 0,
-                        padding: "8px 16px",
-                      }}
-                      onClick={aplicarSugestaoIA}
-                    >
-                      ✨ Aplicar Sugestão da IA no Orçamento
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      </div>
+    )}
+  </div>
+
+  {/* ── 5. BOTÕES DE FECHAMENTO & DISPARO PARA OS SUPERS ── */}
+  <div className={`sdg-accordion-card${secoesAbertas.fechamento ? " ativo" : ""}`}>
+    <div
+      className={`sdg-accordion-hd${secoesAbertas.fechamento ? " aberto" : ""}`}
+      onClick={() => toggleSecao("fechamento")}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 18 }}>📱</span>
+        <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
+          5. Fechamento Formal & Termo WhatsApp de cada Super
+        </h3>
+        <span className="dir-chip c-blue">
+          {equipesAtivas.length} termos prontos para WhatsApp
+        </span>
       </div>
 
-      {/* ── 5. BOTÕES DE FECHAMENTO & DISPARO PARA OS SUPERS ── */}
-      <div className={`sdg-accordion-card${secoesAbertas.fechamento ? " ativo" : ""}`}>
-        <div
-          className={`sdg-accordion-hd${secoesAbertas.fechamento ? " aberto" : ""}`}
-          onClick={() => toggleSecao("fechamento")}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 18 }}>📱</span>
-            <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
-              5. Fechamento Formal & Termo WhatsApp de cada Super
-            </h3>
-            <span className="dir-chip c-blue">
-              {equipesAtivas.length} termos prontos para WhatsApp
+      <button
+        type="button"
+        className="dir-btn"
+        style={{
+          fontSize: 12,
+          padding: "4px 10px",
+          borderColor: secoesAbertas.fechamento ? "var(--teal)" : "#CBD5E1",
+          background: "#fff",
+          fontWeight: 700,
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleSecao("fechamento");
+        }}
+      >
+        {secoesAbertas.fechamento ? "▲ Minimizar Aba" : "▼ Expandir Aba"}
+      </button>
+    </div>
+
+    {secoesAbertas.fechamento && (
+      <div className="sdg-accordion-body">
+        <div className="sdg-footer" style={{ borderTop: 0, padding: 0, marginTop: 0 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-3)" }}>
+              Disparar Acordo Completo no WhatsApp:
             </span>
+            {equipesAtivas.map((s) => (
+              <button
+                key={s.id}
+                className="dir-btn"
+                style={{ fontSize: 12, padding: "6px 10px" }}
+                onClick={() =>
+                  setModalWpp({
+                    superNome: s.nome,
+                    telefone: s.phone ?? null,
+                    mensagem: gerarMensagemSuper(s),
+                  })
+                }
+              >
+                📱 Enviar para {s.nome.split(" ")[0]}
+              </button>
+            ))}
           </div>
 
           <button
-            type="button"
-            className="dir-btn"
-            style={{
-              fontSize: 12,
-              padding: "4px 10px",
-              borderColor: secoesAbertas.fechamento ? "var(--teal)" : "#CBD5E1",
-              background: "#fff",
-              fontWeight: 700,
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleSecao("fechamento");
-            }}
+            className="dir-btn solid"
+            style={{ padding: "10px 20px", fontSize: 14, minHeight: 42 }}
+            disabled={salvando}
+            onClick={salvarCampanha}
           >
-            {secoesAbertas.fechamento ? "▲ Minimizar Aba" : "▼ Expandir Aba"}
+            {salvando ? "Gravando no Sistema…" : "💾 Salvar Campanha & Publicar Premiação na Tropa"}
+          </button>
+        </div>
+      </div>
+    )}
+  </div>
+
+  {/* MODAL DE ENVIO DO ACORDO VIA WHATSAPP */}
+  {modalWpp && (
+    <div className="dir-modal-backdrop" onClick={() => setModalWpp(null)}>
+      <div className="dir-modal-box" onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <span className="dir-lbl">Termo de Acordo da Reunião Estratégica</span>
+            <h3 style={{ fontSize: 18, fontWeight: 800, margin: "4px 0 0", color: "var(--ink)" }}>
+              Enviar Acordo para {modalWpp.superNome}
+            </h3>
+          </div>
+          <button
+            onClick={() => setModalWpp(null)}
+            style={{ background: "none", border: 0, fontSize: 20, cursor: "pointer", color: "var(--ink-3)" }}
+          >
+            ✕
           </button>
         </div>
 
-        {secoesAbertas.fechamento && (
-          <div className="sdg-accordion-body">
-            <div className="sdg-footer" style={{ borderTop: 0, padding: 0, marginTop: 0 }}>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-3)" }}>
-                  Disparar Acordo Completo no WhatsApp:
-                </span>
-                {equipesAtivas.map((s) => (
-                  <button
-                    key={s.id}
-                    className="dir-btn"
-                    style={{ fontSize: 12, padding: "6px 10px" }}
-                    onClick={() =>
-                      setModalWpp({
-                        superNome: s.nome,
-                        telefone: s.phone ?? null,
-                        mensagem: gerarMensagemSuper(s),
-                      })
-                    }
-                  >
-                    📱 Enviar para {s.nome.split(" ")[0]}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                className="dir-btn solid"
-                style={{ padding: "10px 20px", fontSize: 14, minHeight: 42 }}
-                disabled={salvando}
-                onClick={salvarCampanha}
-              >
-                {salvando ? "Gravando no Sistema…" : "💾 Salvar Campanha & Publicar Premiação na Tropa"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* MODAL DE ENVIO DO ACORDO VIA WHATSAPP */}
-      {modalWpp && (
-        <div className="dir-modal-backdrop" onClick={() => setModalWpp(null)}>
-          <div className="dir-modal-box" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <span className="dir-lbl">Termo de Acordo da Reunião Estratégica</span>
-                <h3 style={{ fontSize: 18, fontWeight: 800, margin: "4px 0 0", color: "var(--ink)" }}>
-                  Enviar Acordo para {modalWpp.superNome}
-                </h3>
-              </div>
-              <button
-                onClick={() => setModalWpp(null)}
-                style={{ background: "none", border: 0, fontSize: 20, cursor: "pointer", color: "var(--ink-3)" }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase" }}>
-                Mensagem WhatsApp (editável antes do envio)
-              </label>
-              <textarea
-                rows={12}
-                value={modalWpp.mensagem}
-                onChange={(e) => setModalWpp({ ...modalWpp, mensagem: e.target.value })}
-                style={{
-                  width: "100%",
-                  padding: 10,
-                  borderRadius: 8,
-                  border: "1px solid var(--line)",
-                  fontFamily: "inherit",
-                  fontSize: 13,
-                  lineHeight: 1.4,
-                  resize: "vertical",
-                }}
-              />
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
-              <button className="dir-btn" onClick={() => setModalWpp(null)}>Cancelar</button>
-              <button
-                className="dir-btn-wpp"
-                onClick={() => {
-                  if (modalWpp.telefone) {
-                    const cleanPhone = modalWpp.telefone.replace(/\D/g, "");
-                    const fullPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-                    const url = `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(modalWpp.mensagem)}`;
-                    window.open(url, "_blank");
-                    toast.success(`WhatsApp de ${modalWpp.superNome} aberto com o acordo!`);
-                  } else {
-                    navigator.clipboard.writeText(modalWpp.mensagem);
-                    toast.info(`${modalWpp.superNome} não tem telefone cadastrado. Mensagem copiada para a área de transferência!`);
-                  }
-                  setModalWpp(null);
-                }}
-              >
-                <span>📱 Abrir no WhatsApp</span>
-              </button>
-            </div>
-          </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase" }}>
+            Mensagem WhatsApp (editável antes do envio)
+          </label>
+          <textarea
+            rows={12}
+            value={modalWpp.mensagem}
+            onChange={(e) => setModalWpp({ ...modalWpp, mensagem: e.target.value })}
+            style={{
+              width: "100%",
+              padding: 10,
+              borderRadius: 8,
+              border: "1px solid var(--line)",
+              fontFamily: "inherit",
+              fontSize: 13,
+              lineHeight: 1.4,
+              resize: "vertical",
+            }}
+          />
         </div>
-      )}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+          <button className="dir-btn" onClick={() => setModalWpp(null)}>Cancelar</button>
+          <button
+            className="dir-btn-wpp"
+            onClick={() => {
+              if (modalWpp.telefone) {
+                const cleanPhone = modalWpp.telefone.replace(/\D/g, "");
+                const fullPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+                const url = `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(modalWpp.mensagem)}`;
+                window.open(url, "_blank");
+                toast.success(`WhatsApp de ${modalWpp.superNome} aberto com o acordo!`);
+              } else {
+                navigator.clipboard.writeText(modalWpp.mensagem);
+                toast.info(`${modalWpp.superNome} não tem telefone cadastrado. Mensagem copiada para a área de transferência!`);
+              }
+              setModalWpp(null);
+            }}
+          >
+            <span>📱 Abrir no WhatsApp</span>
+          </button>
+        </div>
+      </div>
     </div>
-  );
+  )}
+</div>
+);
 }
