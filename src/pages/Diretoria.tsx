@@ -95,7 +95,7 @@ export default function Diretoria() {
       </header>
 
       <main className="dir-wrap">
-        {aba !== "hoje" && aba !== "estrategia" ? (
+        {aba !== "hoje" && aba !== "estrategia" && aba !== "pastas" ? (
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span className="dir-lbl">Período</span>
             <div className="dir-per">{PERIODOS.map(([n, t]) => <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{t}</button>)}</div>
