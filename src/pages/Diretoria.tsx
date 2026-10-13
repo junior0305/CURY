@@ -977,9 +977,20 @@ function Equipes({ supers, linhasDoSuper, aberto, tog, abrirPainel, carregandoCo
               const kS = `s:${s.id}`; const ls = linhasDoSuper(s);
               return [
                 <tr key={kS} className="n0" onClick={() => tog(kS)}>
-                  <td><Seta on={!!aberto[kS]} />{s.nome} <span style={{ fontWeight: 500, color: "var(--ink-3)", fontSize: 12 }}>· {s.gerentes.length} gerentes</span></td>
-                  {cel(somaN(s.gerentes.map((g) => numsGer(s, g))), carregandoCons ? null : somar(s.nome, ls))}
+                  <td><Seta on={!!aberto[kS]} />{s.nome} <span style={{ fontWeight: 500, color: "var(--ink-3)", fontSize: 12 }}>· {s.c2s ? `${s.c2s.gerentes.length} gerentes no C2S` : `${s.gerentes.length} gerentes`}</span></td>
+                  {s.c2s ? cel({ corretores: 0, plantaoHoje: s.c2s.hoje, semLogin: 0, logados: 0, online: 0 },
+                    carregandoCons ? null : { ...somar(s.nome, ls), plantaoDias: s.c2s.dias })
+                    : cel(somaN(s.gerentes.map((g) => numsGer(s, g))), carregandoCons ? null : somar(s.nome, ls))}
                 </tr>,
+                ...(aberto[kS] && s.c2s ? [
+                  <tr key={`c2sx:${s.id}`} className="n3"><td colSpan={10} style={{ textAlign: "left" }}>
+                    Plantão lido do C2S: os gerentes desta superintendência ainda não têm conta no Comandra (no C2S ela ainda consta na diretoria anterior).</td></tr>,
+                  ...s.c2s.gerentes.map((g) => (
+                    <tr key={`c2s:${s.id}:${g.nome}`} className="n1">
+                      <td>{g.nome} <span style={{ color: "var(--ink-3)", fontSize: 11.5 }}>· {g.corretores} no plantão · sem conta no Comandra</span></td>
+                      <td /><td><Z n={g.hoje} /></td><td /><td /><td /><td><Z n={g.dias} /></td><td /><td /><td />
+                    </tr>)),
+                ] : []),
                 ...(aberto[kS] ? s.gerentes.flatMap((g) => {
                   const kG = `g:${g.id}`; const sem = s.plantaoSemLogin[g.id] ?? [];
                   return [
@@ -1010,7 +1021,11 @@ function Equipes({ supers, linhasDoSuper, aberto, tog, abrirPainel, carregandoCo
                 }) : []),
               ];
             })}
-            <tr className="tot"><td>Empresa</td>{cel(somaN(todos), carregandoCons ? null : somar("Empresa", supers.flatMap(linhasDoSuper)))}</tr>
+            <tr className="tot"><td>Empresa</td>{(() => {
+              const c2sDias = supers.reduce((a, s) => a + (s.c2s?.dias ?? 0), 0), c2sHoje = supers.reduce((a, s) => a + (s.c2s?.hoje ?? 0), 0);
+              const n = somaN(todos); const t = carregandoCons ? null : somar("Empresa", supers.flatMap(linhasDoSuper));
+              return cel({ ...n, plantaoHoje: n.plantaoHoje + c2sHoje }, t ? { ...t, plantaoDias: t.plantaoDias + c2sDias } : null);
+            })()}</tr>
           </tbody>
         </table>
       </div>
