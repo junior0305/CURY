@@ -335,3 +335,12 @@
 .cs-resp { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
 .cs-resp p { margin: 0; font-size: 13.5px; line-height: 1.5; }
 .cs-q { font-weight: 700; font-size: 13px; color: var(--teal); }
+.cs-atalhos { display: flex; gap: 6px; flex-wrap: wrap; }
+.cs-atalho { border: 1px solid var(--line); background: var(--sunk); color: var(--ink-2); border-radius: 999px; padding: 6px 12px; font-weight: 600; font-size: 12.5px; cursor: pointer; }
+.cs-atalho:hover:not(:disabled) { border-color: var(--teal); color: var(--teal); }
+.cs-atalho:disabled { opacity: .5; cursor: default; }
+.cs-funil td:last-child { font-family: Archivo, system-ui, sans-serif; text-align: left; color: var(--ink-2); min-width: 220px; }
+.cs-funil th:last-child { text-align: left; }
+.cs-hist summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+.cs-hist button { display: block; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line-2); padding: 7px 0; font-size: 13px; color: var(--ink); cursor: pointer; }
+.cs-hist button span { color: var(--ink-3); font-size: 12px; margin-right: 8px; font-family: "JetBrains Mono", monospace; }

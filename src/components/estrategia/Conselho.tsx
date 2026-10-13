@@ -1,152 +1,118 @@
-// Conselho de Estratégia (IA) no topo da aba Estratégia: lê os fatos das 5 perguntas e ajuda a DECIDIR —
-// onde estamos, a conta do funil reverso, 2-3 decisões com opções/custo/recomendação e o plano com dono,
-// prazo e indicador (cada ação vira compromisso pelo "Combinar"). Também responde perguntas livres.
-// Edge estrategia-ia (OpenAI); a análise do dia fica em cache, "Refazer" gera de novo.
-import { useEffect, useRef, useState } from "react";
+// Conselho de Estratégia (IA) no topo da aba Estratégia. Só age quando perguntado: o usuário pergunta
+// (ou usa um atalho) e a IA responde com a recomendação, a escada Leads → Visitas → Pastas → Vendas
+// (hoje × precisa × como aumentar) e um plano que vira compromisso pelo "Combinar".
+// Edge estrategia-ia (OpenAI), gera em segundo plano; as perguntas ficam guardadas em public.estrategia_ia.
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Combinar } from "./Estrategia";
 
 type Acao = { acao: string; responsavel_id: string; responsavel: string; prazo_dias: number; indicador: string };
-type Decisao = { tema: string; decisao: string; opcoes: { nome: string; ganho: string; custo: string }[]; recomendo: string; por_que: string; nao_faria: string; plano: Acao[] };
-type Analise = { leitura: string; conta: string; meta_fecha: "sim" | "apertado" | "nao"; gargalo: string; decisoes: Decisao[];
-  dados_que_faltam: string[]; perguntas_reuniao: string[]; modelo?: string; gerado_em?: string };
-type Resposta = { pergunta: string; resposta: string; recomendo: string; plano: Acao[]; dados_que_faltam: string[] };
+type Resp = { resposta: string; funil: { etapa: string; hoje: string; precisa: string; como: string }[]; plano: Acao[];
+  premissas: string[]; dados_que_faltam: string[] };
+type Item = { id: string; pergunta: string; criado_em: string; status: string; resposta: Resp | null };
 
-const FECHA: Record<string, [string, string]> = { sim: ["a meta fecha", "c-grn"], apertado: ["meta apertada", "c-org"], nao: ["a meta não fecha", "c-red"] };
-const GARG: Record<string, string> = { fechamento: "gargalo: fechamento", funil: "gargalo: funil", trafego: "gargalo: tráfego", time: "gargalo: time", dados: "gargalo: dados" };
-const hora = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "");
-
-async function chamar(body: Record<string, unknown>) {
-  const { data, error } = await supabase.functions.invoke("estrategia-ia", { body });
-  if (error) throw new Error(error.message);
-  if ((data as any)?.error) throw new Error((data as any).error);
-  if (!(data as any)?.pendente) return data as any;
-  // a IA gera em segundo plano (pode passar de 1 minuto): espera a linha ficar pronta
-  const id = (data as any).id as string;
-  for (let i = 0; i < 75; i++) {
-    await new Promise((r) => setTimeout(r, 2500));
-    const { data: l } = await supabase.from("estrategia_ia" as any).select("status,resposta,modelo,criado_em").eq("id", id).maybeSingle();
-    const x = l as any;
-    if (x?.status === "pronto") return { ...x.resposta, modelo: x.modelo, gerado_em: x.criado_em };
-    if (x?.status === "erro") throw new Error("A IA não conseguiu responder agora. Tente de novo.");
-  }
-  throw new Error("A IA demorou demais. Tente de novo em instantes.");
-}
+const ATALHOS: [string, string][] = [
+  ["Como bato a meta?", "Preciso bater a meta deste mês. Como devo atuar? Monte a conta de volume de leads, visitas e pastas e diga o que fazer para aumentar cada um."],
+  ["Volume para a meta", "Qual volume de leads, visitas e pastas preciso por semana até o fim do mês para chegar na meta, e onde está o maior buraco hoje?"],
+  ["Tenho gente suficiente", "Temos gente suficiente trabalhando. Como tiro mais volume do time atual, sem contratar, para chegar na meta?"],
+  ["Lançamento no mês que vem", "Quero uma estratégia para um lançamento no mês que vem: volume de leads, visitas e pastas por semana, canais, escala do time e cronograma do pré-lançamento ao pós."],
+];
+const hora = (iso: string) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 export default function Conselho({ fatos, pronto, donoId, abrir }: {
   fatos: Record<string, unknown>; pronto: boolean; donoId: string; abrir: (c: Combinar) => void;
 }) {
-  const [an, setAn] = useState<Analise | null>(null);
-  const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
+  const qc = useQueryClient();
   const [perg, setPerg] = useState("");
-  const [respostas, setRespostas] = useState<Resposta[]>([]);
-  const [perguntando, setPerguntando] = useState(false);
-  const iniciou = useRef(false);
+  const [pensando, setPensando] = useState(false);
+  const [abertaId, setAbertaId] = useState<string | null>(null);
 
-  async function gerar(forcar: boolean, soCache = false) {
-    setCarregando(true); setErro(null);
+  const { data: hist } = useQuery({
+    queryKey: ["estrategia-ia", donoId],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data } = await supabase.from("estrategia_ia" as any).select("id,pergunta,criado_em,status,resposta")
+        .eq("dono_id", donoId).eq("modo", "pergunta").neq("status", "erro").order("criado_em", { ascending: false }).limit(8);
+      return ((data ?? []) as unknown as Item[]).filter((i) => i.status === "pronto" && i.resposta && "funil" in (i.resposta as object));
+    },
+  });
+  const atual = hist?.find((i) => i.id === abertaId) ?? hist?.[0] ?? null;
+
+  async function perguntar(q: string) {
+    q = q.trim(); if (!q || pensando) return;
+    setPensando(true);
     try {
-      const r = await chamar({ modo: "analise", fatos, forcar, so_cache: soCache, dono_id: donoId });
-      if (r?.vazio) return gerar(false);
-      setAn(r);
-    } catch (e) { setErro((e as Error).message); } finally { setCarregando(false); }
-  }
-  // análise do dia: usa o cache; se ainda não tem, gera assim que os fatos estiverem prontos
-  useEffect(() => { if (pronto && !iniciou.current) { iniciou.current = true; gerar(false, true); } }, [pronto]);
-
-  async function perguntar() {
-    const q = perg.trim(); if (!q) return;
-    setPerguntando(true);
-    try {
-      const r = await chamar({ modo: "pergunta", pergunta: q, fatos, dono_id: donoId });
-      setRespostas((v) => [{ pergunta: q, ...r }, ...v]); setPerg("");
-    } catch (e) { toast.error((e as Error).message); } finally { setPerguntando(false); }
+      const { data, error } = await supabase.functions.invoke("estrategia-ia", { body: { modo: "pergunta", pergunta: q, fatos, dono_id: donoId } });
+      if (error) throw new Error(error.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const id = (data as any).id as string;
+      for (let i = 0; i < 75; i++) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const { data: l } = await supabase.from("estrategia_ia" as any).select("status").eq("id", id).maybeSingle();
+        const st = (l as any)?.status;
+        if (st === "pronto") { await qc.invalidateQueries({ queryKey: ["estrategia-ia", donoId] }); setAbertaId(id); setPerg(""); return; }
+        if (st === "erro") throw new Error("A IA não conseguiu responder agora. Tente de novo.");
+      }
+      throw new Error("A IA demorou demais. Tente de novo em instantes.");
+    } catch (e) { toast.error((e as Error).message); } finally { setPensando(false); }
   }
 
-  const combinar = (a: Acao, sobre: string) => abrir({ sobre, pergunta: 0, titulo: `${a.acao} · meta: ${a.indicador}`,
-    responsavelId: a.responsavel_id || null, prazoDias: a.prazo_dias });
-  const Plano = ({ plano, sobre }: { plano: Acao[]; sobre: string }) => (
-    <ol className="cs-plano">
-      {plano.map((a, i) => (
-        <li key={i}>
-          <div><b>{a.acao}</b><small>{a.responsavel || "você"} · em {a.prazo_dias} dia{a.prazo_dias === 1 ? "" : "s"} · funcionou se: {a.indicador}</small></div>
-          <button className="dir-btn-action" onClick={() => combinar(a, sobre)}>Combinar</button>
-        </li>))}
-    </ol>
-  );
-
+  const r = atual?.resposta;
   return (
     <section className="dir-card cs">
       <div className="cs-hd">
         <div className="cs-who"><div className="cs-av" aria-hidden>IA</div>
-          <div><b>Conselho de estratégia</b><small>lê as 5 perguntas abaixo e ajuda a decidir{an?.gerado_em ? ` · ${an.modelo ?? ""} · gerado às ${hora(an.gerado_em)}` : ""}</small></div></div>
-        <button className="dir-btn" disabled={carregando || !pronto} onClick={() => gerar(true)}>{carregando ? "Pensando…" : an ? "Refazer com os números de agora" : "Gerar a análise"}</button>
+          <div><b>Conselho de estratégia</b><small>pergunte o que precisa decidir · responde com os números das perguntas abaixo</small></div></div>
       </div>
 
-      {erro ? <div className="est-warn"><b style={{ color: "var(--red)" }}>!</b><div>{erro}</div></div> : null}
-      {!an && carregando ? <div className="dir-nota" style={{ padding: "6px 0" }}>Lendo meta, pastas, dinheiro, time e compromissos… leva de 30 segundos a 1 minuto.</div> : null}
-      {!an && !carregando && !pronto ? <div className="dir-nota">Esperando os números das perguntas abaixo carregarem…</div> : null}
-
-      {an ? <>
-        <p className="cs-lei">{an.leitura}</p>
-        <div className="cs-chips">
-          <span className={`dir-chip ${FECHA[an.meta_fecha]?.[1] ?? "c-gray"}`}>{FECHA[an.meta_fecha]?.[0] ?? an.meta_fecha}</span>
-          <span className="dir-chip c-blue">{GARG[an.gargalo] ?? an.gargalo}</span>
-        </div>
-        <div className="cs-conta"><span className="dir-lbl">A conta</span>{an.conta}</div>
-
-        <div className="cs-decs">
-          {an.decisoes.map((d, i) => (
-            <article key={i} className="cs-dec">
-              <div className="dir-lbl">Decisão {i + 1} · {d.tema}</div>
-              <h3>{d.decisao}</h3>
-              <div className="cs-ops">
-                {d.opcoes.map((o) => {
-                  const rec = d.recomendo.toLowerCase().includes(o.nome.toLowerCase().slice(0, 18));
-                  return <div key={o.nome} className={`cs-op${rec ? " rec" : ""}`}><b>{o.nome}{rec ? <span className="dir-chip c-grn">recomendado</span> : null}</b>
-                    <small><span>ganho</span> {o.ganho}</small><small><span>custo</span> {o.custo}</small></div>;
-                })}
-              </div>
-              <p className="cs-rec"><b>Recomendo:</b> {d.recomendo} <span>{d.por_que}</span></p>
-              <p className="cs-nao"><b>Não faria:</b> {d.nao_faria}</p>
-              <div className="dir-lbl">Plano</div>
-              <Plano plano={d.plano} sobre={`Conselho: ${d.tema}`} />
-            </article>))}
-        </div>
-
-        <div className="est-g2">
-          <div className="est-box">
-            <div className="dir-lbl">Perguntas para a reunião de segunda</div>
-            <ol className="cs-list">{an.perguntas_reuniao.map((q) => <li key={q}>{q}</li>)}</ol>
-            <button className="dir-btn" style={{ alignSelf: "flex-start" }} onClick={() => navigator.clipboard?.writeText(an.perguntas_reuniao.map((q, i) => `${i + 1}. ${q}`).join("\n"))
-              .then(() => toast.success("Perguntas copiadas"), () => toast.error("Não consegui copiar"))}>Copiar perguntas</button>
-          </div>
-          <div className="est-box">
-            <div className="dir-lbl">O que falta lançar para decidir melhor</div>
-            {an.dados_que_faltam.length ? <ul className="cs-list">{an.dados_que_faltam.map((q) => <li key={q}>{q}</li>)}</ul> : <div className="dir-nota">Nada: os dados bastam para decidir.</div>}
-          </div>
-        </div>
-      </> : null}
-
-      <div className="cs-ask">
-        <label htmlFor="cs-perg" className="dir-lbl">Pergunte ao conselho</label>
-        <div className="cs-ask-row">
-          <textarea id="cs-perg" rows={2} value={perg} onChange={(e) => setPerg(e.target.value)} disabled={!pronto}
-            placeholder="Ex.: Vale colocar mais R$ 2 mil em anúncio este mês ou cobrar os leads parados primeiro?"
-            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) perguntar(); }} />
-          <button className="dir-btn solid" disabled={perguntando || !perg.trim() || !pronto} onClick={perguntar}>{perguntando ? "Pensando…" : "Perguntar"}</button>
-        </div>
-        {respostas.map((r, i) => (
-          <div key={i} className="cs-resp">
-            <div className="cs-q">{r.pergunta}</div>
-            <p>{r.resposta}</p>
-            <p className="cs-rec"><b>Recomendo:</b> {r.recomendo}</p>
-            {r.plano.length ? <Plano plano={r.plano} sobre={`Conselho: ${r.pergunta.slice(0, 60)}`} /> : null}
-            {r.dados_que_faltam.length ? <p className="dir-nota" style={{ margin: 0 }}>Falta para responder melhor: {r.dados_que_faltam.join("; ")}</p> : null}
-          </div>))}
+      <div className="cs-ask-row">
+        <textarea id="cs-perg" rows={2} value={perg} onChange={(e) => setPerg(e.target.value)} disabled={!pronto || pensando}
+          placeholder={pronto ? "Ex.: Preciso bater a meta. Como devo atuar?" : "Carregando os números…"}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); perguntar(perg); } }} />
+        <button className="dir-btn solid" disabled={pensando || !perg.trim() || !pronto} onClick={() => perguntar(perg)}>{pensando ? "Pensando…" : "Perguntar"}</button>
       </div>
+      <div className="cs-atalhos">
+        {ATALHOS.map(([t, q]) => <button key={t} className="cs-atalho" disabled={!pronto || pensando} onClick={() => { setPerg(q); perguntar(q); }}>{t}</button>)}
+      </div>
+      {pensando ? <div className="dir-nota">Fazendo a conta com meta, leads, visitas, pastas e time… leva cerca de 1 minuto.</div> : null}
+
+      {atual && r ? (
+        <div className="cs-resp">
+          <div className="cs-q">{atual.pergunta}</div>
+          <p className="cs-lei">{r.resposta}</p>
+
+          {r.funil.length ? (
+            <div className="est-tab"><table className="cs-funil">
+              <thead><tr><th>Etapa</th><th>Hoje</th><th>Precisa</th><th>Como aumentar</th></tr></thead>
+              <tbody>{r.funil.map((f) => <tr key={f.etapa}><td><b>{f.etapa}</b></td><td>{f.hoje}</td><td><b>{f.precisa}</b></td><td>{f.como}</td></tr>)}</tbody>
+            </table></div>) : null}
+
+          {r.plano.length ? <>
+            <div className="dir-lbl">O que fazer</div>
+            <ol className="cs-plano">
+              {r.plano.map((a, i) => (
+                <li key={i}>
+                  <div><b>{a.acao}</b><small>{a.responsavel || "você"} · em {a.prazo_dias} dia{a.prazo_dias === 1 ? "" : "s"} · funcionou se: {a.indicador}</small></div>
+                  <button className="dir-btn-action" onClick={() => abrir({ sobre: `Conselho: ${atual.pergunta.slice(0, 60)}`, pergunta: 0,
+                    titulo: `${a.acao} · meta: ${a.indicador}`, responsavelId: a.responsavel_id || null, prazoDias: a.prazo_dias })}>Combinar</button>
+                </li>))}
+            </ol></> : null}
+
+          {r.premissas.length || r.dados_que_faltam.length ? (
+            <p className="dir-nota" style={{ margin: 0 }}>
+              {r.premissas.length ? <>Supondo: {r.premissas.join("; ")}. </> : null}
+              {r.dados_que_faltam.length ? <>Para afinar: {r.dados_que_faltam.join("; ")}.</> : null}
+            </p>) : null}
+        </div>) : null}
+
+      {hist && hist.length > 1 ? (
+        <details className="cs-hist">
+          <summary>Perguntas anteriores ({hist.length - 1})</summary>
+          {hist.filter((i) => i.id !== atual?.id).map((i) => (
+            <button key={i.id} onClick={() => setAbertaId(i.id)}><span>{hora(i.criado_em)}</span>{i.pergunta}</button>))}
+        </details>) : null}
     </section>
   );
 }

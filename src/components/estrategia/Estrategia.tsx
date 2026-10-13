@@ -79,6 +79,21 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
           projecao_no_ritmo: proj(m?.dono.realizado ?? 0), gerentes: (m?.filhos ?? []).filter((f) => f.papel === "MANAGER").map((g) => ({ nome: g.nome, meta: g.meta, vendido: g.realizado })) }; }),
         observacao: "vendas da Adajes de antes de 12/10 aparecem no vendido dela mas não contam no placar da diretoria",
       },
+      funil_30_dias: (() => {
+        const ls30 = c30?.linhas ?? [];
+        const leads = ls30.reduce((a, l) => ({ anuncio: a.anuncio + l.leads.anuncio, disparo: a.disparo + l.leads.disparo, pescados: a.pescados + l.leads.pescados, outros: a.outros + l.leads.outros }), { anuncio: 0, disparo: 0, pescados: 0, outros: 0 });
+        const desde = Date.now() - 30 * 864e5;
+        const c2sCor = supers.reduce((a, x) => a + (x.c2s?.gerentes.reduce((b, g) => b + g.corretores30, 0) ?? 0), 0);
+        return {
+          leads: { total: leads.anuncio + leads.disparo + leads.pescados + leads.outros, ...leads },
+          plantoes: ls30.reduce((a, l) => a + l.plantaoDias, 0) + supers.reduce((a, x) => a + (x.c2s?.dias ?? 0), 0),
+          visitas_lancadas_no_c2s: ls30.reduce((a, l) => a + l.visitas, 0),
+          pastas_cadastradas: pastas.filter((p) => p.cadastrada_em && new Date(p.cadastrada_em).getTime() >= desde).length,
+          vendas: Math.round(ls30.reduce((a, l) => a + l.vendas, 0) * 10) / 10,
+          corretores: { no_comandra: supers.reduce((a, x) => a + x.gerentes.reduce((b, g) => b + g.corretores, 0), 0), so_no_c2s_adajes_silva: c2sCor },
+          observacoes: "visitas só existem para a Liliane (Adajes e Silva sem conta no Comandra, Felipe sem plantão no C2S); pastas cadastradas = pastas abertas hoje no Junix cadastradas nos últimos 30 dias (as que já viraram venda ou foram arquivadas não entram)",
+        };
+      })(),
       pastas: { total: rp.total, clientes: rp.clientes, vivas: rp.vivas, previsao_de_vendas_no_mes: Math.round(rp.previsao * 10) / 10,
         reta_final: rp.reta.n, fora_da_conta: { duplicadas: rp.duplicadas, reprovadas: rp.reprovadas, paradas_60_dias: rp.mortas },
         por_superintendencia: supers.map((s) => { const ps = lidas.filter((p) => p.sup === s.nome && p.viva);
