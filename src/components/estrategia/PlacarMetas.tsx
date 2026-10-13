@@ -126,6 +126,12 @@ export default function PlacarMetas({
   const ritmoSemana = (vendido / diaHoje) * 7;
   const esperado = Math.round((meta * diaHoje) / diasMes);
 
+  const tot = (c30 ?? []).reduce(
+    (a, l) => ({ v: a.v + l.visitas, s: a.s + l.vendas }),
+    { v: 0, s: 0 }
+  );
+  const visitaPorVenda = tot.s > 0 && tot.v >= tot.s ? tot.v / tot.s : null;
+
   // Sincroniza automaticamente a meta da diretoria no Supabase caso os supers somem um novo valor
   useEffect(() => {
     if (somaSupers > 0 && metaDir.dono.id && metaDir.dono.meta !== somaSupers) {
