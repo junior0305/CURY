@@ -53,6 +53,7 @@ import Replicacao from "@/pages/admin/Replicacao";
 import OuroAna from "@/pages/admin/OuroAna";
 import Secretaria from "@/pages/Secretaria";
 import ForcePasswordChange from "@/pages/ForcePasswordChange";
+import MockupGerente from "@/pages/MockupGerente";
 
 const queryClient = new QueryClient();
 
@@ -235,6 +236,7 @@ const App = () => (
             <Route path="/force-password-change" element={<ForcePasswordChange />} />
             <Route path="/bootstrap-admin" element={<BootstrapAdmin />} />
             <Route path="/profile-debug" element={<ProfileDebug />} />
+            <Route path="/mockup-gerente" element={<MockupGerente />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           </ThemeProvider>
