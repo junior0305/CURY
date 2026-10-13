@@ -116,6 +116,35 @@ export default function Diretoria() {
   );
 }
 
+/* Contrato emitido no Junix ainda não é venda (venda = "Venda Confirmada"): é a venda quase fechada,
+   que o diretor precisa ver e cobrar. Também chega no WhatsApp dele (/root/econ/alerta_contratos.py). */
+const titulo = (t: string | null) => (t ?? "—").replace(/\s+BN\s*$/i, "").toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+function ContratosEmitidos({ pastas, supers }: { pastas: PastaJunix[]; supers: SuperDiretoria[] }) {
+  const lista = pastas.filter((p) => p.etapa === "Emissão").sort((a, b) => (b.dias ?? 0) - (a.dias ?? 0));
+  if (!lista.length) return null;
+  const nomeSuper = (p: PastaJunix) => supers.find((s) => s.id === donoJunix(supers, p.superintendente, p.gerente).superId)?.nome ?? titulo(p.superintendente);
+  return (
+    <div className="dir-card" style={{ padding: 16, marginTop: 12, borderColor: "var(--teal)" }}>
+      <div className="dir-h" style={{ marginBottom: 8 }}>
+        <b>Contratos emitidos aguardando virar venda ({lista.length})</b>
+        <span>venda quase fechada · só conta no placar quando o Junix confirmar a venda</span>
+      </div>
+      <div className="dir-list">
+        {lista.map((p) => (
+          <div key={p.proposta_id} style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ minWidth: 0 }}>
+              <b>{titulo(p.cliente)}</b> <span className="dir-nota">· {titulo(p.empreendimento).replace(/^Condomínio\s+/i, "")}</span>
+              <div className="dir-nota">{titulo(p.corretor)} · gerente {titulo(p.gerente)} · {nomeSuper(p)}</div>
+            </div>
+            <span className={`dir-chip ${(p.dias ?? 0) >= 5 ? "c-red" : (p.dias ?? 0) >= 2 ? "c-org" : "c-blue"}`}>
+              {(p.dias ?? 0) === 0 ? "emitido hoje" : `${p.dias} dia${p.dias === 1 ? "" : "s"} parado`}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ───────────────────────── HOJE ───────────────────────── */
 function MetaInput({ valor, onSalvar }: { valor: number | null; onSalvar: (n: number) => void }) {
   const [txt, setTxt] = useState(valor == null ? "" : String(valor));
@@ -142,7 +171,19 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
     telefone: string | null;
     motivo: string;
     mensagem: string;
+    decId?: string;
   } | null>(null);
+
+  // Micro-UX: anomalias do Decida Hoje tratadas/resolvidas na sessão
+  const [resolvidosHoje, setResolvidosHoje] = useState<Set<string>>(() => new Set());
+  const alternarResolvido = (id: string) => {
+    setResolvidosHoje((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   async function definir(id: string, n: number, nome: string) {
     const { error } = await supabase.rpc("definir_meta" as any, { p_mes: mes, p_dono: id, p_vendas: n });
@@ -151,7 +192,7 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
     qc.invalidateQueries({ queryKey: ["metas-painel"] });
   }
 
-  async function dispararCobranca(destId: string, destNome: string, motivo: string, mensagem: string, telefone: string | null) {
+  async function dispararCobranca(destId: string, destNome: string, motivo: string, mensagem: string, telefone: string | null, decId?: string) {
     try {
       await supabase.from("cobrancas" as any).insert({
         de_id: diretorId,
@@ -162,6 +203,14 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
       });
       qc.invalidateQueries({ queryKey: ["diretoria"] });
       toast.success(`Cobrança registrada para ${destNome}!`);
+
+      if (decId) {
+        setResolvidosHoje((prev) => {
+          const next = new Set(prev);
+          next.add(decId);
+          return next;
+        });
+      }
 
       if (telefone) {
         const cleanPhone = telefone.replace(/\D/g, "");
@@ -204,12 +253,14 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
   const nuncaEntraram = corretores.filter((x) => !x.c.ultimo_acesso).length;
 
   // decida hoje: as 3 coisas mais caras agora, do dado
-  type Dec = { cls: string; tipo: string; quem: string; titulo: string; porque: string; acoes: [string, () => void][] };
+  type Dec = { id: string; cls: string; tipo: string; quem: string; titulo: string; porque: string; acoes: [string, () => void][] };
   const decs: (Dec & { peso: number })[] = [];
   for (const { s, g } of gerentes) {
     const l = cons.find((x) => x.id === g.id);
     if (l && l.nuncaFalaram >= 10) {
+      const decId = `leads-sem-toque:${g.id}`;
       decs.push({
+        id: decId,
         peso: l.nuncaFalaram,
         cls: "c-red",
         tipo: "dinheiro na mesa",
@@ -222,7 +273,8 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
             destinatarioId: s.id,
             telefone: s.phone ?? null,
             motivo: `${nf(l.nuncaFalaram)} leads sem toque na equipe do ${g.nome}`,
-            mensagem: `Fala ${s.nome}, no Comandra constam ${nf(l.nuncaFalaram)} leads pagos da equipe do ${g.nome} sem nenhum toque do corretor. Dinheiro de mídia esfria em 48h. Por favor, alinhe com o ${g.nome} para rodar a roleta ou redistribuir hoje antes das 14h.`
+            mensagem: `Fala ${s.nome}, no Comandra constam ${nf(l.nuncaFalaram)} leads pagos da equipe do ${g.nome} sem nenhum toque do corretor. Dinheiro de mídia esfria em 48h. Por favor, alinhe com o ${g.nome} para rodar a roleta ou redistribuir hoje antes das 14h.`,
+            decId
           })],
           [`Abrir painel do ${g.nome}`, () => abrirPainel(g.id)],
           ["Ver leads", () => irPara("leads", `s:${s.id}`)]
@@ -231,9 +283,11 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
     }
     const sl = s.plantaoSemLogin[g.id]?.length ?? 0;
     if (sl >= 2) {
+      const decId = `sem-login:${g.id}`;
       decs.push({
+        id: decId,
         peso: sl * 8,
-        cls: "c-org",
+        cls: "c-red",
         tipo: "equipe invisível",
         quem: `${s.nome} › ${g.nome}`,
         titulo: `${sl} corretores do ${g.nome} no plantão hoje sem login no Comandra`,
@@ -244,7 +298,8 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
             destinatarioId: s.id,
             telefone: s.phone ?? null,
             motivo: `${sl} corretores do ${g.nome} no plantão sem login`,
-            mensagem: `Fala ${s.nome}, verifiquei no Comandra que há ${sl} corretores do ${g.nome} no plantão pelo C2S hoje sem login no Comandra. Estão atendendo mas invisíveis para a distribuição. Pode acionar o ${g.nome} para cobrar o login da equipe agora?`
+            mensagem: `Fala ${s.nome}, verifiquei no Comandra que há ${sl} corretores do ${g.nome} no plantão pelo C2S hoje sem login no Comandra. Estão atendendo mas invisíveis para a distribuição. Pode acionar o ${g.nome} para cobrar o login da equipe agora?`,
+            decId
           })],
           ["Ver nomes", () => irPara("equipes", `s:${s.id}`)],
           [`Abrir painel do ${g.nome}`, () => abrirPainel(g.id)]
@@ -252,9 +307,11 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
       });
     }
     if (l && l.plantaoDias >= 15 && l.visitas === 0) {
+      const decId = `plantao-sem-visita:${g.id}`;
       decs.push({
+        id: decId,
         peso: l.plantaoDias,
-        cls: "c-org",
+        cls: "c-gray",
         tipo: "plantão sem visita",
         quem: `${s.nome} › ${g.nome}`,
         titulo: `${g.nome}: ${l.plantaoDias} dias de plantão e nenhuma visita registrada`,
@@ -265,7 +322,8 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
             destinatarioId: s.id,
             telefone: s.phone ?? null,
             motivo: `${g.nome}: ${l.plantaoDias} dias de plantão e zero visitas no C2S`,
-            mensagem: `Fala ${s.nome}, a equipe do ${g.nome} acumulou ${l.plantaoDias} dias de plantão no C2S mas nenhuma visita lançada. Ou não estão cadastrando atendimento ou a conversão de plantão está travada. Como está essa cobrança?`
+            mensagem: `Fala ${s.nome}, a equipe do ${g.nome} acumulou ${l.plantaoDias} dias de plantão no C2S mas nenhuma visita lançada. Ou não estão cadastrando atendimento ou a conversão de plantão está travada. Como está essa cobrança?`,
+            decId
           })],
           [`Abrir painel do ${g.nome}`, () => abrirPainel(g.id)],
           ["Ver equipe", () => irPara("equipes", `s:${s.id}`)]
@@ -276,8 +334,9 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
   const travadas = pastas.filter((p) => (p.dias ?? 0) >= 7).length;
   if (travadas >= 3) {
     decs.push({
+      id: "pastas-travadas",
       peso: travadas * 3,
-      cls: "c-blue",
+      cls: "c-red",
       tipo: "pasta parada",
       quem: "empresa toda",
       titulo: `${travadas} pastas paradas há 7 dias ou mais no Junix`,
@@ -288,6 +347,7 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
   const atrasadasPlano = (planosMes ?? []).flatMap((p) => p.acoes.filter(atrasada));
   if (atrasadasPlano.length) {
     decs.push({
+      id: "plano-atrasado",
       peso: 1000 + atrasadasPlano.length,
       cls: "c-red",
       tipo: "plano atrasado",
@@ -393,6 +453,7 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
             <div className="dir-card dir-kpi"><div className="dir-lbl">Custo por venda</div><span className="mono">{total?.vendas ? brl((total.gasto ?? 0) / total.vendas) : "—"}</span><small>anúncio ÷ vendas</small></div>
             <div className="dir-card dir-kpi"><div className="dir-lbl">Sem nenhum toque</div><span className="mono" style={{ color: "var(--red)" }}>{total ? nf(total.nuncaFalaram) : "…"}</span><small>carteira ativa</small></div>
           </div>
+          <ContratosEmitidos pastas={pastas} supers={supers} />
         </div>
 
         <div>
@@ -401,20 +462,59 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
             <span style={{ fontSize: 17, fontWeight: 800 }}>Decida hoje</span>
             <span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>as {decida.length || "—"} mais caras agora — o resto pode esperar</span>
           </div>
-          {carregandoCons && !decida.length ? <div className="dir-card dir-vazio">Calculando…</div> : null}
-          {!carregandoCons && !decida.length ? <div className="dir-card dir-vazio">Nada urgente agora.</div> : null}
-          {decida.map((x, i) => (
-            <div key={i} className="dir-card dir-dec">
-              <div style={{ flex: "1 1 300px", minWidth: 0 }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}><span className={`dir-chip ${x.cls}`}>{x.tipo}</span><span style={{ fontSize: 12, color: "var(--ink-3)" }}>{x.quem}</span></div>
-                <div className="dir-dec-t">{x.titulo}</div>
-                <div className="dir-dec-p">{x.porque}</div>
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {x.acoes.map(([t, f], j) => <button key={t} className={`dir-btn${j === 0 ? " solid" : ""}`} onClick={f}>{t}</button>)}
+
+          {decida.length > 0 && decida.every((d) => resolvidosHoje.has(d.id)) && (
+            <div className="dir-missao-cumprida">
+              <div className="dir-missao-icon">🎉</div>
+              <div className="dir-missao-info">
+                <b>Missão Cumprida! Gargalos críticos destravados hoje.</b>
+                <span>Todas as pendências urgentes da manhã foram alinhadas e cobradas. Sua diretoria está blindada.</span>
               </div>
             </div>
-          ))}
+          )}
+
+          {carregandoCons && !decida.length ? <div className="dir-card dir-vazio">Calculando…</div> : null}
+          {!carregandoCons && !decida.length ? <div className="dir-card dir-vazio">Nada urgente agora.</div> : null}
+          {decida.map((x) => {
+            const resolvido = resolvidosHoje.has(x.id);
+            return (
+              <div key={x.id} className={`dir-card dir-dec${resolvido ? " resolvido" : ""}`}>
+                <div style={{ flex: "1 1 300px", minWidth: 0 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    {resolvido ? (
+                      <span className="dir-chip c-grn">✓ Cobrança realizada</span>
+                    ) : (
+                      <span className={`dir-chip ${x.cls}`}>{x.tipo}</span>
+                    )}
+                    <span style={{ fontSize: 12, color: "var(--ink-3)" }}>{x.quem}</span>
+                  </div>
+                  <div className="dir-dec-t">{x.titulo}</div>
+                  <div className="dir-dec-p">{x.porque}</div>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  {resolvido ? (
+                    <button className="dir-btn" style={{ fontSize: 12, padding: "5px 10px", minHeight: 32 }} onClick={() => alternarResolvido(x.id)}>
+                      Desfazer
+                    </button>
+                  ) : (
+                    <>
+                      {x.acoes.map(([t, f], j) => (
+                        <button key={t} className={`dir-btn${j === 0 ? " solid" : ""}`} onClick={f}>{t}</button>
+                      ))}
+                      <button
+                        className="dir-btn"
+                        style={{ fontSize: 12, padding: "6px 10px", color: "var(--ink-3)" }}
+                        title="Marcar como resolvido sem disparar mensagem"
+                        onClick={() => alternarResolvido(x.id)}
+                      >
+                        ✓ Marcar feito
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
 
           <div className="dir-card" style={{ padding: 18 }}>
             <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>Pessoas hoje</div>
@@ -441,6 +541,8 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
           <b>Scorecard Executivo das Superintendências</b>
           <span>Comparativo lado a lado de metas, VGV, capacidade produtiva da tropa e pastas travadas</span>
         </div>
+
+        {/* Versão Desktop: Tabela Analítica Completa */}
         <table className="dir-scorecard-table">
           <thead>
             <tr>
@@ -501,19 +603,37 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
                   </td>
                   <td>
                     {pctMeta != null ? (
-                      <span className={`dir-chip ${pctMeta >= 100 ? "c-grn" : pctMeta >= 65 ? "c-blue" : "c-red"}`}>
-                        {pctMeta}%
-                      </span>
+                      <div className="dir-cell-progress">
+                        <span className={`dir-chip ${pctMeta >= 100 ? "c-grn" : pctMeta >= 65 ? "c-blue" : "c-red"}`}>
+                          {pctMeta}%
+                        </span>
+                        <div className="dir-micro-bar">
+                          <i
+                            className={pctMeta >= 100 ? "ok" : pctMeta >= 65 ? "" : "crit"}
+                            style={{ width: `${Math.min(100, pctMeta)}%` }}
+                          />
+                        </div>
+                      </div>
                     ) : <span className="z">—</span>}
                   </td>
                   <td>
                     <b>{curto(t.vgv)}</b>
                   </td>
                   <td>
-                    <span>{ativosComVenda} de {todosCorret.length}</span>
-                    <span style={{ fontSize: 11, color: pctAtivacao < 25 ? "var(--red)" : "var(--ink-3)", marginLeft: 6, fontWeight: 700 }}>
-                      ({pctAtivacao}%)
-                    </span>
+                    <div className="dir-cell-progress">
+                      <div>
+                        <span>{ativosComVenda} de {todosCorret.length}</span>
+                        <span style={{ fontSize: 11, color: pctAtivacao < 25 ? "var(--red)" : "var(--ink-3)", marginLeft: 6, fontWeight: 700 }}>
+                          ({pctAtivacao}%)
+                        </span>
+                      </div>
+                      <div className="dir-micro-bar">
+                        <i
+                          className={pctAtivacao >= 40 ? "ok" : pctAtivacao >= 25 ? "warn" : "crit"}
+                          style={{ width: `${pctAtivacao}%` }}
+                        />
+                      </div>
+                    </div>
                   </td>
                   <td>
                     <Z n={gastoSuper} fmt={brl} />
@@ -550,6 +670,122 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
             })}
           </tbody>
         </table>
+
+        {/* Versão Mobile / Tablet: Cards Executivos Táteis */}
+        <div className="dir-scorecard-mobile">
+          {supers.map((s) => {
+            const ls = cons.filter((l) => s.gerentes.some((g) => g.id === l.id) || l.id === s.id || l.id === `outros:${s.id}`);
+            const t = somar(s.nome, ls);
+            const f = (metas?.filhos ?? []).find((x) => x.id === s.id);
+            const metaQtd = f?.meta ?? 0;
+            const pctMeta = metaQtd ? Math.round((f?.realizado ?? t.vendas) / metaQtd * 100) : null;
+
+            const todosCorret = s.gerentes.flatMap((g) => g.corretores_lista);
+            const ativosComVenda = todosCorret.filter((c) => (c.vendas_mes ?? 0) > 0).length;
+            const pctAtivacao = todosCorret.length ? Math.round((ativosComVenda / todosCorret.length) * 100) : 0;
+
+            const pastasDoSuper = pastas.filter((p) => donoJunix(supers, p.superintendente, p.gerente).superId === s.id);
+            const travadasSuper = pastasDoSuper.filter((p) => (p.dias ?? 0) >= 7).length;
+
+            const gastoSuper = t.gasto ?? 0;
+            const custoPorVenda = t.vendas && gastoSuper ? Math.round(gastoSuper / t.vendas) : null;
+
+            let saudeCls = "dir-health-green";
+            let saudeTxt = "🟢 Alta";
+            if ((pctMeta != null && pctMeta < 50 && hoje.getDate() > 15) || travadasSuper >= 6 || (pctAtivacao < 20 && todosCorret.length > 5)) {
+              saudeCls = "dir-health-red";
+              saudeTxt = "🔴 Crítica";
+            } else if ((pctMeta != null && pctMeta < 70 && hoje.getDate() > 10) || travadasSuper >= 3 || pctAtivacao < 35) {
+              saudeCls = "dir-health-yellow";
+              saudeTxt = "🟡 Atenção";
+            }
+
+            return (
+              <div key={`mob-${s.id}`} className="dir-super-card">
+                <div className="dir-super-card-header">
+                  <div>
+                    <div className="dir-super-card-title">{s.nome}</div>
+                    <div className="dir-super-card-sub">
+                      {s.gerentes.length} gerentes · {todosCorret.length} corretores
+                    </div>
+                  </div>
+                  <span className={`dir-health-badge ${saudeCls}`}>
+                    {saudeTxt}
+                  </span>
+                </div>
+
+                <div className="dir-super-card-grid">
+                  <div className="dir-super-kpi">
+                    <small>Meta / Realizado</small>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                      <span className="val">{f?.realizado ?? t.vendas}</span>
+                      <span style={{ fontSize: 12, color: "var(--ink-3)" }}>de {metaQtd || "—"}</span>
+                      {pctMeta != null && (
+                        <span className={`dir-chip ${pctMeta >= 100 ? "c-grn" : pctMeta >= 65 ? "c-blue" : "c-red"}`} style={{ marginLeft: "auto" }}>
+                          {pctMeta}%
+                        </span>
+                      )}
+                    </div>
+                    {pctMeta != null && (
+                      <div className="dir-micro-bar" style={{ width: "100%", marginTop: 4 }}>
+                        <i className={pctMeta >= 100 ? "ok" : pctMeta >= 65 ? "" : "crit"} style={{ width: `${Math.min(100, pctMeta)}%` }} />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="dir-super-kpi">
+                    <small>VGV 30d</small>
+                    <span className="val">{curto(t.vgv)}</span>
+                    <span style={{ fontSize: 11, color: "var(--ink-3)" }}>Junix</span>
+                  </div>
+
+                  <div className="dir-super-kpi">
+                    <small>Ativação da Tropa</small>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                      <span className="val">{ativosComVenda}/{todosCorret.length}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: pctAtivacao < 25 ? "var(--red)" : "var(--ink-3)" }}>
+                        ({pctAtivacao}%)
+                      </span>
+                    </div>
+                    <div className="dir-micro-bar" style={{ width: "100%", marginTop: 4 }}>
+                      <i className={pctAtivacao >= 40 ? "ok" : pctAtivacao >= 25 ? "warn" : "crit"} style={{ width: `${pctAtivacao}%` }} />
+                    </div>
+                  </div>
+
+                  <div className="dir-super-kpi">
+                    <small>Pastas Travadas (7d+)</small>
+                    <span className="val" style={{ color: travadasSuper > 0 ? "var(--red)" : "var(--grn)" }}>
+                      {travadasSuper} {travadasSuper === 1 ? "pasta" : "pastas"}
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--ink-3)" }}>
+                      {travadasSuper > 0 ? "risco de distrato" : "esteira fluida"}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--ink-3)", background: "var(--sunk)", padding: "8px 10px", borderRadius: 8 }}>
+                  <span>Mídia: <b><Z n={gastoSuper} fmt={brl} /></b></span>
+                  <span>Custo/Venda: <b>{custoPorVenda ? brl(custoPorVenda) : "—"}</b></span>
+                </div>
+
+                <div className="dir-super-card-footer">
+                  <button
+                    className="dir-btn-action full"
+                    onClick={() => setModalCobranca({
+                      destinatarioNome: s.nome,
+                      destinatarioId: s.id,
+                      telefone: s.phone ?? null,
+                      motivo: `Alinhamento de meta: ${f?.realizado ?? t.vendas}/${metaQtd} vendas · ${travadasSuper} pastas travadas`,
+                      mensagem: `Fala ${s.nome}, revisando os números de fechamento da sua superintendência: temos ${f?.realizado ?? t.vendas} vendas realizadas de uma meta de ${metaQtd || "—"} (${pctMeta ?? 0}% atingido). Temos ${travadasSuper} pastas paradas há 7d+ no Junix. Vamos focar em destravar essas pastas para puxar o VGV esta semana?`
+                    })}
+                  >
+                    📱 Cobrar {s.nome} no WhatsApp
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div className="dir-grid3">
@@ -663,7 +899,8 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
                   modalCobranca.destinatarioNome,
                   modalCobranca.motivo,
                   modalCobranca.mensagem,
-                  modalCobranca.telefone
+                  modalCobranca.telefone,
+                  modalCobranca.decId
                 )}
               >
                 <span>📱 Abrir no WhatsApp & Registrar</span>
