@@ -303,3 +303,35 @@
 .pst-lim-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 10px; }
 @media (max-width: 900px) { .pst-band-g { grid-template-columns: repeat(2, minmax(0,1fr)); } .pst-g2, .pst-g3 { grid-template-columns: minmax(0,1fr); } }
 @media (max-width: 440px) { .pst-fr { grid-template-columns: 96px minmax(0,1fr) 70px; } .pst-ai { grid-template-columns: minmax(0,1fr); } .pst-ai .n { display: none; } .pst-ai .r { align-items: flex-start; } }
+
+/* ── Conselho de estratégia (IA) ── */
+.cs { padding: 18px; display: flex; flex-direction: column; gap: 12px; border-color: #B9DAD9; }
+.cs-hd { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; }
+.cs-who { display: flex; gap: 10px; align-items: center; }
+.cs-av { width: 36px; height: 36px; border-radius: 10px; background: var(--teal); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; }
+.cs-who b { font-size: 16px; } .cs-who small { display: block; font-size: 12px; color: var(--ink-3); }
+.cs-lei { margin: 0; font-size: 15px; font-weight: 600; max-width: 85ch; line-height: 1.5; }
+.cs-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.cs-conta { background: var(--sunk); border-radius: 10px; padding: 10px 12px; font: 500 13px "JetBrains Mono", monospace; display: flex; flex-direction: column; gap: 3px; }
+.cs-decs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.cs-dec { border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cs-dec h3 { margin: 0; font-size: 15.5px; font-weight: 800; line-height: 1.3; }
+.cs-ops { display: flex; flex-direction: column; gap: 6px; }
+.cs-op { border: 1px solid var(--line-2); background: var(--sunk); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.cs-op.rec { border-color: #9FD2BA; background: var(--grn-bg); }
+.cs-op b { font-size: 13px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.cs-op small { font-size: 12px; color: var(--ink-2); }
+.cs-op small span { font-weight: 700; color: var(--ink-3); text-transform: uppercase; font-size: 10px; letter-spacing: .05em; margin-right: 4px; }
+.cs-rec { margin: 0; font-size: 13px; } .cs-rec span { color: var(--ink-2); }
+.cs-nao { margin: 0; font-size: 12.5px; color: var(--ink-3); }
+.cs-plano { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.cs-plano li > div { display: inline-flex; flex-direction: column; max-width: calc(100% - 96px); vertical-align: top; }
+.cs-plano li small { color: var(--ink-3); font-size: 11.5px; }
+.cs-plano li .dir-btn-action { float: right; }
+.cs-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+.cs-ask { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.cs-ask-row { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.cs-ask textarea { flex: 1 1 320px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font: 400 13.5px Archivo, system-ui, sans-serif; resize: vertical; background: #fff; color: var(--ink); }
+.cs-resp { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.cs-resp p { margin: 0; font-size: 13.5px; line-height: 1.5; }
+.cs-q { font-weight: 700; font-size: 13px; color: var(--teal); }

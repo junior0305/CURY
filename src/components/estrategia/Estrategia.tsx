@@ -12,6 +12,8 @@ import { donoJunix, type PastaJunix, type PessoaMeta, type SuperDiretoria } from
 import { useEstrutura, useGastos, hojeSP } from "@/hooks/usePlano";
 import { useCompromissos, useCompromissoAcoes, vencido, type Compromisso, type Lembrete } from "@/hooks/useCompromissos";
 import GastosPlano from "@/components/plano/GastosPlano";
+import Conselho from "./Conselho";
+import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
 
 const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
 const dm = (d: string | null | undefined) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : "—");
@@ -21,7 +23,7 @@ const ETAPAS = ["Pendência", "Cadastro", "Simular", "Selecionar Unidade", "Anex
   "Laudo / Pré-Análise", "Proposta", "Parecer", "Emissão", "Venda Confirmada"];
 const FECHA_NO_MES = new Set(["Proposta", "Parecer", "Emissão", "Venda Confirmada"]);
 
-export interface Combinar { sobre: string; pergunta: number; titulo: string; responsavelId?: string | null }
+export interface Combinar { sobre: string; pergunta: number; titulo: string; responsavelId?: string | null; prazoDias?: number }
 type MetaPainel = { dono: PessoaMeta; filhos: PessoaMeta[] };
 
 export default function Estrategia({ diretorId, supers, pastas }: { diretorId: string; supers: SuperDiretoria[]; pastas: PastaJunix[] }) {
@@ -49,8 +51,58 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
   const metaSuper = new Map(supers.map((s, i) => [s.id, metasQ[i + 1]?.data]));
 
   const abrir = (c: Combinar) => setCombinar(c);
+
+  // fatos para o Conselho de estratégia (IA): os mesmos números das 5 perguntas, já calculados
+  const { data: compromissos } = useCompromissos();
+  const { data: gastos } = useGastos(mes);
+  const { data: cats } = useQuery({
+    queryKey: ["gasto-categorias-canal"], staleTime: 10 * 60_000,
+    queryFn: async () => ((await supabase.from("gasto_categorias" as any).select("id,canal").eq("ativa", true)).data ?? []) as unknown as { id: string; canal: Canal }[],
+  });
+  const pronto = !!metaDir && !!c30 && !!cMes && metasQ.every((q) => !q.isLoading);
+  const fatos = useMemo(() => {
+    if (!pronto || !metaDir) return {};
+    const proj = (r: number) => Math.round((r / diaHoje) * diasMes * 10) / 10;
+    const lidas = lerPastas(pastas).map((p) => ({ ...p, sup: supers.find((s) => s.id === donoJunix(supers, p.superintendente, p.gerente).superId)?.nome ?? "fora do Comandra" }));
+    const rp = resumoPastas(lidas);
+    const tit = (t: string | null) => (t ?? "—").replace(/\s+BN\s*$/i, "").toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+    const canalDe = new Map((cats ?? []).map((c) => [c.id, c.canal]));
+    const fb = (cMes?.linhas ?? []).reduce((a, l) => a + (l.gasto ?? 0), 0);
+    const ld = (cMes?.linhas ?? []).reduce((a, l) => ({ anuncio: a.anuncio + l.leads.anuncio, disparo: a.disparo + l.leads.disparo, pescados: a.pescados + l.leads.pescados }), { anuncio: 0, disparo: 0, pescados: 0 });
+    return {
+      hoje: hojeSP(), dia_do_mes: diaHoje, dias_no_mes: diasMes,
+      referencias_da_casa: { presenca_no_plantao: "60%", plantoes_por_corretor_no_mes: 12, visita_a_cada_plantoes: 8, pasta_vira_venda: "40%",
+        chance_no_mes: "emissão 85%, proposta 50%, aprovada 60%, em análise 30%, documentos 20%, unidade 12%, cadastro 6%" },
+      meta: {
+        diretoria: { meta: metaDir.dono.meta, vendido_no_placar: metaDir.dono.realizado, projecao_no_ritmo: proj(metaDir.dono.realizado) },
+        superintendencias: supers.map((s) => { const m = metaSuper.get(s.id); return { nome: s.nome, meta: m?.dono.meta ?? null, vendido: m?.dono.realizado ?? 0,
+          projecao_no_ritmo: proj(m?.dono.realizado ?? 0), gerentes: (m?.filhos ?? []).filter((f) => f.papel === "MANAGER").map((g) => ({ nome: g.nome, meta: g.meta, vendido: g.realizado })) }; }),
+        observacao: "vendas da Adajes de antes de 12/10 aparecem no vendido dela mas não contam no placar da diretoria",
+      },
+      pastas: { total: rp.total, clientes: rp.clientes, vivas: rp.vivas, previsao_de_vendas_no_mes: Math.round(rp.previsao * 10) / 10,
+        reta_final: rp.reta.n, fora_da_conta: { duplicadas: rp.duplicadas, reprovadas: rp.reprovadas, paradas_60_dias: rp.mortas },
+        por_superintendencia: supers.map((s) => { const ps = lidas.filter((p) => p.sup === s.nome && p.viva);
+          return { nome: s.nome, vivas: ps.length, previsao: Math.round(ps.reduce((a, p) => a + p.chance, 0) * 10) / 10, reta_final: ps.filter((p) => p.reta).length }; }),
+        reta_final_lista: lidas.filter((p) => p.reta).map((p) => ({ cliente: tit(p.cliente), empreendimento: tit(p.empreendimento), etapa: p.etapa, status: p.status, super: p.sup, gerente: tit(p.gerente), corretor: tit(p.corretor) })) },
+      time_por_gerente: supers.flatMap((s) => s.gerentes.map((g) => { const l = linha.get(g.id);
+        return { gerente: g.nome, super: s.nome, corretores_no_comandra: g.corretores, plantoes_30d: l?.plantaoDias ?? 0, visitas_30d: l?.visitas ?? 0,
+          vendas_30d: l?.vendas ?? 0, leads_sem_nenhum_toque: l?.nuncaFalaram ?? 0, corretores_que_nunca_entraram: g.corretores_lista.filter((c) => !c.ultimo_acesso).length }; })),
+      superintendencias_sem_gerente_no_comandra: supers.filter((s) => !s.gerentes.length).map((s) => ({ nome: s.nome,
+        plantao_c2s: s.c2s ? { dias_de_plantao_no_periodo: s.c2s.dias, gerentes_no_c2s: s.c2s.gerentes.map((g) => g.nome) } : "sem plantão no C2S" })),
+      dinheiro_no_mes: CANAIS.map(([k, nome]) => { const gs = (gastos ?? []).filter((g) => canalDe.get(g.categoria_id) === k);
+        const gasto = gs.reduce((a, g) => a + g.realizado, 0) + (k === "anuncio" ? fb : 0);
+        const leads = k === "anuncio" ? ld.anuncio : k === "disparo" ? ld.disparo : k === "prospeccao" ? ld.pescados : null;
+        return { canal: nome, planejado: gs.reduce((a, g) => a + g.planejado, 0), gasto: Math.round(gasto), leads, custo_por_lead: leads && gasto ? Math.round(gasto / leads) : null }; }),
+      compromissos: (compromissos ?? []).filter((c) => c.status !== "cancelado").slice(0, 25).map((c) => ({ titulo: c.titulo, responsavel: c.responsavel, prazo: c.prazo,
+        situacao: c.status === "feito" ? `feito${c.resultado ? ": " + c.resultado : ""}` : vencido(c) ? "VENCIDO" : "aberto" })),
+      pessoas: [...supers.map((s) => ({ id: s.id, nome: s.nome, papel: "superintendente" })),
+        ...supers.flatMap((s) => s.gerentes.map((g) => ({ id: g.id, nome: g.nome, papel: `gerente (${s.nome})` })))],
+    };
+  }, [pronto, metaDir, metaSuper, supers, pastas, linha, cMes, cats, gastos, compromissos, diaHoje, diasMes]);
+
   return (
     <>
+      <Conselho fatos={fatos} pronto={pronto} donoId={diretorId} abrir={abrir} />
       <Pergunta1 metaDir={metaDir} supers={supers} metaSuper={metaSuper} linha={linha} c30={c30?.linhas ?? null}
         diaHoje={diaHoje} diasMes={diasMes} mes={mes} abrir={abrir} />
       <Pergunta2 pastas={pastas} supers={supers} metaDir={metaDir} abrir={abrir} />
@@ -199,16 +251,18 @@ function Pergunta1({ metaDir, supers, metaSuper, linha, c30, diaHoje, diasMes, m
 
 /* ───────────── 2. PASTAS ───────────── */
 function Pergunta2({ pastas, supers, metaDir, abrir }: { pastas: PastaJunix[]; supers: SuperDiretoria[]; metaDir?: MetaPainel; abrir: (c: Combinar) => void }) {
+  // mesma leitura da aba Pastas: só conta pasta viva (sem duplicada, reprovada, parada 60+ dias ou já vendida)
+  const lidas = lerPastas(pastas), rp = resumoPastas(lidas), vivas = lidas.filter((p) => p.viva);
   const porEtapa = new Map<string, number>();
-  for (const p of pastas) porEtapa.set(p.etapa ?? "Outras", (porEtapa.get(p.etapa ?? "Outras") ?? 0) + 1);
+  for (const p of vivas) porEtapa.set(p.etapa ?? "Outras", (porEtapa.get(p.etapa ?? "Outras") ?? 0) + 1);
   const ordem = [...ETAPAS.filter((e) => porEtapa.has(e)), ...[...porEtapa.keys()].filter((e) => !ETAPAS.includes(e))];
   const max = Math.max(1, ...porEtapa.values());
-  const perto = pastas.filter((p) => FECHA_NO_MES.has(p.etapa ?? "")).length;
+  const perto = rp.reta.n;
   const vendido = metaDir?.dono.realizado ?? 0, meta = metaDir?.dono.meta ?? 0;
-  const teto = vendido + perto;
+  const teto = Math.round(vendido + rp.previsao);
   // paradas 7d+ por gerente
   const paradas = new Map<string, { nome: string; gerenteId: string | null; n: number; etapas: Set<string> }>();
-  for (const p of pastas) {
+  for (const p of vivas) {
     if ((p.dias ?? 0) < 7) continue;
     const k = p.gerente ?? "sem gerente";
     const d = donoJunix(supers, p.superintendente, p.gerente);
@@ -220,12 +274,12 @@ function Pergunta2({ pastas, supers, metaDir, abrir }: { pastas: PastaJunix[]; s
   return (
     <section className="dir-card est-q">
       <Cab n={2} titulo="As pastas em andamento viram venda este mês?" veredito={teto >= meta ? "Funil sustenta a meta" : "Funil curto"} tom={teto >= meta ? "grn" : "red"}>
-        Pastas perto de virar venda: <b>{perto}</b> (proposta, parecer, emissão, confirmada). Mesmo se todas fecharem, chegamos a <b>{teto} de {meta}</b>.
+        Das {rp.total} pastas, <b>{rp.vivas} estão vivas</b> e <b>{perto}</b> na reta final (emissão, proposta ou aprovada). Pela chance de cada etapa, o mês fecha perto de <b>{teto} de {meta}</b>.
         {teto < meta ? <> <b>O funil não sustenta a meta</b>: falta gerar pasta, não só fechar.</> : null}
       </Cab>
       <div className="est-g2">
         <div className="est-box">
-          <div className="dir-lbl">{pastas.length} pastas no Junix, por etapa</div>
+          <div className="dir-lbl">{rp.vivas} pastas vivas, por etapa · fora da conta: {rp.duplicadas} duplicadas, {rp.reprovadas} reprovadas, {rp.mortas} paradas 60+ dias</div>
           <div className="est-funil">
             {ordem.map((e) => (
               <div key={e} className={`est-frow${FECHA_NO_MES.has(e) ? " hot" : ""}`}>
@@ -234,7 +288,7 @@ function Pergunta2({ pastas, supers, metaDir, abrir }: { pastas: PastaJunix[]; s
               </div>
             ))}
           </div>
-          <p className="dir-nota" style={{ margin: 0 }}>Verde-azulado: etapas que viram venda dentro do mês.</p>
+          <p className="dir-nota" style={{ margin: 0 }}>Verde-azulado: etapas que costumam virar venda dentro do mês. Detalhe e cobrança por pasta na aba Pastas.</p>
         </div>
         <div className="est-box">
           <div className="dir-lbl">Pastas paradas há 7 dias ou mais</div>
@@ -446,7 +500,7 @@ export function CombinarAcao({ diretorId, c, fechar }: { diretorId: string; c: C
   const ac = useCompromissoAcoes();
   const [titulo, setTitulo] = useState(c.titulo);
   const [resp, setResp] = useState(c.responsavelId ?? "");
-  const [prazo, setPrazo] = useState(somaDias(5));
+  const [prazo, setPrazo] = useState(somaDias(Math.max(1, Math.min(60, c.prazoDias ?? 5))));
   const [lembrete, setLembrete] = useState<Lembrete>("vespera_dia");
   const [salvando, setSalvando] = useState(false);
   const grupo = (papel: string) => (pessoas ?? []).filter((p) => p.papel === papel);
