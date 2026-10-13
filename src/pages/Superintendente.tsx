@@ -33,8 +33,13 @@ import "@/styles/superintendente.css";
 import "@/styles/diretoria.css";
 import PlanoEstrategico from "@/components/plano/PlanoEstrategico";
 import GastosPlano from "@/components/plano/GastosPlano";
+import SalaDeGuerraSuper from "@/components/superintendente/SalaDeGuerraSuper";
+import PastasSuper from "@/components/superintendente/PastasSuper";
+import LeadsAnunciosSuper from "@/components/superintendente/LeadsAnunciosSuper";
 
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "Semana"], [30, "Mês"]];
+
+type AbaSuper = "consolidado" | "estrategia" | "pastas" | "leads" | "time" | "bi" | "campanhas" | "plano" | "gastos";
 
 export default function Superintendente() {
   const { session, role } = useAuth();
@@ -52,12 +57,28 @@ export default function Superintendente() {
   });
   const ehDiretoria = role === "DIRECTOR" || role === "ADMIN";
   const superId = role === "ADMIN" ? (diretorId ?? undefined) : session?.user?.id;
+
+  // Busca o nome do Superintendente para Sala de Guerra e Pastas
+  const { data: superPerfil } = useQuery({
+    queryKey: ["super-perfil-nome", superId],
+    enabled: !!superId,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("first_name, last_name").eq("id", superId!).maybeSingle();
+      if (!data) return "Superintendente";
+      return [data.first_name, data.last_name].filter(Boolean).join(" ") || "Superintendente";
+    },
+  });
+
   const nav = useNavigate();
   const [dias, setDias] = useState(30);
   const [params] = useSearchParams();
   const abaUrl = params.get("aba");
-  const [aba, setAba] = useState<"consolidado" | "time" | "bi" | "campanhas" | "plano" | "gastos">(
-    abaUrl === "time" || abaUrl === "bi" || abaUrl === "campanhas" || abaUrl === "plano" || abaUrl === "gastos" ? abaUrl : "consolidado");
+  const [aba, setAba] = useState<AbaSuper>(
+    abaUrl === "estrategia" || abaUrl === "pastas" || abaUrl === "leads" || abaUrl === "time" || abaUrl === "bi" || abaUrl === "campanhas" || abaUrl === "plano" || abaUrl === "gastos"
+      ? (abaUrl as AbaSuper)
+      : "consolidado"
+  );
   // quais gerentes estão expandidos (mostrando os corretores)
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
   const toggleGer = (id: string) => setAberto((v) => ({ ...v, [id]: !v[id] }));
@@ -75,13 +96,27 @@ export default function Superintendente() {
     <div className="mgr10 app2 sup">
       <Boundary>
       <RailV10
-        atual={aba === "bi" ? "bi" : aba === "time" ? "time" : "tempo"}
+        atual={
+          aba === "estrategia"
+            ? "estrategia"
+            : aba === "pastas"
+            ? "pastas"
+            : aba === "leads"
+            ? "leads"
+            : aba === "time"
+            ? "time"
+            : aba === "bi"
+            ? "bi"
+            : "tempo"
+        }
         mode={mode}
         toggle={toggle}
         onAba={(k) => {
-          // Tempo real = o consolidado; Time = a estrutura inteira (e o cadastro); B.I. = a aba B.I.
-          if (k === "bi") setAba("bi");
+          if (k === "estrategia") setAba("estrategia");
+          else if (k === "pastas") setAba("pastas");
+          else if (k === "leads") setAba("leads");
           else if (k === "time") setAba("time");
+          else if (k === "bi") setAba("bi");
           else setAba("consolidado");
         }}
       />
@@ -95,11 +130,14 @@ export default function Superintendente() {
             </div>
             <div className="sup-per">
               <button className={aba === "consolidado" ? "on" : ""} onClick={() => setAba("consolidado")}>Consolidado</button>
-              <button className={aba === "time" ? "on" : ""} onClick={() => setAba("time")}>Time</button>
+              <button className={aba === "estrategia" ? "on" : ""} onClick={() => setAba("estrategia")}>🎯 Sala de Guerra</button>
+              <button className={aba === "pastas" ? "on" : ""} onClick={() => setAba("pastas")}>📁 Pastas</button>
+              <button className={aba === "leads" ? "on" : ""} onClick={() => setAba("leads")}>📢 Leads & Anúncios</button>
+              <button className={aba === "time" ? "on" : ""} onClick={() => setAba("time")}>👥 Minha Tropa</button>
+              <button className={aba === "bi" ? "on" : ""} onClick={() => setAba("bi")}>📊 B.I.</button>
               <button className={aba === "campanhas" ? "on" : ""} onClick={() => setAba("campanhas")}>Campanhas</button>
               <button className={aba === "plano" ? "on" : ""} onClick={() => setAba("plano")}>Plano</button>
               <button className={aba === "gastos" ? "on" : ""} onClick={() => setAba("gastos")}>Gastos</button>
-              <button className={aba === "bi" ? "on" : ""} onClick={() => setAba("bi")}>B.I.</button>
               {aba === "consolidado" ? PERIODOS.map(([n, r]) => (
                 <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{r}</button>
               )) : null}
@@ -107,7 +145,22 @@ export default function Superintendente() {
           </div>
 
           {!ehDiretoria ? <MinhasTarefas donoId={superId ?? undefined} /> : null}
-          {(aba === "plano" || aba === "gastos") && superId && session?.user?.id ? (
+          {aba === "estrategia" && superId ? (
+            <SalaDeGuerraSuper
+              superId={superId}
+              superNome={superPerfil || session?.user?.user_metadata?.name || session?.user?.email?.split("@")[0] || "Superintendente"}
+            />
+          ) : aba === "pastas" && superId ? (
+            <PastasSuper
+              superId={superId}
+              superNome={superPerfil || session?.user?.user_metadata?.name || session?.user?.email?.split("@")[0] || ""}
+            />
+          ) : aba === "leads" && superId ? (
+            <LeadsAnunciosSuper
+              superId={superId}
+              dias={dias}
+            />
+          ) : (aba === "plano" || aba === "gastos") && superId && session?.user?.id ? (
             <PlanoSuper aba={aba} superId={superId} meuId={session.user.id} />
           ) : aba === "campanhas" ? (
             <CampanhasNaoLead superId={superId} />
@@ -356,8 +409,11 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
   const listaGer = data.gerentes.map((g) => ({ id: g.id, nome: g.first_name || "—" }));
   const blocos = [...data.gerentes.map((g) => ({ id: g.id, titulo: g.first_name || "—", sub: g.email })),
     ...(data.corretores.some((c) => c.manager_id === superId) ? [{ id: superId!, titulo: "Direto com você", sub: null }] : [])];
+  const isOnline = (c: PessoaTime) => !!c.last_seen_at && (Date.now() - new Date(c.last_seen_at).getTime()) < 15 * 60 * 1000;
   const totalAtivos = data.corretores.filter((c) => c.is_active !== false).length;
   const totalSem = [...data.semLogin.values()].reduce((a, l) => a + l.length, 0);
+  const totalOnlineAgora = data.corretores.filter((c) => c.is_active !== false && isOnline(c)).length;
+  const totalPlantaoHoje = data.corretores.filter((c) => c.is_active !== false && plantaoHoje.has(c.id)).length;
 
   return (
     <>
@@ -365,6 +421,16 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
         <div className="sup-k"><span>Gerentes</span><b>{data.gerentes.length}</b></div>
         <div className="sup-k"><span>Corretores cadastrados</span><b>{totalAtivos}</b>
           <i>{data.corretores.length - totalAtivos} desligados</i></div>
+        <div className="sup-k bom" style={{ borderColor: "#10B981" }}>
+          <span>🟢 Online no Comandra</span>
+          <b style={{ color: "#059669" }}>{totalOnlineAgora}</b>
+          <i>{totalAtivos ? Math.round((totalOnlineAgora / totalAtivos) * 100) : 0}% da tropa ativa</i>
+        </div>
+        <div className="sup-k">
+          <span>📍 No plantão hoje (C2S)</span>
+          <b>{totalPlantaoHoje}</b>
+          <i>check-in nas lojas</i>
+        </div>
         <div className="sup-k"><span>Batem ponto sem login</span><b>{totalSem}</b>
           <i>no plantão (C2S) · últimos 30 dias</i></div>
       </div>
@@ -390,6 +456,7 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
                 <b>{b.titulo}</b>
                 <span className="sup-ger-cor">{ativos.length} corretores</span>
                 <span className="sup-ger-nums">
+                  <em><b style={{ color: "#059669" }}>{ativos.filter(isOnline).length}</b> online Comandra</em>
                   <em><b>{ativos.filter((c) => plantaoHoje.has(c.id)).length}</b> no plantão hoje</em>
                   <em><b>{ativos.filter((c) => c.lead_assignment_enabled !== false).length}</b> recebem lead</em>
                   {sem.length ? <em style={{ color: "var(--red)" }}><b>{sem.length}</b> sem login</em> : null}
@@ -407,9 +474,18 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
                   {meus.map((c) => (
                     <div className="sup-cor" key={c.id} style={c.is_active === false ? { opacity: 0.5 } : undefined}>
                       <span className="sup-cor-nm">
-                        <s className={c.last_seen_at && Date.now() - new Date(c.last_seen_at).getTime() < 9e5 ? "on" : "off"} />
+                        <s className={isOnline(c) ? "on" : "off"} />
                         {nome(c)}
-                        {plantaoHoje.has(c.id) ? <em style={{ marginLeft: 6, fontStyle: "normal", fontSize: 11, color: "var(--good)", fontWeight: 700 }}>• no plantão</em> : null}
+                        {isOnline(c) ? (
+                          <span style={{ marginLeft: 6, fontSize: 10.5, color: "#047857", fontWeight: 700, background: "#D1FAE5", padding: "1px 5px", borderRadius: 4 }}>
+                            🟢 online
+                          </span>
+                        ) : null}
+                        {plantaoHoje.has(c.id) ? (
+                          <em style={{ marginLeft: 6, fontStyle: "normal", fontSize: 11, color: "var(--good)", fontWeight: 700 }}>
+                            📍 plantão
+                          </em>
+                        ) : null}
                       </span>
                       <span className="sup-cor-nums">
                         <em>{c.email ?? "—"}</em>

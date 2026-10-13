@@ -43,6 +43,16 @@ export const ABAS: { k: Aba; label: string; to: string }[] = [
   { k: "integracoes", label: "Integrações", to: "/integracoes" },
 ];
 
+/** 6 Módulos Mestres do Superintendente (Cockpit Executivo sem sobreposição) */
+export const ABAS_SUPER: { k: Aba; label: string; to: string }[] = [
+  { k: "tempo", label: "Painel Geral", to: "/super" },
+  { k: "estrategia", label: "Sala de Guerra", to: "/super?aba=estrategia" },
+  { k: "pastas", label: "Pastas", to: "/super?aba=pastas" },
+  { k: "leads", label: "Leads & Mídia", to: "/super?aba=leads" },
+  { k: "time", label: "Minha Tropa", to: "/super?aba=time" },
+  { k: "bi", label: "B.I.", to: "/super?aba=bi" },
+];
+
 export function RailV10({
   atual, sub, mode, toggle, onAba, pip,
 }: {
@@ -55,11 +65,17 @@ export function RailV10({
   pip?: number;
 }) {
   const { signOut, role } = useAuth();
-  // Superintendente/diretor: "Tempo real", "Time" e "B.I." são o painel DELE (/super),
-  // não o painel de gerente — senão ele cai num /manager com o próprio nome e vazio.
-  const ehSuper = role === "SUPERINTENDENT" || role === "DIRECTOR" || role === "ADMIN";
-  const destino = (a: { k: Aba; to: string }) =>
-    !ehSuper ? a.to : a.k === "tempo" ? (role === "SUPERINTENDENT" ? "/super" : "/diretor") : a.k === "time" ? "/super?aba=time" : a.to;
+  const ehSuper = role === "SUPERINTENDENT";
+  const listaAbas = ehSuper ? ABAS_SUPER : ABAS;
+
+  const destino = (a: { k: Aba; to: string }) => {
+    if (ehSuper) return a.to;
+    if (role === "DIRECTOR" || role === "ADMIN") {
+      return a.k === "tempo" ? "/diretor" : a.k === "time" ? "/super?aba=time" : a.to;
+    }
+    return a.to;
+  };
+
   return (
     <nav className="rail" aria-label="Seções">
       <div className="rail-brand">
@@ -67,7 +83,7 @@ export function RailV10({
         <div><b>Comandra</b>{sub ? <i>{sub}</i> : null}</div>
       </div>
 
-      {ABAS.map((a) => {
+      {listaAbas.map((a) => {
         const on = a.k === atual;
         const conteudo = (
           <>
@@ -76,9 +92,8 @@ export function RailV10({
             {a.k === "tempo" && pip ? <i className="pip">{pip}</i> : null}
           </>
         );
-        // As duas primeiras são abas internas do /manager quando estamos nele;
-        // fora dele viram link, senão o clique não sai da página.
-        return onAba && (a.k === "tempo" || a.k === "time") ? (
+        // Quando a tela gerencia as abas internamente via onAba:
+        return onAba ? (
           <button key={a.k} type="button" className={`railb${on ? " on" : ""}`}
             aria-current={on ? "page" : undefined} onClick={() => onAba(a.k)}>
             {conteudo}
@@ -91,17 +106,21 @@ export function RailV10({
         );
       })}
 
-      <div className="rail-sep" />
-      {onAba ? (
-        <button type="button" className={`railb${atual === "bi" ? " on" : ""}`}
-          aria-current={atual === "bi" ? "page" : undefined} onClick={() => onAba("bi")}>
-          <svg viewBox="0 0 24 24"><path d={ICONES.bi} /></svg>B.I.
-        </button>
-      ) : (
-        <Link to={ehSuper ? "/super?aba=bi" : "/manager?aba=bi"} className={atual === "bi" ? "on" : undefined}
-          aria-current={atual === "bi" ? "page" : undefined}>
-          <svg viewBox="0 0 24 24"><path d={ICONES.bi} /></svg>B.I.
-        </Link>
+      {!ehSuper && (
+        <>
+          <div className="rail-sep" />
+          {onAba ? (
+            <button type="button" className={`railb${atual === "bi" ? " on" : ""}`}
+              aria-current={atual === "bi" ? "page" : undefined} onClick={() => onAba("bi")}>
+              <svg viewBox="0 0 24 24"><path d={ICONES.bi} /></svg>B.I.
+            </button>
+          ) : (
+            <Link to="/manager?aba=bi" className={atual === "bi" ? "on" : undefined}
+              aria-current={atual === "bi" ? "page" : undefined}>
+              <svg viewBox="0 0 24 24"><path d={ICONES.bi} /></svg>B.I.
+            </Link>
+          )}
+        </>
       )}
 
       {role === "ADMIN" || role === "DIRECTOR" ? (

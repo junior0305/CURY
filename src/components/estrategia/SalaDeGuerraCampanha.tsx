@@ -11,7 +11,7 @@
  * e refletem diretamente no dashboard dos Superintendentes para derramarem aos gerentes.
  */
 import { useMemo, useState, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { SuperDiretoria } from "@/hooks/useDiretoria";
@@ -266,6 +266,40 @@ export default function SalaDeGuerraCampanha({
   const estoqueOrdenado = useMemo(() => {
     return [...estoque].sort((a, b) => b.disponiveis - a.disponiveis);
   }, [estoque]);
+
+  // Aportes Próprios da Tropa de cada Super (Recursos Próprios dos Gerentes/Corretores)
+  const { data: aportesTropa = [] } = useQuery({
+    queryKey: ["aportes-tropa-supers", mes],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("gastos" as any)
+        .select("dono_id, planejado, nota")
+        .eq("mes", mes)
+        .like("descricao", "%Aporte Tropa%");
+      return (data ?? []) as any[];
+    },
+  });
+
+  const aporteMap = useMemo(() => {
+    const map = new Map<string, { aporteTotal: number; poderDeFogo: number; metaOusada?: number }>();
+    for (const r of aportesTropa) {
+      try {
+        const parsed = JSON.parse(r.nota || "{}");
+        map.set(r.dono_id, {
+          aporteTotal: Number(r.planejado) || 0,
+          poderDeFogo: parsed.poderDeFogoTotal || Number(r.planejado) || 0,
+          metaOusada: parsed.metaOusada,
+        });
+      } catch {
+        map.set(r.dono_id, {
+          aporteTotal: Number(r.planejado) || 0,
+          poderDeFogo: Number(r.planejado) || 0,
+        });
+      }
+    }
+    return map;
+  }, [aportesTropa]);
 
   // Cesta de Produtos & Verbas por Superintendente
   const [itensPorSuper, setItensPorSuper] = useState<Record<string, ItemVerbaSuper[]>>(() => {
@@ -800,11 +834,19 @@ export default function SalaDeGuerraCampanha({
       )
       .join("\n");
 
+    const infoAporte = aporteMap.get(s.id);
+    const linhaAporte =
+      infoAporte && infoAporte.aporteTotal > 0
+        ? `\n🛡️ *Aporte da sua Tropa:* +${brl(infoAporte.aporteTotal)} (Recursos Gerentes/Corretores)\n💥 *Poder de Fogo Total em Campo:* ${brl(sub.total + infoAporte.aporteTotal)}${
+            infoAporte.metaOusada ? `\n🔥 *Sua Meta Ousada com a Tropa:* ${infoAporte.metaOusada} un` : ""
+          }`
+        : "";
+
     return `Fala ${s.nome.split(" ")[0]}, alinhamento fechado da nossa Reunião Estratégica:
 
 🎯 *Campanha de Incentivo:* ${titulo}
 📅 *Período:* ${nomeMes(mes)}
-💰 *Verba Total Alocada para sua equipe:* ${brl(sub.total)}
+💰 *Verba Total Alocada para sua equipe:* ${brl(sub.total)}${linhaAporte}
 🏁 *Sua Meta de Vendas Oficial:* ${metaPessoa} unidades (já definida no seu dashboard)
 👥 *Sua Tropa:* ${corretoresSuper} corretores escalados
 
@@ -1279,6 +1321,7 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
                 const itens = itensPorSuper[s.id] || [];
                 const metaSuperPessoa = metaSuper?.get(s.id)?.dono.meta;
                 const corrSuper = s.gerentes.flatMap((g) => g.corretores_lista).length;
+                const infoAporte = aporteMap.get(s.id);
 
                 return (
                   <div key={s.id} className="sdg-super-card">
@@ -1314,6 +1357,17 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
                             <span style={{ fontSize: 11, color: "var(--ink-3)" }}>un</span>
                           </div>
 
+                          {/* Se a tropa estipulou uma meta ousada maior */}
+                          {infoAporte?.metaOusada && infoAporte.metaOusada > (metaSuperPessoa || 0) && (
+                            <span
+                              className="dir-chip c-blu"
+                              style={{ fontSize: 11, background: "#EFF6FF", color: "#1D4ED8", borderColor: "#BFDBFE", fontWeight: 700 }}
+                              title={`O Superintendente e sua equipe estipularam uma meta ousada de ${infoAporte.metaOusada} un (+${infoAporte.metaOusada - (metaSuperPessoa || 0)} acima da oficial)`}
+                            >
+                              🔥 Meta da Tropa: {infoAporte.metaOusada} un (+{infoAporte.metaOusada - (metaSuperPessoa || 0)})
+                            </span>
+                          )}
+
                           <span className="dir-chip c-gray" style={{ fontSize: 11 }}>
                             {s.gerentes.length} gerentes · {corrSuper} corretores
                           </span>
@@ -1332,9 +1386,36 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
                           <span className="sdg-tipo-pill estoque">
                             🏢 Estoque: {brl(sub.estoques)} ({sub.nEstoques})
                           </span>
-                          <span style={{ fontSize: 15, fontWeight: 800, color: "var(--teal)", marginLeft: 4 }}>
-                            Total: {brl(sub.total)}
+                          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--ink-2)", marginLeft: 4 }}>
+                            Verba Diretor: {brl(sub.total)}
                           </span>
+
+                          {infoAporte && infoAporte.aporteTotal > 0 && (
+                            <>
+                              <span
+                                className="sdg-tipo-pill"
+                                style={{ background: "#ECFDF5", color: "#047857", borderColor: "#A7F3D0", fontWeight: 700 }}
+                                title="Recursos próprios aportados pelos gerentes e corretores da equipe"
+                              >
+                                🛡️ Aporte Tropa: +{brl(infoAporte.aporteTotal)}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: 800,
+                                  color: "#047857",
+                                  marginLeft: 4,
+                                  background: "#D1FAE5",
+                                  padding: "2px 8px",
+                                  borderRadius: 6,
+                                  border: "1px solid #A7F3D0",
+                                }}
+                                title="Poder de Fogo Total em campo (Verba Diretoria + Aportes dos Gerentes/Corretores)"
+                              >
+                                💥 Poder de Fogo: {brl(sub.total + infoAporte.aporteTotal)}
+                              </span>
+                            </>
+                          )}
                         </div>
 
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
