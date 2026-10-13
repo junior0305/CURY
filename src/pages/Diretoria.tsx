@@ -156,7 +156,7 @@ function CobrancasResumo({ cobrancas, supers, cons }: { cobrancas: import("@/hoo
   }
   const linhas = [...por.values()].sort((a, b) => b.n - a.n);
   const semResp = cobrancas.filter((c) => !c.respondida_em);
-  const inativos = [...new Map(cobrancas.filter((c) => !c.para_ativo).map((c) => [c.para_id, c.para])).values()];
+  const inativos = [...new Map(cobrancas.filter((c) => !c.para_ativo && c.para_ainda_tem).map((c) => [c.para_id, c.para])).values()];
   const cobraram = new Set(cobrancas.map((c) => c.de_id));
   const naoCobram = supers.flatMap((s) => s.gerentes).map((g) => ({ g, l: cons.find((x) => x.id === g.id) }))
     .filter(({ g, l }) => !cobraram.has(g.id) && (l?.nuncaFalaram ?? 0) >= 5)

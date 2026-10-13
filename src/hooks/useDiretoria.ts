@@ -37,6 +37,7 @@ export interface Cobranca {
   id: string; de: string; para: string; motivo: string; enviada_em: string; respondida_em: string | null; resposta: string | null;
   de_id: string; para_id: string; para_ativo: boolean;
   leads: number; atendidos: number;   // leads da cobrança e quantos foram mexidos depois dela
+  para_ainda_tem: boolean;            // o cobrado ainda é dono de algum desses leads
 }
 export interface PessoaMeta { id: string; nome: string; papel: string; meta: number | null; realizado: number; pode_editar: boolean }
 
@@ -119,16 +120,16 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
       }
       // efeito da cobrança: lead que andou (status) ou teve interação depois dela
       const lids = [...new Set(cobs.flatMap((c) => (c.lead_ids ?? []) as string[]))];
-      const lead = new Map<string, { status: string; ult: string | null }>();
+      const lead = new Map<string, { status: string; ult: string | null; dono: string | null }>();
       for (let i = 0; i < lids.length; i += 200) {
-        const { data } = await supabase.from("leads").select("id,status,last_interaction_at").in("id", lids.slice(i, i + 200));
-        for (const l of (data ?? []) as any[]) lead.set(l.id, { status: l.status, ult: l.last_interaction_at });
+        const { data } = await supabase.from("leads").select("id,status,last_interaction_at,broker_id").in("id", lids.slice(i, i + 200));
+        for (const l of (data ?? []) as any[]) lead.set(l.id, { status: l.status, ult: l.last_interaction_at, dono: l.broker_id });
       }
       const cobrancas: Cobranca[] = cobs.map((c) => {
-        const ls = ((c.lead_ids ?? []) as string[]).map((id) => lead.get(id)).filter(Boolean) as { status: string; ult: string | null }[];
+        const ls = ((c.lead_ids ?? []) as string[]).map((id) => lead.get(id)).filter(Boolean) as { status: string; ult: string | null; dono: string | null }[];
         return { id: c.id, de: nomes.get(c.de_id) ?? "—", para: nomes.get(c.para_id) ?? "—", de_id: c.de_id, para_id: c.para_id,
           para_ativo: ativo.get(c.para_id) ?? true, motivo: c.motivo, enviada_em: c.enviada_em, respondida_em: c.respondida_em, resposta: c.resposta,
-          leads: ls.length, atendidos: ls.filter((l) => l.status !== "NEW" || (l.ult != null && l.ult > c.enviada_em)).length };
+          para_ainda_tem: ls.some((l) => l.dono === c.para_id), leads: ls.length, atendidos: ls.filter((l) => l.status !== "NEW" || (l.ult != null && l.ult > c.enviada_em)).length };
       });
 
       const plantaoHojeTotal = new Set(plantao.map((r) => `${chaveGerente(r.gerente)}|${chaveNome(r.corretor)}`)).size;
