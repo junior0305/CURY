@@ -58,6 +58,7 @@ export function useDiretorId(role: string | null | undefined, meuId: string | un
 export function useDiretoria(diretorId: string | null | undefined, dias: number) {
   return useQuery({
     queryKey: ["diretoria", diretorId, dias],
+    placeholderData: (ant: any, q: any) => (q?.queryKey?.[1] === diretorId ? ant : undefined),
     enabled: !!diretorId,
     staleTime: 2 * 60_000,
     queryFn: async () => {

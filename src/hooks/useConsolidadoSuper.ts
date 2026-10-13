@@ -66,6 +66,8 @@ async function todas<T>(q: (de: number, ate: number) => PromiseLike<{ data: unkn
 export function useConsolidadoSuper(superId: string | undefined, dias: number) {
   return useQuery({
     queryKey: ["super-consolidado", superId, dias],
+    // trocar o período mantém os números anteriores na tela até os novos chegarem (a consulta leva ~8s)
+    placeholderData: (ant: any, q: any) => (q?.queryKey?.[1] === superId ? ant : undefined),
     enabled: !!superId,
     staleTime: 5 * 60_000,
     queryFn: async () => {

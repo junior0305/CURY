@@ -58,8 +58,9 @@ export default function Diretoria() {
   const abrirPainel = (id: string) => nav(`/manager?manager=${id}`);
 
   const { data: diretorId } = useDiretorId(role, session?.user?.id);
-  const { data: dir, isLoading } = useDiretoria(diretorId, dias);
-  const { data: cons, isLoading: carregandoCons } = useConsolidadoSuper(diretorId ?? undefined, dias);
+  const { data: dir, isLoading, isPlaceholderData: dirVelho } = useDiretoria(diretorId, dias);
+  const { data: cons, isLoading: carregandoCons, isPlaceholderData: consVelho } = useConsolidadoSuper(diretorId ?? undefined, dias);
+  const atualizando = dirVelho || consVelho;
 
   const porId = useMemo(() => new Map((cons?.linhas ?? []).map((l) => [l.id, l])), [cons]);
   const supers = dir?.supers ?? [];
@@ -95,7 +96,8 @@ export default function Diretoria() {
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span className="dir-lbl">Período</span>
             <div className="dir-per">{PERIODOS.map(([n, t]) => <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{t}</button>)}</div>
-            <span className="dir-nota">Clique na superintendência para abrir os gerentes; no gerente para abrir os corretores.</span>
+            {atualizando ? <span className="dir-chip c-blue">atualizando para {PERIODOS.find(([n]) => n === dias)?.[1] ?? `${dias} dias`}…</span>
+              : <span className="dir-nota">Clique na superintendência para abrir os gerentes; no gerente para abrir os corretores.</span>}
           </div>
         ) : null}
 
