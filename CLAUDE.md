@@ -60,3 +60,36 @@ Routes are defined in `src/App.tsx` with role-based `ProtectedRoute` wrappers.
 - Use Tailwind for all styling; use lucide-react for icons
 - Path alias `@/` maps to `src/`
 - Several files have `_old`, `_backup`, `.backup.tsx` variants — these are unused drafts, prefer the canonical filename
+
+## Trabalho em paralelo (mais de uma IA no mesmo repositório)
+
+Mais de uma sessão de IA trabalha neste repositório e publica no mesmo site (comandra.com.br). Leia esta seção antes de mexer e **acrescente aqui** o que você construir ou decidir com o Junior (seção "Registro" no fim).
+
+### Quem cuida de quê
+- **Sessão Estratégia:** `src/components/estrategia/*` (Estratégia, Sala de Guerra, Minha Estratégia, Conselho de estratégia).
+- **Sessão Diretoria:** `src/components/diretoria/*` (EquipesCards, PastasPainel, pastasAnalise, AnunciosSaude), `src/hooks/useDiretoria.ts`, robôs do servidor `/root/econ/*.py`.
+- **Compartilhados:** `src/pages/Diretoria.tsx` e `src/styles/diretoria.css`. Só acrescente; não reescreva nem reordene o que existe. Classes CSS novas com prefixo próprio.
+
+### Commit e publicação
+1. Antes de mexer: `git pull` e `git status`.
+2. `git add` **só dos seus arquivos** (nunca `git add src` inteiro). Faça o commit **antes** de buildar: o `dist` leva tudo o que está no disco, inclusive trabalho pela metade de outra sessão.
+3. Publicar: `npx vite build` → `git add <seus arquivos> dist` → commit → `git push origin main` → `ssh root@187.127.44.223 'docker service update --force --detach cury_agente-app'` → conferir o hash do `index-*.js` em comandra.com.br.
+4. Edge functions ficam no servidor (`/root/supabase/volumes/functions/<fn>/index.ts`), não neste repositório: editar lá e `docker service update --force --detach supabase_functions`. Tabela nova exige reiniciar `supabase_rest`.
+
+### IA (OpenAI)
+- IA **só na aba Estratégia** (decisão do Junior). As outras abas usam regras fixas.
+- Reusar a edge **`estrategia-ia`**: prompt em `system_settings.estrategia_ia_prompt` ({PAPEL} vira diretor/super/gerente), modelo em `estrategia_ia_modelo` (gpt-5.1). Gera em segundo plano e a tela consulta `public.estrategia_ia` pelo id (o GPT-5.1 leva ~60 s; o gateway corta em 60 s). Exemplo: `src/components/estrategia/Conselho.tsx`.
+- A chave da edge é a variável **`ESTRATEGIA_OPENAI_KEY`**. **Nunca** colocar `OPENAI_API_KEY` no serviço `supabase_functions`: 15 edges antigas (webhook_receiver, wa-webhook, ai-sentinela, cerebro, copilot…) leem essa variável e voltariam a usar IA sozinhas, inclusive no WhatsApp.
+
+### Regras da casa (valem para tudo que manda mensagem, cobra ou conta venda)
+- **WhatsApp:** chip do gerente → chip do super **da mesma equipe** → chip do Junior (`system_settings.notification_bot_instance_id`). Nunca chip de super para outra equipe; nunca chip de corretor.
+- **Cobrança:** o diretor cobra o **superintendente** primeiro (não passar por cima). Cobrar o gerente direto é opcional, e o super recebe `internal_notifications` tipo `COBRANCA_DIRETOR`.
+- **Venda** só conta em "Venda Confirmada" no Junix (`junix_vendas`, data = assinatura do cliente).
+- **Adajes:** vendas de antes de 12/10/2026 não contam no placar do diretor (`junix_vendas.fora_do_placar`); contam no painel dela.
+- **Leads:** nada de redistribuir automaticamente; quem decide é o gerente.
+- **Pastas:** previsão sempre com `lerPastas` / `resumoPastas` (`src/components/diretoria/pastasAnalise.ts`), que tiram da conta duplicadas, reprovadas e paradas há 60+ dias. Assim Hoje, Pastas e Estratégia mostram o mesmo número.
+- **Anúncios:** a aba Leads e investimento lê `public.fb_saude` (robô `/root/econ/fb_saude.py`, de hora em hora). Lead de formulário e conversa de WhatsApp têm referências separadas. O painel não escreve no Facebook (versão 1).
+
+### Registro (cada sessão acrescenta uma linha: data · sessão · o que fez/decidiu)
+- 13/10 · Diretoria · Equipes em cards (ritmo da meta, indicadores, gargalo, cobrar/combinar); Pastas nova (pipeline real, ataque de hoje, limpeza, por equipe); aba B.I. no diretor; Saúde dos anúncios; edge `estrategia-ia` + Conselho de estratégia (só responde quando perguntado).
+- 13/10 · Estratégia · (a preencher pela sessão Estratégia: Sala de Guerra, Minha Estratégia, alocação de verba, campanhas de incentivo)
