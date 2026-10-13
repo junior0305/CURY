@@ -1,0 +1,1584 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Comandra — Novo Cockpit do Gerente (Protótipo Interativo)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #F8FAFC;
+      --surface: #FFFFFF;
+      --surface-subtle: #F1F5F9;
+      --border: #E2E8F0;
+      --border-subtle: #F1F5F9;
+      --text-main: #0F172A;
+      --text-muted: #64748B;
+      --text-dim: #94A3B8;
+      
+      --brand: #0D9488;
+      --brand-light: #CCFBF1;
+      --brand-hover: #0F766E;
+
+      --blue: #2563EB;
+      --blue-light: #EFF6FF;
+      --blue-border: #BFDBFE;
+
+      --green: #059669;
+      --green-light: #D1FAE5;
+      --green-border: #A7F3D0;
+
+      --amber: #D97706;
+      --amber-light: #FEF3C7;
+      --amber-border: #FDE68A;
+
+      --rose: #E11D48;
+      --rose-light: #FFE4E6;
+      --rose-border: #FECDD3;
+
+      --purple: #8B46C9;
+      --purple-light: #F3E8FF;
+      --purple-border: #E9D5FF;
+
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-full: 9999px;
+
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+    }
+
+    [data-theme="dark"] {
+      --bg: #0B0F19;
+      --surface: #131B2E;
+      --surface-subtle: #1C2640;
+      --border: #23304C;
+      --border-subtle: #1C2640;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+
+      --brand: #14B8A6;
+      --brand-light: rgba(20, 184, 166, 0.15);
+      --brand-hover: #2DD4BF;
+
+      --blue: #3B82F6;
+      --blue-light: rgba(59, 130, 246, 0.15);
+      --blue-border: rgba(59, 130, 246, 0.3);
+
+      --green: #10B981;
+      --green-light: rgba(16, 185, 129, 0.15);
+      --green-border: rgba(16, 185, 129, 0.3);
+
+      --amber: #F59E0B;
+      --amber-light: rgba(245, 158, 11, 0.15);
+      --amber-border: rgba(245, 158, 11, 0.3);
+
+      --rose: #F43F5E;
+      --rose-light: rgba(244, 63, 94, 0.15);
+      --rose-border: rgba(244, 63, 94, 0.3);
+
+      --purple: #A855F7;
+      --purple-light: rgba(168, 85, 247, 0.15);
+      --purple-border: rgba(168, 85, 247, 0.3);
+
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+      --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.5);
+      --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.7);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Archivo', sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.45;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* BARRA DE CONTROLE DO MOCKUP */
+    .mockup-controls {
+      position: fixed;
+      top: 12px;
+      right: 16px;
+      z-index: 1000;
+      display: flex;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(10px);
+      padding: 6px 10px;
+      border-radius: var(--radius-full);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: var(--shadow-lg);
+    }
+    .m-btn {
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 12px;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .m-btn:hover { color: #fff; }
+    .m-btn.active {
+      background: #0D9488;
+      color: #fff;
+    }
+
+    /* CONTAINER PRINCIPAL */
+    .app-layout {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: 100vh;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    /* MODO DISPOSITIVO MÓVEL */
+    body.is-mobile {
+      background: #090D16;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 30px 10px;
+    }
+    body.is-mobile .app-layout {
+      display: block;
+      width: 412px;
+      height: 860px;
+      overflow-y: auto;
+      background: var(--bg);
+      border-radius: 40px;
+      border: 10px solid #1E293B;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.8);
+    }
+    body.is-mobile .sidebar { display: none; }
+    body.is-mobile .main-content { padding: 16px; }
+
+    /* MENU LATERAL */
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 20px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 10px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 8px;
+    }
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      background: var(--brand);
+      color: #fff;
+      font-weight: 800;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      font-size: 15px;
+    }
+    .brand-title { font-size: 15px; font-weight: 800; letter-spacing: -0.02em; }
+    .brand-sub { font-size: 11px; color: var(--text-muted); display: block; font-weight: 500; }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 9px 12px;
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13.5px;
+      font-weight: 600;
+      transition: all 0.14s;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+    }
+    .nav-item:hover {
+      background: var(--surface-subtle);
+      color: var(--text-main);
+    }
+    .nav-item.active {
+      background: var(--brand-light);
+      color: var(--brand);
+      font-weight: 700;
+    }
+    .nav-icon { font-size: 16px; flex-shrink: 0; }
+    .nav-badge {
+      margin-left: auto;
+      background: var(--rose);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 1px 6px;
+      border-radius: var(--radius-full);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: 14px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .team-badge-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: var(--surface-subtle);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 3px var(--green-light);
+    }
+
+    /* ÁREA PRINCIPAL */
+    .main-content {
+      padding: 24px 32px 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    /* CABEÇALHO DO DASHBOARD COM SELETORES DE DATA */
+    .cockpit-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+    .header-info h1 {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--text-main);
+    }
+    .header-info p {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .periodo-bar {
+      display: inline-flex;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-full);
+      padding: 3px;
+      box-shadow: var(--shadow-sm);
+      align-items: center;
+    }
+    .periodo-btn {
+      border: none;
+      background: transparent;
+      padding: 6px 13px;
+      border-radius: var(--radius-full);
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.14s;
+    }
+    .periodo-btn.active {
+      background: var(--text-main);
+      color: var(--bg);
+    }
+    .date-custom-input {
+      border: none;
+      background: transparent;
+      padding: 4px 8px;
+      font-size: 12px;
+      color: var(--text-main);
+      font-family: 'JetBrains Mono', monospace;
+      outline: none;
+      border-left: 1px solid var(--border);
+      margin-left: 4px;
+      cursor: pointer;
+    }
+
+    /* ── BLOCO 1: O PLACAR DO MÊS ── */
+    .hero-placar {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 1024px) {
+      .hero-placar { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .hero-placar { grid-template-columns: 1fr; }
+    }
+
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px 18px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card.destaque {
+      border-color: var(--brand);
+      background: linear-gradient(135deg, var(--surface) 0%, var(--brand-light) 250%);
+    }
+    .kpi-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .kpi-val {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      margin: 6px 0 2px;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+    .kpi-meta-badge {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: var(--radius-full);
+      background: var(--surface-subtle);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .kpi-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .progress-bar-wrap {
+      width: 100%;
+      height: 7px;
+      background: var(--surface-subtle);
+      border-radius: var(--radius-full);
+      margin: 10px 0 6px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--brand);
+      border-radius: var(--radius-full);
+    }
+
+    /* ── SEÇÃO DE LEADS RECEBIDOS (NOVA ÁREA CENTRAL REQUISITADA) ── */
+    .leads-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .leads-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .leads-title h2 {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .leads-title span {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      display: block;
+    }
+
+    /* FILTROS POR ORIGEM (CLICÁVEIS) */
+    .origem-pills-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .origem-pill-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 14px;
+      border-radius: var(--radius-full);
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .origem-pill-btn:hover {
+      border-color: var(--text-muted);
+      color: var(--text-main);
+    }
+    .origem-pill-btn.active {
+      background: var(--text-main);
+      color: var(--bg);
+      border-color: var(--text-main);
+    }
+    .origem-pill-btn.active .mono {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+    .origem-pill-btn .mono {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 99px;
+      background: var(--border);
+      color: var(--text-main);
+    }
+
+    /* BARRA DE BUSCA E AÇÕES EM LOTE */
+    .leads-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .search-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 7px 12px;
+      width: 320px;
+      max-width: 100%;
+    }
+    .search-box input {
+      border: none;
+      background: transparent;
+      outline: none;
+      font-size: 13px;
+      color: var(--text-main);
+      width: 100%;
+    }
+    .batch-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* TABELA DE LEADS RECEBIDOS */
+    .leads-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .leads-table th {
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-subtle);
+    }
+    .leads-table th:first-child { border-top-left-radius: var(--radius-sm); }
+    .leads-table th:last-child { border-top-right-radius: var(--radius-sm); }
+    .leads-table td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      vertical-align: middle;
+    }
+    .leads-table tr:hover td { background: var(--surface-subtle); }
+
+    .tag-origem {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .tag-origem.anuncio { background: var(--blue-light); color: var(--blue); border: 1px solid var(--blue-border); }
+    .tag-origem.disparo { background: var(--purple-light); color: var(--purple); border: 1px solid var(--purple-border); }
+    .tag-origem.pescado { background: var(--green-light); color: var(--green); border: 1px solid var(--green-border); }
+    .tag-origem.acao    { background: var(--amber-light); color: var(--amber); border: 1px solid var(--amber-border); }
+
+    .lead-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+    .lead-status-pill.urgente { color: var(--rose); font-weight: 700; }
+    .lead-status-pill.andando { color: var(--green); }
+    .lead-status-pill.espera  { color: var(--amber); }
+
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+    }
+    .btn-action.transferir {
+      background: var(--brand-light);
+      color: var(--brand);
+      border: 1px solid var(--brand);
+    }
+    .btn-action.transferir:hover {
+      background: var(--brand);
+      color: #fff;
+    }
+    .btn-action.whatsapp {
+      background: #25D366;
+      color: #fff;
+    }
+    .btn-action.whatsapp:hover { background: #1EBE5D; }
+    .btn-action.olho {
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .btn-action.olho:hover {
+      color: var(--text-main);
+      background: var(--border);
+    }
+
+    /* ── BLOCO 3: TROPA EM CAMPO ── */
+    .tropa-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .section-hd {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .section-title h2 {
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .section-title span {
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+
+    .tropa-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+    }
+    .tropa-table th {
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .tropa-table td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      vertical-align: middle;
+    }
+    .tropa-table tr:hover td { background: var(--surface-subtle); }
+
+    .broker-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .avatar-clean {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-full);
+      background: var(--surface-subtle);
+      color: var(--text-main);
+      font-weight: 700;
+      font-size: 12px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .broker-name-box b {
+      font-weight: 700;
+      color: var(--text-main);
+      display: block;
+      line-height: 1.2;
+    }
+    .broker-tags {
+      display: flex;
+      gap: 6px;
+      margin-top: 3px;
+    }
+    .mini-badge {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .mini-badge.online { background: var(--green-light); color: var(--green); }
+    .mini-badge.plantao { background: var(--blue-light); color: var(--blue); }
+    .mini-badge.offline { background: var(--surface-subtle); color: var(--text-dim); }
+
+    /* SWITCH DA ROLETA SUAVE E MODERNO */
+    .switch-toggle {
+      width: 36px;
+      height: 20px;
+      border-radius: 99px;
+      background: var(--border);
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+      border: none;
+      outline: none;
+      display: inline-block;
+    }
+    .switch-toggle.on { background: var(--green); }
+    .switch-toggle::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+      transition: transform 0.2s;
+    }
+    .switch-toggle.on::after { transform: translateX(16px); }
+
+    /* MODAL DE TRANSFERÊNCIA INTERATIVO */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      width: 480px;
+      max-width: 100%;
+      box-shadow: var(--shadow-lg);
+      padding: 24px;
+      animation: modalIn 0.2s ease-out;
+    }
+    @keyframes modalIn {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .modal-hd {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+    .modal-hd h3 { font-size: 18px; font-weight: 800; }
+    .modal-close {
+      background: transparent;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+    .broker-select-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-md);
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .broker-select-option:hover {
+      border-color: var(--brand);
+      background: var(--brand-light);
+    }
+    .broker-select-option.selected {
+      border-color: var(--brand);
+      background: var(--brand-light);
+    }
+
+    /* TOAST DE FEEDBACK DE AÇÃO */
+    .toast-msg {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #0F172A;
+      color: #fff;
+      padding: 12px 18px;
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 9999;
+    }
+    .toast-msg.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- BARRA DE CONTROLE PARA VOCÊ TESTAR CLARO/ESCURO E MOBILE/DESKTOP -->
+  <div class="mockup-controls">
+    <button class="m-btn active" id="btn-desktop" onclick="setMode('desktop')">💻 Desktop</button>
+    <button class="m-btn" id="btn-mobile" onclick="setMode('mobile')">📱 Celular</button>
+    <span style="width: 1px; height: 18px; background: rgba(255,255,255,0.2); margin: auto 2px;"></span>
+    <button class="m-btn" id="btn-theme" onclick="toggleTheme()">☀️ / 🌙 Tema</button>
+  </div>
+
+  <div class="app-layout">
+    
+    <!-- MENU LATERAL ENXUTO (6 MÓDULOS ESSENCIAIS) -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-logo">C</div>
+        <div>
+          <span class="brand-title">Comandra</span>
+          <span class="brand-sub">Gerente · Equipe Foco</span>
+        </div>
+      </div>
+
+      <button class="nav-item active">
+        <span class="nav-icon">⚡</span> Meu Dashboard
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">📥</span> Leads Recebidos
+        <span class="nav-badge">+14</span>
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">👥</span> Minha Equipe
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">📁</span> Pastas & Crédito
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">🎯</span> Onde Atacar (Caixa)
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">📢</span> Anúncios & Tráfego
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">📊</span> B.I. da Equipe
+      </button>
+
+      <div class="sidebar-footer">
+        <div class="team-badge-pill">
+          <span class="status-dot"></span>
+          <span>Super: <b>Felipe Metlicz</b></span>
+        </div>
+        <button class="nav-item" style="color: var(--rose);">
+          <span class="nav-icon">🚪</span> Sair
+        </button>
+      </div>
+    </aside>
+
+    <!-- CONTEÚDO PRINCIPAL (COCKPIT REFINADO) -->
+    <main class="main-content">
+      
+      <!-- CABEÇALHO COM SELETOR DE DATA EXATO (HOJE, ONTEM, SEMANA, ESCOLHER DATA) -->
+      <header class="cockpit-header">
+        <div class="header-info">
+          <h1>Cockpit de Vendas da Equipe</h1>
+          <p>Visão tática em tempo real · Metas, leads recebidos e controle da tropa</p>
+        </div>
+        <div class="header-actions">
+          <div class="periodo-bar">
+            <button class="periodo-btn active" onclick="filtrarPeriodo('hoje', this)">Hoje</button>
+            <button class="periodo-btn" onclick="filtrarPeriodo('ontem', this)">Ontem</button>
+            <button class="periodo-btn" onclick="filtrarPeriodo('semana', this)">Esta Semana</button>
+            <button class="periodo-btn" onclick="filtrarPeriodo('mes', this)">Mês (Outubro)</button>
+            <input type="date" class="date-custom-input" value="2026-10-13" title="Escolha qualquer data específica" onchange="escolherData(this.value)">
+          </div>
+        </div>
+      </header>
+
+      <!-- ── BLOCO 1: PLACAR DO MÊS ── -->
+      <section class="hero-placar">
+        <!-- Vendas do Mês -->
+        <div class="kpi-card destaque">
+          <span class="kpi-title">🎯 Vendas Confirmadas (Junix)</span>
+          <div class="kpi-val mono">
+            <span style="color: var(--brand);">6</span>
+            <span style="font-size: 18px; color: var(--text-muted); font-weight: 500;">/ 15 un</span>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" style="width: 40%;"></div>
+          </div>
+          <span class="kpi-sub">
+            VGV Total: <b class="mono" style="color: var(--text-main);">R$ 1.620.000</b>
+          </span>
+        </div>
+
+        <!-- Ritmo e Projeção -->
+        <div class="kpi-card">
+          <span class="kpi-title">📈 Projeção de Fechamento</span>
+          <div class="kpi-val mono">
+            <span style="color: var(--amber);">11</span>
+            <span style="font-size: 15px; color: var(--text-muted); font-weight: 500;">vendas</span>
+          </div>
+          <span class="kpi-sub" style="margin-top: 6px;">
+            Ritmo: <b class="mono">0,46 un/dia</b> · Devendo: <b style="color: var(--rose);">-4 un</b>
+          </span>
+        </div>
+
+        <!-- Leads Recebidos no Período Selecionado -->
+        <div class="kpi-card">
+          <span class="kpi-title">📥 Leads no Período Selecionado</span>
+          <div class="kpi-val mono" id="kpi-leads-val">
+            <span style="color: var(--blue);">14</span>
+            <span style="font-size: 14px; color: var(--text-muted); font-weight: 500;">recebidos hoje</span>
+          </div>
+          <span class="kpi-sub" style="margin-top: 6px;">
+            <b>12 atendidos</b> · <span style="color: var(--rose); font-weight: 700;">2 parados (+2h)</span>
+          </span>
+        </div>
+
+        <!-- Poder de Fogo da Equipe -->
+        <div class="kpi-card">
+          <span class="kpi-title">💥 Poder de Fogo (Verba)</span>
+          <div class="kpi-val mono" style="font-size: 24px; color: var(--text-main);">
+            R$ 7.500
+          </div>
+          <span class="kpi-sub" style="margin-top: 6px;">
+            R$ 5k Super + <b style="color: var(--green);">R$ 2,5k Tropa</b>
+          </span>
+        </div>
+      </section>
+
+      <!-- ── BLOCO 2: CENTRAL DE LEADS RECEBIDOS (RESPOSTA DIRETA AO USUÁRIO) ── -->
+      <section class="leads-section">
+        <div class="leads-header">
+          <div class="leads-title">
+            <h2>📥 Leads Recebidos da Equipe</h2>
+            <span>Veja com quem cada cliente está e transfira para outro corretor com 1 clique</span>
+          </div>
+
+          <!-- BOTÃO DE AÇÃO EM LOTE -->
+          <div class="batch-actions">
+            <button class="btn-action transferir" onclick="abrirModalTransferirLote()">
+              ⚡ Redistribuir Selecionados
+            </button>
+          </div>
+        </div>
+
+        <!-- FILTROS POR ORIGEM COM CONTADORES (CAMPANHAS, DISPAROS, PESCADOS, AÇÕES, CARTEIRA) -->
+        <div class="origem-pills-bar">
+          <button class="origem-pill-btn active" onclick="filtrarOrigem('todos', this)">
+            Todos <span class="mono">14</span>
+          </button>
+          <button class="origem-pill-btn" onclick="filtrarOrigem('anuncio', this)">
+            📢 Meta Ads (Facebook/Instagram) <span class="mono">8</span>
+          </button>
+          <button class="origem-pill-btn" onclick="filtrarOrigem('disparo', this)">
+            💬 Disparos WhatsApp <span class="mono">3</span>
+          </button>
+          <button class="origem-pill-btn" onclick="filtrarOrigem('pescado', this)">
+            🎣 Pescados & Carteira <span class="mono">2</span>
+          </button>
+          <button class="origem-pill-btn" onclick="filtrarOrigem('acao', this)">
+            🏃 Ações de Rua / Stand <span class="mono">1</span>
+          </button>
+        </div>
+
+        <!-- BARRA DE PESQUISA RÁPIDA -->
+        <div class="leads-toolbar">
+          <div class="search-box">
+            <span>🔍</span>
+            <input type="text" id="input-busca" placeholder="Buscar por cliente, telefone ou corretor..." onkeyup="filtrarTexto(this.value)">
+          </div>
+          <span style="font-size: 12.5px; color: var(--text-muted);">
+            Mostrando <b>5 de 14 leads</b> recebidos no período selecionado
+          </span>
+        </div>
+
+        <!-- TABELA DE LEADS RECEBIDOS -->
+        <table class="leads-table">
+          <thead>
+            <tr>
+              <th style="width: 32px;"><input type="checkbox" onchange="toggleSelectAll(this)"></th>
+              <th>Cliente & Telefone</th>
+              <th>Origem & Campanha</th>
+              <th>Recebido Em</th>
+              <th>Com Quem Está</th>
+              <th>Status do Atendimento</th>
+              <th style="text-align: right;">Ações do Gerente</th>
+            </tr>
+          </thead>
+          <tbody id="leads-tbody">
+            <!-- Lead 1: URGENTE PARADO -->
+            <tr data-origem="anuncio" data-id="lead_1">
+              <td><input type="checkbox" class="lead-chk"></td>
+              <td>
+                <b style="font-size: 13.5px; display: block;">Juliana Mendes</b>
+                <span class="mono" style="color: var(--text-muted); font-size: 11.5px;">(11) 98765-4321</span>
+              </td>
+              <td>
+                <span class="tag-origem anuncio">📢 Meta Ads · Cury Mooca</span>
+              </td>
+              <td><span class="mono">Hoje às 14h35</span></td>
+              <td>
+                <div class="broker-cell">
+                  <div class="avatar-clean">FN</div>
+                  <div>
+                    <b style="font-size: 13px;">Felipe Nunes</b>
+                    <span class="mini-badge online" style="font-size: 10px;">🟢 online</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="lead-status-pill urgente">
+                  🔥 Cliente aguardando (+2h45)
+                </span>
+              </td>
+              <td style="text-align: right;">
+                <div style="display: flex; gap: 6px; justify-content: flex-end;">
+                  <button class="btn-action transferir" onclick="abrirModalTransferir('Juliana Mendes', 'Felipe Nunes', '(11) 98765-4321', 'lead_1')">
+                    ⚡ Passar Lead
+                  </button>
+                  <button class="btn-action whatsapp" onclick="cobrarCorretor('Felipe Nunes', 'Juliana Mendes')">
+                    💬 Cobrar
+                  </button>
+                  <button class="btn-action olho" onclick="abrirModalEspiar('Juliana Mendes', 'Felipe Nunes', 'anuncio')">
+                    👁️
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Lead 2: URGENTE PARADO -->
+            <tr data-origem="anuncio" data-id="lead_2">
+              <td><input type="checkbox" class="lead-chk"></td>
+              <td>
+                <b style="font-size: 13.5px; display: block;">Marcos Vinicius</b>
+                <span class="mono" style="color: var(--text-muted); font-size: 11.5px;">(11) 97123-9988</span>
+              </td>
+              <td>
+                <span class="tag-origem anuncio">📢 Meta Ads · Torres Tatuapé</span>
+              </td>
+              <td><span class="mono">Hoje às 13h10</span></td>
+              <td>
+                <div class="broker-cell">
+                  <div class="avatar-clean">LS</div>
+                  <div>
+                    <b style="font-size: 13px;">Lucas Silva</b>
+                    <span class="mini-badge online" style="font-size: 10px;">🟢 online</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="lead-status-pill urgente">
+                  🔥 Sem primeiro toque (+3h20)
+                </span>
+              </td>
+              <td style="text-align: right;">
+                <div style="display: flex; gap: 6px; justify-content: flex-end;">
+                  <button class="btn-action transferir" onclick="abrirModalTransferir('Marcos Vinicius', 'Lucas Silva', '(11) 97123-9988', 'lead_2')">
+                    ⚡ Passar Lead
+                  </button>
+                  <button class="btn-action whatsapp" onclick="cobrarCorretor('Lucas Silva', 'Marcos Vinicius')">
+                    💬 Cobrar
+                  </button>
+                  <button class="btn-action olho" onclick="abrirModalEspiar('Marcos Vinicius', 'Lucas Silva', 'anuncio')">
+                    👁️
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Lead 3: DISPARO WHATSAPP ANDANDO -->
+            <tr data-origem="disparo" data-id="lead_3">
+              <td><input type="checkbox" class="lead-chk"></td>
+              <td>
+                <b style="font-size: 13.5px; display: block;">Eduardo Campos</b>
+                <span class="mono" style="color: var(--text-muted); font-size: 11.5px;">(11) 99887-1122</span>
+              </td>
+              <td>
+                <span class="tag-origem disparo">💬 Disparo Oficial · Lançamento</span>
+              </td>
+              <td><span class="mono">Hoje às 11h20</span></td>
+              <td>
+                <div class="broker-cell">
+                  <div class="avatar-clean">AP</div>
+                  <div>
+                    <b style="font-size: 13px;">Ana Paula Ribeiro</b>
+                    <span class="mini-badge online" style="font-size: 10px;">🟢 online</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="lead-status-pill andando">
+                  ✓ Conversando (Visita agendada)
+                </span>
+              </td>
+              <td style="text-align: right;">
+                <div style="display: flex; gap: 6px; justify-content: flex-end;">
+                  <button class="btn-action transferir" onclick="abrirModalTransferir('Eduardo Campos', 'Ana Paula Ribeiro', '(11) 99887-1122', 'lead_3')">
+                    ⚡ Passar
+                  </button>
+                  <button class="btn-action olho" onclick="abrirModalEspiar('Eduardo Campos', 'Ana Paula Ribeiro', 'disparo')">
+                    👁️ Ver Conversa
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Lead 4: PESCADO / REPESCAGEM -->
+            <tr data-origem="pescado" data-id="lead_4">
+              <td><input type="checkbox" class="lead-chk"></td>
+              <td>
+                <b style="font-size: 13.5px; display: block;">Beatriz Siqueira</b>
+                <span class="mono" style="color: var(--text-muted); font-size: 11.5px;">(11) 96554-3322</span>
+              </td>
+              <td>
+                <span class="tag-origem pescado">🎣 Pescado · Base Cury 2024</span>
+              </td>
+              <td><span class="mono">Hoje às 10h15</span></td>
+              <td>
+                <div class="broker-cell">
+                  <div class="avatar-clean">RC</div>
+                  <div>
+                    <b style="font-size: 13px;">Rodrigo Costa</b>
+                    <span class="mini-badge plantao" style="font-size: 10px;">📍 plantão Ipiranga</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="lead-status-pill andando">
+                  ✓ Documentos solicitados
+                </span>
+              </td>
+              <td style="text-align: right;">
+                <div style="display: flex; gap: 6px; justify-content: flex-end;">
+                  <button class="btn-action transferir" onclick="abrirModalTransferir('Beatriz Siqueira', 'Rodrigo Costa', '(11) 96554-3322', 'lead_4')">
+                    ⚡ Passar
+                  </button>
+                  <button class="btn-action olho" onclick="abrirModalEspiar('Beatriz Siqueira', 'Rodrigo Costa', 'pescado')">
+                    👁️
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Lead 5: AÇÃO DE STAND / RUA -->
+            <tr data-origem="acao" data-id="lead_5">
+              <td><input type="checkbox" class="lead-chk"></td>
+              <td>
+                <b style="font-size: 13.5px; display: block;">Thiago Alencar</b>
+                <span class="mono" style="color: var(--text-muted); font-size: 11.5px;">(11) 95544-7788</span>
+              </td>
+              <td>
+                <span class="tag-origem acao">🏃 Ação de Rua / Tenda Mooca</span>
+              </td>
+              <td><span class="mono">Hoje às 09h40</span></td>
+              <td>
+                <div class="broker-cell">
+                  <div class="avatar-clean">BM</div>
+                  <div>
+                    <b style="font-size: 13px;">Bruna Martins</b>
+                    <span class="mini-badge offline" style="font-size: 10px;">⚪ offline</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="lead-status-pill espera">
+                  ⚠️ Corretor offline (Pausado)
+                </span>
+              </td>
+              <td style="text-align: right;">
+                <div style="display: flex; gap: 6px; justify-content: flex-end;">
+                  <button class="btn-action transferir" style="background: var(--brand); color: #fff;" onclick="abrirModalTransferir('Thiago Alencar', 'Bruna Martins', '(11) 95544-7788', 'lead_5')">
+                    ⚡ Passar pra frente
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ── BLOCO 3: TROPA EM CAMPO COM ROLETA DE LEADS ── -->
+      <section class="tropa-section">
+        <div class="section-hd">
+          <div class="section-title">
+            <h2>👥 Minha Tropa & Chave de Roleta</h2>
+            <span>Ligue ou pause corretores para receberem os próximos leads que chegarem de anúncios e campanhas</span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <span style="font-size: 12px; font-weight: 700; color: var(--green); background: var(--green-light); padding: 4px 10px; border-radius: var(--radius-full);">
+              🟢 4 Corretores na Roleta Ativa
+            </span>
+          </div>
+        </div>
+
+        <table class="tropa-table">
+          <thead>
+            <tr>
+              <th>Corretor</th>
+              <th>Status Hoje</th>
+              <th>Roleta (Receber Leads)</th>
+              <th class="mono" style="text-align: right;">Leads Ativos</th>
+              <th class="mono" style="text-align: right;">Vendas Mês</th>
+              <th class="mono" style="text-align: right;">Saldo Comissão</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="broker-cell">
+                  <div class="avatar-clean">AP</div>
+                  <div class="broker-name-box">
+                    <b>Ana Paula Ribeiro</b>
+                    <div class="broker-tags">
+                      <span class="mini-badge online">🟢 online</span>
+                      <span class="mini-badge plantao">📍 plantão Mooca</span>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td><span style="font-size: 12.5px; color: var(--green); font-weight: 600;">Atendendo normal</span></td>
+              <td>
+                <button class="switch-toggle on" onclick="toggleSwitch(this)"></button>
+                <span style="font-size: 12px; font-weight: 600; margin-left: 6px;">Recebendo</span>
+              </td>
+              <td class="mono" style="text-align: right; font-weight: 700;">22</td>
+              <td class="mono" style="text-align: right; font-weight: 800; color: var(--green);">3 un</td>
+              <td class="mono" style="text-align: right; font-weight: 700; color: var(--green);">+ R$ 26.800</td>
+            </tr>
+
+            <tr>
+              <td>
+                <div class="broker-cell">
+                  <div class="avatar-clean">LS</div>
+                  <div class="broker-name-box">
+                    <b>Lucas Silva</b>
+                    <div class="broker-tags">
+                      <span class="mini-badge online">🟢 online</span>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td><span style="font-size: 12.5px; color: var(--amber); font-weight: 600;">1 lead parado</span></td>
+              <td>
+                <button class="switch-toggle on" onclick="toggleSwitch(this)"></button>
+                <span style="font-size: 12px; font-weight: 600; margin-left: 6px;">Recebendo</span>
+              </td>
+              <td class="mono" style="text-align: right; font-weight: 700;">34</td>
+              <td class="mono" style="text-align: right; font-weight: 800; color: var(--green);">2 un</td>
+              <td class="mono" style="text-align: right; font-weight: 700; color: var(--green);">+ R$ 14.200</td>
+            </tr>
+
+            <tr>
+              <td>
+                <div class="broker-cell">
+                  <div class="avatar-clean">FN</div>
+                  <div class="broker-name-box">
+                    <b>Felipe Nunes</b>
+                    <div class="broker-tags">
+                      <span class="mini-badge online">🟢 online</span>
+                      <span class="mini-badge plantao">📍 plantão Tatuapé</span>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td><span style="font-size: 12.5px; color: var(--green); font-weight: 600;">Atendendo normal</span></td>
+              <td>
+                <button class="switch-toggle on" onclick="toggleSwitch(this)"></button>
+                <span style="font-size: 12px; font-weight: 600; margin-left: 6px;">Recebendo</span>
+              </td>
+              <td class="mono" style="text-align: right; font-weight: 700;">18</td>
+              <td class="mono" style="text-align: right; font-weight: 800; color: var(--green);">1 un</td>
+              <td class="mono" style="text-align: right; font-weight: 700; color: var(--green);">+ R$ 7.900</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ── MODAL INTERATIVO: TRANSFERIR LEAD PARA OUTRO CORRETOR ── -->
+  <div class="modal-overlay" id="modal-transferir">
+    <div class="modal-card">
+      <div class="modal-hd">
+        <div>
+          <h3>⚡ Transferir Lead</h3>
+          <span style="font-size: 13px; color: var(--text-muted);" id="modal-lead-info">
+            Transferir cliente <b>Juliana Mendes</b>
+          </span>
+        </div>
+        <button class="modal-close" onclick="fecharModalTransferir()">✕</button>
+      </div>
+
+      <div style="background: var(--surface-subtle); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 16px; font-size: 12.5px;">
+        Corretor atual: <b id="modal-corretor-atual">Felipe Nunes</b> (não atendeu o cliente há +2h)
+      </div>
+
+      <p style="font-size: 13px; font-weight: 700; margin-bottom: 8px;">Escolha o novo corretor responsável:</p>
+      
+      <div class="broker-select-option selected" onclick="selecionarCorretorDestino(this, 'Ana Paula Ribeiro')">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="avatar-clean" style="width: 26px; height: 26px; font-size: 10px;">AP</div>
+          <div>
+            <b>Ana Paula Ribeiro</b>
+            <span style="display: block; font-size: 11px; color: var(--green); font-weight: 600;">🟢 Online agora · 22 leads</span>
+          </div>
+        </div>
+        <span style="font-size: 12px; color: var(--brand); font-weight: 800;">Selecionado ✓</span>
+      </div>
+
+      <div class="broker-select-option" onclick="selecionarCorretorDestino(this, 'Rodrigo Costa')">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="avatar-clean" style="width: 26px; height: 26px; font-size: 10px;">RC</div>
+          <div>
+            <b>Rodrigo Costa</b>
+            <span style="display: block; font-size: 11px; color: var(--blue); font-weight: 600;">📍 No plantão · 8 leads (pouca carga)</span>
+          </div>
+        </div>
+        <span style="font-size: 12px; color: var(--text-muted);">Escolher</span>
+      </div>
+
+      <div class="broker-select-option" onclick="selecionarCorretorDestino(this, 'Roleta Automática')">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="avatar-clean" style="width: 26px; height: 26px; font-size: 10px; background: var(--purple-light); color: var(--purple);">⚡</div>
+          <div>
+            <b>Próximo da Roleta Automática</b>
+            <span style="display: block; font-size: 11px; color: var(--text-muted);">Distribui para quem tem menos leads ativos</span>
+          </div>
+        </div>
+        <span style="font-size: 12px; color: var(--text-muted);">Escolher</span>
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 18px;">
+        <button class="btn-action" style="flex: 1; padding: 10px; background: var(--surface-subtle); color: var(--text-main);" onclick="fecharModalTransferir()">
+          Cancelar
+        </button>
+        <button class="btn-action" style="flex: 2; padding: 10px; background: var(--brand); color: #fff;" onclick="confirmarTransferencia()">
+          Confirmar Transferência
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL INTERATIVO: ESPIAR CONVERSA DE WHATSAPP ── -->
+  <div class="modal-overlay" id="modal-espiar">
+    <div class="modal-card" style="width: 520px;">
+      <div class="modal-hd">
+        <div>
+          <h3>👁️ Conversa com o Cliente</h3>
+          <span style="font-size: 12.5px; color: var(--text-muted);" id="espiar-lead-title">
+            Juliana Mendes · Corretor: Felipe Nunes
+          </span>
+        </div>
+        <button class="modal-close" onclick="fecharModalEspiar()">✕</button>
+      </div>
+
+      <div style="background: #E5DDD5; border-radius: var(--radius-md); padding: 14px; height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--border);">
+        <!-- Msg 1 Cliente -->
+        <div style="align-self: flex-start; background: #fff; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 13px; box-shadow: 0 1px 1px rgba(0,0,0,0.1);">
+          <b style="color: var(--blue); font-size: 11px; display: block;">Juliana (Cliente)</b>
+          Olá! Vi o anúncio do Residencial Mooca no Instagram. Qual o valor da entrada para renda familiar de R$ 4.200?
+          <span style="font-size: 10px; color: #888; display: block; text-align: right; margin-top: 4px;">14:35</span>
+        </div>
+
+        <!-- Msg 2 Robô -->
+        <div style="align-self: flex-end; background: #DCF8C6; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 13px; box-shadow: 0 1px 1px rgba(0,0,0,0.1);">
+          <b style="color: var(--brand); font-size: 11px; display: block;">Comandra (Boas-vindas)</b>
+          Olá Juliana! Seja bem-vinda à Cury. O consultor Felipe Nunes já está com sua ficha e vai te atender em instantes!
+          <span style="font-size: 10px; color: #888; display: block; text-align: right; margin-top: 4px;">14:35</span>
+        </div>
+
+        <!-- Alerta de vácuo -->
+        <div style="text-align: center; margin: 10px 0;">
+          <span style="background: #FEE2E2; color: #DC2626; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 700;">
+            ⚠️ Corretor não respondeu há 2h45 min
+          </span>
+        </div>
+
+        <!-- Msg 3 Cliente de novo -->
+        <div style="align-self: flex-start; background: #fff; padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 13px; box-shadow: 0 1px 1px rgba(0,0,0,0.1);">
+          <b style="color: var(--blue); font-size: 11px; display: block;">Juliana (Cliente)</b>
+          Oi Felipe, você consegue me passar a tabela ou fotos da planta hoje?
+          <span style="font-size: 10px; color: #888; display: block; text-align: right; margin-top: 4px;">16:50</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 16px;">
+        <button class="btn-action whatsapp" style="flex: 1; padding: 10px;" onclick="fecharModalEspiar(); cobrarCorretor('Felipe Nunes', 'Juliana Mendes')">
+          💬 Cobrar Felipe no WhatsApp
+        </button>
+        <button class="btn-action transferir" style="flex: 1; padding: 10px;" onclick="fecharModalEspiar(); abrirModalTransferir('Juliana Mendes', 'Felipe Nunes', '(11) 98765-4321', 'lead_1')">
+          ⚡ Tirar do Felipe e Passar Lead
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST DE NOTIFICAÇÃO INTERATIVO -->
+  <div class="toast-msg" id="toast">
+    <span id="toast-text">Ação executada com sucesso!</span>
+  </div>
+
+  <script>
+    let leadSendoTransferido = null;
+    let corretorDestinoEscolhido = 'Ana Paula Ribeiro';
+
+    function setMode(mode) {
+      document.body.classList.toggle('is-mobile', mode === 'mobile');
+      document.getElementById('btn-desktop').classList.toggle('active', mode === 'desktop');
+      document.getElementById('btn-mobile').classList.toggle('active', mode === 'mobile');
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+    }
+
+    function toggleSwitch(btn) {
+      btn.classList.toggle('on');
+      const label = btn.nextElementSibling;
+      if (btn.classList.contains('on')) {
+        label.textContent = 'Recebendo';
+        showToast('Corretor ativado na roleta para receber os próximos leads!');
+      } else {
+        label.textContent = 'Pausado';
+        showToast('Corretor pausado da roleta!');
+      }
+    }
+
+    /* FILTROS POR PERÍODO */
+    function filtrarPeriodo(tipo, btn) {
+      document.querySelectorAll('.periodo-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const kpi = document.getElementById('kpi-leads-val');
+      if (tipo === 'hoje') {
+        kpi.innerHTML = '<span style="color: var(--blue);">14</span> <span style="font-size: 14px; color: var(--text-muted); font-weight: 500;">recebidos hoje</span>';
+        showToast('Filtrado: Leads recebidos HOJE (14 leads)');
+      } else if (tipo === 'ontem') {
+        kpi.innerHTML = '<span style="color: var(--blue);">19</span> <span style="font-size: 14px; color: var(--text-muted); font-weight: 500;">recebidos ontem</span>';
+        showToast('Filtrado: Leads recebidos ONTEM (19 leads)');
+      } else if (tipo === 'semana') {
+        kpi.innerHTML = '<span style="color: var(--blue);">68</span> <span style="font-size: 14px; color: var(--text-muted); font-weight: 500;">na semana</span>';
+        showToast('Filtrado: Leads recebidos ESTA SEMANA (68 leads)');
+      } else {
+        kpi.innerHTML = '<span style="color: var(--blue);">142</span> <span style="font-size: 14px; color: var(--text-muted); font-weight: 500;">no mês</span>';
+        showToast('Filtrado: Leads recebidos NO MÊS (142 leads)');
+      }
+    }
+
+    function escolherData(data) {
+      document.querySelectorAll('.periodo-btn').forEach(b => b.classList.remove('active'));
+      const d = data.split('-').reverse().join('/');
+      const kpi = document.getElementById('kpi-leads-val');
+      kpi.innerHTML = `<span style="color: var(--blue);">11</span> <span style="font-size: 14px; color: var(--text-muted); font-weight: 500;">no dia ${d}</span>`;
+      showToast(`Filtrado por data específica: ${d}`);
+    }
+
+    /* FILTROS POR ORIGEM */
+    function filtrarOrigem(origem, btn) {
+      document.querySelectorAll('.origem-pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const rows = document.querySelectorAll('#leads-tbody tr');
+      rows.forEach(r => {
+        if (origem === 'todos' || r.getAttribute('data-origem') === origem) {
+          r.style.display = '';
+        } else {
+          r.style.display = 'none';
+        }
+      });
+      showToast(`Filtro aplicado: ${btn.textContent.trim()}`);
+    }
+
+    function filtrarTexto(txt) {
+      const q = txt.toLowerCase();
+      const rows = document.querySelectorAll('#leads-tbody tr');
+      rows.forEach(r => {
+        const text = r.innerText.toLowerCase();
+        r.style.display = text.includes(q) ? '' : 'none';
+      });
+    }
+
+    function toggleSelectAll(master) {
+      document.querySelectorAll('.lead-chk').forEach(c => c.checked = master.checked);
+    }
+
+    /* MODAL DE TRANSFERÊNCIA */
+    function abrirModalTransferir(cliente, corretorAtual, tel, leadId) {
+      leadSendoTransferido = leadId;
+      document.getElementById('modal-lead-info').innerHTML = `Transferir cliente <b>${cliente}</b> (${tel})`;
+      document.getElementById('modal-corretor-atual').textContent = corretorAtual;
+      document.getElementById('modal-transferir').classList.add('open');
+    }
+
+    function fecharModalTransferir() {
+      document.getElementById('modal-transferir').classList.remove('open');
+    }
+
+    function selecionarCorretorDestino(el, nome) {
+      document.querySelectorAll('.broker-select-option').forEach(o => {
+        o.classList.remove('selected');
+        o.querySelector('span:last-child').textContent = 'Escolher';
+        o.querySelector('span:last-child').style.color = 'var(--text-muted)';
+        o.querySelector('span:last-child').style.fontWeight = 'normal';
+      });
+      el.classList.add('selected');
+      el.querySelector('span:last-child').textContent = 'Selecionado ✓';
+      el.querySelector('span:last-child').style.color = 'var(--brand)';
+      el.querySelector('span:last-child').style.fontWeight = '800';
+      corretorDestinoEscolhido = nome;
+    }
+
+    function confirmarTransferencia() {
+      fecharModalTransferir();
+      if (leadSendoTransferido) {
+        const row = document.querySelector(`tr[data-id="${leadSendoTransferido}"]`);
+        if (row) {
+          const brokerCell = row.querySelector('.broker-cell b');
+          if (brokerCell) brokerCell.textContent = corretorDestinoEscolhido;
+          const statusCell = row.querySelector('.lead-status-pill');
+          if (statusCell) {
+            statusCell.className = 'lead-status-pill andando';
+            statusCell.textContent = '✓ Transferido agora (Notificado)';
+          }
+        }
+      }
+      showToast(`Lead transferido com sucesso para ${corretorDestinoEscolhido}! Corretor notificado.`);
+    }
+
+    function abrirModalTransferirLote() {
+      const checados = document.querySelectorAll('.lead-chk:checked');
+      if (!checados.length) {
+        showToast('Selecione pelo menos um lead na tabela usando as caixas de seleção!');
+        return;
+      }
+      abrirModalTransferir(`${checados.length} leads selecionados`, 'Vários corretores', '', null);
+    }
+
+    /* ESPIAR CONVERSA */
+    function abrirModalEspiar(cliente, corretor, origem) {
+      document.getElementById('espiar-lead-title').textContent = `${cliente} · Corretor: ${corretor}`;
+      document.getElementById('modal-espiar').classList.add('open');
+    }
+
+    function fecharModalEspiar() {
+      document.getElementById('modal-espiar').classList.remove('open');
+    }
+
+    /* COBRAR VIA WHATSAPP */
+    function cobrarCorretor(corretor, cliente) {
+      const msg = `Fala ${corretor}, o cliente ${cliente} que entrou pelo anúncio está sem resposta há mais de 2 horas. Você consegue dar o retorno nele agora ou prefere que eu passe para outro corretor da roleta?`;
+      const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+      window.open(url, '_blank');
+      showToast(`Cobrança enviada no WhatsApp para ${corretor}!`);
+    }
+
+    function showToast(text) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-text').textContent = text;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3500);
+    }
+  </script>
+</body>
+</html>
