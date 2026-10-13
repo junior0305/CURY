@@ -2,7 +2,7 @@
 // da operação lado a lado — sem precisar entrar em painel por painel.
 //
 //   Plantão e visita  ← C2S   (cury_metricas_diarias escopo gerente, enchida por /root/econ/metricas.py)
-//   Venda e VGV       ← Junix (junix_vendas.data_venda: contrato, ou assinatura do cliente enquanto não há contrato)
+//   Venda e VGV       ← Junix (junix_vendas.data_venda: assinatura do cliente; contrato só se faltar a assinatura)
 //   Pastas            ← Junix (junix_pastas, o kanban de agora — dono pela Pesquisa de Proposta)
 //   Anúncio           ← Facebook (conta de cada gerente, fb-conta-gerente)
 //   Leads por origem  ← Comandra (leads)
