@@ -13,6 +13,7 @@ import { useEstrutura, useGastos, hojeSP } from "@/hooks/usePlano";
 import { useCompromissos, useCompromissoAcoes, vencido, type Compromisso, type Lembrete } from "@/hooks/useCompromissos";
 import GastosPlano from "@/components/plano/GastosPlano";
 import Conselho from "./Conselho";
+import SalaDeGuerraCampanha from "./SalaDeGuerraCampanha";
 import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
 
 const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
@@ -27,6 +28,7 @@ export interface Combinar { sobre: string; pergunta: number; titulo: string; res
 type MetaPainel = { dono: PessoaMeta; filhos: PessoaMeta[] };
 
 export default function Estrategia({ diretorId, supers, pastas }: { diretorId: string; supers: SuperDiretoria[]; pastas: PastaJunix[] }) {
+  const [visao, setVisao] = useState<"sala_de_guerra" | "diagnostico">("sala_de_guerra");
   const [combinar, setCombinar] = useState<Combinar | null>(null);
   const hoje = new Date();
   const diaHoje = hoje.getDate();
@@ -117,13 +119,42 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
 
   return (
     <>
-      <Conselho fatos={fatos} pronto={pronto} donoId={diretorId} abrir={abrir} />
-      <Pergunta1 metaDir={metaDir} supers={supers} metaSuper={metaSuper} linha={linha} c30={c30?.linhas ?? null}
-        diaHoje={diaHoje} diasMes={diasMes} mes={mes} abrir={abrir} />
-      <Pergunta2 pastas={pastas} supers={supers} metaDir={metaDir} abrir={abrir} />
-      <Pergunta3 diretorId={diretorId} supers={supers} linhasMes={cMes?.linhas ?? null} mes={mes} />
-      <Pergunta4 supers={supers} linha={linha} carregando={!c30} abrir={abrir} />
-      <Pergunta5 abrir={abrir} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+        <div className="dir-per" style={{ background: "#E2E8F0", padding: 4 }}>
+          <button
+            className={visao === "sala_de_guerra" ? "on" : ""}
+            onClick={() => setVisao("sala_de_guerra")}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
+          >
+            <span>⚔️</span> Sala de Guerra (Campanha & Investimento)
+          </button>
+          <button
+            className={visao === "diagnostico" ? "on" : ""}
+            onClick={() => setVisao("diagnostico")}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
+          >
+            <span>🧠</span> Conselho IA & Diagnóstico (5 Perguntas)
+          </button>
+        </div>
+        <span style={{ fontSize: 12.5, color: "var(--ink-3)", fontWeight: 500 }}>
+          {visao === "sala_de_guerra" ? "Modo Reunião Tática com os Superintendentes" : "Modo Rotina Executiva & Auditoria Semanal"}
+        </span>
+      </div>
+
+      {visao === "sala_de_guerra" ? (
+        <SalaDeGuerraCampanha diretorId={diretorId} supers={supers} />
+      ) : (
+        <>
+          <Conselho fatos={fatos} pronto={pronto} donoId={diretorId} abrir={abrir} />
+          <Pergunta1 metaDir={metaDir} supers={supers} metaSuper={metaSuper} linha={linha} c30={c30?.linhas ?? null}
+            diaHoje={diaHoje} diasMes={diasMes} mes={mes} abrir={abrir} />
+          <Pergunta2 pastas={pastas} supers={supers} metaDir={metaDir} abrir={abrir} />
+          <Pergunta3 diretorId={diretorId} supers={supers} linhasMes={cMes?.linhas ?? null} mes={mes} />
+          <Pergunta4 supers={supers} linha={linha} carregando={!c30} abrir={abrir} />
+          <Pergunta5 abrir={abrir} />
+        </>
+      )}
+
       {combinar && <CombinarAcao diretorId={diretorId} c={combinar} fechar={() => setCombinar(null)} />}
     </>
   );

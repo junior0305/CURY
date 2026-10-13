@@ -349,3 +349,278 @@
 .cs-funil td:first-child { white-space: nowrap !important; }
 .cs-funil td:nth-child(2) { color: var(--ink-2); min-width: 150px; }
 .cs-funil td:nth-child(3) { min-width: 180px; }
+
+/* ── Sala de Guerra (Estratégia & Reunião com Superintendentes) ── */
+.sdg-container {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  border-color: #B9DAD9;
+  background: #ffffff;
+  box-shadow: 0 4px 20px rgba(15, 27, 45, 0.05);
+}
+
+.sdg-hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sdg-hd-info {
+  flex: 1 1 400px;
+}
+
+.sdg-hd-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sdg-grid-config {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  gap: 14px;
+}
+
+.sdg-box {
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sdg-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  outline: none;
+  transition: border-color .15s;
+}
+
+.sdg-input:focus {
+  border-color: var(--teal);
+}
+
+.sdg-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sdg-sec-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.sdg-sec-title small {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.sdg-supers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.sdg-super-pill {
+  border: 1.5px solid var(--line);
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all .15s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+}
+
+.sdg-super-pill:hover {
+  border-color: #B9DAD9;
+  background: #F8FBFA;
+}
+
+.sdg-super-pill.ativo {
+  border-color: var(--teal);
+  background: #F0F9F8;
+  box-shadow: 0 2px 8px rgba(14, 124, 123, 0.12);
+}
+
+.sdg-acoes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sdg-acao-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fff;
+  transition: border-color .15s;
+}
+
+.sdg-acao-row:hover {
+  border-color: #CFD7E3;
+}
+
+.sdg-acao-info {
+  flex: 1 1 360px;
+}
+
+.sdg-acao-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sdg-input-valor {
+  width: 110px;
+  text-align: right;
+  border: 1px solid var(--line);
+  background: var(--sunk);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  outline: none;
+}
+
+.sdg-input-valor:focus {
+  border-color: var(--teal);
+  background: #fff;
+}
+
+.sdg-preset-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.sdg-preset-btns button {
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: all .1s;
+}
+
+.sdg-preset-btns button:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+  background: #fff;
+}
+
+.sdg-roi-card {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 100%);
+  border-radius: 16px;
+  padding: 22px;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: 0 10px 25px rgba(15, 27, 45, 0.15);
+}
+
+.sdg-roi-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sdg-roi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.sdg-roi-metric {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sdg-roi-metric small {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #9FB3CC;
+  font-weight: 700;
+}
+
+.sdg-roi-metric .val {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 24px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.sdg-roi-metric .sub {
+  font-size: 11.5px;
+  color: #9FB3CC;
+}
+
+.sdg-ia-box {
+  background: rgba(14, 124, 123, 0.2);
+  border: 1px solid rgba(14, 124, 123, 0.4);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.sdg-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 900px) {
+  .sdg-grid-config {
+    grid-template-columns: 1fr;
+  }
+  .sdg-acao-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sdg-acao-input-wrap {
+    justify-content: space-between;
+  }
+}
+
