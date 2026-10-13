@@ -68,7 +68,7 @@ Mais de uma sessão de IA trabalha neste repositório e publica no mesmo site (c
 ### Quem cuida de quê
 - **Sessão Estratégia:** `src/components/estrategia/*` (Estratégia, Sala de Guerra, Minha Estratégia, Conselho de estratégia).
 - **Sessão Diretoria:** `src/components/diretoria/*` (EquipesCards, PastasPainel, pastasAnalise, AnunciosSaude), `src/hooks/useDiretoria.ts`, robôs do servidor `/root/econ/*.py`.
-- **Compartilhados:** `src/pages/Diretoria.tsx` e `src/styles/diretoria.css`. Só acrescente; não reescreva nem reordene o que existe. Classes CSS novas com prefixo próprio.
+- **Compartilhados:** `src/components/manager-v10/RailV10.tsx` (menu do gerente **e** do super: no /manager só Tempo real, Time e B.I. são abas internas; o resto é link), `src/pages/Diretoria.tsx` e `src/styles/diretoria.css`. Só acrescente; não reescreva nem reordene o que existe. Classes CSS novas com prefixo próprio.
 
 ### Commit e publicação
 1. Antes de mexer: `git pull` e `git status`.
@@ -93,3 +93,4 @@ Mais de uma sessão de IA trabalha neste repositório e publica no mesmo site (c
 ### Registro (cada sessão acrescenta uma linha: data · sessão · o que fez/decidiu)
 - 13/10 · Diretoria · Equipes em cards (ritmo da meta, indicadores, gargalo, cobrar/combinar); Pastas nova (pipeline real, ataque de hoje, limpeza, por equipe); aba B.I. no diretor; Saúde dos anúncios; edge `estrategia-ia` + Conselho de estratégia (só responde quando perguntado).
 - 13/10 · Estratégia · (a preencher pela sessão Estratégia: Sala de Guerra, Minha Estratégia, alocação de verba, campanhas de incentivo)
+- 13/10 · Diretoria · Conserto: no /manager toda aba abria o B.I. (RailV10 mandava todas as abas para onAba). Agora só o /super resolve tudo por dentro.
