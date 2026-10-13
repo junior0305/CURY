@@ -64,6 +64,7 @@ export default function RoletaHoje({ managerId, quem }: { managerId: string; que
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [passando, setPassando] = useState<string | null>(null);
   const [verTodos, setVerTodos] = useState(false);
+  const [busca, setBusca] = useState("");
 
   const recarregar = () => { qc.invalidateQueries({ queryKey: ["roleta-hoje", managerId] }); qc.invalidateQueries({ queryKey: ["tempo-real"] }); qc.invalidateQueries({ queryKey: ["aba-leads"] }); };
   async function alternar(c: Corretor, receber: boolean) {
@@ -94,6 +95,12 @@ export default function RoletaHoje({ managerId, quem }: { managerId: string; que
   }), [data]);
   if (!data) return null;
   const ligados = data.corretores.filter((c) => c.on);
+  // plantão primeiro (é quem deve receber), depois quem já está ligado, depois o resto em ordem alfabética
+  const sem = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const lista = data.corretores
+    .filter((c) => !busca.trim() || sem(c.nome).includes(sem(busca.trim())))
+    .sort((a, b) => Number(b.plantao) - Number(a.plantao) || Number(b.on) - Number(a.on) || a.nome.localeCompare(b.nome));
+  const nPlantao = data.corretores.filter((c) => c.plantao).length;
   const atrasados = data.leads.filter((l) => l.estado !== "ok" && l.min >= 15).length;
   const mostrar = verTodos ? ordem : ordem.slice(0, 8);
   const destinos = [...data.corretores].sort((a, b) => Number(b.on) - Number(a.on) || Number(b.online) - Number(a.online));
@@ -102,23 +109,26 @@ export default function RoletaHoje({ managerId, quem }: { managerId: string; que
     <div className="rlt">
       <section className="rlt-card">
         <div className="rlt-h">
-          <div><b>Roleta de leads</b><span>{ligados.length} de {data.corretores.length} recebendo agora{data.alguemNoPlantao ? "" : " · ninguém bateu ponto no C2S ainda"}</span></div>
+          <div><b>Roleta de leads</b><span>{ligados.length} de {data.corretores.length} recebendo agora · {nPlantao ? `${nPlantao} no plantão` : "ninguém bateu ponto no C2S ainda"}</span></div>
           <div className="rlt-bt">
             <button disabled={ocupado === "todos"} onClick={() => todos(true)}>Ligar todos</button>
             <button disabled={ocupado === "todos"} onClick={() => todos(false)}>Desligar todos</button>
           </div>
         </div>
+        <input className="rlt-busca" type="search" value={busca} onChange={(e) => setBusca(e.target.value)}
+          placeholder={`Buscar corretor pelo nome (${data.corretores.length} na equipe)`} aria-label="Buscar corretor pelo nome" />
         <div className="rlt-chips">
-          {data.corretores.map((c) => (
+          {lista.map((c) => (
             <button key={c.id} className={`rlt-chip${c.on ? " on" : ""}`} disabled={ocupado === c.id} onClick={() => alternar(c, !c.on)}
               title={c.on ? "Clique para tirar da roleta" : "Clique para colocar na roleta"} aria-pressed={c.on}>
               <span className="sw"><i /></span>
               <span className="nm">{c.nome.split(" ").slice(0, 2).join(" ")}
-                <small>{c.on ? "recebe" : "não recebe"}{c.fonte === "gerente" ? " · por você" : c.fonte === "plantao" ? " · plantão" : ""}{c.plantao ? " · no plantão" : ""}{c.online ? " · online" : ""}</small></span>
+                <small>{c.plantao ? <strong>no plantão · </strong> : null}{c.on ? "recebe" : "não recebe"}{c.fonte === "gerente" ? " · por você" : ""}{c.online ? " · online" : ""}</small></span>
             </button>))}
-          {!data.corretores.length ? <span className="rlt-vazio">Nenhum corretor ativo na equipe.</span> : null}
+          {!data.corretores.length ? <span className="rlt-vazio">Nenhum corretor ativo na equipe.</span>
+            : !lista.length ? <span className="rlt-vazio">Nenhum corretor com esse nome.</span> : null}
         </div>
-        <p className="rlt-nota">Quem bate ponto no C2S entra sozinho. O que você liga ou desliga aqui vale até a meia-noite, mesmo sem check-in.</p>
+        <p className="rlt-nota">Quem bate ponto no C2S entra sozinho e aparece primeiro. Você pode ligar qualquer outro corretor, mesmo fora do plantão: vale até a meia-noite.</p>
       </section>
 
       <section className="rlt-card">

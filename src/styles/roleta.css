@@ -34,3 +34,6 @@
 .rlt-mais { align-self: flex-start; }
 @media (max-width: 980px) { .rlt { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 520px) { .rlt-l { grid-template-columns: minmax(0, 1fr); } .rlt-st { justify-self: start; } }
+.mgr10 .rlt .rlt-busca { font: inherit; font-size: 13.5px; width: 100%; border: 1px solid var(--line, #E1E6EE); border-radius: 10px; padding: 9px 12px; background: var(--sunk, #EDF2FA); color: var(--ink, #0B1B36); }
+.mgr10 .rlt .rlt-busca:focus { outline: 2px solid var(--blue, #0D9488); outline-offset: 1px; background: var(--card, #fff); }
+.rlt-chip .nm small strong { color: var(--blue, #0D9488); font-weight: 800; }
