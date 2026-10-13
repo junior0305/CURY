@@ -90,6 +90,54 @@ export default function SalaDeGuerraCampanha({
   const [metaVendas, setMetaVendas] = useState(40);
   const [ticketMedio, setTicketMedio] = useState(250000);
 
+  // Simulador de Meta Alvo com IA ("Como chegar em XX vendas?")
+  const [metaAlvoSimulacao, setMetaAlvoSimulacao] = useState(50);
+  const [mostrarSimulador, setMostrarSimulador] = useState(false);
+
+  const sugestaoIA = useMemo(() => {
+    const alvo = Math.max(1, metaAlvoSimulacao);
+    const custoVendaMedio = 680;
+    const verbaSugeridaTotal = Math.round((alvo * custoVendaMedio) / 500) * 500;
+
+    const sAnuncio = Math.round((verbaSugeridaTotal * 0.45) / 500) * 500;
+    const sRua = Math.round((verbaSugeridaTotal * 0.20) / 500) * 500;
+    const sPap = Math.round((verbaSugeridaTotal * 0.12) / 500) * 500;
+    const sAtiva = Math.round((verbaSugeridaTotal * 0.08) / 500) * 500;
+    const sPremios = Math.max(1000, verbaSugeridaTotal - (sAnuncio + sRua + sPap + sAtiva));
+
+    const leadsEst = Math.round(sAnuncio / 28);
+    const visitasEst = Math.round((sRua / 500) * 6);
+    const pastasEst = Math.round(sPap / 400);
+    const bonusTropa = Math.round(Math.min(0.30, sPremios / 15000) * 100);
+    const corretoresMinimos = Math.max(12, Math.ceil(alvo / 1.4));
+
+    return {
+      alvo,
+      verbaSugeridaTotal,
+      alocacoes: {
+        anuncio: sAnuncio,
+        rua: sRua,
+        pap: sPap,
+        oferta_ativa: sAtiva,
+        premios: sPremios,
+      },
+      leadsEst,
+      visitasEst,
+      pastasEst,
+      bonusTropa,
+      corretoresMinimos,
+      vgvEstimado: alvo * ticketMedio,
+      custoPorVenda: Math.round(verbaSugeridaTotal / alvo),
+    };
+  }, [metaAlvoSimulacao, ticketMedio]);
+
+  const aplicarSugestaoIA = () => {
+    setVerbaTotal(sugestaoIA.verbaSugeridaTotal);
+    setMetaVendas(sugestaoIA.alvo);
+    setAlocacoes(sugestaoIA.alocacoes);
+    toast.success(`Mix recomendado pela IA para atingir ${sugestaoIA.alvo} vendas aplicado no orçamento!`);
+  };
+
   // Seleção de Superintendências participantes
   const [supersSelecionados, setSupersSelecionados] = useState<Set<string>>(
     () => new Set(supers.map((s) => s.id))
@@ -505,6 +553,118 @@ Vamos para cima! O que você precisa de mim para rodar essa máquina a partir de
               </>
             )}
           </p>
+        </div>
+
+        {/* Simulador Interativo de Meta Alvo ("Quero Chegar em XX Vendas") */}
+        <div className="sdg-reversa-box">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <span className="dir-lbl" style={{ color: "#FBBF24" }}>Simulador de Engenharia Reversa da IA</span>
+              <h4 style={{ fontSize: 16, fontWeight: 800, margin: "2px 0 0", color: "#fff" }}>
+                🎯 E se eu quiser bater uma meta específica? O que a IA sugere?
+              </h4>
+            </div>
+            <button
+              type="button"
+              className="dir-btn"
+              style={{
+                background: "rgba(255, 255, 255, 0.1)",
+                color: "#fff",
+                borderColor: "rgba(255, 255, 255, 0.2)",
+                fontSize: 12.5,
+              }}
+              onClick={() => setMostrarSimulador(!mostrarSimulador)}
+            >
+              {mostrarSimulador ? "Recolher Simulador ▲" : "Simular Meta Alvo (ex: 50, 60 vendas) ▼"}
+            </button>
+          </div>
+
+          {mostrarSimulador && (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, color: "#9FB3CC", fontWeight: 600 }}>Quero chegar em:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  className="sdg-input-valor mono"
+                  style={{ background: "#fff", color: "var(--ink)", width: 90 }}
+                  value={metaAlvoSimulacao}
+                  onChange={(e) => setMetaAlvoSimulacao(Number(e.target.value))}
+                />
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>vendas</span>
+                <div className="sdg-preset-btns">
+                  {[35, 45, 50, 60, 75, 100].map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      style={{
+                        background: metaAlvoSimulacao === v ? "var(--teal)" : "rgba(255,255,255,0.1)",
+                        color: "#fff",
+                        borderColor: "rgba(255,255,255,0.2)",
+                      }}
+                      onClick={() => setMetaAlvoSimulacao(v)}
+                    >
+                      {v} un
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Resultado do Plano Sugerido pela IA */}
+              <div className="sdg-reversa-grid">
+                <div className="sdg-reversa-card">
+                  <small>Verba Total Recomendada</small>
+                  <b>{brl(sugestaoIA.verbaSugeridaTotal)}</b>
+                  <span>Custo por venda ~{brl(sugestaoIA.custoPorVenda)}</span>
+                </div>
+                <div className="sdg-reversa-card">
+                  <small>Volume Mínimo no Funil</small>
+                  <b>~{sugestaoIA.leadsEst} leads · ~{sugestaoIA.visitasEst} visitas</b>
+                  <span>exige ~{sugestaoIA.pastasEst} pastas montadas</span>
+                </div>
+                <div className="sdg-reversa-card">
+                  <small>Força de Vendas Exigida</small>
+                  <b>{sugestaoIA.corretoresMinimos} corretores ativos</b>
+                  <span>bônus de prêmio sugerido: +{sugestaoIA.bonusTropa}%</span>
+                </div>
+              </div>
+
+              {/* Tabela comparativa do mix sugerido */}
+              <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 12, fontSize: 12.5 }}>
+                <div style={{ fontWeight: 700, color: "#FBBF24", marginBottom: 6 }}>
+                  Divisão Recomendada do Orçamento para {sugestaoIA.alvo} Vendas:
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
+                  <div>📢 Anúncios: <b>{brl(sugestaoIA.alocacoes.anuncio)}</b></div>
+                  <div>🎪 Rua & Tenda: <b>{brl(sugestaoIA.alocacoes.rua)}</b></div>
+                  <div>🚪 PAP: <b>{brl(sugestaoIA.alocacoes.pap)}</b></div>
+                  <div>📞 Oferta Ativa: <b>{brl(sugestaoIA.alocacoes.oferta_ativa)}</b></div>
+                  <div>🏆 Prêmios Tropa: <b>{brl(sugestaoIA.alocacoes.premios)}</b></div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, color: "#9FB3CC" }}>
+                  Aplica a meta de {sugestaoIA.alvo} vendas e recalcula todo o orçamento da Sala de Guerra:
+                </span>
+                <button
+                  type="button"
+                  className="dir-btn"
+                  style={{
+                    background: "#F59E0B",
+                    color: "#0F1B2D",
+                    fontWeight: 800,
+                    border: 0,
+                    padding: "8px 16px",
+                  }}
+                  onClick={aplicarSugestaoIA}
+                >
+                  ✨ Aplicar Sugestão da IA no Orçamento
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

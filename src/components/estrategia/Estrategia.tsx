@@ -14,6 +14,7 @@ import { useCompromissos, useCompromissoAcoes, vencido, type Compromisso, type L
 import GastosPlano from "@/components/plano/GastosPlano";
 import Conselho from "./Conselho";
 import SalaDeGuerraCampanha from "./SalaDeGuerraCampanha";
+import MinhaEstrategia from "./MinhaEstrategia";
 import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
 
 const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
@@ -28,7 +29,7 @@ export interface Combinar { sobre: string; pergunta: number; titulo: string; res
 type MetaPainel = { dono: PessoaMeta; filhos: PessoaMeta[] };
 
 export default function Estrategia({ diretorId, supers, pastas }: { diretorId: string; supers: SuperDiretoria[]; pastas: PastaJunix[] }) {
-  const [visao, setVisao] = useState<"sala_de_guerra" | "diagnostico">("sala_de_guerra");
+  const [visao, setVisao] = useState<"minhas_estrategias" | "sala_de_guerra" | "diagnostico">("minhas_estrategias");
   const [combinar, setCombinar] = useState<Combinar | null>(null);
   const hoje = new Date();
   const diaHoje = hoje.getDate();
@@ -122,11 +123,18 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div className="dir-per" style={{ background: "#E2E8F0", padding: 4 }}>
           <button
+            className={visao === "minhas_estrategias" ? "on" : ""}
+            onClick={() => setVisao("minhas_estrategias")}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
+          >
+            <span>🎯</span> Minhas Estratégias (Lançamentos & Estoque)
+          </button>
+          <button
             className={visao === "sala_de_guerra" ? "on" : ""}
             onClick={() => setVisao("sala_de_guerra")}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
           >
-            <span>⚔️</span> Sala de Guerra (Campanha & Investimento)
+            <span>⚔️</span> Sala de Guerra (Reunião & Verba)
           </button>
           <button
             className={visao === "diagnostico" ? "on" : ""}
@@ -137,11 +145,17 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
           </button>
         </div>
         <span style={{ fontSize: 12.5, color: "var(--ink-3)", fontWeight: 500 }}>
-          {visao === "sala_de_guerra" ? "Modo Reunião Tática com os Superintendentes" : "Modo Rotina Executiva & Auditoria Semanal"}
+          {visao === "minhas_estrategias"
+            ? "Portfólio de Produtos, Lançamentos e Estoque do Diretor"
+            : visao === "sala_de_guerra"
+            ? "Modo Reunião Tática com os Superintendentes"
+            : "Modo Rotina Executiva & Auditoria Semanal"}
         </span>
       </div>
 
-      {visao === "sala_de_guerra" ? (
+      {visao === "minhas_estrategias" ? (
+        <MinhaEstrategia diretorId={diretorId} supers={supers} />
+      ) : visao === "sala_de_guerra" ? (
         <SalaDeGuerraCampanha diretorId={diretorId} supers={supers} />
       ) : (
         <>

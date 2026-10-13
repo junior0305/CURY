@@ -624,3 +624,211 @@
   }
 }
 
+/* ── Engenharia Reversa da IA na Sala de Guerra ── */
+.sdg-reversa-box {
+  background: rgba(15, 27, 45, 0.4);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 14px;
+  padding: 16px;
+  margin-top: 10px;
+}
+
+.sdg-reversa-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.sdg-reversa-card {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sdg-reversa-card small {
+  font-size: 11px;
+  color: #FBBF24;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sdg-reversa-card b {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 16px;
+  color: #fff;
+}
+
+.sdg-reversa-card span {
+  font-size: 11.5px;
+  color: #9FB3CC;
+}
+
+/* ── Minha Estratégia (Portfólio Multi-Estratégia do Diretor) ── */
+.mestr-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mestr-top-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mestr-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.mestr-kpi {
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mestr-kpi small {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.mestr-kpi b {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.mestr-kpi span {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.mestr-tabs-bar {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+}
+
+.mestr-tabs-list {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: max-content;
+}
+
+.mestr-tab-pill {
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all .15s;
+}
+
+.mestr-tab-pill:hover {
+  border-color: var(--teal);
+  color: var(--ink);
+}
+
+.mestr-tab-pill.on {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(15, 27, 45, 0.15);
+}
+
+.mestr-tab-pill.add {
+  background: #F0F9F8;
+  border-color: #B9DAD9;
+  color: var(--teal);
+  font-weight: 700;
+}
+
+.mestr-detalhe-card {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mestr-detalhe-hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mestr-grid-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.mestr-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mestr-acoes-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.mestr-acao-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--sunk);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.mestr-add-acao-box {
+  background: #F8FAFC;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .mestr-add-acao-box > div {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+
