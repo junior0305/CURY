@@ -28,6 +28,7 @@ export const nomesSuperC2S = (nome: string) => [`Superintendente ${nome}`, `Supe
 export interface PastaJunix {
   proposta_id: string; cliente: string | null; etapa: string | null; dias: number | null;
   corretor: string | null; gerente: string | null; superintendente: string | null; empreendimento: string | null;
+  status_texto?: string | null; cadastrada_em?: string | null;
 }
 export interface SuperDiretoria {
   id: string; nome: string; tokens: string[];
@@ -84,7 +85,7 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
           return ((data as unknown as SuperRollup | null)?.gerentes ?? []) as GerenteRollup[];
         })),
         buscarPlantao(`${hoje}T03:00:00Z`).catch(() => []),
-        supabase.from("junix_pastas" as any).select("proposta_id,cliente,etapa,dias,corretor,gerente,superintendente,empreendimento"),
+        supabase.from("junix_pastas" as any).select("proposta_id,cliente,etapa,dias,corretor,gerente,superintendente,empreendimento,status_texto,cadastrada_em"),
         supabase.from("cobrancas" as any).select("id,de_id,para_id,motivo,enviada_em,respondida_em,resposta,lead_ids")
           .gte("enviada_em", new Date(Date.now() - 7 * 864e5).toISOString()).order("enviada_em", { ascending: false }).limit(40),
       ]);

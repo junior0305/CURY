@@ -258,3 +258,48 @@
 .eqc-ger td.r { color: var(--red); font-weight: 700; }
 @media (max-width: 900px) { .eqc-grid { grid-template-columns: minmax(0,1fr); } .eqc-emp { grid-template-columns: repeat(2, minmax(0,1fr)); } .eqc-emp > div:first-child { grid-column: 1 / -1; } }
 @media (max-width: 440px) { .eqc-ind { grid-template-columns: minmax(0,1fr) auto; } .eqc-ind .dir-chip { grid-column: 2; } }
+
+/* ── Pastas (13/10) ── */
+.pst-band { padding: 16px 18px; }
+.pst-band-g { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 18px; }
+.pst-big { font: 800 28px "JetBrains Mono", monospace; line-height: 1.1; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.pst-big small { font: 600 14px Archivo, system-ui, sans-serif; color: var(--ink-3); }
+.pst-s { font-size: 12px; color: var(--ink-3); margin-top: 3px; }
+.pst-alerta { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: var(--red-bg); color: var(--red); font-size: 13px; font-weight: 700; }
+.pst-alerta.ok { background: var(--grn-bg); color: var(--grn); }
+.pst-alerta span { display: block; color: var(--ink-2); font-weight: 400; margin-top: 2px; }
+.pst-g2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.25fr); gap: 18px; }
+.pst-g3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+.pst-sec { padding: 16px 18px; min-width: 0; }
+.pst-fun { display: flex; flex-direction: column; gap: 9px; }
+.pst-fr { display: grid; grid-template-columns: 130px minmax(0,1fr) 92px; gap: 10px; align-items: center; }
+.pst-fr .nm { font-size: 13px; font-weight: 600; }
+.pst-fr .nm small { display: block; font-weight: 400; color: var(--ink-3); font-size: 11.5px; }
+.pst-bar { position: relative; height: 22px; background: var(--sunk); border-radius: 6px; overflow: hidden; display: flex; }
+.pst-bar i { display: block; height: 100%; background: var(--blue); }
+.pst-bar b { display: block; height: 100%; background: repeating-linear-gradient(135deg, var(--red) 0 4px, var(--red-bg) 4px 7px); }
+.pst-bar em { position: absolute; left: 8px; top: 2px; font: 700 12px "JetBrains Mono", monospace; color: #fff; font-style: normal; }
+.pst-fr .v { text-align: right; font-size: 12.5px; color: var(--ink-3); }
+.pst-fr .v b { display: block; font: 700 13px "JetBrains Mono", monospace; color: var(--ink); }
+.pst-leg { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-3); margin-top: 12px; }
+.pst-leg i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.pst-at { display: flex; flex-direction: column; }
+.pst-ai { display: grid; grid-template-columns: 26px minmax(0,1fr) auto; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line-2); align-items: start; }
+.pst-ai:first-child { border-top: 0; }
+.pst-ai .n { font: 700 13px "JetBrains Mono", monospace; color: var(--ink-3); padding-top: 2px; }
+.pst-ai .t { font-weight: 700; font-size: 13.5px; }
+.pst-ai .t small { font-weight: 500; color: var(--ink-3); font-size: 12px; }
+.pst-ai .d { font-size: 12.5px; color: var(--ink-3); margin-top: 1px; }
+.pst-ai .nx { font-size: 12.5px; margin-top: 4px; }
+.pst-ai .nx::before { content: "→ "; color: var(--teal); font-weight: 700; }
+.pst-ai .r { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.pst-link { background: none; border: 0; color: var(--teal); font-weight: 600; font-size: 12px; cursor: pointer; padding: 2px 0; text-align: right; }
+.pst-lim { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--sunk); min-width: 0; display: flex; flex-direction: column; }
+.pst-lim h4 { margin: 0; font-size: 14px; font-weight: 800; display: flex; justify-content: space-between; gap: 8px; }
+.pst-lim p { margin: 4px 0 8px; font-size: 12.5px; color: var(--ink-3); }
+.pst-lim ul { margin: 0; padding: 0; list-style: none; font-size: 12.5px; }
+.pst-lim li { padding: 5px 0; border-top: 1px solid var(--line); }
+.pst-lim li small { color: var(--ink-3); }
+.pst-lim-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 10px; }
+@media (max-width: 900px) { .pst-band-g { grid-template-columns: repeat(2, minmax(0,1fr)); } .pst-g2, .pst-g3 { grid-template-columns: minmax(0,1fr); } }
+@media (max-width: 440px) { .pst-fr { grid-template-columns: 96px minmax(0,1fr) 70px; } .pst-ai { grid-template-columns: minmax(0,1fr); } .pst-ai .n { display: none; } .pst-ai .r { align-items: flex-start; } }

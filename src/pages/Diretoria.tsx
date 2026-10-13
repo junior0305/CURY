@@ -13,6 +13,8 @@ import { useDiretorId, useDiretoria, useMetasDiretoria, donoJunix, chaveGerente,
   type SuperDiretoria, type PastaJunix } from "@/hooks/useDiretoria";
 import Estrategia from "@/components/estrategia/Estrategia";
 import EquipesCards from "@/components/diretoria/EquipesCards";
+import PastasPainel from "@/components/diretoria/PastasPainel";
+import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
 import { usePlanos, atrasada } from "@/hooks/usePlano";
 import "@/styles/diretoria.css";
 
@@ -114,7 +116,12 @@ export default function Diretoria() {
               {aberto["tabela-equipes"] ? <Equipes supers={supers} linhasDoSuper={linhasDoSuper} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} /> : null}
             </>}
             {aba === "leads" && <Leads dias={dias} supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
-            {aba === "pastas" && <Pastas supers={supers} pastas={dir.pastas} aberto={aberto} tog={tog} />}
+            {aba === "pastas" && <>
+              <PastasPainel diretorId={diretorId!} supers={supers} pastas={dir.pastas} />
+              <button className="dir-btn" style={{ alignSelf: "flex-start" }} onClick={() => tog("tabela-pastas")}>
+                {aberto["tabela-pastas"] ? "▾ Esconder a árvore completa" : "▸ Árvore completa: super → gerente → corretor → cliente"}</button>
+              {aberto["tabela-pastas"] ? <Pastas supers={supers} pastas={dir.pastas} aberto={aberto} tog={tog} /> : null}
+            </>}
             {aba === "estrategia" && diretorId && <Estrategia diretorId={diretorId} supers={supers} pastas={dir.pastas} />}
           </>
         )}
@@ -287,12 +294,9 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
   const ritmo = desloc === 0 ? (hoje.getDate() / diasMes) * 100 : 0;
   const somaSupers = (metas?.filhos ?? []).reduce((a, f) => a + (f.meta ?? 0), 0);
 
-  // Cálculo realista de Pipeline de Pastas (Junix)
-  const analiseCount = pastas.filter((p) => /laudo|an[aá]lise/i.test(p.etapa ?? "")).length;
-  const propostaCount = pastas.filter((p) => /proposta|simular|emiss|documento/i.test(p.etapa ?? "")).length;
-  const cadastroCount = pastas.filter((p) => /cadastro|unidade/i.test(p.etapa ?? "")).length;
-  const potencialPastas = Math.round(analiseCount * 0.70 + propostaCount * 0.40 + cadastroCount * 0.15);
-  const projecaoPipeline = realizado + potencialPastas;
+  // Pipeline de pastas (Junix): mesma leitura da aba Pastas — só pasta viva, chance por etapa
+  const rp = useMemo(() => resumoPastas(lerPastas(pastas)), [pastas]);
+  const projecaoPipeline = Math.round(realizado + rp.previsao);
 
   // pessoas
   const gerentes = supers.flatMap((s) => s.gerentes.map((g) => ({ s, g })));
@@ -454,25 +458,18 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
                     <small>Vendas Feitas</small>
                     <b>{realizado}</b>
                   </div>
-                  <div className="dir-pipeline-item">
-                    <small>Em Análise (70%)</small>
-                    <b>{analiseCount} <span style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 400 }}>(~{Math.round(analiseCount * 0.70)})</span></b>
-                  </div>
-                  <div className="dir-pipeline-item">
-                    <small>Em Proposta (40%)</small>
-                    <b>{propostaCount} <span style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 400 }}>(~{Math.round(propostaCount * 0.40)})</span></b>
-                  </div>
-                  <div className="dir-pipeline-item">
-                    <small>Em Cadastro (15%)</small>
-                    <b>{cadastroCount} <span style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 400 }}>(~{Math.round(cadastroCount * 0.15)})</span></b>
-                  </div>
+                  {([["Reta final", rp.reta], ["Análise e documentos", rp.meio], ["Cadastro e unidade", rp.comeco]] as const).map(([t, g]) => (
+                    <div key={t} className="dir-pipeline-item">
+                      <small>{t}</small>
+                      <b>{g.n} <span style={{ fontSize: 11, color: "var(--ink-3)", fontWeight: 400 }}>(~{(Math.round(g.prev * 10) / 10).toLocaleString("pt-BR")})</span></b>
+                    </div>))}
                   <div className="dir-pipeline-item" style={{ background: "#EEF4F8" }}>
                     <small>Potencial Fechamento</small>
                     <b style={{ color: "var(--teal)" }}>{projecaoPipeline} <span style={{ fontSize: 11, fontWeight: 500 }}>vendas</span></b>
                   </div>
                 </div>
                 <p className="dir-nota" style={{ marginTop: 8, marginBottom: 0 }}>
-                  Regra de 3 aritmética projeta <b>{projecao ?? "—"}</b> vendas. O estoque de <b>{pastas.length}</b> pastas ativas no Junix tem potencial estimado de fechar em <b>{projecaoPipeline}</b> vendas.
+                  Regra de 3 aritmética projeta <b>{projecao ?? "—"}</b> vendas. Das <b>{rp.total}</b> pastas no Junix, <b>{rp.vivas}</b> estão vivas ({rp.duplicadas} duplicadas, {rp.reprovadas} reprovadas e {rp.mortas} paradas há 60+ dias ficam fora da conta); com as vendas feitas, o mês fecha perto de <b>{projecaoPipeline}</b>.
                   {projecaoPipeline < d.meta ? (
                     <span style={{ color: "var(--red)", fontWeight: 700, display: "block", marginTop: 3 }}>
                       ⚠️ Déficit de {d.meta - projecaoPipeline} vendas: injete novas pastas na esteira de crédito para não perder a meta.
@@ -855,13 +852,13 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
         {/* Pipeline por Etapa Junix */}
         <div className="dir-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ fontSize: 16, fontWeight: 800 }}>Pipeline de Pastas (Junix)</div>
-          <span style={{ fontSize: 12, color: "var(--ink-3)" }}>{pastas.length} pastas ativas na esteira hoje</span>
+          <span style={{ fontSize: 12, color: "var(--ink-3)" }}>{rp.vivas} pastas vivas de {rp.total} no Junix · previsão {(Math.round(rp.previsao * 10) / 10).toLocaleString("pt-BR")} vendas no mês</span>
           <div className="dir-list">
             {[
-              ["Análise / Laudo (Crédito CEF)", analiseCount, "var(--teal)", "70% de chance"],
-              ["Proposta / Documentos", propostaCount, "var(--ink)", "40% de chance"],
-              ["Cadastro / Unidade", cadastroCount, "var(--ink-3)", "15% de chance"],
-              ["Pastas Travadas (7d+)", travadas, "var(--red)", "risco de distrato"],
+              ["Reta final (emissão, proposta, aprovada)", rp.reta.n, "var(--teal)", "50–85% de chance"],
+              ["Análise / Documentos", rp.meio.n, "var(--ink)", "20–30% de chance"],
+              ["Cadastro / Unidade", rp.comeco.n, "var(--ink-3)", "6–12% de chance"],
+              ["Fora da conta", rp.reprovadas + rp.mortas + rp.duplicadas, "var(--red)", "reprovadas, paradas 60+ dias, duplicadas"],
             ].map(([et, count, cor, prob]) => (
               <div key={et as string}>
                 <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>
