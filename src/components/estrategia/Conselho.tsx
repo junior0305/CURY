@@ -21,7 +21,17 @@ async function chamar(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke("estrategia-ia", { body });
   if (error) throw new Error(error.message);
   if ((data as any)?.error) throw new Error((data as any).error);
-  return data as any;
+  if (!(data as any)?.pendente) return data as any;
+  // a IA gera em segundo plano (pode passar de 1 minuto): espera a linha ficar pronta
+  const id = (data as any).id as string;
+  for (let i = 0; i < 75; i++) {
+    await new Promise((r) => setTimeout(r, 2500));
+    const { data: l } = await supabase.from("estrategia_ia" as any).select("status,resposta,modelo,criado_em").eq("id", id).maybeSingle();
+    const x = l as any;
+    if (x?.status === "pronto") return { ...x.resposta, modelo: x.modelo, gerado_em: x.criado_em };
+    if (x?.status === "erro") throw new Error("A IA não conseguiu responder agora. Tente de novo.");
+  }
+  throw new Error("A IA demorou demais. Tente de novo em instantes.");
 }
 
 export default function Conselho({ fatos, pronto, donoId, abrir }: {
@@ -76,7 +86,7 @@ export default function Conselho({ fatos, pronto, donoId, abrir }: {
       </div>
 
       {erro ? <div className="est-warn"><b style={{ color: "var(--red)" }}>!</b><div>{erro}</div></div> : null}
-      {!an && carregando ? <div className="dir-nota" style={{ padding: "6px 0" }}>Lendo meta, pastas, dinheiro, time e compromissos… leva uns 20 segundos.</div> : null}
+      {!an && carregando ? <div className="dir-nota" style={{ padding: "6px 0" }}>Lendo meta, pastas, dinheiro, time e compromissos… leva de 30 segundos a 1 minuto.</div> : null}
       {!an && !carregando && !pronto ? <div className="dir-nota">Esperando os números das perguntas abaixo carregarem…</div> : null}
 
       {an ? <>
