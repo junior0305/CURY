@@ -1,18 +1,19 @@
-/* Sala de Guerra Estratégica: Planejamento de Campanha com os Superintendentes.
- * Recursos:
- *   - Configuração de verba total e meta de vendas;
- *   - Campanha de Incentivo Oficial com Premiações da Tropa (publicação de banners nos dashboards dos corretores, gerentes e supers);
- *   - Seletor de Equipes (Superintendências e suas tropas);
- *   - Cardápio de Ações Táticas com alocação detalhada por SUPER $\to$ GERENTE $\to$ CORRETOR;
- *   - Escolha de Produto (Estoque Junix ou digitação de lançamento não cadastrado no sistema) e Região/Praça;
- *   - Inteligência Preditiva Comandra com ROI e Engenharia Reversa ("Como chegar em XX vendas?");
- *   - Fechamento formal de acordo e envio no WhatsApp de cada Super.
+/* Sala de Guerra Estratégica: Planejamento de Reunião & Verba com os Superintendentes.
+ *
+ * Arquitetura Comercial:
+ *   1. Placar de Metas da Reunião (Ritmo, Projeção, Devedores e edição inline) no topo;
+ *   2. Campanha de Incentivo Oficial com Premiações da Tropa (banners nos dashboards);
+ *   3. Alocação de Verba por Superintendente & Cesta de Produtos (Lançamentos Futuros e Estoques Junix);
+ *   4. Inteligência Preditiva Comandra com ROI e Engenharia Reversa ("Como chegar em XX vendas?");
+ *   5. Fechamento formal de acordo e envio no WhatsApp de cada Superintendente.
  */
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { SuperDiretoria } from "@/hooks/useDiretoria";
 import { usePlanoAcoes, useEstoque } from "@/hooks/usePlano";
+import type { LinhaConsolidado } from "@/hooks/useConsolidadoSuper";
+import PlacarMetas, { MetaPainel, Combinar } from "./PlacarMetas";
 
 const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
 const inicioMes = (desloc = 0) => {
@@ -21,13 +22,13 @@ const inicioMes = (desloc = 0) => {
 };
 const nomeMes = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString("pt-BR", { month: "long" });
 
-export interface AcaoTat {
-  key: "anuncio" | "rua" | "pap" | "oferta_ativa" | "premios";
-  nome: string;
-  icone: string;
-  descricao: string;
-  comoMede: string;
-  defaultVal: number;
+export interface ItemVerbaSuper {
+  id: string;
+  tipo: "lancamento" | "estoque";
+  produto: string; // Nome do empreendimento Junix ou digitado livremente
+  canal: "anuncio" | "rua" | "pap" | "oferta_ativa" | "premios";
+  gerenteId?: string; // ID do gerente ou "" (toda a equipe do super)
+  valor: number;
 }
 
 export interface RegraPremio {
@@ -38,25 +39,13 @@ export interface RegraPremio {
   publico: "BROKER" | "MANAGER" | "TODOS";
 }
 
-export interface DetalheSuperCanal {
-  valor: number;
-  produto: string;
-  outroProduto?: string;
-  regiao: string;
-  gerentes?: Record<string, number>;
+export interface AcaoTat {
+  key: "anuncio" | "rua" | "pap" | "oferta_ativa" | "premios";
+  nome: string;
+  icone: string;
+  descricao: string;
+  comoMede: string;
 }
-
-const REGIOES_PADRAO = [
-  "Todas as Regiões",
-  "Zona Leste",
-  "Zona Sul",
-  "Zona Norte",
-  "Zona Oeste",
-  "Centro",
-  "Grande SP / ABCD",
-  "Baixada Santista",
-  "Campinas / Interior",
-];
 
 const ACOES_CATALOGO: AcaoTat[] = [
   {
@@ -65,7 +54,6 @@ const ACOES_CATALOGO: AcaoTat[] = [
     icone: "📢",
     descricao: "Tráfego pago no Facebook e Instagram direcionado aos produtos foco.",
     comoMede: "CPL médio de ~R$ 28 · Conversão estimada de 2.2% em vendas.",
-    defaultVal: 12000,
   },
   {
     key: "rua",
@@ -73,7 +61,6 @@ const ACOES_CATALOGO: AcaoTat[] = [
     icone: "🎪",
     descricao: "Tendas em pontos de fluxo, promotores, panfletagem e lanche de apoio.",
     comoMede: "Custo de ~R$ 500/dia de blitz · ~6 visitas diretas no estande por dia.",
-    defaultVal: 5000,
   },
   {
     key: "pap",
@@ -81,7 +68,6 @@ const ACOES_CATALOGO: AcaoTat[] = [
     icone: "🚪",
     descricao: "Porta a porta em empresas locais, comércios e polos de emprego da região.",
     comoMede: "Gera pastas diretas (~R$ 400 por pasta montada) · 40% de conversão.",
-    defaultVal: 3000,
   },
   {
     key: "oferta_ativa",
@@ -89,7 +75,6 @@ const ACOES_CATALOGO: AcaoTat[] = [
     icone: "📞",
     descricao: "Disparos WhatsApp, reativação de base antiga e roleta de clientes dormentes.",
     comoMede: "Ferramenta de disparo e chips · ~1 venda direta a cada R$ 650 investidos.",
-    defaultVal: 2000,
   },
   {
     key: "premios",
@@ -97,27 +82,38 @@ const ACOES_CATALOGO: AcaoTat[] = [
     icone: "🏆",
     descricao: "Premiação por pasta aprovada na Caixa e prêmio para o corretor campeão.",
     comoMede: "Aumenta a ativação da equipe em até +30%, destravando corretores ociosos.",
-    defaultVal: 4000,
   },
 ];
 
 export default function SalaDeGuerraCampanha({
   diretorId,
   supers,
+  metaDir,
+  metaSuper,
+  linha,
+  c30,
+  diaHoje = new Date().getDate(),
+  diasMes = 30,
+  abrir,
   onSalvo,
 }: {
   diretorId: string;
   supers: SuperDiretoria[];
+  metaDir?: MetaPainel;
+  metaSuper?: Map<string, MetaPainel | undefined>;
+  linha?: Map<string, LinhaConsolidado>;
+  c30?: LinhaConsolidado[] | null;
+  diaHoje?: number;
+  diasMes?: number;
+  abrir?: (c: Combinar) => void;
   onSalvo?: () => void;
 }) {
-  const { criarPlano, criarAcao, criarGasto } = usePlanoAcoes();
   const { data: estoque = [] } = useEstoque();
 
   const mesAtual = inicioMes();
   const [mes, setMes] = useState(mesAtual);
 
   const [titulo, setTitulo] = useState(`Campanha de Incentivo · ${nomeMes(mesAtual)}`);
-  const [verbaTotal, setVerbaTotal] = useState(26000);
   const [metaVendas, setMetaVendas] = useState(40);
   const [ticketMedio, setTicketMedio] = useState(250000);
 
@@ -156,26 +152,6 @@ export default function SalaDeGuerraCampanha({
     });
   };
 
-  // Alocação da verba nas 5 ações
-  const [alocacoes, setAlocacoes] = useState<Record<string, number>>({
-    anuncio: 12000,
-    rua: 5000,
-    pap: 3000,
-    oferta_ativa: 2000,
-    premios: 4000,
-  });
-
-  const setAloc = (k: string, val: number) => {
-    setAlocacoes((prev) => ({ ...prev, [k]: Math.max(0, val) }));
-  };
-
-  // Detalhamento de cada canal por Super -> Gerente
-  const [detalhesPorCanal, setDetalhesPorCanal] = useState<
-    Record<string, Record<string, DetalheSuperCanal>>
-  >({});
-  const [canalAbertoDetalhes, setCanalAbertoDetalhes] = useState<string | null>("anuncio");
-
-  // Equipes ativas e total de corretores
   const equipesAtivas = useMemo(
     () => supers.filter((s) => supersSelecionados.has(s.id)),
     [supers, supersSelecionados]
@@ -186,58 +162,210 @@ export default function SalaDeGuerraCampanha({
     [equipesAtivas]
   );
 
-  // Atualizar detalhe de um Super em um canal
-  const atualizarDetalheSuper = (
-    canalKey: string,
-    superId: string,
-    patch: Partial<DetalheSuperCanal>
-  ) => {
-    setDetalhesPorCanal((prev) => {
-      const canalData = prev[canalKey] || {};
-      const superData = canalData[superId] || {
-        valor: Math.round((alocacoes[canalKey] || 0) / Math.max(1, equipesAtivas.length)),
-        produto: "",
-        regiao: "Todas as Regiões",
-        gerentes: {},
-      };
-      return {
-        ...prev,
-        [canalKey]: {
-          ...canalData,
-          [superId]: { ...superData, ...patch },
-        },
-      };
+  // Produtos ordenados por estoque disponível
+  const estoqueOrdenado = useMemo(() => {
+    return [...estoque].sort((a, b) => b.disponiveis - a.disponiveis);
+  }, [estoque]);
+
+  // Cesta de Produtos & Verbas por Superintendente
+  // Exemplo de alta performance: Adajes começa com 2 lançamentos (R$ 5k cada) + 5 estoques (R$ 2k cada) = R$ 20k
+  const [itensPorSuper, setItensPorSuper] = useState<Record<string, ItemVerbaSuper[]>>(() => {
+    const inicial: Record<string, ItemVerbaSuper[]> = {};
+
+    supers.forEach((s) => {
+      const nomeLower = s.nome.toLowerCase();
+      if (nomeLower.includes("adajes")) {
+        inicial[s.id] = [
+          { id: "ad_l1", tipo: "lancamento", produto: "Residencial Mooca (Novo Lançamento)", canal: "anuncio", valor: 5000 },
+          { id: "ad_l2", tipo: "lancamento", produto: "Torres Cury Tatuapé (Lançamento Futuro)", canal: "anuncio", valor: 5000 },
+          { id: "ad_e1", tipo: "estoque", produto: "Cury Bela Vista", canal: "rua", valor: 2000 },
+          { id: "ad_e2", tipo: "estoque", produto: "Mérito Mooca", canal: "pap", valor: 2000 },
+          { id: "ad_e3", tipo: "estoque", produto: "Único Santana", canal: "oferta_ativa", valor: 2000 },
+          { id: "ad_e4", tipo: "estoque", produto: "Cury Ipiranga", canal: "anuncio", valor: 2000 },
+          { id: "ad_e5", tipo: "estoque", produto: "Parque da Mooca", canal: "rua", valor: 2000 },
+        ];
+      } else if (nomeLower.includes("felipe") || nomeLower.includes("metlicz")) {
+        inicial[s.id] = [
+          { id: "fe_l1", tipo: "lancamento", produto: "Cury Cidade Tiradentes (Lançamento)", canal: "anuncio", valor: 7000 },
+          { id: "fe_e1", tipo: "estoque", produto: "Dez Guaianases", canal: "rua", valor: 3000 },
+          { id: "fe_e2", tipo: "estoque", produto: "Mérito Itaquera", canal: "pap", valor: 2000 },
+        ];
+      } else if (nomeLower.includes("liliane")) {
+        inicial[s.id] = [
+          { id: "li_l1", tipo: "lancamento", produto: "Torres da Lapa (Lançamento)", canal: "anuncio", valor: 5000 },
+          { id: "li_e1", tipo: "estoque", produto: "Cury Barra Funda", canal: "oferta_ativa", valor: 2500 },
+        ];
+      } else {
+        inicial[s.id] = [
+          { id: `${s.id}_l1`, tipo: "lancamento", produto: "Lançamento Foco Região Sul", canal: "anuncio", valor: 5000 },
+          { id: `${s.id}_e1`, tipo: "estoque", produto: "Estoque Principal da Região", canal: "rua", valor: 2000 },
+        ];
+      }
     });
+
+    return inicial;
+  });
+
+  // Funções de manipulação da cesta de cada Super
+  const adicionarLancamento = (superId: string) => {
+    const novoItem: ItemVerbaSuper = {
+      id: String(Date.now()),
+      tipo: "lancamento",
+      produto: "",
+      canal: "anuncio",
+      gerenteId: "",
+      valor: 5000,
+    };
+    setItensPorSuper((prev) => ({
+      ...prev,
+      [superId]: [...(prev[superId] || []), novoItem],
+    }));
+    toast.success("Novo Lançamento Futuro adicionado!");
   };
 
-  // Distribuir proporcionalmente a verba de um canal entre os supers
-  const distribuirCanalProporcional = (canalKey: string) => {
-    const valCanal = alocacoes[canalKey] || 0;
-    if (valCanal <= 0 || totalCorretoresAtivos <= 0) return;
+  const adicionarEstoque = (superId: string) => {
+    const topProd = estoqueOrdenado[0]?.empreendimento || "Cury Bela Vista";
+    const novoItem: ItemVerbaSuper = {
+      id: String(Date.now()),
+      tipo: "estoque",
+      produto: topProd,
+      canal: "rua",
+      gerenteId: "",
+      valor: 2000,
+    };
+    setItensPorSuper((prev) => ({
+      ...prev,
+      [superId]: [...(prev[superId] || []), novoItem],
+    }));
+    toast.success("Novo Produto de Estoque adicionado!");
+  };
 
-    setDetalhesPorCanal((prev) => {
-      const canalData = { ...(prev[canalKey] || {}) };
-      for (const s of equipesAtivas) {
-        const corrSuper = s.gerentes.flatMap((g) => g.corretores_lista).length;
-        const prop = corrSuper / totalCorretoresAtivos;
-        const valorSuper = Math.round((valCanal * prop) / 100) * 100;
-        canalData[s.id] = {
-          ...(canalData[s.id] || { produto: "", regiao: "Todas as Regiões", gerentes: {} }),
-          valor: valorSuper,
-        };
+  const dividirEm5Estoques = (superId: string, valorUnitario = 2000) => {
+    const topEstoques = estoqueOrdenado.slice(0, 5);
+    const canais: Array<"rua" | "pap" | "oferta_ativa" | "anuncio"> = [
+      "rua",
+      "pap",
+      "oferta_ativa",
+      "anuncio",
+      "rua",
+    ];
+
+    const lista = (
+      topEstoques.length > 0
+        ? topEstoques
+        : [
+            { empreendimento: "Cury Bela Vista", disponiveis: 23 },
+            { empreendimento: "Mérito Mooca", disponiveis: 14 },
+            { empreendimento: "Único Santana", disponiveis: 9 },
+            { empreendimento: "Cury Ipiranga", disponiveis: 18 },
+            { empreendimento: "Parque da Mooca", disponiveis: 12 },
+          ]
+    ).map((e: any, idx) => ({
+      id: `${Date.now()}_${idx}`,
+      tipo: "estoque" as const,
+      produto: e.empreendimento,
+      canal: canais[idx % canais.length],
+      gerenteId: "",
+      valor: valorUnitario,
+    }));
+
+    setItensPorSuper((prev) => ({
+      ...prev,
+      [superId]: [...(prev[superId] || []), ...lista],
+    }));
+
+    toast.success(`⚡ 5 produtos de estoque (${brl(valorUnitario)} cada) adicionados na cesta do Super!`);
+  };
+
+  const atualizarItem = (superId: string, itemId: string, patch: Partial<ItemVerbaSuper>) => {
+    setItensPorSuper((prev) => ({
+      ...prev,
+      [superId]: (prev[superId] || []).map((it) => (it.id === itemId ? { ...it, ...patch } : it)),
+    }));
+  };
+
+  const removerItem = (superId: string, itemId: string) => {
+    setItensPorSuper((prev) => ({
+      ...prev,
+      [superId]: (prev[superId] || []).filter((it) => it.id !== itemId),
+    }));
+  };
+
+  // Subtotais por Super
+  const subtotaisPorSuper = useMemo(() => {
+    const map: Record<
+      string,
+      {
+        total: number;
+        lancamentos: number;
+        nLancamentos: number;
+        estoques: number;
+        nEstoques: number;
       }
-      return { ...prev, [canalKey]: canalData };
-    });
-    toast.success(`Verba de ${brl(valCanal)} distribuída proporcionalmente entre os ${equipesAtivas.length} Supers!`);
+    > = {};
+
+    for (const s of supers) {
+      const itens = itensPorSuper[s.id] || [];
+      let total = 0;
+      let lancamentos = 0;
+      let nLancamentos = 0;
+      let estoques = 0;
+      let nEstoques = 0;
+
+      for (const it of itens) {
+        const v = it.valor || 0;
+        total += v;
+        if (it.tipo === "lancamento") {
+          lancamentos += v;
+          nLancamentos++;
+        } else {
+          estoques += v;
+          nEstoques++;
+        }
+      }
+
+      map[s.id] = { total, lancamentos, nLancamentos, estoques, nEstoques };
+    }
+
+    return map;
+  }, [supers, itensPorSuper]);
+
+  // Alocação consolidada nas 5 frentes táticas a partir de todos os itens de todos os supers ativos
+  const alocacoes = useMemo(() => {
+    const canais: Record<string, number> = {
+      anuncio: 0,
+      rua: 0,
+      pap: 0,
+      oferta_ativa: 0,
+      premios: 0,
+    };
+
+    for (const s of equipesAtivas) {
+      const itens = itensPorSuper[s.id] || [];
+      for (const it of itens) {
+        if (canais[it.canal] !== undefined) {
+          canais[it.canal] += it.valor || 0;
+        }
+      }
+    }
+
+    return canais;
+  }, [equipesAtivas, itensPorSuper]);
+
+  const totalAlocado = useMemo(() => {
+    return Object.values(alocacoes).reduce((a, b) => a + b, 0);
+  }, [alocacoes]);
+
+  // Verba total configurada
+  const [verbaTotal, setVerbaTotal] = useState(totalAlocado || 48000);
+
+  // Sincronizar verba total com total alocado se o usuário desejar
+  const ajustarVerbaParaAlocado = () => {
+    setVerbaTotal(totalAlocado);
+    toast.success(`Verba global ajustada para ${brl(totalAlocado)}.`);
   };
 
   // Cálculos matemáticos de ROI & Projeção
-  const totalAlocado = useMemo(
-    () => Object.values(alocacoes).reduce((a, b) => a + b, 0),
-    [alocacoes]
-  );
-  const saldoVerba = verbaTotal - totalAlocado;
-
   const projecoes = useMemo(() => {
     const aAnuncio = alocacoes.anuncio || 0;
     const aRua = alocacoes.rua || 0;
@@ -323,8 +451,7 @@ export default function SalaDeGuerraCampanha({
   const aplicarSugestaoIA = () => {
     setVerbaTotal(sugestaoIA.verbaSugeridaTotal);
     setMetaVendas(sugestaoIA.alvo);
-    setAlocacoes(sugestaoIA.alocacoes);
-    toast.success(`Mix recomendado pela IA para atingir ${sugestaoIA.alvo} vendas aplicado no orçamento!`);
+    toast.success(`Meta de ${sugestaoIA.alvo} vendas e verba sugerida de ${brl(sugestaoIA.verbaSugeridaTotal)} aplicadas!`);
   };
 
   // Gerenciamento de Premiações
@@ -341,9 +468,7 @@ export default function SalaDeGuerraCampanha({
   };
 
   const atualizarPremio = (id: string, patch: Partial<RegraPremio>) => {
-    setRegrasPremios((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
-    );
+    setRegrasPremios((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   };
 
   const removerPremio = (id: string) => {
@@ -375,7 +500,7 @@ export default function SalaDeGuerraCampanha({
           mes,
           titulo,
           foco: "geral",
-          objetivo: `Ofensiva com ${equipesAtivas.length} superintendências. Verba total de ${brl(verbaTotal)}. Premiações cadastradas: ${regrasPremios.map((r) => r.premio).join("; ")}`,
+          objetivo: `Ofensiva com ${equipesAtivas.length} superintendências. Verba total alocada de ${brl(totalAlocado)}. Premiações cadastradas: ${regrasPremios.map((r) => r.premio).join("; ")}`,
           meta_vendas: metaVendas,
           prioridade: 1,
           status: "ativo",
@@ -386,35 +511,30 @@ export default function SalaDeGuerraCampanha({
       if (planoErr) throw planoErr;
       const planoId = (planoData as any).id;
 
-      // 2. Criar as ações táticas vinculadas
+      // 2. Criar as ações táticas vinculadas para cada canal
       for (const a of ACOES_CATALOGO) {
-        const valor = alocacoes[a.key] || 0;
-        if (valor > 0) {
-          // Detalhes dos supers neste canal
-          const detCanal = detalhesPorCanal[a.key] || {};
-          const detalhesTexto = Object.entries(detCanal)
-            .map(([supId, d]) => {
-              const s = supers.find((x) => x.id === supId);
-              const prod = d.outroProduto || d.produto || "Geral";
-              return `${s?.nome?.split(" ")[0] ?? "Super"}: ${brl(d.valor)} (${prod} - ${d.regiao})`;
-            })
-            .join(" | ");
+        const valorCanal = alocacoes[a.key] || 0;
+        if (valorCanal > 0) {
+          const itensCanal = equipesAtivas.flatMap((s) =>
+            (itensPorSuper[s.id] || [])
+              .filter((it) => it.canal === a.key)
+              .map((it) => `${s.nome.split(" ")[0]}: ${it.tipo === "lancamento" ? "🚀" : "🏢"} ${it.produto || "Geral"} (${brl(it.valor)})`)
+          );
 
           await supabase.from("plano_acoes" as any).insert({
             plano_id: planoId,
-            titulo: `${a.nome}: investimento de ${brl(valor)}`,
+            titulo: `${a.nome}: investimento de ${brl(valorCanal)}`,
             entregavel: a.comoMede,
-            custo_previsto: valor,
+            custo_previsto: valorCanal,
             status: "a_fazer",
-            nota: detalhesTexto || `Equipes envolvidas: ${equipesAtivas.map((s) => s.nome).join(", ")}`,
+            nota: itensCanal.join(" | ") || `Equipes envolvidas: ${equipesAtivas.map((s) => s.nome).join(", ")}`,
           });
 
-          // Registrar em gastos planejados
           await supabase.from("gastos" as any).insert({
             dono_id: diretorId,
             mes,
             descricao: `Campanha: ${titulo} · ${a.nome}`,
-            planejado: valor,
+            planejado: valorCanal,
             realizado: 0,
           });
         }
@@ -439,7 +559,7 @@ export default function SalaDeGuerraCampanha({
 
         await supabase.from("announcements").insert({
           title: `🏆 Campanha de Incentivo: ${titulo}`,
-          body: `🔥 *Atenção Tropa de Vendas!* Campanha Oficial da Diretoria Comercial para ${nomeMes(mes)}!\n\n🎯 *Meta Geral:* ${metaVendas} vendas\n💰 *Investimento em Ações:* ${brl(verbaTotal)}\n\n*Regras de Premiação & Sorteios:*\n${corpoPremio}\n\nFale com seu Gerente, monte suas pastas no Junix e acelere!`,
+          body: `🔥 *Atenção Tropa de Vendas!* Campanha Oficial da Diretoria Comercial para ${nomeMes(mes)}!\n\n🎯 *Meta Geral:* ${metaVendas} vendas\n💰 *Investimento em Ações:* ${brl(totalAlocado)}\n\n*Regras de Premiação & Sorteios:*\n${corpoPremio}\n\nFale com seu Gerente, monte suas pastas no Junix e acelere!`,
           category: "evento",
           emoji: "🏆",
           target_role: ["BROKER", "MANAGER", "SUPERINTENDENT"],
@@ -447,7 +567,7 @@ export default function SalaDeGuerraCampanha({
         });
       }
 
-      toast.success("Campanha gravada com sucesso e banner publicado nos dashboards da tropa!");
+      toast.success("Campanha gravada com sucesso e premiações publicadas!");
       if (onSalvo) onSalvo();
     } catch (err: any) {
       toast.error("Erro ao salvar campanha: " + err.message);
@@ -457,38 +577,58 @@ export default function SalaDeGuerraCampanha({
   }
 
   function gerarMensagemSuper(s: SuperDiretoria) {
+    const sub = subtotaisPorSuper[s.id] || { total: 0, lancamentos: 0, estoques: 0 };
+    const itens = itensPorSuper[s.id] || [];
+    const metaPessoa = metaSuper?.get(s.id)?.dono.meta ?? Math.round(metaVendas / Math.max(1, equipesAtivas.length));
     const corretoresSuper = s.gerentes.flatMap((g) => g.corretores_lista).length;
-    const proporcao = totalCorretoresAtivos > 0 ? corretoresSuper / totalCorretoresAtivos : 1 / equipesAtivas.length;
-    const metaSuper = Math.round(metaVendas * proporcao);
-    const verbaSuper = Math.round(totalAlocado * proporcao);
 
-    const linhasCanais = ACOES_CATALOGO.map((a) => {
-      const det = detalhesPorCanal[a.key]?.[s.id];
-      const val = det?.valor ?? Math.round((alocacoes[a.key] || 0) * proporcao);
-      if (val <= 0) return null;
-      let extra = "";
-      const prod = det?.outroProduto || det?.produto;
-      if (prod) extra += ` [Produto: ${prod}]`;
-      if (det?.regiao && det.regiao !== "Todas as Regiões") extra += ` [Praça: ${det.regiao}]`;
-      return `• ${a.nome}: ${brl(val)}${extra}`;
-    })
-      .filter(Boolean)
-      .join("\n");
+    const itensLancamento = itens.filter((it) => it.tipo === "lancamento");
+    const itensEstoque = itens.filter((it) => it.tipo === "estoque");
+
+    const canalNome = (k: string) => ACOES_CATALOGO.find((a) => a.key === k)?.nome ?? k;
+
+    const linhasLanc =
+      itensLancamento.length > 0
+        ? itensLancamento
+            .map((it) => `• 🚀 ${it.produto || "Lançamento Novo"}: ${brl(it.valor)} (${canalNome(it.canal)})`)
+            .join("\n")
+        : "• Nenhum lançamento alocado";
+
+    const linhasEstoque =
+      itensEstoque.length > 0
+        ? itensEstoque
+            .map((it) => `• 🏢 ${it.produto || "Estoque Junix"}: ${brl(it.valor)} (${canalNome(it.canal)})`)
+            .join("\n")
+        : "• Nenhum estoque alocado";
 
     const linhasPremios = regrasPremios
-      .map((r) => `🎁 *${r.premio}* (${r.gatilho === "produto_especifico" ? `Produto: ${r.produto}` : r.gatilho === "meta_equipe" ? "Ao bater meta" : r.gatilho === "sorteio" ? "Sorteio geral" : "Por venda confirmada"})`)
+      .map(
+        (r) =>
+          `🎁 *${r.premio}* (${
+            r.gatilho === "produto_especifico"
+              ? `Produto: ${r.produto}`
+              : r.gatilho === "meta_equipe"
+              ? "Ao bater meta"
+              : r.gatilho === "sorteio"
+              ? "Sorteio geral"
+              : "Por venda confirmada"
+          })`
+      )
       .join("\n");
 
     return `Fala ${s.nome.split(" ")[0]}, alinhamento fechado da nossa Reunião Estratégica:
 
 🎯 *Campanha de Incentivo:* ${titulo}
 📅 *Período:* ${nomeMes(mes)}
-💰 *Verba Alocada para sua equipe:* ${brl(verbaSuper)}
-🏁 *Sua Meta de Vendas:* ${metaSuper} unidades
+💰 *Verba Total Alocada para sua equipe:* ${brl(sub.total)}
+🏁 *Sua Meta de Vendas:* ${metaPessoa} unidades
 👥 *Sua Tropa:* ${corretoresSuper} corretores escalados
 
-📌 *Frentes de Ação e Verba da sua Superintendência:*
-${linhasCanais || "• Alocação distribuída nas 5 frentes táticas"}
+🚀 *Lançamentos Futuros (${brl(sub.lancamentos)}):*
+${linhasLanc}
+
+🏢 *Produtos de Estoque Junix (${brl(sub.estoques)}):*
+${linhasEstoque}
 
 🏆 *Premiações da Tropa Cadastradas:*
 ${linhasPremios || "• Bônus por meta e pasta aprovada na Caixa"}
@@ -502,13 +642,13 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
       <div className="sdg-hd">
         <div className="sdg-hd-info">
           <span className="dir-chip c-blue" style={{ marginBottom: 6 }}>
-            ⚔️ Sala de Guerra & Planejamento Tático
+            ⚔️ Sala de Guerra Comercial & Verba
           </span>
           <h2 style={{ fontSize: 22, fontWeight: 800, margin: "2px 0 6px", color: "var(--ink)" }}>
-            Montar Plano Estratégico com os Superintendentes
+            Reunião Estratégica de Metas & Alocação de Verba
           </h2>
           <p style={{ fontSize: 13.5, color: "var(--ink-3)", margin: 0 }}>
-            Defina o investimento, hierarquize a verba por Super e Gerente, configure a campanha de premiação da tropa e calcule o retorno esperado.
+            Tudo nasce da meta. Acompanhe o placar da diretoria, distribua o orçamento por Superintendência em Lançamentos Futuros e Estoques Junix, configure premiações e calcule o retorno esperado.
           </p>
         </div>
 
@@ -524,408 +664,476 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
         </div>
       </div>
 
-      {/* ── 1. CONFIGURAÇÃO DE INVESTIMENTO & CAMPANHA DE INCENTIVO COM PREMIAÇÃO ── */}
-      <div className="sdg-grid-config">
-        <div className="sdg-box" style={{ gridColumn: "span 2" }}>
-          <label className="dir-lbl">Nome da Ofensiva / Campanha de Incentivo da Tropa</label>
-          <input
-            type="text"
-            className="sdg-input"
-            value={titulo}
-            onChange={(e) => setTitulo(e.target.value)}
-            placeholder="Ex.: Campanha Aceleração Caixa · Lançamentos e Estoque"
+      {/* ── 1. PLACAR DE METAS DA REUNIÃO (ETAPA 1: ONDE TUDO NASCE) ── */}
+      {metaDir && metaSuper && linha && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <PlacarMetas
+            metaDir={metaDir}
+            supers={supers}
+            metaSuper={metaSuper}
+            linha={linha}
+            c30={c30 ?? null}
+            diaHoje={diaHoje}
+            diasMes={diasMes}
+            mes={mes}
+            abrir={abrir}
           />
         </div>
+      )}
 
-        <div className="sdg-box">
-          <label className="dir-lbl">Meta Geral de Vendas</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input
-              type="number"
-              min={1}
-              className="sdg-input mono"
-              value={metaVendas}
-              onChange={(e) => setMetaVendas(Number(e.target.value))}
-            />
-            <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
-              VGV ~ <b>{brl(metaVendas * ticketMedio)}</b>
-            </span>
-          </div>
-        </div>
-
-        <div className="sdg-box" style={{ gridColumn: "span 3" }}>
-          <label className="dir-lbl">Verba Total Disponível para a Operação (R$)</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <input
-              type="number"
-              step={1000}
-              className="sdg-input mono"
-              style={{ maxWidth: 200 }}
-              value={verbaTotal}
-              onChange={(e) => setVerbaTotal(Number(e.target.value))}
-            />
-            <span style={{ fontSize: 16, fontWeight: 800, color: "var(--teal)" }}>
-              {brl(verbaTotal)}
-            </span>
-            <span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>
-              Esta verba é distribuída nas 5 frentes táticas abaixo e rateada entre as Superintendências.
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── SEÇÃO DE PREMIAÇÕES & SORTEIOS DA TROPA (BANNERS NOS DASHBOARDS) ── */}
-      <div className="sdg-box" style={{ background: "#F8FAFC", border: "1.5px solid #CBD5E1" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <div>
-            <span className="dir-lbl" style={{ color: "#D97706" }}>Premiação da Tropa (Aparece no Dashboard dos Corretores e Gerentes)</span>
-            <h4 style={{ fontSize: 15, fontWeight: 800, margin: "2px 0 0", color: "var(--ink)" }}>
-              🏆 O que vai premiar ou sortear nesta campanha?
-            </h4>
-          </div>
-          <button
-            type="button"
-            className="dir-btn"
-            style={{ fontSize: 12, padding: "5px 10px", borderColor: "var(--teal)", color: "var(--teal)" }}
-            onClick={adicionarPremio}
-          >
-            + Adicionar Premiação / Sorteio
-          </button>
-        </div>
-
-        {/* Lista de Prêmios */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-          {regrasPremios.map((r, idx) => (
-            <div
-              key={r.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.5fr 1fr 140px auto",
-                gap: 8,
-                alignItems: "center",
-                background: "#fff",
-                padding: "8px 12px",
-                borderRadius: 8,
-                border: "1px solid var(--line)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 14 }}>🎁</span>
-                <input
-                  type="text"
-                  className="sdg-input"
-                  style={{ fontSize: 13 }}
-                  value={r.premio}
-                  onChange={(e) => atualizarPremio(r.id, { premio: e.target.value })}
-                  placeholder="Ex: PIX de R$ 500, iPhone 16 Pro, Notebook Dell..."
-                />
-              </div>
-
-              <select
-                className="sdg-input"
-                style={{ fontSize: 12.5 }}
-                value={r.gatilho}
-                onChange={(e) => atualizarPremio(r.id, { gatilho: e.target.value as any })}
-              >
-                <option value="venda_geral">Por cada venda confirmada</option>
-                <option value="produto_especifico">Por venda em produto específico</option>
-                <option value="meta_equipe">Ao bater a meta da equipe</option>
-                <option value="sorteio">Sorteio da Tropa</option>
-              </select>
-
-              <select
-                className="sdg-input"
-                style={{ fontSize: 12.5 }}
-                value={r.publico}
-                onChange={(e) => atualizarPremio(r.id, { publico: e.target.value as any })}
-              >
-                <option value="BROKER">Só Corretores</option>
-                <option value="MANAGER">Só Gerentes</option>
-                <option value="TODOS">Toda a Tropa</option>
-              </select>
-
-              <button
-                type="button"
-                style={{ background: "none", border: 0, color: "var(--red)", cursor: "pointer", fontSize: 13 }}
-                onClick={() => removerPremio(r.id)}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 12.5, color: "var(--ink-2)" }}>
-          <input
-            type="checkbox"
-            id="pubBanner"
-            checked={publicarBanner}
-            onChange={(e) => setPublicarBanner(e.target.checked)}
-            style={{ width: 16, height: 16, accentColor: "var(--teal)" }}
-          />
-          <label htmlFor="pubBanner" style={{ cursor: "pointer", fontWeight: 600 }}>
-            Publicar automaticamente banner com estas premiações em destaque nos dashboards de todos os Corretores, Gerentes e Supers.
-          </label>
-        </div>
-      </div>
-
-      {/* ── 2. SELEÇÃO DE EQUIPES ENVOLVIDAS ── */}
+      {/* ── 2. CONFIGURAÇÃO DE INVESTIMENTO & CAMPANHA DE INCENTIVO COM PREMIAÇÃO ── */}
       <div className="sdg-sec">
         <div className="sdg-sec-title">
-          <span>2. Equipes Envolvidas na Ofensiva</span>
-          <small>{equipesAtivas.length} de {supers.length} superintendências selecionadas · {totalCorretoresAtivos} corretores na escala</small>
+          <span>2. Campanha de Incentivo Oficial & Premiação da Tropa</span>
+          <small>Dispara nos dashboards de corretores, gerentes e supers</small>
         </div>
 
-        <div className="sdg-supers-grid">
-          {supers.map((s) => {
-            const ativa = supersSelecionados.has(s.id);
-            const corretoresSuper = s.gerentes.flatMap((g) => g.corretores_lista).length;
-            const proporcao = totalCorretoresAtivos > 0 && ativa ? corretoresSuper / totalCorretoresAtivos : 0;
-            const metaSugerida = Math.round(metaVendas * proporcao);
-            const verbaSugerida = Math.round(totalAlocado * proporcao);
+        <div className="sdg-grid-config">
+          <div className="sdg-box" style={{ gridColumn: "span 2" }}>
+            <label className="dir-lbl">Nome da Ofensiva / Campanha de Incentivo da Tropa</label>
+            <input
+              type="text"
+              className="sdg-input"
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              placeholder="Ex.: Campanha Aceleração Caixa · Lançamentos e Estoque"
+            />
+          </div>
 
-            return (
-              <div
-                key={s.id}
-                className={`sdg-super-pill${ativa ? " ativo" : ""}`}
-                onClick={() => toggleSuper(s.id)}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <b style={{ fontSize: 15 }}>{s.nome}</b>
-                  <span className={`dir-chip ${ativa ? "c-grn" : "c-gray"}`}>
-                    {ativa ? "participa ✓" : "de fora"}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, color: "var(--ink-3)", marginTop: 4 }}>
-                  {s.gerentes.length} gerentes · {corretoresSuper} corretores
-                </div>
-                {ativa && (
-                  <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px dashed var(--line)", fontSize: 11.5, display: "flex", justifyContent: "space-between" }}>
-                    <span>Cota Meta: <b>{metaSugerida || "—"} vendas</b></span>
-                    <span>Cota Verba: <b>{brl(verbaSugerida)}</b></span>
-                  </div>
+          <div className="sdg-box">
+            <label className="dir-lbl">Meta Geral de Vendas</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <input
+                type="number"
+                min={1}
+                className="sdg-input mono"
+                value={metaVendas}
+                onChange={(e) => setMetaVendas(Number(e.target.value))}
+              />
+              <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                VGV ~ <b>{brl(metaVendas * ticketMedio)}</b>
+              </span>
+            </div>
+          </div>
+
+          <div className="sdg-box" style={{ gridColumn: "span 3" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+              <label className="dir-lbl">Verba Total Disponível para a Operação</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                  Soma Alocada nos Supers: <b className="mono" style={{ color: "var(--teal)" }}>{brl(totalAlocado)}</b>
+                </span>
+                {totalAlocado !== verbaTotal && (
+                  <button
+                    type="button"
+                    className="dir-btn"
+                    style={{ fontSize: 11, padding: "3px 8px", color: "var(--teal)", borderColor: "var(--teal)" }}
+                    onClick={ajustarVerbaParaAlocado}
+                  >
+                    ⚡ Igualar Verba ao Total Alocado
+                  </button>
                 )}
               </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <input
+                type="number"
+                step={1000}
+                className="sdg-input mono"
+                style={{ maxWidth: 200 }}
+                value={verbaTotal}
+                onChange={(e) => setVerbaTotal(Number(e.target.value))}
+              />
+              <span style={{ fontSize: 16, fontWeight: 800, color: "var(--teal)" }}>
+                {brl(verbaTotal)}
+              </span>
+              <span className={`dir-chip ${verbaTotal === totalAlocado ? "c-grn" : verbaTotal > totalAlocado ? "c-blue" : "c-red"}`}>
+                {verbaTotal === totalAlocado
+                  ? "100% distribuído nos Supers ✓"
+                  : verbaTotal > totalAlocado
+                  ? `Sobra ${brl(verbaTotal - totalAlocado)} para distribuir`
+                  : `Orçamento estourado em ${brl(totalAlocado - verbaTotal)}`}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Premiações e Sorteios */}
+        <div className="sdg-box" style={{ background: "#F8FAFC", border: "1.5px solid #CBD5E1" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <span className="dir-lbl" style={{ color: "#D97706" }}>Premiação da Tropa (Banner Oficial no Dashboard)</span>
+              <h4 style={{ fontSize: 15, fontWeight: 800, margin: "2px 0 0", color: "var(--ink)" }}>
+                🏆 O que a Diretoria vai premiar ou sortear nesta campanha?
+              </h4>
+            </div>
+            <button
+              type="button"
+              className="dir-btn"
+              style={{ fontSize: 12, padding: "5px 10px", borderColor: "var(--teal)", color: "var(--teal)" }}
+              onClick={adicionarPremio}
+            >
+              + Adicionar Premiação / Sorteio
+            </button>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+            {regrasPremios.map((r) => (
+              <div
+                key={r.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1.5fr 1fr 140px auto",
+                  gap: 8,
+                  alignItems: "center",
+                  background: "#fff",
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: "1px solid var(--line)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 14 }}>🎁</span>
+                  <input
+                    type="text"
+                    className="sdg-input"
+                    style={{ fontSize: 13 }}
+                    value={r.premio}
+                    onChange={(e) => atualizarPremio(r.id, { premio: e.target.value })}
+                    placeholder="Ex: PIX de R$ 500, iPhone 16 Pro, Notebook Dell..."
+                  />
+                </div>
+
+                <select
+                  className="sdg-input"
+                  style={{ fontSize: 12.5 }}
+                  value={r.gatilho}
+                  onChange={(e) => atualizarPremio(r.id, { gatilho: e.target.value as any })}
+                >
+                  <option value="venda_geral">Por cada venda confirmada</option>
+                  <option value="produto_especifico">Por venda em produto específico</option>
+                  <option value="meta_equipe">Ao bater a meta da equipe</option>
+                  <option value="sorteio">Sorteio da Tropa</option>
+                </select>
+
+                <select
+                  className="sdg-input"
+                  style={{ fontSize: 12.5 }}
+                  value={r.publico}
+                  onChange={(e) => atualizarPremio(r.id, { publico: e.target.value as any })}
+                >
+                  <option value="BROKER">Só Corretores</option>
+                  <option value="MANAGER">Só Gerentes</option>
+                  <option value="TODOS">Toda a Tropa</option>
+                </select>
+
+                <button
+                  type="button"
+                  style={{ background: "none", border: 0, color: "var(--red)", cursor: "pointer", fontSize: 13 }}
+                  onClick={() => removerPremio(r.id)}
+                  title="Remover premiação"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 12.5, color: "var(--ink-2)" }}>
+            <input
+              type="checkbox"
+              id="pubBanner"
+              checked={publicarBanner}
+              onChange={(e) => setPublicarBanner(e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: "var(--teal)" }}
+            />
+            <label htmlFor="pubBanner" style={{ cursor: "pointer", fontWeight: 600 }}>
+              Publicar automaticamente banner com estas premiações em destaque nos dashboards de todos os Corretores, Gerentes e Supers.
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3. ALOCAÇÃO DE VERBA POR SUPERINTENDENTE & CESTA DE PRODUTOS ── */}
+      <div className="sdg-sec">
+        <div className="sdg-sec-title">
+          <span>3. Alocação de Verba por Superintendente & Cesta de Produtos</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span>Total Alocado: <b className="mono" style={{ color: "var(--teal)" }}>{brl(totalAlocado)}</b></span>
+            <span className="dir-chip c-blue">{equipesAtivas.length} Supers na Campanha</span>
+          </div>
+        </div>
+
+        {/* Seletor rápido de quem participa */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ink-3)" }}>Supers Participantes:</span>
+          {supers.map((s) => {
+            const ativa = supersSelecionados.has(s.id);
+            return (
+              <button
+                key={s.id}
+                type="button"
+                className={`dir-chip ${ativa ? "c-grn" : "c-gray"}`}
+                style={{ cursor: "pointer", fontSize: 12, padding: "5px 10px", border: ativa ? "1.5px solid var(--teal)" : "1px solid var(--line)" }}
+                onClick={() => toggleSuper(s.id)}
+              >
+                {s.nome} {ativa ? "✓" : "+ incluir"}
+              </button>
             );
           })}
         </div>
-      </div>
 
-      {/* ── 3. CARDÁPIO DE AÇÕES TÁTICAS (ALOCAÇÃO DETALHADA POR SUPER, GERENTE E PRODUTO) ── */}
-      <div className="sdg-sec">
-        <div className="sdg-sec-title">
-          <span>3. Mix Tático & Alocação por Super / Gerente / Produto</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span>Total Alocado: <b className="mono">{brl(totalAlocado)}</b></span>
-            <span className={`dir-chip ${saldoVerba === 0 ? "c-grn" : saldoVerba > 0 ? "c-blue" : "c-red"}`}>
-              {saldoVerba === 0 ? "100% alocado" : saldoVerba > 0 ? `sobra ${brl(saldoVerba)}` : `estourou ${brl(-saldoVerba)}`}
-            </span>
-          </div>
-        </div>
-
-        <div className="sdg-acoes-list">
-          {ACOES_CATALOGO.map((a) => {
-            const val = alocacoes[a.key] || 0;
-            const pct = verbaTotal > 0 ? Math.round((val / verbaTotal) * 100) : 0;
-            const aberto = canalAbertoDetalhes === a.key;
+        {/* CARDS INDIVIDUAIS DE CADA SUPERINTENDENTE COM SUA CESTA DE PRODUTOS */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {equipesAtivas.map((s) => {
+            const sub = subtotaisPorSuper[s.id] || { total: 0, lancamentos: 0, nLancamentos: 0, estoques: 0, nEstoques: 0 };
+            const itens = itensPorSuper[s.id] || [];
+            const metaSuperPessoa = metaSuper?.get(s.id)?.dono.meta;
+            const corrSuper = s.gerentes.flatMap((g) => g.corretores_lista).length;
 
             return (
-              <div key={a.key} className="sdg-acao-row" style={{ flexDirection: "column", alignItems: "stretch" }}>
-                {/* Linha principal da ação */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-                  <div className="sdg-acao-info">
+              <div key={s.id} className="sdg-super-card">
+                {/* Cabeçalho do Super */}
+                <div className="sdg-super-card-hd">
+                  <div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 20 }}>{a.icone}</span>
-                      <b style={{ fontSize: 15, color: "var(--ink)" }}>{a.nome}</b>
-                      <span className="dir-chip c-gray" style={{ fontSize: 10.5 }}>{pct}% da verba</span>
-                    </div>
-                    <p style={{ fontSize: 12.5, color: "var(--ink-3)", margin: "4px 0 0" }}>
-                      {a.descricao} <span style={{ color: "var(--teal)", fontWeight: 600 }}>({a.comoMede})</span>
-                    </p>
-                  </div>
-
-                  <div className="sdg-acao-input-wrap">
-                    <span className="mono" style={{ fontSize: 13, color: "var(--ink-3)" }}>R$</span>
-                    <input
-                      type="number"
-                      step={500}
-                      min={0}
-                      className="sdg-input-valor mono"
-                      value={val}
-                      onChange={(e) => setAloc(a.key, Number(e.target.value))}
-                    />
-                    <div className="sdg-preset-btns">
-                      {[1000, 3000, 5000, 10000].map((v) => (
-                        <button key={v} type="button" onClick={() => setAloc(a.key, v)}>
-                          +{v >= 1000 ? `${v / 1000}k` : v}
-                        </button>
-                      ))}
-                      <button type="button" style={{ color: "var(--red)" }} onClick={() => setAloc(a.key, 0)}>
-                        zerar
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="dir-btn"
-                      style={{ fontSize: 12, padding: "5px 10px", borderColor: aberto ? "var(--teal)" : "#CBD5E1", background: aberto ? "#F0FDF4" : "#fff" }}
-                      onClick={() => setCanalAbertoDetalhes(aberto ? null : a.key)}
-                    >
-                      {aberto ? "▲ Recolher Detalhe" : "▼ Detalhar por Super / Produto"}
-                    </button>
-                  </div>
-                </div>
-
-                {/* GAVETA DE DETALHAMENTO POR SUPER, GERENTE, PRODUTO E REGIÃO */}
-                {aberto && (
-                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed var(--line)", background: "#F8FAFC", borderRadius: 10, padding: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-                      <span className="dir-lbl" style={{ color: "var(--navy)" }}>
-                        Distribuição de {a.nome} por Superintendência:
+                      <span style={{ fontSize: 18 }}>👤</span>
+                      <h3 style={{ fontSize: 17, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
+                        {s.nome}
+                      </h3>
+                      {metaSuperPessoa != null && (
+                        <span className="dir-chip c-blue" style={{ fontWeight: 700 }}>
+                          🎯 Meta: {metaSuperPessoa} vendas
+                        </span>
+                      )}
+                      <span className="dir-chip c-gray" style={{ fontSize: 11 }}>
+                        {s.gerentes.length} gerentes · {corrSuper} corretores
                       </span>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "var(--ink-3)", marginTop: 4 }}>
+                      Distribua a verba do superintendente entre Lançamentos Futuros e Produtos de Estoque Junix:
+                    </div>
+                  </div>
+
+                  {/* Subtotais e Botões de Ação do Super */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <div className="sdg-super-card-subtotais">
+                      <span className="sdg-tipo-pill lancamento">
+                        🚀 Lançamentos: {brl(sub.lancamentos)} ({sub.nLancamentos})
+                      </span>
+                      <span className="sdg-tipo-pill estoque">
+                        🏢 Estoque: {brl(sub.estoques)} ({sub.nEstoques})
+                      </span>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: "var(--teal)", marginLeft: 4 }}>
+                        Total: {brl(sub.total)}
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button
                         type="button"
                         className="dir-btn"
-                        style={{ fontSize: 11.5, padding: "4px 8px", color: "var(--teal)", borderColor: "var(--teal)" }}
-                        onClick={() => distribuirCanalProporcional(a.key)}
+                        style={{ fontSize: 11.5, padding: "5px 8px", borderColor: "#A855F7", color: "#7E22CE", background: "#FAF5FF" }}
+                        onClick={() => adicionarLancamento(s.id)}
                       >
-                        ⚡ Distribuir Proporcionalmente pelo tamanho da tropa
+                        + Lançamento Futuro
+                      </button>
+                      <button
+                        type="button"
+                        className="dir-btn"
+                        style={{ fontSize: 11.5, padding: "5px 8px", borderColor: "#0284C7", color: "#0369A1", background: "#F0F9FF" }}
+                        onClick={() => adicionarEstoque(s.id)}
+                      >
+                        + Produto de Estoque
+                      </button>
+                      <button
+                        type="button"
+                        className="dir-btn"
+                        style={{ fontSize: 11.5, padding: "5px 8px", borderColor: "var(--teal)", color: "var(--teal)" }}
+                        onClick={() => dividirEm5Estoques(s.id, 2000)}
+                        title="Adiciona 5 produtos do Junix com R$ 2.000 cada automaticamente"
+                      >
+                        ⚡ 5 Estoques Rápidos (R$ 2k cada)
                       </button>
                     </div>
+                  </div>
+                </div>
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {equipesAtivas.map((s) => {
-                        const det = detalhesPorCanal[a.key]?.[s.id] || {
-                          valor: Math.round(val / Math.max(1, equipesAtivas.length)),
-                          produto: "",
-                          regiao: "Todas as Regiões",
-                          gerentes: {},
-                        };
-                        const corrSuper = s.gerentes.flatMap((g) => g.corretores_lista).length;
-
-                        return (
-                          <div
-                            key={s.id}
-                            style={{
-                              background: "#fff",
-                              border: "1px solid var(--line)",
-                              borderRadius: 8,
-                              padding: 10,
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: 8,
-                            }}
-                          >
-                            <div style={{ display: "grid", gridTemplateColumns: "1.2fr 130px 1.2fr 1.2fr", gap: 10, alignItems: "center" }}>
-                              <div>
-                                <b style={{ fontSize: 13.5 }}>{s.nome}</b>
-                                <div style={{ fontSize: 11, color: "var(--ink-3)" }}>
-                                  {s.gerentes.length} gerentes · {corrSuper} corretores
-                                </div>
-                              </div>
-
-                              <div>
-                                <label style={{ fontSize: 10, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase" }}>Verba R$</label>
-                                <input
-                                  type="number"
-                                  step={200}
-                                  className="sdg-input mono"
-                                  style={{ padding: "4px 8px", fontSize: 13 }}
-                                  value={det.valor}
-                                  onChange={(e) =>
-                                    atualizarDetalheSuper(a.key, s.id, { valor: Number(e.target.value) })
-                                  }
-                                />
-                              </div>
-
-                              <div>
-                                <label style={{ fontSize: 10, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase" }}>Produto Alvo</label>
-                                <select
-                                  className="sdg-input"
-                                  style={{ padding: "4px 8px", fontSize: 12 }}
-                                  value={det.produto}
-                                  onChange={(e) =>
-                                    atualizarDetalheSuper(a.key, s.id, { produto: e.target.value })
-                                  }
-                                >
-                                  <option value="">Geral / Toda a Carteira</option>
-                                  <option value="digitar_outro">✏️ Digitar outro produto / lançamento...</option>
-                                  {estoque.slice(0, 15).map((e) => (
-                                    <option key={e.cod_empreendimento} value={e.empreendimento}>
-                                      {e.empreendimento.replace(/^CONDOM[IÍ]NIO\s+/i, "")} ({e.disponiveis} disp.)
-                                    </option>
-                                  ))}
-                                </select>
-                                {det.produto === "digitar_outro" && (
-                                  <input
-                                    type="text"
-                                    className="sdg-input"
-                                    style={{ marginTop: 4, padding: "4px 8px", fontSize: 12 }}
-                                    placeholder="Digite o nome do lançamento..."
-                                    value={det.outroProduto || ""}
-                                    onChange={(e) =>
-                                      atualizarDetalheSuper(a.key, s.id, { outroProduto: e.target.value })
-                                    }
-                                  />
-                                )}
-                              </div>
-
-                              <div>
-                                <label style={{ fontSize: 10, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase" }}>Região / Praça</label>
-                                <select
-                                  className="sdg-input"
-                                  style={{ padding: "4px 8px", fontSize: 12 }}
-                                  value={det.regiao}
-                                  onChange={(e) =>
-                                    atualizarDetalheSuper(a.key, s.id, { regiao: e.target.value })
-                                  }
-                                >
-                                  {REGIOES_PADRAO.map((r) => (
-                                    <option key={r} value={r}>
-                                      {r}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-
-                            {/* Subdivisão por gerentes daquele Super */}
-                            {s.gerentes.length > 0 && (
-                              <details style={{ fontSize: 12, borderTop: "1px dashed var(--line)", paddingTop: 6, marginTop: 4 }}>
-                                <summary style={{ cursor: "pointer", color: "var(--teal)", fontWeight: 600 }}>
-                                  ▾ Distribuir entre os {s.gerentes.length} Gerentes de {s.nome.split(" ")[0]}
-                                </summary>
-                                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8, marginTop: 8 }}>
-                                  {s.gerentes.map((g) => (
-                                    <div key={g.id} style={{ background: "var(--sunk)", padding: "6px 8px", borderRadius: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                      <span style={{ fontSize: 12 }}><b>{g.nome}</b> <small style={{ color: "var(--ink-3)" }}>({g.corretores} corr.)</small></span>
-                                      <input
-                                        type="number"
-                                        placeholder="R$"
-                                        className="sdg-input mono"
-                                        style={{ width: 80, padding: "2px 6px", fontSize: 12 }}
-                                        value={det.gerentes?.[g.id] ?? ""}
-                                        onChange={(e) => {
-                                          const novoVal = Number(e.target.value);
-                                          atualizarDetalheSuper(a.key, s.id, {
-                                            gerentes: { ...(det.gerentes || {}), [g.id]: novoVal },
-                                          });
-                                        }}
-                                      />
-                                    </div>
-                                  ))}
-                                </div>
-                              </details>
-                            )}
-                          </div>
-                        );
-                      })}
+                {/* Tabela da Cesta de Projetos do Super */}
+                {itens.length === 0 ? (
+                  <div style={{ padding: 16, textAlign: "center", background: "#F8FAFC", borderRadius: 8, color: "var(--ink-3)", fontSize: 13 }}>
+                    Nenhum produto alocado para {s.nome.split(" ")[0]} ainda. Clique nos botões acima para adicionar Lançamentos ou Estoques!
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {/* Cabeçalho da tabela */}
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "130px 1.5fr 1.3fr 1fr 140px 32px",
+                        gap: 8,
+                        padding: "0 10px",
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        color: "var(--ink-3)",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      <span>Tipo</span>
+                      <span>Produto / Lançamento</span>
+                      <span>Frente / Canal Tático</span>
+                      <span>Gerência Responsável</span>
+                      <span>Verba (R$)</span>
+                      <span />
                     </div>
+
+                    {/* Linhas da cesta */}
+                    {itens.map((it) => (
+                      <div key={it.id} className="sdg-cesta-row">
+                        {/* 1. Tipo de Produto */}
+                        <div>
+                          <select
+                            className="sdg-input"
+                            style={{
+                              fontSize: 11.5,
+                              padding: "4px 6px",
+                              fontWeight: 700,
+                              borderColor: it.tipo === "lancamento" ? "#D8B4FE" : "#BAE6FD",
+                              background: it.tipo === "lancamento" ? "#FAF5FF" : "#F0F9FF",
+                              color: it.tipo === "lancamento" ? "#7E22CE" : "#0369A1",
+                            }}
+                            value={it.tipo}
+                            onChange={(e) => atualizarItem(s.id, it.id, { tipo: e.target.value as any })}
+                          >
+                            <option value="lancamento">🚀 Lançamento</option>
+                            <option value="estoque">🏢 Estoque</option>
+                          </select>
+                        </div>
+
+                        {/* 2. Nome do Produto (Select se estoque, Input se lançamento) */}
+                        <div>
+                          {it.tipo === "lancamento" ? (
+                            <input
+                              type="text"
+                              className="sdg-input"
+                              style={{ fontSize: 12.5, padding: "5px 8px" }}
+                              placeholder="Digite o nome do lançamento futuro (ex: Cury Mooca...)"
+                              value={it.produto}
+                              onChange={(e) => atualizarItem(s.id, it.id, { produto: e.target.value })}
+                            />
+                          ) : (
+                            <select
+                              className="sdg-input"
+                              style={{ fontSize: 12.5, padding: "5px 8px" }}
+                              value={it.produto}
+                              onChange={(e) => atualizarItem(s.id, it.id, { produto: e.target.value })}
+                            >
+                              <option value="">Selecione o produto de estoque...</option>
+                              {estoqueOrdenado.map((e) => (
+                                <option key={e.cod_empreendimento} value={e.empreendimento}>
+                                  {e.empreendimento.replace(/^CONDOM[IÍ]NIO\s+/i, "")} ({e.disponiveis} disp.)
+                                </option>
+                              ))}
+                              <option value="Outro Estoque">✏️ Outro Estoque (digitar)</option>
+                            </select>
+                          )}
+                        </div>
+
+                        {/* 3. Canal / Frente Tática */}
+                        <div>
+                          <select
+                            className="sdg-input"
+                            style={{ fontSize: 12, padding: "5px 8px" }}
+                            value={it.canal}
+                            onChange={(e) => atualizarItem(s.id, it.id, { canal: e.target.value as any })}
+                          >
+                            {ACOES_CATALOGO.map((a) => (
+                              <option key={a.key} value={a.key}>
+                                {a.icone} {a.nome}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* 4. Gerente Responsável */}
+                        <div>
+                          <select
+                            className="sdg-input"
+                            style={{ fontSize: 11.5, padding: "5px 8px" }}
+                            value={it.gerenteId || ""}
+                            onChange={(e) => atualizarItem(s.id, it.id, { gerenteId: e.target.value })}
+                          >
+                            <option value="">Toda a Superintendência</option>
+                            {s.gerentes.map((g) => (
+                              <option key={g.id} value={g.id}>
+                                Gerência {g.nome} ({g.corretores} corr.)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* 5. Valor R$ */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span className="mono" style={{ fontSize: 11, color: "var(--ink-3)" }}>R$</span>
+                          <input
+                            type="number"
+                            step={500}
+                            min={0}
+                            className="sdg-input mono"
+                            style={{ padding: "4px 8px", fontSize: 13, fontWeight: 700 }}
+                            value={it.valor}
+                            onChange={(e) => atualizarItem(s.id, it.id, { valor: Number(e.target.value) })}
+                          />
+                        </div>
+
+                        {/* 6. Ação Remover */}
+                        <button
+                          type="button"
+                          style={{
+                            background: "none",
+                            border: 0,
+                            color: "var(--red)",
+                            cursor: "pointer",
+                            fontSize: 14,
+                            textAlign: "center",
+                          }}
+                          onClick={() => removerItem(s.id, it.id)}
+                          title="Remover produto da verba"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             );
           })}
+        </div>
+
+        {/* Resumo Consolidado dos Canais */}
+        <div style={{ background: "var(--sunk)", borderRadius: 12, padding: 14, border: "1px solid var(--line)", marginTop: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)", marginBottom: 8 }}>
+            📊 Consolidação do Orçamento por Frente Tática (Soma de todos os produtos alocados):
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+            {ACOES_CATALOGO.map((a) => {
+              const v = alocacoes[a.key] || 0;
+              const pct = totalAlocado > 0 ? Math.round((v / totalAlocado) * 100) : 0;
+              return (
+                <div key={a.key} style={{ background: "#fff", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>{a.icone} {a.nome.split(" ")[0]}</span>
+                    <span className="dir-chip c-gray" style={{ fontSize: 10 }}>{pct}%</span>
+                  </div>
+                  <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: "var(--ink)", marginTop: 4 }}>
+                    {brl(v)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -982,12 +1190,12 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
             {projecoes.vendasTotais >= metaVendas ? (
               <>
                 O mix de <b>{brl(totalAlocado)}</b> está matematicamente dimensionado para atingir <b>{projecoes.vendasTotais} vendas</b> (superando a meta de {metaVendas}).
-                As {equipesAtivas.length} equipes selecionadas somam {totalCorretoresAtivos} corretores, garantindo braço suficiente para atender os ~{projecoes.leadsAnuncio} leads digitais e as ~{projecoes.visitasRua} visitas presenciais.
+                As {equipesAtivas.length} equipes selecionadas somam {totalCorretoresAtivos} corretores, garantindo braço suficiente para atender os ~{projecoes.leadsAnuncio} leads digitais e as ~{projecoes.visitasRua} visitas presenciais nos produtos alocados.
               </>
             ) : (
               <>
                 Atenção: com a configuração atual, o mix projeta <b>{projecoes.vendasTotais} vendas</b>, o que deixa um <b>déficit de {metaVendas - projecoes.vendasTotais} vendas</b> contra a meta de {metaVendas}.
-                {alocacoes.premios === 0 ? " Sugestão: adicione verba de premiação para a tropa para acelerar aprovação de crédito na CEF." : " Sugestão: aumente a verba de anúncios digitais ou adicione mais equipes na escala de rua."}
+                {alocacoes.premios === 0 ? " Sugestão: adicione verba de premiação para a tropa para acelerar aprovação de crédito na Caixa." : " Sugestão: adicione mais lançamentos futuros ou aumente a verba de anúncios digitais e ações de rua."}
               </>
             )}
           </p>
@@ -1084,7 +1292,7 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <span style={{ fontSize: 12, color: "#9FB3CC" }}>
-                  Aplica a meta de {sugestaoIA.alvo} vendas e recalcula todo o orçamento da Sala de Guerra:
+                  Aplica a meta de {sugestaoIA.alvo} vendas e a verba recomendada no orçamento:
                 </span>
                 <button
                   type="button"
@@ -1110,7 +1318,7 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
       <div className="sdg-footer">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-3)" }}>
-            Disparar Termo de Acordo no WhatsApp:
+            Disparar Acordo Completo no WhatsApp:
           </span>
           {equipesAtivas.map((s) => (
             <button
@@ -1136,7 +1344,7 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
           disabled={salvando}
           onClick={salvarCampanha}
         >
-          {salvando ? "Gravando no Sistema…" : "💾 Salvar Campanha & Disparar Premiação"}
+          {salvando ? "Gravando no Sistema…" : "💾 Salvar Campanha & Publicar Premiação na Tropa"}
         </button>
       </div>
 
@@ -1146,9 +1354,9 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
           <div className="dir-modal-box" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <span className="dir-lbl">Termo de Acordo da Reunião</span>
+                <span className="dir-lbl">Termo de Acordo da Reunião Estratégica</span>
                 <h3 style={{ fontSize: 18, fontWeight: 800, margin: "4px 0 0", color: "var(--ink)" }}>
-                  Enviar para {modalWpp.superNome}
+                  Enviar Acordo para {modalWpp.superNome}
                 </h3>
               </div>
               <button
@@ -1161,10 +1369,10 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
 
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <label style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase" }}>
-                Mensagem WhatsApp (editável antes de abrir)
+                Mensagem WhatsApp (editável antes do envio)
               </label>
               <textarea
-                rows={10}
+                rows={12}
                 value={modalWpp.mensagem}
                 onChange={(e) => setModalWpp({ ...modalWpp, mensagem: e.target.value })}
                 style={{
