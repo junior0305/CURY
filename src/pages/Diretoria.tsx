@@ -145,6 +145,49 @@ function ContratosEmitidos({ pastas, supers }: { pastas: PastaJunix[]; supers: S
   );
 }
 
+/* Cobranças da semana por quem cobra: cobrou quantas vezes, o corretor respondeu, o lead andou depois?
+   E quem tem lead sem toque e não cobrou ninguém. Lista crua não decide nada; o resumo diz quem cobra e se funciona. */
+function CobrancasResumo({ cobrancas, supers, cons }: { cobrancas: import("@/hooks/useDiretoria").Cobranca[]; supers: SuperDiretoria[]; cons: LinhaConsolidado[] }) {
+  const por = new Map<string, { nome: string; n: number; resp: number; leads: number; atend: number }>();
+  for (const c of cobrancas) {
+    const x = por.get(c.de_id) ?? { nome: c.de, n: 0, resp: 0, leads: 0, atend: 0 };
+    x.n++; if (c.respondida_em) x.resp++; x.leads += c.leads; x.atend += c.atendidos;
+    por.set(c.de_id, x);
+  }
+  const linhas = [...por.values()].sort((a, b) => b.n - a.n);
+  const semResp = cobrancas.filter((c) => !c.respondida_em);
+  const inativos = [...new Map(cobrancas.filter((c) => !c.para_ativo).map((c) => [c.para_id, c.para])).values()];
+  const cobraram = new Set(cobrancas.map((c) => c.de_id));
+  const naoCobram = supers.flatMap((s) => s.gerentes).map((g) => ({ g, l: cons.find((x) => x.id === g.id) }))
+    .filter(({ g, l }) => !cobraram.has(g.id) && (l?.nuncaFalaram ?? 0) >= 5)
+    .sort((a, b) => (b.l?.nuncaFalaram ?? 0) - (a.l?.nuncaFalaram ?? 0));
+  return (
+    <div className="dir-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div className="dir-h"><b>Cobranças · 7 dias</b><span>quem cobra, se o corretor responde e se o lead anda depois</span></div>
+      {!linhas.length ? <span className="dir-nota">Ninguém cobrou corretor nos últimos 7 dias.</span> : (
+        <div className="dir-tree" style={{ margin: "0 -18px" }}>
+          <table>
+            <thead><tr><th>Quem cobrou</th><th>Cobranças</th><th>Responderam</th><th>Leads cobrados</th><th>Atendidos depois</th></tr></thead>
+            <tbody>
+              {linhas.map((x) => (
+                <tr key={x.nome} className="n1">
+                  <td>{x.nome}</td><td>{x.n}</td>
+                  <td><span className={x.resp < x.n ? "r" : "g"}>{x.resp} de {x.n}</span></td>
+                  <td>{x.leads || "—"}</td>
+                  <td>{x.leads ? <span className={x.atend < x.leads ? "r" : "g"}>{x.atend} de {x.leads}</span> : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {semResp.length ? <div className="dir-nota"><b style={{ color: "var(--red)" }}>Sem resposta:</b> {semResp.slice(0, 6).map((c) => `${c.para} (cobrado por ${c.de})`).join(" · ")}</div> : null}
+      {inativos.length ? <div className="dir-nota"><b style={{ color: "var(--org)" }}>Conta desativada, mas ainda com leads:</b> {inativos.join(", ")}. Reative ou passe os leads para quem está ativo.</div> : null}
+      {naoCobram.length ? <div className="dir-nota"><b style={{ color: "var(--red)" }}>Têm lead sem toque e não cobraram ninguém:</b> {naoCobram.slice(0, 6).map(({ g, l }) => `${g.nome} (${l?.nuncaFalaram} sem toque)`).join(" · ")}</div> : null}
+    </div>
+  );
+}
+
 /* ───────────────────────── HOJE ───────────────────────── */
 function MetaInput({ valor, onSalvar }: { valor: number | null; onSalvar: (n: number) => void }) {
   const [txt, setTxt] = useState(valor == null ? "" : String(valor));
@@ -827,23 +870,7 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
           </button>
         </div>
 
-        <div className="dir-card" style={{ padding: 18, display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>Cobranças Executivas · 7 dias</div>
-          {!cobrancas.length ? <span className="dir-nota">Nenhuma cobrança registrada nos últimos 7 dias.</span> : (
-            <div className="dir-list">
-              {cobrancas.slice(0, 6).map((c) => (
-                <div key={c.id} style={{ display: "block" }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <b>{c.de} → {c.para}</b>
-                    <span className={`dir-chip ${c.respondida_em ? "c-grn" : "c-gray"}`}>{c.respondida_em ? "respondeu" : "sem resposta"}</span>
-                    <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--ink-3)" }}>{hora(c.enviada_em)}</span>
-                  </div>
-                  <div style={{ fontSize: 12.5, color: "var(--ink-2)", marginTop: 3 }}>{c.resposta ? `“${c.resposta.slice(0, 90)}”` : c.motivo}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <CobrancasResumo cobrancas={cobrancas} supers={supers} cons={cons} />
       </div>
 
       {/* MODAL DE COBRANÇA EXECUTIVA DIRETA */}

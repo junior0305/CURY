@@ -33,7 +33,11 @@ export interface SuperDiretoria {
   logadosHoje: Record<string, boolean>;         // corretor id → entrou hoje
   plantaoSemLogin: Record<string, string[]>;    // gerente id → nomes no plantão sem login
 }
-export interface Cobranca { id: string; de: string; para: string; motivo: string; enviada_em: string; respondida_em: string | null; resposta: string | null }
+export interface Cobranca {
+  id: string; de: string; para: string; motivo: string; enviada_em: string; respondida_em: string | null; resposta: string | null;
+  de_id: string; para_id: string; para_ativo: boolean;
+  leads: number; atendidos: number;   // leads da cobrança e quantos foram mexidos depois dela
+}
 export interface PessoaMeta { id: string; nome: string; papel: string; meta: number | null; realizado: number; pode_editar: boolean }
 
 export function useDiretorId(role: string | null | undefined, meuId: string | undefined) {
@@ -72,7 +76,7 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
         })),
         buscarPlantao(`${hoje}T03:00:00Z`).catch(() => []),
         supabase.from("junix_pastas" as any).select("proposta_id,cliente,etapa,dias,corretor,gerente,superintendente,empreendimento"),
-        supabase.from("cobrancas" as any).select("id,de_id,para_id,motivo,enviada_em,respondida_em,resposta")
+        supabase.from("cobrancas" as any).select("id,de_id,para_id,motivo,enviada_em,respondida_em,resposta,lead_ids")
           .gte("enviada_em", new Date(Date.now() - 7 * 864e5).toISOString()).order("enviada_em", { ascending: false }).limit(40),
       ]);
 
@@ -108,12 +112,24 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
       const cobs = ((cobR as any).data ?? []) as any[];
       const pids = [...new Set(cobs.flatMap((c) => [c.de_id, c.para_id]))];
       const nomes = new Map<string, string>();
+      const ativo = new Map<string, boolean>();
       if (pids.length) {
-        const { data } = await supabase.from("profiles").select("id,first_name").in("id", pids);
-        for (const p of (data ?? []) as any[]) nomes.set(p.id, p.first_name ?? "—");
+        const { data } = await supabase.from("profiles").select("id,first_name,is_active").in("id", pids);
+        for (const p of (data ?? []) as any[]) { nomes.set(p.id, p.first_name ?? "—"); ativo.set(p.id, p.is_active !== false); }
       }
-      const cobrancas: Cobranca[] = cobs.map((c) => ({ id: c.id, de: nomes.get(c.de_id) ?? "—", para: nomes.get(c.para_id) ?? "—",
-        motivo: c.motivo, enviada_em: c.enviada_em, respondida_em: c.respondida_em, resposta: c.resposta }));
+      // efeito da cobrança: lead que andou (status) ou teve interação depois dela
+      const lids = [...new Set(cobs.flatMap((c) => (c.lead_ids ?? []) as string[]))];
+      const lead = new Map<string, { status: string; ult: string | null }>();
+      for (let i = 0; i < lids.length; i += 200) {
+        const { data } = await supabase.from("leads").select("id,status,last_interaction_at").in("id", lids.slice(i, i + 200));
+        for (const l of (data ?? []) as any[]) lead.set(l.id, { status: l.status, ult: l.last_interaction_at });
+      }
+      const cobrancas: Cobranca[] = cobs.map((c) => {
+        const ls = ((c.lead_ids ?? []) as string[]).map((id) => lead.get(id)).filter(Boolean) as { status: string; ult: string | null }[];
+        return { id: c.id, de: nomes.get(c.de_id) ?? "—", para: nomes.get(c.para_id) ?? "—", de_id: c.de_id, para_id: c.para_id,
+          para_ativo: ativo.get(c.para_id) ?? true, motivo: c.motivo, enviada_em: c.enviada_em, respondida_em: c.respondida_em, resposta: c.resposta,
+          leads: ls.length, atendidos: ls.filter((l) => l.status !== "NEW" || (l.ult != null && l.ult > c.enviada_em)).length };
+      });
 
       const plantaoHojeTotal = new Set(plantao.map((r) => `${chaveGerente(r.gerente)}|${chaveNome(r.corretor)}`)).size;
       return { supers, pastas, cobrancas, plantaoHojeTotal };
