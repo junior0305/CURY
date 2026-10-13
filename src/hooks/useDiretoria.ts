@@ -18,9 +18,12 @@ export const chaveGerente = (s: string | null | undefined) => {
   const k = (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z]/g, "");
   return APELIDO[k] ?? chaveNome(s);
 };
-const colado = (s: string | null | undefined) =>
+export const colado = (s: string | null | undefined) =>
   (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z]/g, "");
-const diaSP = (ms: number) => new Date(ms - 3 * 3600 * 1000).toISOString().slice(0, 10);
+export const diaSP = (ms: number) => new Date(ms - 3 * 3600 * 1000).toISOString().slice(0, 10);
+export const gerenteC2S = (s: string | null | undefined) =>
+  String(s ?? "Sem gerente").replace(/^Gerente\s+/i, "").replace(/\+$/, "").trim() || "Sem gerente";
+export const nomesSuperC2S = (nome: string) => [`Superintendente ${nome}`, `Superintendencia ${nome}`, `Superintendência ${nome}`];
 
 export interface PastaJunix {
   proposta_id: string; cliente: string | null; etapa: string | null; dias: number | null;
@@ -34,7 +37,8 @@ export interface SuperDiretoria {
   plantaoSemLogin: Record<string, string[]>;    // gerente id → nomes no plantão sem login
   // super sem gerente no Comandra (ex.: Adajes, Silva — no C2S ainda estão na diretoria antiga):
   // plantão lido direto do C2S pelo nome exato da superintendência
-  c2s?: { dias: number; hoje: number; gerentes: { nome: string; dias: number; hoje: number; corretores: number }[] };
+  // corretores = quem bateu ponto no período; corretores30 = base de 30 dias (denominador da presença)
+  c2s?: { dias: number; hoje: number; gerentes: { nome: string; dias: number; hoje: number; corretores: number; corretores30: number }[] };
 }
 export interface Cobranca {
   id: string; de: string; para: string; motivo: string; enviada_em: string; respondida_em: string | null; resposta: string | null;
@@ -139,24 +143,27 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
       const plantaoHojeTotal = new Set(plantao.map((r) => `${chaveGerente(r.gerente)}|${chaveNome(r.corretor)}`)).size;
       // super sem gerente no Comandra: plantão direto do C2S (nome exato; "Silva" não pode pegar "Silvano")
       const de = diaSP(Date.now() - (dias - 1) * 864e5);
+      const de30 = diaSP(Date.now() - (Math.max(dias, 30) - 1) * 864e5);
       for (const s of supers) {
         if (s.gerentes.length) continue;
-        const nomes = [`Superintendente ${s.nome}`, `Superintendencia ${s.nome}`, `Superintendência ${s.nome}`];
+        const nomes = nomesSuperC2S(s.nome);
         const rows: any[] = [];
         for (let a = 0; ; a += 1000) {
-          const { data } = await supabase.from("c2s_plantao" as any).select("dia,corretor,gerente").in("superintendente", nomes).gte("dia", de).range(a, a + 999);
+          const { data } = await supabase.from("c2s_plantao" as any).select("dia,corretor,gerente").in("superintendente", nomes).gte("dia", de30).range(a, a + 999);
           rows.push(...((data ?? []) as any[])); if (!data || data.length < 1000) break;
         }
         if (!rows.length) continue;
-        const porG = new Map<string, { dias: Set<string>; hoje: Set<string>; cor: Set<string> }>();
+        const porG = new Map<string, { dias: Set<string>; hoje: Set<string>; cor: Set<string>; cor30: Set<string> }>();
         for (const r of rows) {
-          const g = String(r.gerente ?? "Sem gerente").replace(/^Gerente\s+/i, "").replace(/\+$/, "").trim() || "Sem gerente";
+          const g = gerenteC2S(r.gerente);
           const k = chaveNome(r.corretor);
-          const x = porG.get(g) ?? { dias: new Set<string>(), hoje: new Set<string>(), cor: new Set<string>() };
-          x.dias.add(`${r.dia}|${k}`); x.cor.add(k); if (r.dia === hoje) x.hoje.add(k);
+          const x = porG.get(g) ?? { dias: new Set<string>(), hoje: new Set<string>(), cor: new Set<string>(), cor30: new Set<string>() };
+          x.cor30.add(k);
+          if (r.dia >= de) { x.dias.add(`${r.dia}|${k}`); x.cor.add(k); }
+          if (r.dia === hoje) x.hoje.add(k);
           porG.set(g, x);
         }
-        const gerentes = [...porG.entries()].map(([nome, x]) => ({ nome, dias: x.dias.size, hoje: x.hoje.size, corretores: x.cor.size }))
+        const gerentes = [...porG.entries()].map(([nome, x]) => ({ nome, dias: x.dias.size, hoje: x.hoje.size, corretores: x.cor.size, corretores30: x.cor30.size }))
           .sort((a, b) => b.dias - a.dias);
         s.c2s = { dias: gerentes.reduce((a, g) => a + g.dias, 0), hoje: gerentes.reduce((a, g) => a + g.hoje, 0), gerentes };
       }

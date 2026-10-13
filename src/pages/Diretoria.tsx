@@ -12,6 +12,7 @@ import { useConsolidadoSuper, type LinhaConsolidado } from "@/hooks/useConsolida
 import { useDiretorId, useDiretoria, useMetasDiretoria, donoJunix, chaveGerente,
   type SuperDiretoria, type PastaJunix } from "@/hooks/useDiretoria";
 import Estrategia from "@/components/estrategia/Estrategia";
+import EquipesCards from "@/components/diretoria/EquipesCards";
 import { usePlanos, atrasada } from "@/hooks/usePlano";
 import "@/styles/diretoria.css";
 
@@ -97,7 +98,7 @@ export default function Diretoria() {
             <span className="dir-lbl">Período</span>
             <div className="dir-per">{PERIODOS.map(([n, t]) => <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{t}</button>)}</div>
             {atualizando ? <span className="dir-chip c-blue">atualizando para {PERIODOS.find(([n]) => n === dias)?.[1] ?? `${dias} dias`}…</span>
-              : <span className="dir-nota">Clique na superintendência para abrir os gerentes; no gerente para abrir os corretores.</span>}
+              : <span className="dir-nota">{aba === "equipes" ? "O período muda plantões, visitas e pastas; vendas e meta são sempre do mês." : "Clique na superintendência para abrir os gerentes; no gerente para abrir os corretores."}</span>}
           </div>
         ) : null}
 
@@ -106,7 +107,12 @@ export default function Diretoria() {
             {aba === "hoje" && <Hoje diretorId={diretorId!} supers={supers} total={totalEmpresa} cons={cons?.linhas ?? []}
               carregandoCons={carregandoCons} plantaoHojeTotal={dir.plantaoHojeTotal} cobrancas={dir.cobrancas} pastas={dir.pastas}
               irPara={(a, k) => { setAba(a); if (k) setAberto((v) => ({ ...v, [k]: true })); }} abrirPainel={abrirPainel} />}
-            {aba === "equipes" && <Equipes supers={supers} linhasDoSuper={linhasDoSuper} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
+            {aba === "equipes" && <>
+              <EquipesCards diretorId={diretorId!} supers={supers} linhasDoSuper={linhasDoSuper} dias={dias} carregandoCons={carregandoCons} abrirPainel={abrirPainel} />
+              <button className="dir-btn" style={{ alignSelf: "flex-start" }} onClick={() => tog("tabela-equipes")}>
+                {aberto["tabela-equipes"] ? "▾ Esconder a tabela completa" : "▸ Tabela completa, corretor por corretor (login, online, plantão)"}</button>
+              {aberto["tabela-equipes"] ? <Equipes supers={supers} linhasDoSuper={linhasDoSuper} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} /> : null}
+            </>}
             {aba === "leads" && <Leads dias={dias} supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
             {aba === "pastas" && <Pastas supers={supers} pastas={dir.pastas} aberto={aberto} tog={tog} />}
             {aba === "estrategia" && diretorId && <Estrategia diretorId={diretorId} supers={supers} pastas={dir.pastas} />}

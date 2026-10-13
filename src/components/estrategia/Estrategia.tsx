@@ -21,7 +21,7 @@ const ETAPAS = ["Pendência", "Cadastro", "Simular", "Selecionar Unidade", "Anex
   "Laudo / Pré-Análise", "Proposta", "Parecer", "Emissão", "Venda Confirmada"];
 const FECHA_NO_MES = new Set(["Proposta", "Parecer", "Emissão", "Venda Confirmada"]);
 
-interface Combinar { sobre: string; pergunta: number; titulo: string; responsavelId?: string | null }
+export interface Combinar { sobre: string; pergunta: number; titulo: string; responsavelId?: string | null }
 type MetaPainel = { dono: PessoaMeta; filhos: PessoaMeta[] };
 
 export default function Estrategia({ diretorId, supers, pastas }: { diretorId: string; supers: SuperDiretoria[]; pastas: PastaJunix[] }) {
@@ -441,7 +441,7 @@ function Pergunta5({ abrir }: { abrir: (c: Combinar) => void }) {
 }
 
 /* ───────────── COMBINAR AÇÃO ───────────── */
-function CombinarAcao({ diretorId, c, fechar }: { diretorId: string; c: Combinar; fechar: () => void }) {
+export function CombinarAcao({ diretorId, c, fechar }: { diretorId: string; c: Combinar; fechar: () => void }) {
   const { data: pessoas } = useEstrutura(diretorId);
   const ac = useCompromissoAcoes();
   const [titulo, setTitulo] = useState(c.titulo);
