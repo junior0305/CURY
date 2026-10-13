@@ -217,7 +217,7 @@ const CorretorPainel = () => {
     },
     staleTime: 5 * 60 * 1000,
   });
-  const regiaoDe = (l?: Lead | null) => (l?.fbCampaign ? regionByCampaign[l.fbCampaign] : "") || "";
+  const regiaoDe = (l?: Lead | null) => l?.regiaoInteresse || (l?.fbCampaign ? regionByCampaign[l.fbCampaign] : "") || "";
 
   // ── ETIQUETAS (persistidas em lead_etiquetas) ───────────────────────────────
   const { data: etiquetasDB = [] } = useQuery<string[]>({
@@ -341,8 +341,11 @@ const CorretorPainel = () => {
     ["Renda Informada", fmtRenda(sel.rendaDeclarada)],
     ["Tipo de Trabalho", sel.tipoTrabalho ? TIPO_TRABALHO_LABEL[sel.tipoTrabalho] : "—"],
     ["Região de Interesse", regiaoDe(sel) || "—"],
-    ["Campanha / Origem", sel.fbCampaign || sel.product || sel.source || "—"],
+    ["Campanha / Origem", sel.campanhaNome || (sel.fbCampaign && !/^\d{10,}$/.test(sel.fbCampaign) ? sel.fbCampaign : "") || sel.product || sel.source || "—"],
   ] : [];
+  // O que mais o cliente respondeu no formulário (o que busca, quando quer mudar…), fora o que já está acima.
+  const outrasRespostas = Object.entries(sel?.formRespostas || {})
+    .filter(([k]) => !/regi|bairro|zona|morar|cidade|localiza|renda|salari|ganha|trabalh|emprego|ocupa|profiss/i.test(k));
 
   const badgeFor = (l: Lead) => {
     if (l.status === "VISIT_SCHEDULED") return { cls: "l-badge", txt: "Visita marcada" };
@@ -453,6 +456,9 @@ const CorretorPainel = () => {
                       </div>
                       <div className="lead-facts-grid">
                         {facts.map(([k, v]) => (
+                          <div className="fact-cell" key={k}><span className="fact-lbl">{k}</span><span className="fact-val">{v}</span></div>
+                        ))}
+                        {outrasRespostas.map(([k, v]) => (
                           <div className="fact-cell" key={k}><span className="fact-lbl">{k}</span><span className="fact-val">{v}</span></div>
                         ))}
                       </div>

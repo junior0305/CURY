@@ -111,6 +111,9 @@ export interface Lead {
   temperatureUpdatedAt: string | null; // Última atualização da temperatura
   source: LeadSource;                  // Origem: funil, prospecção, manual etc.
   fbCampaign?: string | null;          // Campanha (casa com distribution_queues.match_value → region)
+  campanhaNome?: string | null;        // Nome da campanha no Facebook (o Make manda só o ID)
+  regiaoInteresse?: string | null;     // Região que o cliente marcou no formulário
+  formRespostas?: Record<string, string> | null; // Demais respostas do formulário
   // Rastro da Ana (SDR). No SJC ana_qualified_at pode não existir → vem null.
   anaContactedAt: string | null;       // Ana abordou o lead
   anaQualifiedAt: string | null;       // Ana QUALIFICOU o lead (🥇 ouro)
