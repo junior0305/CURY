@@ -129,13 +129,28 @@ export default function SalaDeGuerraCampanha({
     }, 0);
   }, [supers, metaSuper]);
 
-  // Meta Oficial da Diretoria (Meta Principal do Sistema)
+  // Meta Oficial da Diretoria (Meta Principal do Sistema: Soma das metas de todos os Supers)
   const metaOficialDiretoria = useMemo(() => {
-    return metaDir?.dono.meta || somaMetasSupers || 65;
-  }, [metaDir, somaMetasSupers]);
+    return somaMetasSupers > 0 ? somaMetasSupers : (metaDir?.dono.meta || 65);
+  }, [somaMetasSupers, metaDir]);
 
   const [metaVendasManual, setMetaVendasManual] = useState<number | null>(null);
   const metaVendas = metaVendasManual ?? metaOficialDiretoria;
+
+  // Sincroniza automaticamente a meta oficial da diretoria com a soma dos Supers no Supabase
+  useEffect(() => {
+    if (somaMetasSupers > 0 && diretorId && metaDir?.dono.meta !== somaMetasSupers) {
+      supabase.rpc("definir_meta" as any, {
+        p_mes: mes,
+        p_dono: diretorId,
+        p_vendas: somaMetasSupers,
+      }).then(({ error }) => {
+        if (!error) {
+          qc.invalidateQueries({ queryKey: ["metas-painel"] });
+        }
+      });
+    }
+  }, [somaMetasSupers, diretorId, metaDir?.dono.meta, mes, qc]);
 
   // Atualizar Meta Oficial de um Superintendente no Supabase (já reflete no dashboard dele para derramar)
   const salvarMetaSuper = async (superId: string, superNome: string, valor: number) => {

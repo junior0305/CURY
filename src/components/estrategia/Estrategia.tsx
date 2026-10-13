@@ -78,7 +78,15 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
       referencias_da_casa: { presenca_no_plantao: "60%", plantoes_por_corretor_no_mes: 12, visita_a_cada_plantoes: 8, pasta_vira_venda: "40%",
         chance_no_mes: "emissão 85%, proposta 50%, aprovada 60%, em análise 30%, documentos 20%, unidade 12%, cadastro 6%" },
       meta: {
-        diretoria: { meta: metaDir.dono.meta, vendido_no_placar: metaDir.dono.realizado, projecao_no_ritmo: proj(metaDir.dono.realizado) },
+        diretoria: {
+          meta: (() => {
+            const filhos = metaDir.filhos.filter((f) => f.papel === "SUPERINTENDENT");
+            const soma = filhos.reduce((a, f) => a + (f.meta ?? 0), 0);
+            return soma > 0 ? soma : (metaDir.dono.meta ?? 65);
+          })(),
+          vendido_no_placar: metaDir.dono.realizado,
+          projecao_no_ritmo: proj(metaDir.dono.realizado),
+        },
         superintendencias: supers.map((s) => { const m = metaSuper.get(s.id); return { nome: s.nome, meta: m?.dono.meta ?? null, vendido: m?.dono.realizado ?? 0,
           projecao_no_ritmo: proj(m?.dono.realizado ?? 0), gerentes: (m?.filhos ?? []).filter((f) => f.papel === "MANAGER").map((g) => ({ nome: g.nome, meta: g.meta, vendido: g.realizado })) }; }),
         observacao: "vendas da Adajes de antes de 12/10 aparecem no vendido dela mas não contam no placar da diretoria",
@@ -232,7 +240,10 @@ function Pergunta2({ pastas, supers, metaDir, abrir }: { pastas: PastaJunix[]; s
   const ordem = [...ETAPAS.filter((e) => porEtapa.has(e)), ...[...porEtapa.keys()].filter((e) => !ETAPAS.includes(e))];
   const max = Math.max(1, ...porEtapa.values());
   const perto = rp.reta.n;
-  const vendido = metaDir?.dono.realizado ?? 0, meta = metaDir?.dono.meta ?? 0;
+  const filhos = metaDir?.filhos.filter((f) => f.papel === "SUPERINTENDENT") ?? [];
+  const somaSupers = filhos.reduce((a, f) => a + (f.meta ?? 0), 0);
+  const vendido = metaDir?.dono.realizado ?? 0;
+  const meta = somaSupers > 0 ? somaSupers : (metaDir?.dono.meta ?? 65);
   const teto = Math.round(vendido + rp.previsao);
   // paradas 7d+ por gerente
   const paradas = new Map<string, { nome: string; gerenteId: string | null; n: number; etapas: Set<string> }>();

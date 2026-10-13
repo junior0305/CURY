@@ -3,7 +3,7 @@
  * meta derramada e a tabela completa de Superintendências e Gerentes:
  * Equipe | Meta (editável inline) | Vendeu | Ritmo | Projeção | Devendo | Combinar Ação.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -102,6 +102,7 @@ export default function PlacarMetas({
   mes: string;
   abrir?: (c: Combinar) => void;
 }) {
+  const qc = useQueryClient();
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
   if (!metaDir) {
     return (
@@ -111,23 +112,34 @@ export default function PlacarMetas({
     );
   }
 
-  const proj = (r: number) => Math.round((r / diaHoje) * diasMes);
-  const meta = metaDir.dono.meta ?? 0;
+  const filhosDir = metaDir.filhos.filter((f) => f.papel === "SUPERINTENDENT");
+  const somaSupers = filhosDir.reduce((a, f) => a + (f.meta ?? 0), 0);
+
+  // A Meta Oficial da Diretoria é a soma das metas individuais dos Superintendentes (ex: 65 vendas).
+  // Se ainda não houver metas de supers definidas, utiliza a meta cadastrada no dono.
+  const meta = somaSupers > 0 ? somaSupers : (metaDir.dono.meta ?? 0);
   const vendido = metaDir.dono.realizado;
+  const proj = (r: number) => Math.round((r / diaHoje) * diasMes);
   const faltam = Math.max(0, meta - vendido);
   const semanas = Math.max(1, (diasMes - diaHoje) / 7);
   const porSemana = Math.ceil(faltam / semanas);
   const ritmoSemana = (vendido / diaHoje) * 7;
   const esperado = Math.round((meta * diaHoje) / diasMes);
 
-  const tot = (c30 ?? []).reduce(
-    (a, l) => ({ v: a.v + l.visitas, s: a.s + l.vendas }),
-    { v: 0, s: 0 }
-  );
-  const visitaPorVenda = tot.s > 0 && tot.v >= tot.s ? tot.v / tot.s : null;
-
-  const filhosDir = metaDir.filhos.filter((f) => f.papel === "SUPERINTENDENT");
-  const somaSupers = filhosDir.reduce((a, f) => a + (f.meta ?? 0), 0);
+  // Sincroniza automaticamente a meta da diretoria no Supabase caso os supers somem um novo valor
+  useEffect(() => {
+    if (somaSupers > 0 && metaDir.dono.id && metaDir.dono.meta !== somaSupers) {
+      supabase.rpc("definir_meta" as any, {
+        p_mes: mes,
+        p_dono: metaDir.dono.id,
+        p_vendas: somaSupers,
+      }).then(({ error }) => {
+        if (!error) {
+          qc.invalidateQueries({ queryKey: ["metas-painel"] });
+        }
+      });
+    }
+  }, [somaSupers, metaDir.dono.id, metaDir.dono.meta, mes, qc]);
   const derrame = supers.map((s) => {
     const m = metaSuper.get(s.id);
     const gers = (m?.filhos ?? []).filter((f) => f.papel === "MANAGER");
@@ -228,7 +240,14 @@ export default function PlacarMetas({
 
       <div className="est-g2">
         <div className="est-box">
-          <div className="dir-lbl">Meta da diretoria</div>
+          <div className="dir-lbl" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
+            <span>Meta da diretoria</span>
+            {somaSupers > 0 && (
+              <span className="dir-nota" style={{ fontSize: 11, color: "var(--ink-2)", fontWeight: 600 }}>
+                (Soma dos {filhosDir.length} Supers: {somaSupers} vendas)
+              </span>
+            )}
+          </div>
           <div className="est-big mono">
             {vendido}
             <span style={{ fontSize: 18, color: "var(--ink-3)" }}> / {meta}</span>
