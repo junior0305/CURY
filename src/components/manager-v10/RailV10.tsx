@@ -92,8 +92,9 @@ export function RailV10({
             {a.k === "tempo" && pip ? <i className="pip">{pip}</i> : null}
           </>
         );
-        // Quando a tela gerencia as abas internamente via onAba:
-        return onAba ? (
+        // O /super resolve todas as abas na própria tela; o /manager só Tempo real e Time
+        // (Leads, Pastas, Disparar... são páginas próprias). Sem isso, toda aba do gerente caía no B.I.
+        return onAba && (ehSuper || a.k === "tempo" || a.k === "time") ? (
           <button key={a.k} type="button" className={`railb${on ? " on" : ""}`}
             aria-current={on ? "page" : undefined} onClick={() => onAba(a.k)}>
             {conteudo}
