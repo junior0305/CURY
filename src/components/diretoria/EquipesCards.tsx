@@ -96,7 +96,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
     const hojeN = c2s ? c2s.hoje : s.gerentes.reduce((a, g) => a + g.plantao_hoje, 0);
     const plantoes = c2s ? c2s.dias : soma((l) => l.plantaoDias);
     const semPlantao = !c2s && plantoes === 0 && hojeN === 0;
-    const visitas = soma((l) => l.visitas), vendasP = soma((l) => l.vendas), pastas = soma((l) => l.pastas), vgv = soma((l) => l.vgv);
+    const visitas = soma((l) => l.visitas), pastas = soma((l) => l.pastas), vgv = soma((l) => l.vgv);
 
     const inds: Ind[] = [];
     if (semPlantao) inds.push({ k: "presenca", nm: "Presença hoje", falta: "Plantão desta equipe não aparece no C2S. Sem ponto, não dá para medir." });
@@ -113,8 +113,10 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
     else if (!visitas) inds.push({ k: "visita", nm: "Visitas", sub: "nenhuma visita lançada no C2S", val: "0", ref: `ref 1 a cada ${REF.plantoesPorVisita}`, r: plantoes ? 0 : null });
     else { const cada = plantoes / visitas; inds.push({ k: "visita", nm: "Visitas", sub: `${visitas} no período`, val: `1 a cada ${Math.round(cada)}`, ref: `ref 1 a cada ${REF.plantoesPorVisita} plantões`, r: REF.plantoesPorVisita / cada }); }
 
-    const conv = pastas ? vendasP / pastas : null;
-    inds.push({ k: "fecha", nm: "Pasta vira venda", sub: `${v1(vendasP)} vendas no placar no período · ${pastas} pastas abertas`, val: conv == null ? "—" : `${Math.round(conv * 100)}%`, ref: `ref ${REF.conversao * 100}%`, r: conv == null ? null : conv / REF.conversao });
+    // vendas da equipe no mês (mesmo número do destaque; inclui as que não contam no placar)
+    const fm = metas?.filhos?.find((x) => x.id === s.id)?.realizado ?? 0;
+    const conv = pastas ? fm / pastas : null;
+    inds.push({ k: "fecha", nm: "Pasta vira venda", sub: `${v1(fm)} vendas da equipe no mês · ${pastas} pastas abertas`, val: conv == null ? "—" : `${Math.round(conv * 100)}%`, ref: `ref ${REF.conversao * 100}%`, r: conv == null ? null : conv / REF.conversao });
 
     const pior = inds.filter((i) => i.r != null).sort((a, b) => a.r! - b.r!)[0];
     const f = metas?.filhos?.find((x) => x.id === s.id);
