@@ -12,12 +12,12 @@ import type { SuperDiretoria } from "@/hooks/useDiretoria";
 type Alerta = { g: "red" | "org" | "grn"; tipo: string; titulo: string; detalhe: string; acao: "super" | "trafego" };
 type Anuncio = { id: string; nome: string; status: string; gasto: number; leads: number; impr: number };
 type Conjunto = { id: string; nome: string; status: string; gasto: number; leads: number; anuncios: Anuncio[] };
-type Campanha = { id: string; nome: string; status: string; orcamento_dia: number; gasto: number; leads: number; impr: number; conjuntos: Conjunto[] };
+type Campanha = { id: string; nome: string; status: string; orcamento_dia: number; gasto: number; leads: number; form: number; conversas: number; impr: number; tipo?: "form" | "conversa"; conjuntos: Conjunto[] };
 type Conta = {
   conta: string; dono_id: string; dono: string; papel?: string; super_id?: string; super?: string; erro?: string;
-  gasto_7d: number; leads_fb_7d: number; impr_7d: number; gasto_7d_ant: number; leads_7d_ant: number;
+  gasto_7d: number; leads_fb_7d: number; form_7d: number; conversas_7d: number; impr_7d: number; gasto_7d_ant: number; leads_7d_ant: number;
   gasto_por_dia: Record<string, number>; campanhas: Campanha[]; mexidas: { quando: string; tipo: string; objeto: string; quem: string }[];
-  comandra: { leads: number; responderam: number; sem_toque: number; fora_regiao: number }; alertas: Alerta[]; casa: { cpl: number; cpm: number };
+  comandra: { leads: number; responderam: number; sem_toque: number; fora_regiao: number }; alertas: Alerta[]; casa: { cpl: number; cpc: number; cpm: number };
 };
 type Linha = { account_id: string; dados: Conta; atualizado_em: string };
 
@@ -25,6 +25,12 @@ const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
 const hojeSP = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
 const COR: Record<string, string> = { red: "c-red", org: "c-org", grn: "c-grn" };
 const ST: Record<string, string> = { ACTIVE: "no ar", PAUSED: "pausada", CAMPAIGN_PAUSED: "pausada", ADSET_PAUSED: "pausada", WITH_ISSUES: "com problema", DISAPPROVED: "reprovada", IN_PROCESS: "em análise" };
+
+function porTipo(c: Conta) {
+  const f = c.campanhas.filter((x) => x.tipo !== "conversa"), v = c.campanhas.filter((x) => x.tipo === "conversa");
+  const gf = f.reduce((a, x) => a + x.gasto, 0), gv = v.reduce((a, x) => a + x.gasto, 0);
+  return { form: c.form_7d ?? 0, conv: c.conversas_7d ?? 0, cpl: c.form_7d ? gf / c.form_7d : null, cpc: c.conversas_7d ? gv / c.conversas_7d : null, gf, gv };
+}
 
 function situacao(c: Conta) {
   if (c.erro) return { txt: "sem acesso", cls: "c-red" };
@@ -49,9 +55,10 @@ export default function AnunciosSaude({ diretorId, supers }: { diretorId: string
   const contas = [...data].filter((l) => l.dados.erro || l.dados.gasto_7d > 0 || l.dados.campanhas?.length)
     .sort((a, b) => (b.dados.alertas?.filter((x) => x.g === "red").length ?? 0) - (a.dados.alertas?.filter((x) => x.g === "red").length ?? 0) || b.dados.gasto_7d - a.dados.gasto_7d);
   const sum = (f: (c: Conta) => number) => contas.reduce((a, l) => a + (f(l.dados) || 0), 0);
-  const gasto = sum((c) => c.gasto_7d), leads = sum((c) => c.leads_fb_7d), gastoAnt = sum((c) => c.gasto_7d_ant), leadsAnt = sum((c) => c.leads_7d_ant);
+  const gasto = sum((c) => c.gasto_7d), gastoAnt = sum((c) => c.gasto_7d_ant);
+  const form = sum((c) => porTipo(c).form), conv = sum((c) => porTipo(c).conv), gf = sum((c) => porTipo(c).gf), gv = sum((c) => porTipo(c).gv);
   const cheg = sum((c) => c.comandra?.leads), resp = sum((c) => c.comandra?.responderam), semToque = sum((c) => c.comandra?.sem_toque);
-  const cpl = leads ? gasto / leads : 0, cplAnt = leadsAnt ? gastoAnt / leadsAnt : 0;
+  const cpl = form ? gf / form : 0, cpc = conv ? gv / conv : 0;
   const atualizado = data.map((l) => l.atualizado_em).sort().pop();
   const vermelhos = contas.flatMap((l) => (l.dados.alertas ?? []).filter((a) => a.g === "red").map((a) => ({ ...a, conta: l.dados.dono })));
 
@@ -78,26 +85,28 @@ export default function AnunciosSaude({ diretorId, supers }: { diretorId: string
       <div className="dir-h"><b>Saúde dos anúncios</b><span>lido no Facebook às {atualizado ? new Date(atualizado).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "—"} · atualiza de hora em hora · últimos 7 dias</span></div>
       <div className="ads-band">
         <div><div className="dir-lbl">Gasto</div><div className="ads-big">{brl(gasto)}</div><div className="ads-s">{gastoAnt ? `${gasto >= gastoAnt ? "+" : ""}${Math.round((gasto / gastoAnt - 1) * 100)}% contra a semana anterior` : "sem semana anterior"}</div></div>
-        <div><div className="dir-lbl">Leads no Facebook</div><div className="ads-big">{leads}</div><div className="ads-s">{cheg} chegaram no Comandra (páginas mapeadas)</div></div>
-        <div><div className="dir-lbl">Custo por lead</div><div className="ads-big">{cpl ? brl(cpl) : "—"}</div><div className="ads-s">{cplAnt ? `semana anterior ${brl(cplAnt)}` : ""}</div></div>
+        <div><div className="dir-lbl">Leads de formulário</div><div className="ads-big">{form}</div><div className="ads-s">{cpl ? `${brl(cpl)} cada` : ""} · {cheg} chegaram no Comandra</div></div>
+        <div><div className="dir-lbl">Conversas no WhatsApp</div><div className="ads-big">{conv}</div><div className="ads-s">{cpc ? `${brl(cpc)} cada` : "nenhuma campanha de conversa"}</div></div>
         <div><div className="dir-lbl">Responderam</div><div className="ads-big">{cheg ? `${Math.round((resp / cheg) * 100)}%` : "—"}</div><div className="ads-s">{resp} de {cheg} à primeira mensagem</div></div>
         <div><div className="dir-lbl">Sem toque há 24h+</div><div className={`ads-big${semToque ? " r" : ""}`}>{semToque}</div><div className="ads-s">lead pago parado</div></div>
       </div>
       {vermelhos.length ? <div className="ads-urg"><b>Agora:</b> {vermelhos.slice(0, 3).map((a) => `${a.conta} — ${a.titulo}`).join(" · ")}{vermelhos.length > 3 ? ` · e mais ${vermelhos.length - 3}` : ""}</div> : null}
 
       <div className="dir-tree"><table>
-        <thead><tr><th>Conta</th><th>Situação</th><th>Gasto 7d</th><th>Leads FB</th><th>Custo/lead</th><th>Mil impressões</th><th>Chegaram</th><th>Responderam</th><th>Sem toque</th><th>Alertas</th></tr></thead>
+        <thead><tr><th>Conta</th><th>Situação</th><th>Gasto 7d</th><th>Leads form</th><th>Custo/lead</th><th>Conversas</th><th>Custo/conversa</th><th>Mil impressões</th><th>Chegaram</th><th>Responderam</th><th>Sem toque</th><th>Alertas</th></tr></thead>
         <tbody>
           {contas.map((l) => {
             const c = l.dados, s = situacao(c), on = aberta === l.account_id;
-            const cplC = c.leads_fb_7d ? c.gasto_7d / c.leads_fb_7d : null, cpmC = c.impr_7d ? (c.gasto_7d / c.impr_7d) * 1000 : null;
+            const pt = porTipo(c), cplC = pt.cpl, cpcC = pt.cpc, cpmC = c.impr_7d ? (c.gasto_7d / c.impr_7d) * 1000 : null;
             const nR = (c.alertas ?? []).filter((a) => a.g === "red").length, nO = (c.alertas ?? []).filter((a) => a.g === "org").length;
             return [
               <tr key={l.account_id} className="n0" onClick={() => setAberta(on ? null : l.account_id)}>
                 <td><span className={`dir-seta${on ? " on" : ""}`} aria-hidden>▸</span>{c.dono}<span className="ads-sub"> · {c.super && c.papel === "MANAGER" ? c.super : "super"}</span></td>
                 <td style={{ fontFamily: "inherit" }}><span className={`dir-chip ${s.cls}`}>{s.txt}</span></td>
-                <td>{brl(c.gasto_7d)}</td><td>{c.leads_fb_7d}</td>
-                <td className={cplC && cplC > 2 * c.casa.cpl ? "r" : !cplC && c.gasto_7d > 60 ? "r" : ""}>{cplC ? brl(cplC) : "—"}</td>
+                <td>{brl(c.gasto_7d)}</td><td>{pt.form}</td>
+                <td className={cplC && cplC > 2 * c.casa.cpl ? "r" : !cplC && pt.gf > 60 ? "r" : ""}>{cplC ? brl(cplC) : pt.gf > 0 ? "sem lead" : "—"}</td>
+                <td>{pt.conv || "—"}</td>
+                <td className={cpcC && cpcC > 2 * (c.casa.cpc ?? 10) ? "r" : ""}>{cpcC ? brl(cpcC) : "—"}</td>
                 <td className={cpmC && cpmC > 2.5 * c.casa.cpm ? "r" : ""}>{cpmC ? brl(cpmC) : "—"}</td>
                 <td>{c.comandra?.leads ?? "—"}</td>
                 <td>{c.comandra?.leads ? `${Math.round((c.comandra.responderam / c.comandra.leads) * 100)}%` : "—"}</td>
@@ -105,7 +114,7 @@ export default function AnunciosSaude({ diretorId, supers }: { diretorId: string
                 <td style={{ fontFamily: "inherit" }}>{nR ? <span className="dir-chip c-red">{nR}</span> : null} {nO ? <span className="dir-chip c-org">{nO}</span> : null}{!nR && !nO ? <span className="dir-chip c-grn">ok</span> : null}</td>
               </tr>,
               on ? (
-                <tr key={`${l.account_id}:x`} className="ads-x"><td colSpan={10}>
+                <tr key={`${l.account_id}:x`} className="ads-x"><td colSpan={12}>
                   <div className="ads-alertas">
                     {(c.alertas ?? []).map((a, i) => (
                       <div key={i} className={`ads-al ${a.g}`}>
@@ -120,7 +129,7 @@ export default function AnunciosSaude({ diretorId, supers }: { diretorId: string
                     {c.mexidas?.length ? <span className="dir-nota">Última mexida: {new Date(c.mexidas[0].quando.replace("+0000", "Z")).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} por {c.mexidas[0].quem} ({c.mexidas[0].objeto})</span> : null}
                   </div>
                   <table className="ads-camp">
-                    <thead><tr><th>Campanha / anúncio</th><th>Situação</th><th>Orçamento/dia</th><th>Gasto 7d</th><th>Leads</th><th>Custo/lead</th></tr></thead>
+                    <thead><tr><th>Campanha / anúncio</th><th>Situação</th><th>Orçamento/dia</th><th>Gasto 7d</th><th>Resultado</th><th>Custo por resultado</th></tr></thead>
                     <tbody>
                       {[...c.campanhas].sort((a, b) => b.gasto - a.gasto).flatMap((cp) => {
                         const k = `${l.account_id}:${cp.id}`;
@@ -129,14 +138,14 @@ export default function AnunciosSaude({ diretorId, supers }: { diretorId: string
                             <td><span className={`dir-seta${campAberta[k] ? " on" : ""}`} aria-hidden>▸</span>{cp.nome}</td>
                             <td style={{ fontFamily: "inherit" }}>{ST[cp.status] ?? cp.status.toLowerCase()}</td>
                             <td>{cp.orcamento_dia ? brl(cp.orcamento_dia) : cp.conjuntos.reduce((a, s: any) => a + (s.orcamento_dia || 0), 0) ? brl(cp.conjuntos.reduce((a, s: any) => a + (s.orcamento_dia || 0), 0)) : "—"}</td>
-                            <td>{brl(cp.gasto)}</td><td>{cp.leads}</td>
-                            <td className={cp.leads && cp.gasto / cp.leads > 2 * c.casa.cpl ? "r" : !cp.leads && cp.gasto > 60 ? "r" : ""}>{cp.leads ? brl(cp.gasto / cp.leads) : "—"}</td>
+                            <td>{brl(cp.gasto)}</td><td>{cp.leads} {cp.tipo === "conversa" ? "conversas" : "leads"}</td>
+                            <td className={cp.leads && cp.gasto / cp.leads > 2 * (cp.tipo === "conversa" ? c.casa.cpc : c.casa.cpl) ? "r" : !cp.leads && cp.gasto > 60 ? "r" : ""}>{cp.leads ? brl(cp.gasto / cp.leads) : "—"}</td>
                           </tr>,
                           ...(campAberta[k] ? cp.conjuntos.flatMap((s) => s.anuncios).filter((a) => a.gasto > 0).sort((a, b) => b.gasto - a.gasto).map((a) => (
                             <tr key={`${k}:${a.id}`} className="n2">
                               <td>{a.nome}</td><td style={{ fontFamily: "inherit" }}>{ST[a.status] ?? a.status.toLowerCase()}</td><td />
                               <td>{brl(a.gasto)}</td><td>{a.leads}</td>
-                              <td className={a.leads && a.gasto / a.leads <= 0.6 * c.casa.cpl ? "g" : !a.leads && a.gasto >= 40 ? "r" : ""}>{a.leads ? brl(a.gasto / a.leads) : "—"}</td>
+                              <td className={a.leads && a.gasto / a.leads <= 0.6 * (cp.tipo === "conversa" ? c.casa.cpc : c.casa.cpl) ? "g" : !a.leads && a.gasto >= 40 ? "r" : ""}>{a.leads ? brl(a.gasto / a.leads) : "—"}</td>
                             </tr>)) : []),
                         ];
                       })}
@@ -147,7 +156,7 @@ export default function AnunciosSaude({ diretorId, supers }: { diretorId: string
           })}
         </tbody>
       </table></div>
-      <p className="dir-nota" style={{ margin: 0 }}>Referência da casa (média das contas da Econ em 7 dias): {brl(contas[0]?.dados.casa?.cpl ?? 0)} por lead e {brl(contas[0]?.dados.casa?.cpm ?? 0)} por mil impressões. "Chegaram" conta só as páginas ligadas a cada conta; anúncio de uma equipe em página de outra aparece na conta dona da página.</p>
+      <p className="dir-nota" style={{ margin: 0 }}>Referência da casa (média das contas da Econ em 7 dias): {brl(contas[0]?.dados.casa?.cpl ?? 0)} por lead de formulário, {brl(contas[0]?.dados.casa?.cpc ?? 0)} por conversa no WhatsApp e {brl(contas[0]?.dados.casa?.cpm ?? 0)} por mil impressões. Lead e conversa não se comparam: conversa é mais barata e menos qualificada. "Chegaram" conta só as páginas ligadas a cada conta; anúncio de uma equipe em página de outra aparece na conta dona da página.</p>
     </section>
   );
 }
