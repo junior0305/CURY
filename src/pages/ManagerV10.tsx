@@ -22,6 +22,7 @@ import { useCruzamentoCury } from "@/hooks/useCruzamentoCury";
 import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/components/manager-v10/ui";
 import { Navigate, useSearchParams } from "react-router-dom";
 import TempoReal from "@/components/manager-v10/TempoReal";
+import CockpitGerenteV3 from "@/components/manager-v10/CockpitGerenteV3";
 import TimeTab from "@/components/manager-v10/TimeTab";
 import RoletaHoje from "@/components/manager-v10/RoletaHoje";
 import BiTab from "@/components/manager-v10/BiTab";
@@ -224,21 +225,30 @@ export default function ManagerV10() {
       />
 
       <main className="shell2">
-        <header className="top2">
-          <div><h1>{view === "tempo" ? "Tempo real" : view === "time" ? "Time" : "B.I. — Fechamento"}</h1>
-            <p>{view === "tempo" ? "O que a equipe está fazendo agora"
-               : view === "time" ? "A estratégia da equipe"
-               : "Vendas × Visitas × Documentos — a operação em números"}</p></div>
-          {view !== "bi" ? <div className="top2-r"><SeletorPeriodo /></div> : null}
-        </header>
         <MinhasTarefas donoId={userId} nome={userId !== session?.user?.id ? nome : undefined} />
-        {view !== "bi" ? <RoletaHoje managerId={userId} quem={session?.user?.id ?? userId} /> : null}
         {view === "tempo" ? (
-          <TempoReal managerId={userId} />
+          <CockpitGerenteV3 managerId={userId} quem={session?.user?.id ?? userId} />
         ) : view === "time" ? (
-          <TimeTab managerId={userId} />
+          <>
+            <header className="top2">
+              <div>
+                <h1>Time</h1>
+                <p>A estratégia e alocação da equipe</p>
+              </div>
+              <div className="top2-r"><SeletorPeriodo /></div>
+            </header>
+            <TimeTab managerId={userId} />
+          </>
         ) : (
-          <BiTab scope="gerente" managerId={userId} />
+          <>
+            <header className="top2">
+              <div>
+                <h1>B.I. — Fechamento</h1>
+                <p>Vendas × Visitas × Documentos — a operação em números</p>
+              </div>
+            </header>
+            <BiTab scope="gerente" managerId={userId} />
+          </>
         )}
       </main>
     </div>
