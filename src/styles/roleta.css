@@ -6,8 +6,8 @@
 .rlt-h span { font-size: 12.5px; color: var(--ink-3, #7F8EAB); }
 .rlt-h em { color: var(--red, #C8265C); font-style: normal; font-weight: 700; }
 .rlt-bt { display: flex; gap: 6px; }
-.rlt-bt button, .rlt-ac button, .rlt-mais { font: inherit; font-size: 12.5px; font-weight: 700; border-radius: 8px; padding: 6px 10px; cursor: pointer; border: 1px solid var(--blue, #0D9488); background: transparent; color: var(--blue, #0D9488); min-height: 32px; }
-.rlt-ac button.solid { background: var(--blue, #0D9488); color: #fff; }
+.mgr10 .rlt .rlt-bt button, .mgr10 .rlt .rlt-ac button, .mgr10 .rlt .rlt-mais { font: inherit; font-size: 12.5px; font-weight: 700; border-radius: 8px; padding: 6px 10px; cursor: pointer; border: 1px solid var(--blue, #0D9488); background: transparent; color: var(--blue, #0D9488); min-height: 32px; }
+.mgr10 .rlt .rlt-ac button.solid { background: var(--blue, #0D9488); color: #fff; }
 .rlt-bt button:disabled, .rlt-ac button:disabled { opacity: .5; cursor: default; }
 .rlt-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
 .rlt-chip { display: flex; gap: 8px; align-items: center; text-align: left; border: 1px solid var(--line, #E1E6EE); background: var(--sunk, #EDF2FA); border-radius: 10px; padding: 8px 10px; cursor: pointer; font: inherit; color: var(--ink-2, #44557A); min-height: 48px; }

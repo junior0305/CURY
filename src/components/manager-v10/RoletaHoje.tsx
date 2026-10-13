@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { definirRecebimento } from "@/hooks/useTempoReal";
 import { cobrarCorretor, redistribuir } from "@/hooks/useLeads";
 import { buscarPlantao } from "@/utils/c2sMatching";
-import { chaveNome, chaveGerente } from "@/hooks/useDiretoria";
+import { chaveNome, chaveGerente, gerenteC2S } from "@/hooks/useDiretoria";
 import "@/styles/roleta.css";
 
 type Corretor = { id: string; nome: string; on: boolean; fonte: string | null; online: boolean; plantao: boolean };
@@ -33,7 +33,7 @@ function useRoleta(managerId: string) {
         buscarPlantao(`${hoje}T03:00:00Z`).catch(() => []),
       ]);
       const kg = chaveGerente((ger as any)?.first_name);
-      const noPlantao = new Set(plantao.filter((r) => r.created_at?.slice(0, 10) >= hoje && chaveGerente(r.gerente) === kg).map((r) => chaveNome(r.corretor)));
+      const noPlantao = new Set(plantao.filter((r) => r.created_at?.slice(0, 10) >= hoje && chaveGerente(gerenteC2S(r.gerente)) === kg).map((r) => chaveNome(r.corretor)));
       const corretores: Corretor[] = ((bs ?? []) as any[]).map((b) => ({
         id: b.id, nome: [b.first_name, b.last_name].filter(Boolean).join(" ").trim() || "—",
         on: b.lead_assignment_enabled !== false,
