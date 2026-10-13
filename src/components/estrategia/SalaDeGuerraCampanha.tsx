@@ -10,7 +10,7 @@
  * Todas as metas sincronizadas com o banco de dados (metas_painel / definir_meta)
  * e refletem diretamente no dashboard dos Superintendentes para derramarem aos gerentes.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
