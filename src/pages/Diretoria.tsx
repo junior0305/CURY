@@ -13,13 +13,14 @@ import { useDiretorId, useDiretoria, useMetasDiretoria, donoJunix, chaveGerente,
   type SuperDiretoria, type PastaJunix } from "@/hooks/useDiretoria";
 import Estrategia from "@/components/estrategia/Estrategia";
 import EquipesCards from "@/components/diretoria/EquipesCards";
+import BiTab from "@/components/manager-v10/BiTab";
 import PastasPainel from "@/components/diretoria/PastasPainel";
 import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
 import { usePlanos, atrasada } from "@/hooks/usePlano";
 import "@/styles/diretoria.css";
 
-type Aba = "hoje" | "equipes" | "leads" | "pastas" | "estrategia";
-const ABAS: [Aba, string][] = [["hoje", "Hoje"], ["equipes", "Equipes"], ["leads", "Leads e investimento"], ["pastas", "Pastas"], ["estrategia", "Estratégia"]];
+type Aba = "hoje" | "equipes" | "leads" | "pastas" | "bi" | "estrategia";
+const ABAS: [Aba, string][] = [["hoje", "Hoje"], ["equipes", "Equipes"], ["leads", "Leads e investimento"], ["pastas", "Pastas"], ["bi", "B.I."], ["estrategia", "Estratégia"]];
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "7 dias"], [30, "30 dias"]];
 
 const nf = (n: number) => n.toLocaleString("pt-BR");
@@ -95,7 +96,7 @@ export default function Diretoria() {
       </header>
 
       <main className="dir-wrap">
-        {aba !== "hoje" && aba !== "estrategia" && aba !== "pastas" ? (
+        {aba !== "hoje" && aba !== "estrategia" && aba !== "pastas" && aba !== "bi" ? (
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span className="dir-lbl">Período</span>
             <div className="dir-per">{PERIODOS.map(([n, t]) => <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{t}</button>)}</div>
@@ -122,6 +123,7 @@ export default function Diretoria() {
                 {aberto["tabela-pastas"] ? "▾ Esconder a árvore completa" : "▸ Árvore completa: super → gerente → corretor → cliente"}</button>
               {aberto["tabela-pastas"] ? <Pastas supers={supers} pastas={dir.pastas} aberto={aberto} tog={tog} /> : null}
             </>}
+            {aba === "bi" && <BiTab scope="super" managerId={diretorId ?? undefined} />}
             {aba === "estrategia" && diretorId && <Estrategia diretorId={diretorId} supers={supers} pastas={dir.pastas} />}
           </>
         )}
