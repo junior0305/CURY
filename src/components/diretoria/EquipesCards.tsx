@@ -85,6 +85,9 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
   const diasMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
   const ritmo = hoje.getDate() / diasMes;
 
+  // antes do primeiro ponto do dia (C2S sincroniza ao longo do dia), presença zerada não é gargalo
+  const semPontoHoje = supers.every((s) => (s.c2s ? s.c2s.hoje : s.gerentes.reduce((a, g) => a + g.plantao_hoje, 0)) === 0);
+
   const cards = useMemo(() => supers.map((s) => {
     const ls = linhasDoSuper(s);
     const soma = (f: (l: LinhaConsolidado) => number) => ls.reduce((a, l) => a + f(l), 0);
@@ -98,6 +101,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
     const inds: Ind[] = [];
     if (semPlantao) inds.push({ k: "presenca", nm: "Presença hoje", falta: "Plantão desta equipe não aparece no C2S. Sem ponto, não dá para medir." });
     else if (!corretores) inds.push({ k: "presenca", nm: "Presença hoje", falta: "Nenhum corretor cadastrado." });
+    else if (semPontoHoje) inds.push({ k: "presenca", nm: "Presença hoje", falta: "O C2S ainda não trouxe nenhum ponto de hoje." });
     else { const r = hojeN / corretores; inds.push({ k: "presenca", nm: "Presença hoje", sub: `${hojeN} de ${corretores} corretores${c2s ? " (base C2S 30 dias)" : ""}`, val: `${Math.round(r * 100)}%`, ref: `ref ${REF.presenca * 100}%`, r: r / REF.presenca }); }
 
     const refPl = REF.plantoesMes * dias / 30;
@@ -110,7 +114,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
     else { const cada = plantoes / visitas; inds.push({ k: "visita", nm: "Visitas", sub: `${visitas} no período`, val: `1 a cada ${Math.round(cada)}`, ref: `ref 1 a cada ${REF.plantoesPorVisita} plantões`, r: REF.plantoesPorVisita / cada }); }
 
     const conv = pastas ? vendasP / pastas : null;
-    inds.push({ k: "fecha", nm: "Pasta vira venda", sub: `${v1(vendasP)} vendas no período · ${pastas} pastas abertas`, val: conv == null ? "—" : `${Math.round(conv * 100)}%`, ref: `ref ${REF.conversao * 100}%`, r: conv == null ? null : conv / REF.conversao });
+    inds.push({ k: "fecha", nm: "Pasta vira venda", sub: `${v1(vendasP)} vendas no placar no período · ${pastas} pastas abertas`, val: conv == null ? "—" : `${Math.round(conv * 100)}%`, ref: `ref ${REF.conversao * 100}%`, r: conv == null ? null : conv / REF.conversao });
 
     const pior = inds.filter((i) => i.r != null).sort((a, b) => a.r! - b.r!)[0];
     const f = metas?.filhos?.find((x) => x.id === s.id);
@@ -127,7 +131,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
 
     return { s, inds, pior: pior && pior.r! < 0.9 ? pior : null, meta, realizado, foraN, esperado,
       gap: esperado != null ? realizado - esperado : null, vgv, corretores, hojeN, semPlantao, ger };
-  }).sort((a, b) => (a.gap ?? Infinity) - (b.gap ?? Infinity)), [supers, linhasDoSuper, metas, fora, sete, dias, ritmo]);
+  }).sort((a, b) => (a.gap ?? Infinity) - (b.gap ?? Infinity)), [supers, linhasDoSuper, metas, fora, sete, dias, ritmo, semPontoHoje]);
 
   async function cobrar(c: typeof cards[number]) {
     const nome = c.s.nome.split(" ")[0];
@@ -169,7 +173,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
             {placarEmp !== vendasEmp ? <span><b>{v1(placarEmp)}</b> no placar da diretoria</span> : null}</div>
         </div>
         <div><div className="dir-lbl">Presença hoje</div><div className="eqc-v">{corEmp ? `${hojeEmp} de ${corEmp}` : "—"}</div>
-          <div className="eqc-s">{corEmp ? `${Math.round(hojeEmp / corEmp * 100)}% · ref ${REF.presenca * 100}%` : ""}{semPl.length ? ` · sem ${semPl.join(", ")} (fora do C2S)` : ""}</div></div>
+          <div className="eqc-s">{semPontoHoje ? "C2S ainda sem ponto de hoje" : corEmp ? `${Math.round(hojeEmp / corEmp * 100)}% · ref ${REF.presenca * 100}%` : ""}{semPl.length ? ` · sem ${semPl.join(", ")} (fora do C2S)` : ""}</div></div>
         <div><div className="dir-lbl">Gargalo mais comum</div><div className="eqc-v">{topG ? GARGALO[topG[0]][0] : "—"}</div>
           <div className="eqc-s">{topG ? `${topG[1]} de ${cards.length} superintendências · ${perTxt}` : carregandoCons ? "carregando…" : ""}</div></div>
         <div><div className="dir-lbl">Atrás do ritmo</div><div className="eqc-v">{atras.length ? atras.join(", ") : comMeta.length ? "ninguém" : "—"}</div>
@@ -184,7 +188,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
             <article key={c.s.id} className={`dir-card eqc-card${alerta ? " alerta" : ""}`}>
               <div className="eqc-hd">
                 <div><h3>{c.s.nome}</h3>
-                  <div className="eqc-s">{c.corretores} corretores · {c.s.c2s ? c.s.c2s.gerentes.length : c.s.gerentes.length} gerentes · {mi(c.vgv)} no período</div></div>
+                  <div className="eqc-s">{c.corretores} corretores · {c.s.c2s ? c.s.c2s.gerentes.length : c.s.gerentes.length} gerentes · {mi(c.vgv)} no placar no período</div></div>
                 <div className="eqc-chips">
                   {c.s.c2s ? <span className="dir-chip c-gray">plantão do C2S · gerentes sem conta</span> : null}
                   {c.semPlantao ? <span className="dir-chip c-org">fora do C2S</span> : null}
@@ -202,7 +206,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
                 </div>
                 {c.meta != null ? <><Ritmo feito={c.realizado} esperado={c.esperado!} meta={c.meta} />
                   <div className="eqc-leg"><span>devia ter {v1(c.esperado!)} até hoje</span><span>meta derramada da Estratégia</span></div></> : null}
-                {c.foraN > 0 ? <div className="eqc-nota">{v1(c.realizado)} vendas da equipe aparecem no painel {c.s.nome.endsWith("a") ? "dela" : "dele"}. <b>{v1(c.realizado - c.foraN)} contam no placar da diretoria</b> ({v1(c.foraN)} são de antes de entrar na equipe).</div> : null}
+                {c.foraN > 0 ? <div className="eqc-nota">{v1(c.realizado)} vendas da equipe aparecem no painel da superintendência. <b>{v1(c.realizado - c.foraN)} contam no placar da diretoria</b> ({v1(c.foraN)} são de antes de entrar na equipe).</div> : null}
               </div>
 
               <div className="eqc-inds">
