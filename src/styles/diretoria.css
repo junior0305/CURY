@@ -914,3 +914,26 @@
 
 
 
+
+/* ── Saúde dos anúncios (13/10) ── */
+.ads { padding: 18px 0 8px; display: flex; flex-direction: column; gap: 12px; }
+.ads > .dir-h, .ads > .ads-band, .ads > .ads-urg, .ads > .dir-nota { margin-left: 18px; margin-right: 18px; }
+.ads-band { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 14px; }
+.ads-big { font: 800 24px "JetBrains Mono", monospace; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.ads-big.r { color: var(--red); }
+.ads-s { font-size: 12px; color: var(--ink-3); }
+.ads-urg { background: var(--red-bg); color: var(--red); border-radius: 10px; padding: 9px 12px; font-size: 13px; }
+.ads-sub { font-weight: 500; color: var(--ink-3); font-size: 12px; }
+.ads-x > td { background: var(--sunk) !important; text-align: left !important; font-family: Archivo, system-ui, sans-serif !important; padding: 14px 18px !important; }
+.ads-alertas { display: flex; flex-direction: column; gap: 8px; }
+.ads-al { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; background: #fff; border: 1px solid var(--line); border-left-width: 4px; border-radius: 10px; padding: 10px 12px; }
+.ads-al.red { border-left-color: var(--red); } .ads-al.org { border-left-color: var(--org); } .ads-al.grn { border-left-color: var(--grn); }
+.ads-al b { font-size: 13.5px; } .ads-al p { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-2); white-space: normal; }
+.ads-acts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+.ads-camp { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; }
+.ads-camp td, .ads-camp th { padding: 7px 10px; border-bottom: 1px solid var(--line-2); font-size: 12.5px; text-align: right; }
+.ads-camp td:first-child, .ads-camp th:first-child { text-align: left; white-space: normal; }
+.ads-camp tr.n1 { cursor: pointer; font-weight: 600; }
+.ads-camp tr.n2 td:first-child { padding-left: 32px; color: var(--ink-2); }
+.ads-camp td.r { color: var(--red); font-weight: 700; } .ads-camp td.g { color: var(--grn); font-weight: 700; }
+@media (max-width: 900px) { .ads-band { grid-template-columns: repeat(2, minmax(0,1fr)); } }

@@ -14,6 +14,7 @@ import { useDiretorId, useDiretoria, useMetasDiretoria, donoJunix, chaveGerente,
 import Estrategia from "@/components/estrategia/Estrategia";
 import EquipesCards from "@/components/diretoria/EquipesCards";
 import BiTab from "@/components/manager-v10/BiTab";
+import AnunciosSaude from "@/components/diretoria/AnunciosSaude";
 import PastasPainel from "@/components/diretoria/PastasPainel";
 import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
 import { usePlanos, atrasada } from "@/hooks/usePlano";
@@ -116,6 +117,7 @@ export default function Diretoria() {
                 {aberto["tabela-equipes"] ? "▾ Esconder a tabela completa" : "▸ Tabela completa, corretor por corretor (login, online, plantão)"}</button>
               {aberto["tabela-equipes"] ? <Equipes supers={supers} linhasDoSuper={linhasDoSuper} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} /> : null}
             </>}
+            {aba === "leads" && <AnunciosSaude diretorId={diretorId!} supers={supers} />}
             {aba === "leads" && <Leads dias={dias} supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
             {aba === "pastas" && <>
               <PastasPainel diretorId={diretorId!} supers={supers} pastas={dir.pastas} />
