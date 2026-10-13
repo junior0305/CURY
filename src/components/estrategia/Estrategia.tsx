@@ -30,6 +30,7 @@ type MetaPainel = { dono: PessoaMeta; filhos: PessoaMeta[] };
 
 export default function Estrategia({ diretorId, supers, pastas }: { diretorId: string; supers: SuperDiretoria[]; pastas: PastaJunix[] }) {
   const [visao, setVisao] = useState<"minhas_estrategias" | "sala_de_guerra" | "diagnostico">("minhas_estrategias");
+  const [conselhoAberto, setConselhoAberto] = useState(false);
   const [combinar, setCombinar] = useState<Combinar | null>(null);
   const hoje = new Date();
   const diaHoje = hoje.getDate();
@@ -159,7 +160,32 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
         <SalaDeGuerraCampanha diretorId={diretorId} supers={supers} />
       ) : (
         <>
-          <Conselho fatos={fatos} pronto={pronto} donoId={diretorId} abrir={abrir} />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+            <button
+              type="button"
+              className="dir-btn"
+              onClick={() => setConselhoAberto(!conselhoAberto)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                background: conselhoAberto ? "var(--teal)" : "#fff",
+                color: conselhoAberto ? "#fff" : "var(--teal)",
+                borderColor: "var(--teal)",
+              }}
+            >
+              <span>🧠</span>
+              <span>{conselhoAberto ? "Recolher Conselho de IA ▲" : "Consultar Conselho de IA (Perguntas Abertas) ▼"}</span>
+            </button>
+            <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
+              As 5 perguntas da rotina executiva iniciam imediatamente abaixo:
+            </span>
+          </div>
+
+          {conselhoAberto && <Conselho fatos={fatos} pronto={pronto} donoId={diretorId} abrir={abrir} />}
+
           <Pergunta1 metaDir={metaDir} supers={supers} metaSuper={metaSuper} linha={linha} c30={c30?.linhas ?? null}
             diaHoje={diaHoje} diasMes={diasMes} mes={mes} abrir={abrir} />
           <Pergunta2 pastas={pastas} supers={supers} metaDir={metaDir} abrir={abrir} />
