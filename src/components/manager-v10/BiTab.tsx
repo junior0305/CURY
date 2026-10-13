@@ -10,6 +10,7 @@
  * Telas 2/3/4 = "em breve" (falta dado de anúncios/bancário/RH).
  */
 import { useMemo, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PlantaoEmpresa from "./PlantaoEmpresa";
@@ -128,6 +129,9 @@ const pct = (n: number) => (n ?? 0) + "%";
 const delta = (v: number, a: number) => (a > 0 ? Math.round(((v - a) / a) * 100) : v > 0 ? 100 : 0);
 
 export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"; managerId?: string }) {
+  // diretor/admin olham o placar da diretoria: sem a venda de antes de uma super entrar (junix_vendas.fora_do_placar)
+  const { role } = useAuth();
+  const placar = role === "DIRECTOR" || role === "ADMIN";
   const [dias, setDias] = useState(30);
   const [screen, setScreen] = useState(1);
   const [nivel, setNivel] = useState<Nivel>("gerente");
@@ -148,12 +152,12 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
   // VENDAS = Junix (ImobFlow), venda a venda com VGV real — espelhado em junix_vendas
   // pelo /root/junix/vendas.py. Só gestor lê (a linha traz comissão de todos os níveis).
   const { data: vendasJunix = [] } = useQuery({
-    queryKey: ["junixVendas", dias],
+    queryKey: ["junixVendas", dias, placar],
     queryFn: async () => {
       const desde = new Date(Date.now() - 3 * 3600 * 1000 - (dias - 1) * 86400000).toISOString().slice(0, 10);
       const { data, error } = await supabase.from("junix_vendas" as any)
         .select("oc, empreendimento, bloco, unidade, fase, data_contrato, data_venda, diretor, superintendente, gerente, corretor, vgv, qtd, sinal_status")
-        .eq("ativo", true).gte("data_venda", desde).order("data_venda", { ascending: false });
+        .eq("ativo", true).in("fora_do_placar", placar ? [false] : [false, true]).gte("data_venda", desde).order("data_venda", { ascending: false });
       if (error) throw error;
       return (data || []) as any[];
     },
@@ -248,13 +252,13 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
   const maxRank = Math.max(1, ...rankEcon.map((l) => (ordem === "vgv" ? l.vgv : ordem === "checkins" ? l.checkins : l.visitas)));
 
   const { data: ant } = useQuery({
-    queryKey: ["biAnteriorEcon", dias],
+    queryKey: ["biAnteriorEcon", dias, placar],
     queryFn: async () => {
       const ms = 86400000, agora = Date.now() - 3 * 3600 * 1000;
       const ate = new Date(agora - dias * ms).toISOString().slice(0, 10);          // último dia do anterior
       const de = new Date(agora - (2 * dias - 1) * ms).toISOString().slice(0, 10);  // primeiro dia do anterior
       const { data: vs } = await supabase.from("junix_vendas" as any).select("vgv, qtd")
-        .eq("ativo", true).gte("data_venda", de).lte("data_venda", ate);
+        .eq("ativo", true).in("fora_do_placar", placar ? [false] : [false, true]).gte("data_venda", de).lte("data_venda", ate);
       const plantao: any[] = [];
       for (let from = 0; ; from += 1000) {
         const { data, error } = await supabase.from("c2s_plantao" as any).select("dia, corretor, gerente")

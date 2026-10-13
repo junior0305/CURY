@@ -121,27 +121,18 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
   });
 }
 
-// a qual super (e gerente) pertence uma linha do Junix. Gerente do Junix conhecido no Comandra: vale ele.
-// Gerente desconhecido (ex.: pasta antiga aberta noutra equipe, "SAMANTHA"/"SNOW UV"): segue o CORRETOR —
-// corretor do Comandra vai pra equipe dele; gerente abrindo pasta própria vai pra equipe dele.
-export function donoJunix(supers: SuperDiretoria[], superintendente: string | null, gerente: string | null, corretor?: string | null) {
+// O Junix às vezes grava como "superintendente" um gerente da superintendência (ex.: SNOW UV é equipe da Adajes).
+const APELIDO_SUPER: Record<string, string> = { SNOWUV: "ADAJES" };
+export const superJunix = (s: string | null | undefined) => APELIDO_SUPER[colado(s)] ?? (s ?? "");
+
+// a qual super (e gerente) pertence uma linha do Junix
+export function donoJunix(supers: SuperDiretoria[], superintendente: string | null, gerente: string | null) {
   const kg = chaveGerente(gerente);
   for (const s of supers) {
     const g = s.gerentes.find((x) => chaveGerente(x.nome) === kg);
     if (g) return { superId: s.id, gerenteId: g.id };
   }
-  if (corretor) {
-    const kc = chaveNome(corretor);
-    const achados = supers.flatMap((s) => s.gerentes.flatMap((g) =>
-      g.corretores_lista.filter((c) => chaveNome(c.nome) === kc).map(() => ({ superId: s.id, gerenteId: g.id }))));
-    if (achados.length === 1) return achados[0];
-    const kgc = chaveGerente(corretor);
-    for (const s of supers) {
-      const g = s.gerentes.find((x) => chaveGerente(x.nome) === kgc);
-      if (g) return { superId: s.id, gerenteId: g.id };
-    }
-  }
-  const ks = colado(superintendente);
+  const ks = colado(superJunix(superintendente));
   const s = supers.find((x) => x.tokens.some((t) => ks.includes(t)));
   return { superId: s?.id ?? "fora", gerenteId: null as string | null };
 }
