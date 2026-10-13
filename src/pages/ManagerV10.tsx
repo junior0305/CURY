@@ -23,6 +23,7 @@ import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/comp
 import { Navigate, useSearchParams } from "react-router-dom";
 import TempoReal from "@/components/manager-v10/TempoReal";
 import TimeTab from "@/components/manager-v10/TimeTab";
+import RoletaHoje from "@/components/manager-v10/RoletaHoje";
 import BiTab from "@/components/manager-v10/BiTab";
 import { RailV10 } from "@/components/manager-v10/RailV10";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
@@ -231,6 +232,7 @@ export default function ManagerV10() {
           {view !== "bi" ? <div className="top2-r"><SeletorPeriodo /></div> : null}
         </header>
         <MinhasTarefas donoId={userId} nome={userId !== session?.user?.id ? nome : undefined} />
+        {view !== "bi" ? <RoletaHoje managerId={userId} quem={session?.user?.id ?? userId} /> : null}
         {view === "tempo" ? (
           <TempoReal managerId={userId} />
         ) : view === "time" ? (

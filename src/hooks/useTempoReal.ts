@@ -286,8 +286,9 @@ export function useTempoReal(
 export async function definirRecebimento(profileId: string, receber: boolean) {
   const { error } = await supabase.from("profiles").update({
     lead_assignment_enabled: receber,
-    lead_assignment_source: receber ? "gerente" : null,
-    lead_assignment_date: receber ? diaSP() : null,
+    // ligar OU desligar no painel é decisão do gerente: o robô do plantão respeita até a meia-noite
+    lead_assignment_source: "gerente",
+    lead_assignment_date: diaSP(),
   }).eq("id", profileId);
   if (error) throw error;
 }
