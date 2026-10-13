@@ -344,3 +344,8 @@
 .cs-hist summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
 .cs-hist button { display: block; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line-2); padding: 7px 0; font-size: 13px; color: var(--ink); cursor: pointer; }
 .cs-hist button span { color: var(--ink-3); font-size: 12px; margin-right: 8px; font-family: "JetBrains Mono", monospace; }
+.cs-ask-row textarea { flex: 1 1 320px; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font: 400 14px Archivo, system-ui, sans-serif; resize: vertical; background: #fff; color: var(--ink); }
+.cs-funil td, .cs-funil th { font-family: Archivo, system-ui, sans-serif !important; text-align: left !important; white-space: normal !important; vertical-align: top; font-size: 13px; }
+.cs-funil td:first-child { white-space: nowrap !important; }
+.cs-funil td:nth-child(2) { color: var(--ink-2); min-width: 150px; }
+.cs-funil td:nth-child(3) { min-width: 180px; }
