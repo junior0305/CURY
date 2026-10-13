@@ -937,3 +937,50 @@
 .ads-camp tr.n2 td:first-child { padding-left: 32px; color: var(--ink-2); }
 .ads-camp td.r { color: var(--red); font-weight: 700; } .ads-camp td.g { color: var(--grn); font-weight: 700; }
 @media (max-width: 900px) { .ads-band { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+
+/* ─── SALA DE GUERRA: ABAS / SEÇÕES COLAPSÁVEIS (ACCORDION) ─── */
+.sdg-accordion-card {
+  background: #ffffff;
+  border: 1.5px solid #CBD5E1;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all .15s ease-in-out;
+}
+
+.sdg-accordion-card:hover {
+  border-color: #94A3B8;
+}
+
+.sdg-accordion-card.ativo {
+  border-color: #38BDF8;
+  box-shadow: 0 4px 14px rgba(14, 165, 233, 0.08);
+}
+
+.sdg-accordion-hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 18px;
+  cursor: pointer;
+  user-select: none;
+  background: #F8FAFC;
+  transition: background .15s;
+}
+
+.sdg-accordion-hd:hover {
+  background: #F1F5F9;
+}
+
+.sdg-accordion-hd.aberto {
+  border-bottom: 1px solid var(--line);
+  background: #F0F9FF;
+}
+
+.sdg-accordion-body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

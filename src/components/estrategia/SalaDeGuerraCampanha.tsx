@@ -6,6 +6,8 @@
  *   3. Alocação de Verba por Superintendente & Cesta de Produtos (Lançamentos Futuros e Estoques Junix);
  *   4. Inteligência Preditiva Comandra com ROI e Engenharia Reversa ("Como chegar em XX vendas?");
  *   5. Fechamento formal de acordo e envio no WhatsApp de cada Superintendente.
+ *
+ * Todas as abas iniciam minimizadas por padrão e podem ser expandidas individualmente ou em bloco.
  */
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -134,6 +136,39 @@ export default function SalaDeGuerraCampanha({
   ]);
   const [publicarBanner, setPublicarBanner] = useState(true);
 
+  // Estado de controle das abas/seções minimizadas (todas iniciam minimizadas como solicitado)
+  const [secoesAbertas, setSecoesAbertas] = useState<Record<string, boolean>>({
+    metas: false,
+    campanha: false,
+    alocacao: false,
+    preditivo: false,
+    fechamento: false,
+  });
+
+  const toggleSecao = (k: string) => {
+    setSecoesAbertas((prev) => ({ ...prev, [k]: !prev[k] }));
+  };
+
+  const expandirTodas = () => {
+    setSecoesAbertas({
+      metas: true,
+      campanha: true,
+      alocacao: true,
+      preditivo: true,
+      fechamento: true,
+    });
+  };
+
+  const recolherTodas = () => {
+    setSecoesAbertas({
+      metas: false,
+      campanha: false,
+      alocacao: false,
+      preditivo: false,
+      fechamento: false,
+    });
+  };
+
   // Seleção de Superintendências participantes
   const [supersSelecionados, setSupersSelecionados] = useState<Set<string>>(
     () => new Set(supers.map((s) => s.id))
@@ -168,7 +203,6 @@ export default function SalaDeGuerraCampanha({
   }, [estoque]);
 
   // Cesta de Produtos & Verbas por Superintendente
-  // Exemplo de alta performance: Adajes começa com 2 lançamentos (R$ 5k cada) + 5 estoques (R$ 2k cada) = R$ 20k
   const [itensPorSuper, setItensPorSuper] = useState<Record<string, ItemVerbaSuper[]>>(() => {
     const inicial: Record<string, ItemVerbaSuper[]> = {};
 
@@ -330,6 +364,19 @@ export default function SalaDeGuerraCampanha({
     return map;
   }, [supers, itensPorSuper]);
 
+  // Contagem geral de lançamentos e estoques
+  const { totalItensLancamento, totalItensEstoque } = useMemo(() => {
+    let lanc = 0;
+    let est = 0;
+    for (const s of equipesAtivas) {
+      for (const it of itensPorSuper[s.id] || []) {
+        if (it.tipo === "lancamento") lanc++;
+        else est++;
+      }
+    }
+    return { totalItensLancamento: lanc, totalItensEstoque: est };
+  }, [equipesAtivas, itensPorSuper]);
+
   // Alocação consolidada nas 5 frentes táticas a partir de todos os itens de todos os supers ativos
   const alocacoes = useMemo(() => {
     const canais: Record<string, number> = {
@@ -359,7 +406,6 @@ export default function SalaDeGuerraCampanha({
   // Verba total configurada
   const [verbaTotal, setVerbaTotal] = useState(totalAlocado || 48000);
 
-  // Sincronizar verba total com total alocado se o usuário desejar
   const ajustarVerbaParaAlocado = () => {
     setVerbaTotal(totalAlocado);
     toast.success(`Verba global ajustada para ${brl(totalAlocado)}.`);
@@ -664,688 +710,941 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
         </div>
       </div>
 
+      {/* ── BARRA DE CONTROLE MODULAR DAS ABAS (ACCORDION) ── */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 10,
+          padding: "10px 14px",
+          background: "#F1F5F9",
+          borderRadius: 10,
+          border: "1px solid var(--line)",
+        }}
+      >
+        <span style={{ fontSize: 13, color: "var(--ink-2)", fontWeight: 600 }}>
+          📁 <b>Painel Modular:</b> Cada etapa está minimizada para leitura executiva. Clique em qualquer etapa para expandir seus detalhes.
+        </span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            className="dir-btn"
+            style={{ fontSize: 12, padding: "5px 12px", background: "#fff", borderColor: "#CBD5E1", fontWeight: 700 }}
+            onClick={expandirTodas}
+          >
+            ▼ Expandir Todas as Abas
+          </button>
+          <button
+            type="button"
+            className="dir-btn"
+            style={{ fontSize: 12, padding: "5px 12px", background: "#fff", borderColor: "#CBD5E1", fontWeight: 700 }}
+            onClick={recolherTodas}
+          >
+            ▲ Minimizar Todas
+          </button>
+        </div>
+      </div>
+
       {/* ── 1. PLACAR DE METAS DA REUNIÃO (ETAPA 1: ONDE TUDO NASCE) ── */}
       {metaDir && metaSuper && linha && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <PlacarMetas
-            metaDir={metaDir}
-            supers={supers}
-            metaSuper={metaSuper}
-            linha={linha}
-            c30={c30 ?? null}
-            diaHoje={diaHoje}
-            diasMes={diasMes}
-            mes={mes}
-            abrir={abrir}
-          />
-        </div>
-      )}
-
-      {/* ── 2. CONFIGURAÇÃO DE INVESTIMENTO & CAMPANHA DE INCENTIVO COM PREMIAÇÃO ── */}
-      <div className="sdg-sec">
-        <div className="sdg-sec-title">
-          <span>2. Campanha de Incentivo Oficial & Premiação da Tropa</span>
-          <small>Dispara nos dashboards de corretores, gerentes e supers</small>
-        </div>
-
-        <div className="sdg-grid-config">
-          <div className="sdg-box" style={{ gridColumn: "span 2" }}>
-            <label className="dir-lbl">Nome da Ofensiva / Campanha de Incentivo da Tropa</label>
-            <input
-              type="text"
-              className="sdg-input"
-              value={titulo}
-              onChange={(e) => setTitulo(e.target.value)}
-              placeholder="Ex.: Campanha Aceleração Caixa · Lançamentos e Estoque"
-            />
-          </div>
-
-          <div className="sdg-box">
-            <label className="dir-lbl">Meta Geral de Vendas</label>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input
-                type="number"
-                min={1}
-                className="sdg-input mono"
-                value={metaVendas}
-                onChange={(e) => setMetaVendas(Number(e.target.value))}
-              />
-              <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
-                VGV ~ <b>{brl(metaVendas * ticketMedio)}</b>
+        <div className={`sdg-accordion-card${secoesAbertas.metas ? " ativo" : ""}`}>
+          <div
+            className={`sdg-accordion-hd${secoesAbertas.metas ? " aberto" : ""}`}
+            onClick={() => toggleSecao("metas")}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 18 }}>🏁</span>
+              <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
+                1. Placar de Metas da Reunião (Ritmo, Projeção & Devedores)
+              </h3>
+              <span className={`dir-chip ${metaDir.dono.realizado >= (metaDir.dono.meta ?? 0) ? "c-grn" : "c-blue"}`}>
+                Vendido {metaDir.dono.realizado} de {metaDir.dono.meta ?? 0} ({metaDir.dono.meta ? Math.round((metaDir.dono.realizado / metaDir.dono.meta) * 100) : 0}%)
+              </span>
+              <span className="dir-chip c-gray" style={{ fontSize: 11 }}>
+                Faltam {Math.max(0, (metaDir.dono.meta ?? 0) - metaDir.dono.realizado)} vendas em {diasMes - diaHoje} dias
               </span>
             </div>
-          </div>
 
-          <div className="sdg-box" style={{ gridColumn: "span 3" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-              <label className="dir-lbl">Verba Total Disponível para a Operação</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
-                  Soma Alocada nos Supers: <b className="mono" style={{ color: "var(--teal)" }}>{brl(totalAlocado)}</b>
-                </span>
-                {totalAlocado !== verbaTotal && (
-                  <button
-                    type="button"
-                    className="dir-btn"
-                    style={{ fontSize: 11, padding: "3px 8px", color: "var(--teal)", borderColor: "var(--teal)" }}
-                    onClick={ajustarVerbaParaAlocado}
-                  >
-                    ⚡ Igualar Verba ao Total Alocado
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <input
-                type="number"
-                step={1000}
-                className="sdg-input mono"
-                style={{ maxWidth: 200 }}
-                value={verbaTotal}
-                onChange={(e) => setVerbaTotal(Number(e.target.value))}
-              />
-              <span style={{ fontSize: 16, fontWeight: 800, color: "var(--teal)" }}>
-                {brl(verbaTotal)}
-              </span>
-              <span className={`dir-chip ${verbaTotal === totalAlocado ? "c-grn" : verbaTotal > totalAlocado ? "c-blue" : "c-red"}`}>
-                {verbaTotal === totalAlocado
-                  ? "100% distribuído nos Supers ✓"
-                  : verbaTotal > totalAlocado
-                  ? `Sobra ${brl(verbaTotal - totalAlocado)} para distribuir`
-                  : `Orçamento estourado em ${brl(totalAlocado - verbaTotal)}`}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Premiações e Sorteios */}
-        <div className="sdg-box" style={{ background: "#F8FAFC", border: "1.5px solid #CBD5E1" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-            <div>
-              <span className="dir-lbl" style={{ color: "#D97706" }}>Premiação da Tropa (Banner Oficial no Dashboard)</span>
-              <h4 style={{ fontSize: 15, fontWeight: 800, margin: "2px 0 0", color: "var(--ink)" }}>
-                🏆 O que a Diretoria vai premiar ou sortear nesta campanha?
-              </h4>
-            </div>
-            <button
-              type="button"
-              className="dir-btn"
-              style={{ fontSize: 12, padding: "5px 10px", borderColor: "var(--teal)", color: "var(--teal)" }}
-              onClick={adicionarPremio}
-            >
-              + Adicionar Premiação / Sorteio
-            </button>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-            {regrasPremios.map((r) => (
-              <div
-                key={r.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1.5fr 1fr 140px auto",
-                  gap: 8,
-                  alignItems: "center",
-                  background: "#fff",
-                  padding: "8px 12px",
-                  borderRadius: 8,
-                  border: "1px solid var(--line)",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 14 }}>🎁</span>
-                  <input
-                    type="text"
-                    className="sdg-input"
-                    style={{ fontSize: 13 }}
-                    value={r.premio}
-                    onChange={(e) => atualizarPremio(r.id, { premio: e.target.value })}
-                    placeholder="Ex: PIX de R$ 500, iPhone 16 Pro, Notebook Dell..."
-                  />
-                </div>
-
-                <select
-                  className="sdg-input"
-                  style={{ fontSize: 12.5 }}
-                  value={r.gatilho}
-                  onChange={(e) => atualizarPremio(r.id, { gatilho: e.target.value as any })}
-                >
-                  <option value="venda_geral">Por cada venda confirmada</option>
-                  <option value="produto_especifico">Por venda em produto específico</option>
-                  <option value="meta_equipe">Ao bater a meta da equipe</option>
-                  <option value="sorteio">Sorteio da Tropa</option>
-                </select>
-
-                <select
-                  className="sdg-input"
-                  style={{ fontSize: 12.5 }}
-                  value={r.publico}
-                  onChange={(e) => atualizarPremio(r.id, { publico: e.target.value as any })}
-                >
-                  <option value="BROKER">Só Corretores</option>
-                  <option value="MANAGER">Só Gerentes</option>
-                  <option value="TODOS">Toda a Tropa</option>
-                </select>
-
-                <button
-                  type="button"
-                  style={{ background: "none", border: 0, color: "var(--red)", cursor: "pointer", fontSize: 13 }}
-                  onClick={() => removerPremio(r.id)}
-                  title="Remover premiação"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 12.5, color: "var(--ink-2)" }}>
-            <input
-              type="checkbox"
-              id="pubBanner"
-              checked={publicarBanner}
-              onChange={(e) => setPublicarBanner(e.target.checked)}
-              style={{ width: 16, height: 16, accentColor: "var(--teal)" }}
-            />
-            <label htmlFor="pubBanner" style={{ cursor: "pointer", fontWeight: 600 }}>
-              Publicar automaticamente banner com estas premiações em destaque nos dashboards de todos os Corretores, Gerentes e Supers.
-            </label>
-          </div>
-        </div>
-      </div>
-
-      {/* ── 3. ALOCAÇÃO DE VERBA POR SUPERINTENDENTE & CESTA DE PRODUTOS ── */}
-      <div className="sdg-sec">
-        <div className="sdg-sec-title">
-          <span>3. Alocação de Verba por Superintendente & Cesta de Produtos</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span>Total Alocado: <b className="mono" style={{ color: "var(--teal)" }}>{brl(totalAlocado)}</b></span>
-            <span className="dir-chip c-blue">{equipesAtivas.length} Supers na Campanha</span>
-          </div>
-        </div>
-
-        {/* Seletor rápido de quem participa */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ink-3)" }}>Supers Participantes:</span>
-          {supers.map((s) => {
-            const ativa = supersSelecionados.has(s.id);
-            return (
-              <button
-                key={s.id}
-                type="button"
-                className={`dir-chip ${ativa ? "c-grn" : "c-gray"}`}
-                style={{ cursor: "pointer", fontSize: 12, padding: "5px 10px", border: ativa ? "1.5px solid var(--teal)" : "1px solid var(--line)" }}
-                onClick={() => toggleSuper(s.id)}
-              >
-                {s.nome} {ativa ? "✓" : "+ incluir"}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* CARDS INDIVIDUAIS DE CADA SUPERINTENDENTE COM SUA CESTA DE PRODUTOS */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {equipesAtivas.map((s) => {
-            const sub = subtotaisPorSuper[s.id] || { total: 0, lancamentos: 0, nLancamentos: 0, estoques: 0, nEstoques: 0 };
-            const itens = itensPorSuper[s.id] || [];
-            const metaSuperPessoa = metaSuper?.get(s.id)?.dono.meta;
-            const corrSuper = s.gerentes.flatMap((g) => g.corretores_lista).length;
-
-            return (
-              <div key={s.id} className="sdg-super-card">
-                {/* Cabeçalho do Super */}
-                <div className="sdg-super-card-hd">
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 18 }}>👤</span>
-                      <h3 style={{ fontSize: 17, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
-                        {s.nome}
-                      </h3>
-                      {metaSuperPessoa != null && (
-                        <span className="dir-chip c-blue" style={{ fontWeight: 700 }}>
-                          🎯 Meta: {metaSuperPessoa} vendas
-                        </span>
-                      )}
-                      <span className="dir-chip c-gray" style={{ fontSize: 11 }}>
-                        {s.gerentes.length} gerentes · {corrSuper} corretores
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 12.5, color: "var(--ink-3)", marginTop: 4 }}>
-                      Distribua a verba do superintendente entre Lançamentos Futuros e Produtos de Estoque Junix:
-                    </div>
-                  </div>
-
-                  {/* Subtotais e Botões de Ação do Super */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <div className="sdg-super-card-subtotais">
-                      <span className="sdg-tipo-pill lancamento">
-                        🚀 Lançamentos: {brl(sub.lancamentos)} ({sub.nLancamentos})
-                      </span>
-                      <span className="sdg-tipo-pill estoque">
-                        🏢 Estoque: {brl(sub.estoques)} ({sub.nEstoques})
-                      </span>
-                      <span style={{ fontSize: 15, fontWeight: 800, color: "var(--teal)", marginLeft: 4 }}>
-                        Total: {brl(sub.total)}
-                      </span>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        className="dir-btn"
-                        style={{ fontSize: 11.5, padding: "5px 8px", borderColor: "#A855F7", color: "#7E22CE", background: "#FAF5FF" }}
-                        onClick={() => adicionarLancamento(s.id)}
-                      >
-                        + Lançamento Futuro
-                      </button>
-                      <button
-                        type="button"
-                        className="dir-btn"
-                        style={{ fontSize: 11.5, padding: "5px 8px", borderColor: "#0284C7", color: "#0369A1", background: "#F0F9FF" }}
-                        onClick={() => adicionarEstoque(s.id)}
-                      >
-                        + Produto de Estoque
-                      </button>
-                      <button
-                        type="button"
-                        className="dir-btn"
-                        style={{ fontSize: 11.5, padding: "5px 8px", borderColor: "var(--teal)", color: "var(--teal)" }}
-                        onClick={() => dividirEm5Estoques(s.id, 2000)}
-                        title="Adiciona 5 produtos do Junix com R$ 2.000 cada automaticamente"
-                      >
-                        ⚡ 5 Estoques Rápidos (R$ 2k cada)
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tabela da Cesta de Projetos do Super */}
-                {itens.length === 0 ? (
-                  <div style={{ padding: 16, textAlign: "center", background: "#F8FAFC", borderRadius: 8, color: "var(--ink-3)", fontSize: 13 }}>
-                    Nenhum produto alocado para {s.nome.split(" ")[0]} ainda. Clique nos botões acima para adicionar Lançamentos ou Estoques!
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {/* Cabeçalho da tabela */}
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "130px 1.5fr 1.3fr 1fr 140px 32px",
-                        gap: 8,
-                        padding: "0 10px",
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        color: "var(--ink-3)",
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      <span>Tipo</span>
-                      <span>Produto / Lançamento</span>
-                      <span>Frente / Canal Tático</span>
-                      <span>Gerência Responsável</span>
-                      <span>Verba (R$)</span>
-                      <span />
-                    </div>
-
-                    {/* Linhas da cesta */}
-                    {itens.map((it) => (
-                      <div key={it.id} className="sdg-cesta-row">
-                        {/* 1. Tipo de Produto */}
-                        <div>
-                          <select
-                            className="sdg-input"
-                            style={{
-                              fontSize: 11.5,
-                              padding: "4px 6px",
-                              fontWeight: 700,
-                              borderColor: it.tipo === "lancamento" ? "#D8B4FE" : "#BAE6FD",
-                              background: it.tipo === "lancamento" ? "#FAF5FF" : "#F0F9FF",
-                              color: it.tipo === "lancamento" ? "#7E22CE" : "#0369A1",
-                            }}
-                            value={it.tipo}
-                            onChange={(e) => atualizarItem(s.id, it.id, { tipo: e.target.value as any })}
-                          >
-                            <option value="lancamento">🚀 Lançamento</option>
-                            <option value="estoque">🏢 Estoque</option>
-                          </select>
-                        </div>
-
-                        {/* 2. Nome do Produto (Select se estoque, Input se lançamento) */}
-                        <div>
-                          {it.tipo === "lancamento" ? (
-                            <input
-                              type="text"
-                              className="sdg-input"
-                              style={{ fontSize: 12.5, padding: "5px 8px" }}
-                              placeholder="Digite o nome do lançamento futuro (ex: Cury Mooca...)"
-                              value={it.produto}
-                              onChange={(e) => atualizarItem(s.id, it.id, { produto: e.target.value })}
-                            />
-                          ) : (
-                            <select
-                              className="sdg-input"
-                              style={{ fontSize: 12.5, padding: "5px 8px" }}
-                              value={it.produto}
-                              onChange={(e) => atualizarItem(s.id, it.id, { produto: e.target.value })}
-                            >
-                              <option value="">Selecione o produto de estoque...</option>
-                              {estoqueOrdenado.map((e) => (
-                                <option key={e.cod_empreendimento} value={e.empreendimento}>
-                                  {e.empreendimento.replace(/^CONDOM[IÍ]NIO\s+/i, "")} ({e.disponiveis} disp.)
-                                </option>
-                              ))}
-                              <option value="Outro Estoque">✏️ Outro Estoque (digitar)</option>
-                            </select>
-                          )}
-                        </div>
-
-                        {/* 3. Canal / Frente Tática */}
-                        <div>
-                          <select
-                            className="sdg-input"
-                            style={{ fontSize: 12, padding: "5px 8px" }}
-                            value={it.canal}
-                            onChange={(e) => atualizarItem(s.id, it.id, { canal: e.target.value as any })}
-                          >
-                            {ACOES_CATALOGO.map((a) => (
-                              <option key={a.key} value={a.key}>
-                                {a.icone} {a.nome}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* 4. Gerente Responsável */}
-                        <div>
-                          <select
-                            className="sdg-input"
-                            style={{ fontSize: 11.5, padding: "5px 8px" }}
-                            value={it.gerenteId || ""}
-                            onChange={(e) => atualizarItem(s.id, it.id, { gerenteId: e.target.value })}
-                          >
-                            <option value="">Toda a Superintendência</option>
-                            {s.gerentes.map((g) => (
-                              <option key={g.id} value={g.id}>
-                                Gerência {g.nome} ({g.corretores} corr.)
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* 5. Valor R$ */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <span className="mono" style={{ fontSize: 11, color: "var(--ink-3)" }}>R$</span>
-                          <input
-                            type="number"
-                            step={500}
-                            min={0}
-                            className="sdg-input mono"
-                            style={{ padding: "4px 8px", fontSize: 13, fontWeight: 700 }}
-                            value={it.valor}
-                            onChange={(e) => atualizarItem(s.id, it.id, { valor: Number(e.target.value) })}
-                          />
-                        </div>
-
-                        {/* 6. Ação Remover */}
-                        <button
-                          type="button"
-                          style={{
-                            background: "none",
-                            border: 0,
-                            color: "var(--red)",
-                            cursor: "pointer",
-                            fontSize: 14,
-                            textAlign: "center",
-                          }}
-                          onClick={() => removerItem(s.id, it.id)}
-                          title="Remover produto da verba"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Resumo Consolidado dos Canais */}
-        <div style={{ background: "var(--sunk)", borderRadius: 12, padding: 14, border: "1px solid var(--line)", marginTop: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)", marginBottom: 8 }}>
-            📊 Consolidação do Orçamento por Frente Tática (Soma de todos os produtos alocados):
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-            {ACOES_CATALOGO.map((a) => {
-              const v = alocacoes[a.key] || 0;
-              const pct = totalAlocado > 0 ? Math.round((v / totalAlocado) * 100) : 0;
-              return (
-                <div key={a.key} style={{ background: "#fff", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 12, fontWeight: 700 }}>{a.icone} {a.nome.split(" ")[0]}</span>
-                    <span className="dir-chip c-gray" style={{ fontSize: 10 }}>{pct}%</span>
-                  </div>
-                  <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: "var(--ink)", marginTop: 4 }}>
-                    {brl(v)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* ── 4. PAINEL PREDITIVO DA IA (RETORNO ESTIMADO & ROI) ── */}
-      <div className="sdg-roi-card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
-          <div>
-            <span className="dir-lbl" style={{ color: "#9FB3CC" }}>Inteligência Preditiva Comandra</span>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: "#fff", margin: "4px 0 0" }}>
-              Projeção de Retorno do Mix Estratégico
-            </h3>
-          </div>
-          <div className="sdg-roi-chips">
-            <span className={`dir-chip ${projecoes.vendasTotais >= metaVendas ? "c-grn" : "c-org"}`}>
-              {projecoes.vendasTotais >= metaVendas ? "✓ Mix Sustenta a Meta" : "⚠️ Mix Abaixo da Meta"}
-            </span>
-          </div>
-        </div>
-
-        <div className="sdg-roi-grid">
-          <div className="sdg-roi-metric">
-            <small>Vendas Projetadas</small>
-            <div className="val">{projecoes.vendasTotais} <span style={{ fontSize: 14, fontWeight: 500, color: "#9FB3CC" }}>vendas</span></div>
-            <div className="sub">
-              {projecoes.vendasAnuncio} anúncio · {projecoes.vendasRua} rua · {projecoes.vendasPap} pap · {projecoes.vendasAtiva} ativa
-            </div>
-          </div>
-
-          <div className="sdg-roi-metric">
-            <small>VGV Estimado</small>
-            <div className="val">{brl(projecoes.vgvProjetado)}</div>
-            <div className="sub">ticket médio de {brl(ticketMedio)}</div>
-          </div>
-
-          <div className="sdg-roi-metric">
-            <small>Custo por Venda</small>
-            <div className="val">{projecoes.custoPorVenda ? brl(projecoes.custoPorVenda) : "—"}</div>
-            <div className="sub">investimento total ÷ vendas projetadas</div>
-          </div>
-
-          <div className="sdg-roi-metric">
-            <small>Gás de Premiação</small>
-            <div className="val" style={{ color: "#34D399" }}>
-              +{Math.round(projecoes.bonusPremios * 100)}%
-            </div>
-            <div className="sub">estímulo direto na ativação da tropa</div>
-          </div>
-        </div>
-
-        {/* Parecer Estratégico da IA */}
-        <div className="sdg-ia-box">
-          <b>🧠 Veredito da IA para esta Reunião:</b>
-          <p style={{ margin: "4px 0 0", fontSize: 13, lineHeight: 1.5, color: "#E2E8F0" }}>
-            {projecoes.vendasTotais >= metaVendas ? (
-              <>
-                O mix de <b>{brl(totalAlocado)}</b> está matematicamente dimensionado para atingir <b>{projecoes.vendasTotais} vendas</b> (superando a meta de {metaVendas}).
-                As {equipesAtivas.length} equipes selecionadas somam {totalCorretoresAtivos} corretores, garantindo braço suficiente para atender os ~{projecoes.leadsAnuncio} leads digitais e as ~{projecoes.visitasRua} visitas presenciais nos produtos alocados.
-              </>
-            ) : (
-              <>
-                Atenção: com a configuração atual, o mix projeta <b>{projecoes.vendasTotais} vendas</b>, o que deixa um <b>déficit de {metaVendas - projecoes.vendasTotais} vendas</b> contra a meta de {metaVendas}.
-                {alocacoes.premios === 0 ? " Sugestão: adicione verba de premiação para a tropa para acelerar aprovação de crédito na Caixa." : " Sugestão: adicione mais lançamentos futuros ou aumente a verba de anúncios digitais e ações de rua."}
-              </>
-            )}
-          </p>
-        </div>
-
-        {/* Simulador Interativo de Meta Alvo ("Quero Chegar em XX Vendas") */}
-        <div className="sdg-reversa-box">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-            <div>
-              <span className="dir-lbl" style={{ color: "#FBBF24" }}>Simulador de Engenharia Reversa da IA</span>
-              <h4 style={{ fontSize: 16, fontWeight: 800, margin: "2px 0 0", color: "#fff" }}>
-                🎯 E se eu quiser bater uma meta específica? O que a IA sugere?
-              </h4>
-            </div>
             <button
               type="button"
               className="dir-btn"
               style={{
-                background: "rgba(255, 255, 255, 0.1)",
-                color: "#fff",
-                borderColor: "rgba(255, 255, 255, 0.2)",
-                fontSize: 12.5,
+                fontSize: 12,
+                padding: "4px 10px",
+                borderColor: secoesAbertas.metas ? "var(--teal)" : "#CBD5E1",
+                background: "#fff",
+                fontWeight: 700,
               }}
-              onClick={() => setMostrarSimulador(!mostrarSimulador)}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleSecao("metas");
+              }}
             >
-              {mostrarSimulador ? "Recolher Simulador ▲" : "Simular Meta Alvo (ex: 50, 60 vendas) ▼"}
+              {secoesAbertas.metas ? "▲ Minimizar Aba" : "▼ Expandir Aba"}
             </button>
           </div>
 
-          {mostrarSimulador && (
-            <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", gap: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13, color: "#9FB3CC", fontWeight: 600 }}>Quero chegar em:</span>
+          {secoesAbertas.metas && (
+            <div className="sdg-accordion-body">
+              <PlacarMetas
+                metaDir={metaDir}
+                supers={supers}
+                metaSuper={metaSuper}
+                linha={linha}
+                c30={c30 ?? null}
+                diaHoje={diaHoje}
+                diasMes={diasMes}
+                mes={mes}
+                abrir={abrir}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 2. CONFIGURAÇÃO DE INVESTIMENTO & CAMPANHA DE INCENTIVO COM PREMIAÇÃO ── */}
+      <div className={`sdg-accordion-card${secoesAbertas.campanha ? " ativo" : ""}`}>
+        <div
+          className={`sdg-accordion-hd${secoesAbertas.campanha ? " aberto" : ""}`}
+          onClick={() => toggleSecao("campanha")}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 18 }}>🏆</span>
+            <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
+              2. Campanha de Incentivo Oficial & Premiação da Tropa
+            </h3>
+            <span className="dir-chip c-blue">
+              🎯 Meta: {metaVendas} vendas
+            </span>
+            <span className="dir-chip c-grn">
+              💰 Verba: {brl(verbaTotal)}
+            </span>
+            <span className="dir-chip c-org">
+              🎁 {regrasPremios.length} premiações ativas
+            </span>
+            {publicarBanner && (
+              <span className="dir-chip c-gray" style={{ fontSize: 11 }}>
+                Banner oficial ativo
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="dir-btn"
+            style={{
+              fontSize: 12,
+              padding: "4px 10px",
+              borderColor: secoesAbertas.campanha ? "var(--teal)" : "#CBD5E1",
+              background: "#fff",
+              fontWeight: 700,
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSecao("campanha");
+            }}
+          >
+            {secoesAbertas.campanha ? "▲ Minimizar Aba" : "▼ Expandir Aba"}
+          </button>
+        </div>
+
+        {secoesAbertas.campanha && (
+          <div className="sdg-accordion-body">
+            <div className="sdg-sec-title">
+              <span>Configuração da Campanha & Banners de Destaque</span>
+              <small>Dispara nos dashboards de corretores, gerentes e supers</small>
+            </div>
+
+            <div className="sdg-grid-config">
+              <div className="sdg-box" style={{ gridColumn: "span 2" }}>
+                <label className="dir-lbl">Nome da Ofensiva / Campanha de Incentivo da Tropa</label>
                 <input
-                  type="number"
-                  min={1}
-                  max={200}
-                  className="sdg-input-valor mono"
-                  style={{ background: "#fff", color: "var(--ink)", width: 90 }}
-                  value={metaAlvoSimulacao}
-                  onChange={(e) => setMetaAlvoSimulacao(Number(e.target.value))}
+                  type="text"
+                  className="sdg-input"
+                  value={titulo}
+                  onChange={(e) => setTitulo(e.target.value)}
+                  placeholder="Ex.: Campanha Aceleração Caixa · Lançamentos e Estoque"
                 />
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>vendas</span>
-                <div className="sdg-preset-btns">
-                  {[35, 45, 50, 60, 75, 100].map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      style={{
-                        background: metaAlvoSimulacao === v ? "var(--teal)" : "rgba(255,255,255,0.1)",
-                        color: "#fff",
-                        borderColor: "rgba(255,255,255,0.2)",
-                      }}
-                      onClick={() => setMetaAlvoSimulacao(v)}
+              </div>
+
+              <div className="sdg-box">
+                <label className="dir-lbl">Meta Geral de Vendas</label>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="number"
+                    min={1}
+                    className="sdg-input mono"
+                    value={metaVendas}
+                    onChange={(e) => setMetaVendas(Number(e.target.value))}
+                  />
+                  <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                    VGV ~ <b>{brl(metaVendas * ticketMedio)}</b>
+                  </span>
+                </div>
+              </div>
+
+              <div className="sdg-box" style={{ gridColumn: "span 3" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <label className="dir-lbl">Verba Total Disponível para a Operação</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                      Soma Alocada nos Supers: <b className="mono" style={{ color: "var(--teal)" }}>{brl(totalAlocado)}</b>
+                    </span>
+                    {totalAlocado !== verbaTotal && (
+                      <button
+                        type="button"
+                        className="dir-btn"
+                        style={{ fontSize: 11, padding: "3px 8px", color: "var(--teal)", borderColor: "var(--teal)" }}
+                        onClick={ajustarVerbaParaAlocado}
+                      >
+                        ⚡ Igualar Verba ao Total Alocado
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <input
+                    type="number"
+                    step={1000}
+                    className="sdg-input mono"
+                    style={{ maxWidth: 200 }}
+                    value={verbaTotal}
+                    onChange={(e) => setVerbaTotal(Number(e.target.value))}
+                  />
+                  <span style={{ fontSize: 16, fontWeight: 800, color: "var(--teal)" }}>
+                    {brl(verbaTotal)}
+                  </span>
+                  <span className={`dir-chip ${verbaTotal === totalAlocado ? "c-grn" : verbaTotal > totalAlocado ? "c-blue" : "c-red"}`}>
+                    {verbaTotal === totalAlocado
+                      ? "100% distribuído nos Supers ✓"
+                      : verbaTotal > totalAlocado
+                      ? `Sobra ${brl(verbaTotal - totalAlocado)} para distribuir`
+                      : `Orçamento estourado em ${brl(totalAlocado - verbaTotal)}`}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Premiações e Sorteios */}
+            <div className="sdg-box" style={{ background: "#F8FAFC", border: "1.5px solid #CBD5E1" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                <div>
+                  <span className="dir-lbl" style={{ color: "#D97706" }}>Premiação da Tropa (Banner Oficial no Dashboard)</span>
+                  <h4 style={{ fontSize: 15, fontWeight: 800, margin: "2px 0 0", color: "var(--ink)" }}>
+                    🏆 O que a Diretoria vai premiar ou sortear nesta campanha?
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  className="dir-btn"
+                  style={{ fontSize: 12, padding: "5px 10px", borderColor: "var(--teal)", color: "var(--teal)" }}
+                  onClick={adicionarPremio}
+                >
+                  + Adicionar Premiação / Sorteio
+                </button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+                {regrasPremios.map((r) => (
+                  <div
+                    key={r.id}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.5fr 1fr 140px auto",
+                      gap: 8,
+                      alignItems: "center",
+                      background: "#fff",
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "1px solid var(--line)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 14 }}>🎁</span>
+                      <input
+                        type="text"
+                        className="sdg-input"
+                        style={{ fontSize: 13 }}
+                        value={r.premio}
+                        onChange={(e) => atualizarPremio(r.id, { premio: e.target.value })}
+                        placeholder="Ex: PIX de R$ 500, iPhone 16 Pro, Notebook Dell..."
+                      />
+                    </div>
+
+                    <select
+                      className="sdg-input"
+                      style={{ fontSize: 12.5 }}
+                      value={r.gatilho}
+                      onChange={(e) => atualizarPremio(r.id, { gatilho: e.target.value as any })}
                     >
-                      {v} un
+                      <option value="venda_geral">Por cada venda confirmada</option>
+                      <option value="produto_especifico">Por venda em produto específico</option>
+                      <option value="meta_equipe">Ao bater a meta da equipe</option>
+                      <option value="sorteio">Sorteio da Tropa</option>
+                    </select>
+
+                    <select
+                      className="sdg-input"
+                      style={{ fontSize: 12.5 }}
+                      value={r.publico}
+                      onChange={(e) => atualizarPremio(r.id, { publico: e.target.value as any })}
+                    >
+                      <option value="BROKER">Só Corretores</option>
+                      <option value="MANAGER">Só Gerentes</option>
+                      <option value="TODOS">Toda a Tropa</option>
+                    </select>
+
+                    <button
+                      type="button"
+                      style={{ background: "none", border: 0, color: "var(--red)", cursor: "pointer", fontSize: 13 }}
+                      onClick={() => removerPremio(r.id)}
+                      title="Remover premiação"
+                    >
+                      ✕
                     </button>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
 
-              {/* Resultado do Plano Sugerido pela IA */}
-              <div className="sdg-reversa-grid">
-                <div className="sdg-reversa-card">
-                  <small>Verba Total Recomendada</small>
-                  <b>{brl(sugestaoIA.verbaSugeridaTotal)}</b>
-                  <span>Custo por venda ~{brl(sugestaoIA.custoPorVenda)}</span>
-                </div>
-                <div className="sdg-reversa-card">
-                  <small>Volume Mínimo no Funil</small>
-                  <b>~{sugestaoIA.leadsEst} leads · ~{sugestaoIA.visitasEst} visitas</b>
-                  <span>exige ~{sugestaoIA.pastasEst} pastas montadas</span>
-                </div>
-                <div className="sdg-reversa-card">
-                  <small>Força de Vendas Exigida</small>
-                  <b>{sugestaoIA.corretoresMinimos} corretores ativos</b>
-                  <span>bônus de prêmio sugerido: +{sugestaoIA.bonusTropa}%</span>
-                </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 12.5, color: "var(--ink-2)" }}>
+                <input
+                  type="checkbox"
+                  id="pubBanner"
+                  checked={publicarBanner}
+                  onChange={(e) => setPublicarBanner(e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: "var(--teal)" }}
+                />
+                <label htmlFor="pubBanner" style={{ cursor: "pointer", fontWeight: 600 }}>
+                  Publicar automaticamente banner com estas premiações em destaque nos dashboards de todos os Corretores, Gerentes e Supers.
+                </label>
               </div>
+            </div>
+          </div>
+        )}
+      </div>
 
-              {/* Tabela comparativa do mix sugerido */}
-              <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 12, fontSize: 12.5 }}>
-                <div style={{ fontWeight: 700, color: "#FBBF24", marginBottom: 6 }}>
-                  Divisão Recomendada do Orçamento para {sugestaoIA.alvo} Vendas:
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
-                  <div>📢 Anúncios: <b>{brl(sugestaoIA.alocacoes.anuncio)}</b></div>
-                  <div>🎪 Rua & Tenda: <b>{brl(sugestaoIA.alocacoes.rua)}</b></div>
-                  <div>🚪 PAP: <b>{brl(sugestaoIA.alocacoes.pap)}</b></div>
-                  <div>📞 Oferta Ativa: <b>{brl(sugestaoIA.alocacoes.oferta_ativa)}</b></div>
-                  <div>🏆 Prêmios Tropa: <b>{brl(sugestaoIA.alocacoes.premios)}</b></div>
-                </div>
+      {/* ── 3. ALOCAÇÃO DE VERBA POR SUPERINTENDENTE & CESTA DE PRODUTOS ── */}
+      <div className={`sdg-accordion-card${secoesAbertas.alocacao ? " ativo" : ""}`}>
+        <div
+          className={`sdg-accordion-hd${secoesAbertas.alocacao ? " aberto" : ""}`}
+          onClick={() => toggleSecao("alocacao")}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 18 }}>🏢</span>
+            <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
+              3. Alocação de Verba por Superintendente & Cesta de Produtos
+            </h3>
+            <span className="dir-chip c-blue">
+              👥 {equipesAtivas.length} Supers ativos
+            </span>
+            <span className="dir-chip c-grn">
+              💰 {brl(totalAlocado)} alocados
+            </span>
+            <span className="sdg-tipo-pill lancamento">
+              🚀 {totalItensLancamento} lançamentos
+            </span>
+            <span className="sdg-tipo-pill estoque">
+              🏢 {totalItensEstoque} estoques
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="dir-btn"
+            style={{
+              fontSize: 12,
+              padding: "4px 10px",
+              borderColor: secoesAbertas.alocacao ? "var(--teal)" : "#CBD5E1",
+              background: "#fff",
+              fontWeight: 700,
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSecao("alocacao");
+            }}
+          >
+            {secoesAbertas.alocacao ? "▲ Minimizar Aba" : "▼ Expandir Aba"}
+          </button>
+        </div>
+
+        {secoesAbertas.alocacao && (
+          <div className="sdg-accordion-body">
+            <div className="sdg-sec-title">
+              <span>Cesta de Produtos por Equipe</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span>Total Alocado: <b className="mono" style={{ color: "var(--teal)" }}>{brl(totalAlocado)}</b></span>
+                <span className="dir-chip c-blue">{equipesAtivas.length} Supers na Campanha</span>
               </div>
+            </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12, color: "#9FB3CC" }}>
-                  Aplica a meta de {sugestaoIA.alvo} vendas e a verba recomendada no orçamento:
+            {/* Seletor rápido de quem participa */}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--ink-3)" }}>Supers Participantes:</span>
+              {supers.map((s) => {
+                const ativa = supersSelecionados.has(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`dir-chip ${ativa ? "c-grn" : "c-gray"}`}
+                    style={{ cursor: "pointer", fontSize: 12, padding: "5px 10px", border: ativa ? "1.5px solid var(--teal)" : "1px solid var(--line)" }}
+                    onClick={() => toggleSuper(s.id)}
+                  >
+                    {s.nome} {ativa ? "✓" : "+ incluir"}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* CARDS INDIVIDUAIS DE CADA SUPERINTENDENTE COM SUA CESTA DE PRODUTOS */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              {equipesAtivas.map((s) => {
+                const sub = subtotaisPorSuper[s.id] || { total: 0, lancamentos: 0, nLancamentos: 0, estoques: 0, nEstoques: 0 };
+                const itens = itensPorSuper[s.id] || [];
+                const metaSuperPessoa = metaSuper?.get(s.id)?.dono.meta;
+                const corrSuper = s.gerentes.flatMap((g) => g.corretores_lista).length;
+
+                return (
+                  <div key={s.id} className="sdg-super-card">
+                    {/* Cabeçalho do Super */}
+                    <div className="sdg-super-card-hd">
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 18 }}>👤</span>
+                          <h3 style={{ fontSize: 17, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
+                            {s.nome}
+                          </h3>
+                          {metaSuperPessoa != null && (
+                            <span className="dir-chip c-blue" style={{ fontWeight: 700 }}>
+                              🎯 Meta: {metaSuperPessoa} vendas
+                            </span>
+                          )}
+                          <span className="dir-chip c-gray" style={{ fontSize: 11 }}>
+                            {s.gerentes.length} gerentes · {corrSuper} corretores
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12.5, color: "var(--ink-3)", marginTop: 4 }}>
+                          Distribua a verba do superintendente entre Lançamentos Futuros e Produtos de Estoque Junix:
+                        </div>
+                      </div>
+
+                      {/* Subtotais e Botões de Ação do Super */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <div className="sdg-super-card-subtotais">
+                          <span className="sdg-tipo-pill lancamento">
+                            🚀 Lançamentos: {brl(sub.lancamentos)} ({sub.nLancamentos})
+                          </span>
+                          <span className="sdg-tipo-pill estoque">
+                            🏢 Estoque: {brl(sub.estoques)} ({sub.nEstoques})
+                          </span>
+                          <span style={{ fontSize: 15, fontWeight: 800, color: "var(--teal)", marginLeft: 4 }}>
+                            Total: {brl(sub.total)}
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            className="dir-btn"
+                            style={{ fontSize: 11.5, padding: "5px 8px", borderColor: "#A855F7", color: "#7E22CE", background: "#FAF5FF" }}
+                            onClick={() => adicionarLancamento(s.id)}
+                          >
+                            + Lançamento Futuro
+                          </button>
+                          <button
+                            type="button"
+                            className="dir-btn"
+                            style={{ fontSize: 11.5, padding: "5px 8px", borderColor: "#0284C7", color: "#0369A1", background: "#F0F9FF" }}
+                            onClick={() => adicionarEstoque(s.id)}
+                          >
+                            + Produto de Estoque
+                          </button>
+                          <button
+                            type="button"
+                            className="dir-btn"
+                            style={{ fontSize: 11.5, padding: "5px 8px", borderColor: "var(--teal)", color: "var(--teal)" }}
+                            onClick={() => dividirEm5Estoques(s.id, 2000)}
+                            title="Adiciona 5 produtos do Junix com R$ 2.000 cada automaticamente"
+                          >
+                            ⚡ 5 Estoques Rápidos (R$ 2k cada)
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tabela da Cesta de Projetos do Super */}
+                    {itens.length === 0 ? (
+                      <div style={{ padding: 16, textAlign: "center", background: "#F8FAFC", borderRadius: 8, color: "var(--ink-3)", fontSize: 13 }}>
+                        Nenhum produto alocado para {s.nome.split(" ")[0]} ainda. Clique nos botões acima para adicionar Lançamentos ou Estoques!
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {/* Cabeçalho da tabela */}
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "130px 1.5fr 1.3fr 1fr 140px 32px",
+                            gap: 8,
+                            padding: "0 10px",
+                            fontSize: 10.5,
+                            fontWeight: 700,
+                            color: "var(--ink-3)",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          <span>Tipo</span>
+                          <span>Produto / Lançamento</span>
+                          <span>Frente / Canal Tático</span>
+                          <span>Gerência Responsável</span>
+                          <span>Verba (R$)</span>
+                          <span />
+                        </div>
+
+                        {/* Linhas da cesta */}
+                        {itens.map((it) => (
+                          <div key={it.id} className="sdg-cesta-row">
+                            {/* 1. Tipo de Produto */}
+                            <div>
+                              <select
+                                className="sdg-input"
+                                style={{
+                                  fontSize: 11.5,
+                                  padding: "4px 6px",
+                                  fontWeight: 700,
+                                  borderColor: it.tipo === "lancamento" ? "#D8B4FE" : "#BAE6FD",
+                                  background: it.tipo === "lancamento" ? "#FAF5FF" : "#F0F9FF",
+                                  color: it.tipo === "lancamento" ? "#7E22CE" : "#0369A1",
+                                }}
+                                value={it.tipo}
+                                onChange={(e) => atualizarItem(s.id, it.id, { tipo: e.target.value as any })}
+                              >
+                                <option value="lancamento">🚀 Lançamento</option>
+                                <option value="estoque">🏢 Estoque</option>
+                              </select>
+                            </div>
+
+                            {/* 2. Nome do Produto (Select se estoque, Input se lançamento) */}
+                            <div>
+                              {it.tipo === "lancamento" ? (
+                                <input
+                                  type="text"
+                                  className="sdg-input"
+                                  style={{ fontSize: 12.5, padding: "5px 8px" }}
+                                  placeholder="Digite o nome do lançamento futuro (ex: Cury Mooca...)"
+                                  value={it.produto}
+                                  onChange={(e) => atualizarItem(s.id, it.id, { produto: e.target.value })}
+                                />
+                              ) : (
+                                <select
+                                  className="sdg-input"
+                                  style={{ fontSize: 12.5, padding: "5px 8px" }}
+                                  value={it.produto}
+                                  onChange={(e) => atualizarItem(s.id, it.id, { produto: e.target.value })}
+                                >
+                                  <option value="">Selecione o produto de estoque...</option>
+                                  {estoqueOrdenado.map((e) => (
+                                    <option key={e.cod_empreendimento} value={e.empreendimento}>
+                                      {e.empreendimento.replace(/^CONDOM[IÍ]NIO\s+/i, "")} ({e.disponiveis} disp.)
+                                    </option>
+                                  ))}
+                                  <option value="Outro Estoque">✏️ Outro Estoque (digitar)</option>
+                                </select>
+                              )}
+                            </div>
+
+                            {/* 3. Canal / Frente Tática */}
+                            <div>
+                              <select
+                                className="sdg-input"
+                                style={{ fontSize: 12, padding: "5px 8px" }}
+                                value={it.canal}
+                                onChange={(e) => atualizarItem(s.id, it.id, { canal: e.target.value as any })}
+                              >
+                                {ACOES_CATALOGO.map((a) => (
+                                  <option key={a.key} value={a.key}>
+                                    {a.icone} {a.nome}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* 4. Gerente Responsável */}
+                            <div>
+                              <select
+                                className="sdg-input"
+                                style={{ fontSize: 11.5, padding: "5px 8px" }}
+                                value={it.gerenteId || ""}
+                                onChange={(e) => atualizarItem(s.id, it.id, { gerenteId: e.target.value })}
+                              >
+                                <option value="">Toda a Superintendência</option>
+                                {s.gerentes.map((g) => (
+                                  <option key={g.id} value={g.id}>
+                                    Gerência {g.nome} ({g.corretores} corr.)
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* 5. Valor R$ */}
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              <span className="mono" style={{ fontSize: 11, color: "var(--ink-3)" }}>R$</span>
+                              <input
+                                type="number"
+                                step={500}
+                                min={0}
+                                className="sdg-input mono"
+                                style={{ padding: "4px 8px", fontSize: 13, fontWeight: 700 }}
+                                value={it.valor}
+                                onChange={(e) => atualizarItem(s.id, it.id, { valor: Number(e.target.value) })}
+                              />
+                            </div>
+
+                            {/* 6. Ação Remover */}
+                            <button
+                              type="button"
+                              style={{
+                                background: "none",
+                                border: 0,
+                                color: "var(--red)",
+                                cursor: "pointer",
+                                fontSize: 14,
+                                textAlign: "center",
+                              }}
+                              onClick={() => removerItem(s.id, it.id)}
+                              title="Remover produto da verba"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Resumo Consolidado dos Canais */}
+            <div style={{ background: "var(--sunk)", borderRadius: 12, padding: 14, border: "1px solid var(--line)", marginTop: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)", marginBottom: 8 }}>
+                📊 Consolidação do Orçamento por Frente Tática (Soma de todos os produtos alocados):
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+                {ACOES_CATALOGO.map((a) => {
+                  const v = alocacoes[a.key] || 0;
+                  const pct = totalAlocado > 0 ? Math.round((v / totalAlocado) * 100) : 0;
+                  return (
+                    <div key={a.key} style={{ background: "#fff", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 12, fontWeight: 700 }}>{a.icone} {a.nome.split(" ")[0]}</span>
+                        <span className="dir-chip c-gray" style={{ fontSize: 10 }}>{pct}%</span>
+                      </div>
+                      <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: "var(--ink)", marginTop: 4 }}>
+                        {brl(v)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 4. PAINEL PREDITIVO DA IA (RETORNO ESTIMADO & ROI) ── */}
+      <div className={`sdg-accordion-card${secoesAbertas.preditivo ? " ativo" : ""}`}>
+        <div
+          className={`sdg-accordion-hd${secoesAbertas.preditivo ? " aberto" : ""}`}
+          onClick={() => toggleSecao("preditivo")}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 18 }}>🧠</span>
+            <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
+              4. Inteligência Preditiva Comandra & ROI do Mix Estratégico
+            </h3>
+            <span className={`dir-chip ${projecoes.vendasTotais >= metaVendas ? "c-grn" : "c-org"}`}>
+              🔮 Projeção: {projecoes.vendasTotais} vendas
+            </span>
+            <span className="dir-chip c-blue">
+              VGV ~{brl(projecoes.vgvProjetado)}
+            </span>
+            <span className="dir-chip c-gray" style={{ fontSize: 11 }}>
+              Custo/venda: {projecoes.custoPorVenda ? brl(projecoes.custoPorVenda) : "—"}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="dir-btn"
+            style={{
+              fontSize: 12,
+              padding: "4px 10px",
+              borderColor: secoesAbertas.preditivo ? "var(--teal)" : "#CBD5E1",
+              background: "#fff",
+              fontWeight: 700,
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSecao("preditivo");
+            }}
+          >
+            {secoesAbertas.preditivo ? "▲ Minimizar Aba" : "▼ Expandir Aba"}
+          </button>
+        </div>
+
+        {secoesAbertas.preditivo && (
+          <div className="sdg-accordion-body" style={{ background: "#0F1B2D", borderRadius: 12, padding: 18, margin: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+              <div>
+                <span className="dir-lbl" style={{ color: "#9FB3CC" }}>Inteligência Preditiva Comandra</span>
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: "#fff", margin: "4px 0 0" }}>
+                  Projeção de Retorno do Mix Estratégico
+                </h3>
+              </div>
+              <div className="sdg-roi-chips">
+                <span className={`dir-chip ${projecoes.vendasTotais >= metaVendas ? "c-grn" : "c-org"}`}>
+                  {projecoes.vendasTotais >= metaVendas ? "✓ Mix Sustenta a Meta" : "⚠️ Mix Abaixo da Meta"}
                 </span>
+              </div>
+            </div>
+
+            <div className="sdg-roi-grid">
+              <div className="sdg-roi-metric">
+                <small>Vendas Projetadas</small>
+                <div className="val">{projecoes.vendasTotais} <span style={{ fontSize: 14, fontWeight: 500, color: "#9FB3CC" }}>vendas</span></div>
+                <div className="sub">
+                  {projecoes.vendasAnuncio} anúncio · {projecoes.vendasRua} rua · {projecoes.vendasPap} pap · {projecoes.vendasAtiva} ativa
+                </div>
+              </div>
+
+              <div className="sdg-roi-metric">
+                <small>VGV Estimado</small>
+                <div className="val">{brl(projecoes.vgvProjetado)}</div>
+                <div className="sub">ticket médio de {brl(ticketMedio)}</div>
+              </div>
+
+              <div className="sdg-roi-metric">
+                <small>Custo por Venda</small>
+                <div className="val">{projecoes.custoPorVenda ? brl(projecoes.custoPorVenda) : "—"}</div>
+                <div className="sub">investimento total ÷ vendas projetadas</div>
+              </div>
+
+              <div className="sdg-roi-metric">
+                <small>Gás de Premiação</small>
+                <div className="val" style={{ color: "#34D399" }}>
+                  +{Math.round(projecoes.bonusPremios * 100)}%
+                </div>
+                <div className="sub">estímulo direto na ativação da tropa</div>
+              </div>
+            </div>
+
+            {/* Parecer Estratégico da IA */}
+            <div className="sdg-ia-box">
+              <b>🧠 Veredito da IA para esta Reunião:</b>
+              <p style={{ margin: "4px 0 0", fontSize: 13, lineHeight: 1.5, color: "#E2E8F0" }}>
+                {projecoes.vendasTotais >= metaVendas ? (
+                  <>
+                    O mix de <b>{brl(totalAlocado)}</b> está matematicamente dimensionado para atingir <b>{projecoes.vendasTotais} vendas</b> (superando a meta de {metaVendas}).
+                    As {equipesAtivas.length} equipes selecionadas somam {totalCorretoresAtivos} corretores, garantindo braço suficiente para atender os ~{projecoes.leadsAnuncio} leads digitais e as ~{projecoes.visitasRua} visitas presenciais nos produtos alocados.
+                  </>
+                ) : (
+                  <>
+                    Atenção: com a configuração atual, o mix projeta <b>{projecoes.vendasTotais} vendas</b>, o que deixa um <b>déficit de {metaVendas - projecoes.vendasTotais} vendas</b> contra a meta de {metaVendas}.
+                    {alocacoes.premios === 0 ? " Sugestão: adicione verba de premiação para a tropa para acelerar aprovação de crédito na Caixa." : " Sugestão: adicione mais lançamentos futuros ou aumente a verba de anúncios digitais e ações de rua."}
+                  </>
+                )}
+              </p>
+            </div>
+
+            {/* Simulador Interativo de Meta Alvo ("Quero Chegar em XX Vendas") */}
+            <div className="sdg-reversa-box">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                <div>
+                  <span className="dir-lbl" style={{ color: "#FBBF24" }}>Simulador de Engenharia Reversa da IA</span>
+                  <h4 style={{ fontSize: 16, fontWeight: 800, margin: "2px 0 0", color: "#fff" }}>
+                    🎯 E se eu quiser bater uma meta específica? O que a IA sugere?
+                  </h4>
+                </div>
                 <button
                   type="button"
                   className="dir-btn"
                   style={{
-                    background: "#F59E0B",
-                    color: "#0F1B2D",
-                    fontWeight: 800,
-                    border: 0,
-                    padding: "8px 16px",
+                    background: "rgba(255, 255, 255, 0.1)",
+                    color: "#fff",
+                    borderColor: "rgba(255, 255, 255, 0.2)",
+                    fontSize: 12.5,
                   }}
-                  onClick={aplicarSugestaoIA}
+                  onClick={() => setMostrarSimulador(!mostrarSimulador)}
                 >
-                  ✨ Aplicar Sugestão da IA no Orçamento
+                  {mostrarSimulador ? "Recolher Simulador ▲" : "Simular Meta Alvo (ex: 50, 60 vendas) ▼"}
                 </button>
               </div>
+
+              {mostrarSimulador && (
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, color: "#9FB3CC", fontWeight: 600 }}>Quero chegar em:</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={200}
+                      className="sdg-input-valor mono"
+                      style={{ background: "#fff", color: "var(--ink)", width: 90 }}
+                      value={metaAlvoSimulacao}
+                      onChange={(e) => setMetaAlvoSimulacao(Number(e.target.value))}
+                    />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>vendas</span>
+                    <div className="sdg-preset-btns">
+                      {[35, 45, 50, 60, 75, 100].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          style={{
+                            background: metaAlvoSimulacao === v ? "var(--teal)" : "rgba(255,255,255,0.1)",
+                            color: "#fff",
+                            borderColor: "rgba(255,255,255,0.2)",
+                          }}
+                          onClick={() => setMetaAlvoSimulacao(v)}
+                        >
+                          {v} un
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Resultado do Plano Sugerido pela IA */}
+                  <div className="sdg-reversa-grid">
+                    <div className="sdg-reversa-card">
+                      <small>Verba Total Recomendada</small>
+                      <b>{brl(sugestaoIA.verbaSugeridaTotal)}</b>
+                      <span>Custo por venda ~{brl(sugestaoIA.custoPorVenda)}</span>
+                    </div>
+                    <div className="sdg-reversa-card">
+                      <small>Volume Mínimo no Funil</small>
+                      <b>~{sugestaoIA.leadsEst} leads · ~{sugestaoIA.visitasEst} visitas</b>
+                      <span>exige ~{sugestaoIA.pastasEst} pastas montadas</span>
+                    </div>
+                    <div className="sdg-reversa-card">
+                      <small>Força de Vendas Exigida</small>
+                      <b>{sugestaoIA.corretoresMinimos} corretores ativos</b>
+                      <span>bônus de prêmio sugerido: +{sugestaoIA.bonusTropa}%</span>
+                    </div>
+                  </div>
+
+                  {/* Tabela comparativa do mix sugerido */}
+                  <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 12, fontSize: 12.5 }}>
+                    <div style={{ fontWeight: 700, color: "#FBBF24", marginBottom: 6 }}>
+                      Divisão Recomendada do Orçamento para {sugestaoIA.alvo} Vendas:
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8 }}>
+                      <div>📢 Anúncios: <b>{brl(sugestaoIA.alocacoes.anuncio)}</b></div>
+                      <div>🎪 Rua & Tenda: <b>{brl(sugestaoIA.alocacoes.rua)}</b></div>
+                      <div>🚪 PAP: <b>{brl(sugestaoIA.alocacoes.pap)}</b></div>
+                      <div>📞 Oferta Ativa: <b>{brl(sugestaoIA.alocacoes.oferta_ativa)}</b></div>
+                      <div>🏆 Prêmios Tropa: <b>{brl(sugestaoIA.alocacoes.premios)}</b></div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, color: "#9FB3CC" }}>
+                      Aplica a meta de {sugestaoIA.alvo} vendas e a verba recomendada no orçamento:
+                    </span>
+                    <button
+                      type="button"
+                      className="dir-btn"
+                      style={{
+                        background: "#F59E0B",
+                        color: "#0F1B2D",
+                        fontWeight: 800,
+                        border: 0,
+                        padding: "8px 16px",
+                      }}
+                      onClick={aplicarSugestaoIA}
+                    >
+                      ✨ Aplicar Sugestão da IA no Orçamento
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* ── 5. BOTÕES DE FECHAMENTO & DISPARO PARA OS SUPERS ── */}
-      <div className="sdg-footer">
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-3)" }}>
-            Disparar Acordo Completo no WhatsApp:
-          </span>
-          {equipesAtivas.map((s) => (
-            <button
-              key={s.id}
-              className="dir-btn"
-              style={{ fontSize: 12, padding: "6px 10px" }}
-              onClick={() =>
-                setModalWpp({
-                  superNome: s.nome,
-                  telefone: s.phone ?? null,
-                  mensagem: gerarMensagemSuper(s),
-                })
-              }
-            >
-              📱 Enviar para {s.nome.split(" ")[0]}
-            </button>
-          ))}
+      <div className={`sdg-accordion-card${secoesAbertas.fechamento ? " ativo" : ""}`}>
+        <div
+          className={`sdg-accordion-hd${secoesAbertas.fechamento ? " aberto" : ""}`}
+          onClick={() => toggleSecao("fechamento")}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 18 }}>📱</span>
+            <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--ink)" }}>
+              5. Fechamento Formal & Termo WhatsApp de cada Super
+            </h3>
+            <span className="dir-chip c-blue">
+              {equipesAtivas.length} termos prontos para WhatsApp
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="dir-btn"
+            style={{
+              fontSize: 12,
+              padding: "4px 10px",
+              borderColor: secoesAbertas.fechamento ? "var(--teal)" : "#CBD5E1",
+              background: "#fff",
+              fontWeight: 700,
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSecao("fechamento");
+            }}
+          >
+            {secoesAbertas.fechamento ? "▲ Minimizar Aba" : "▼ Expandir Aba"}
+          </button>
         </div>
 
-        <button
-          className="dir-btn solid"
-          style={{ padding: "10px 20px", fontSize: 14, minHeight: 42 }}
-          disabled={salvando}
-          onClick={salvarCampanha}
-        >
-          {salvando ? "Gravando no Sistema…" : "💾 Salvar Campanha & Publicar Premiação na Tropa"}
-        </button>
+        {secoesAbertas.fechamento && (
+          <div className="sdg-accordion-body">
+            <div className="sdg-footer" style={{ borderTop: 0, padding: 0, marginTop: 0 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-3)" }}>
+                  Disparar Acordo Completo no WhatsApp:
+                </span>
+                {equipesAtivas.map((s) => (
+                  <button
+                    key={s.id}
+                    className="dir-btn"
+                    style={{ fontSize: 12, padding: "6px 10px" }}
+                    onClick={() =>
+                      setModalWpp({
+                        superNome: s.nome,
+                        telefone: s.phone ?? null,
+                        mensagem: gerarMensagemSuper(s),
+                      })
+                    }
+                  >
+                    📱 Enviar para {s.nome.split(" ")[0]}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                className="dir-btn solid"
+                style={{ padding: "10px 20px", fontSize: 14, minHeight: 42 }}
+                disabled={salvando}
+                onClick={salvarCampanha}
+              >
+                {salvando ? "Gravando no Sistema…" : "💾 Salvar Campanha & Publicar Premiação na Tropa"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* MODAL DE ENVIO DO ACORDO VIA WHATSAPP */}

@@ -29,7 +29,7 @@ export interface Combinar { sobre: string; pergunta: number; titulo: string; res
 type MetaPainel = { dono: PessoaMeta; filhos: PessoaMeta[] };
 
 export default function Estrategia({ diretorId, supers, pastas }: { diretorId: string; supers: SuperDiretoria[]; pastas: PastaJunix[] }) {
-  const [visao, setVisao] = useState<"minhas_estrategias" | "sala_de_guerra" | "diagnostico">("minhas_estrategias");
+  const [visao, setVisao] = useState<"sala_de_guerra" | "diagnostico" | "minhas_estrategias">("sala_de_guerra");
   const [conselhoAberto, setConselhoAberto] = useState(false);
   const [combinar, setCombinar] = useState<Combinar | null>(null);
   const hoje = new Date();
@@ -124,13 +124,6 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div className="dir-per" style={{ background: "#E2E8F0", padding: 4 }}>
           <button
-            className={visao === "minhas_estrategias" ? "on" : ""}
-            onClick={() => setVisao("minhas_estrategias")}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
-          >
-            <span>🎯</span> Minhas Estratégias (Lançamentos & Estoque)
-          </button>
-          <button
             className={visao === "sala_de_guerra" ? "on" : ""}
             onClick={() => setVisao("sala_de_guerra")}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
@@ -144,19 +137,24 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
           >
             <span>🧠</span> Conselho IA & Diagnóstico (5 Perguntas)
           </button>
+          <button
+            className={visao === "minhas_estrategias" ? "on" : ""}
+            onClick={() => setVisao("minhas_estrategias")}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
+          >
+            <span>🎯</span> Minhas Estratégias (Lançamentos & Estoque)
+          </button>
         </div>
         <span style={{ fontSize: 12.5, color: "var(--ink-3)", fontWeight: 500 }}>
-          {visao === "minhas_estrategias"
-            ? "Portfólio de Produtos, Lançamentos e Estoque do Diretor"
-            : visao === "sala_de_guerra"
+          {visao === "sala_de_guerra"
             ? "Modo Reunião Tática com os Superintendentes"
-            : "Modo Rotina Executiva & Auditoria Semanal"}
+            : visao === "diagnostico"
+            ? "Modo Rotina Executiva & Auditoria Semanal"
+            : "Portfólio de Produtos, Lançamentos e Estoque do Diretor"}
         </span>
       </div>
 
-      {visao === "minhas_estrategias" ? (
-        <MinhaEstrategia diretorId={diretorId} supers={supers} />
-      ) : visao === "sala_de_guerra" ? (
+      {visao === "sala_de_guerra" ? (
         <SalaDeGuerraCampanha
           diretorId={diretorId}
           supers={supers}
@@ -168,7 +166,7 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
           diasMes={diasMes}
           abrir={abrir}
         />
-      ) : (
+      ) : visao === "diagnostico" ? (
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
             <button
@@ -201,6 +199,8 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
           <Pergunta4 supers={supers} linha={linha} carregando={!c30} abrir={abrir} />
           <Pergunta5 abrir={abrir} />
         </>
+      ) : (
+        <MinhaEstrategia diretorId={diretorId} supers={supers} />
       )}
 
       {combinar && <CombinarAcao diretorId={diretorId} c={combinar} fechar={() => setCombinar(null)} />}
