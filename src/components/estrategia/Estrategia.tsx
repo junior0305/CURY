@@ -16,6 +16,7 @@ import Conselho from "./Conselho";
 import SalaDeGuerraCampanha from "./SalaDeGuerraCampanha";
 import MinhaEstrategia from "./MinhaEstrategia";
 import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
+import { empresa } from "@/lib/empresa";
 
 const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
 const dm = (d: string | null | undefined) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : "—");
@@ -89,7 +90,7 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
         },
         superintendencias: supers.map((s) => { const m = metaSuper.get(s.id); return { nome: s.nome, meta: m?.dono.meta ?? null, vendido: m?.dono.realizado ?? 0,
           projecao_no_ritmo: proj(m?.dono.realizado ?? 0), gerentes: (m?.filhos ?? []).filter((f) => f.papel === "MANAGER").map((g) => ({ nome: g.nome, meta: g.meta, vendido: g.realizado })) }; }),
-        observacao: "vendas da Adajes de antes de 12/10 aparecem no vendido dela mas não contam no placar da diretoria",
+        observacao: empresa().notas_ia.join(" · "),
       },
       funil_30_dias: (() => {
         const ls30 = c30?.linhas ?? [];
@@ -102,8 +103,8 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
           visitas_lancadas_no_c2s: ls30.reduce((a, l) => a + l.visitas, 0),
           pastas_cadastradas: pastas.filter((p) => p.cadastrada_em && new Date(p.cadastrada_em).getTime() >= desde).length,
           vendas: Math.round(ls30.reduce((a, l) => a + l.vendas, 0) * 10) / 10,
-          corretores: { no_comandra: supers.reduce((a, x) => a + x.gerentes.reduce((b, g) => b + g.corretores, 0), 0), so_no_c2s_adajes_silva: c2sCor },
-          observacoes: "visitas só existem para a Liliane (Adajes e Silva sem conta no Comandra, Felipe sem plantão no C2S); pastas cadastradas = pastas abertas hoje no Junix cadastradas nos últimos 30 dias (as que já viraram venda ou foram arquivadas não entram)",
+          corretores: { no_comandra: supers.reduce((a, x) => a + x.gerentes.reduce((b, g) => b + g.corretores, 0), 0), so_no_c2s_sem_conta_no_comandra: c2sCor },
+          observacoes: [...empresa().notas_ia, "pastas cadastradas = pastas abertas hoje no Junix cadastradas nos últimos 30 dias (as que já viraram venda ou foram arquivadas não entram)"].join("; "),
         };
       })(),
       pastas: { total: rp.total, clientes: rp.clientes, vivas: rp.vivas, previsao_de_vendas_no_mes: Math.round(rp.previsao * 10) / 10,

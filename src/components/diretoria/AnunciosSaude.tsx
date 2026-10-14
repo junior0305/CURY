@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { SuperDiretoria } from "@/hooks/useDiretoria";
+import { empresa } from "@/lib/empresa";
 
 type Alerta = { g: "red" | "org" | "grn"; tipo: string; titulo: string; detalhe: string; acao: "super" | "trafego" };
 type Anuncio = { id: string; nome: string; status: string; gasto: number; leads: number; impr: number };
@@ -156,7 +157,7 @@ export default function AnunciosSaude({ diretorId, supers }: { diretorId: string
           })}
         </tbody>
       </table></div>
-      <p className="dir-nota" style={{ margin: 0 }}>Referência da casa (média das contas da Econ em 7 dias): {brl(contas[0]?.dados.casa?.cpl ?? 0)} por lead de formulário, {brl(contas[0]?.dados.casa?.cpc ?? 0)} por conversa no WhatsApp e {brl(contas[0]?.dados.casa?.cpm ?? 0)} por mil impressões. Lead e conversa não se comparam: conversa é mais barata e menos qualificada. "Chegaram" conta só as páginas ligadas a cada conta; anúncio de uma equipe em página de outra aparece na conta dona da página.</p>
+      <p className="dir-nota" style={{ margin: 0 }}>Referência da casa (média das contas{empresa().nome ? ` da ${empresa().nome}` : ""} em 7 dias): {brl(contas[0]?.dados.casa?.cpl ?? 0)} por lead de formulário, {brl(contas[0]?.dados.casa?.cpc ?? 0)} por conversa no WhatsApp e {brl(contas[0]?.dados.casa?.cpm ?? 0)} por mil impressões. Lead e conversa não se comparam: conversa é mais barata e menos qualificada. "Chegaram" conta só as páginas ligadas a cada conta; anúncio de uma equipe em página de outra aparece na conta dona da página.</p>
     </section>
   );
 }

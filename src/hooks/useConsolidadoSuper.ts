@@ -14,6 +14,7 @@
 import { superJunix } from "@/hooks/useDiretoria";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { empresa } from "@/lib/empresa";
 
 export type OrigemLead = "anuncio" | "disparo" | "pescados" | "outros";
 
@@ -36,10 +37,9 @@ export interface LinhaConsolidado {
 const chave = (s: string | null | undefined) =>
   (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase()
     .replace(/\bBN\b/g, "").replace(/[^A-Z ]/g, " ").trim().split(/\s+/)[0] ?? "";
-const APELIDO: Record<string, string> = { OTAVIONETO: "JAGUAR" };
 const chaveGer = (s: string | null | undefined) => {
   const k = (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z]/g, "");
-  return APELIDO[k] ?? chave(s);
+  return empresa().apelidos_gerente[k] ?? chave(s);
 };
 const diaSP = (ms: number) => new Date(ms - 3 * 3600 * 1000).toISOString().slice(0, 10);
 

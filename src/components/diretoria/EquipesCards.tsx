@@ -13,6 +13,7 @@ import type { LinhaConsolidado } from "@/hooks/useConsolidadoSuper";
 import { useMetasDiretoria, chaveGerente, chaveNome, colado, superJunix, diaSP, gerenteC2S, nomesSuperC2S,
   type SuperDiretoria } from "@/hooks/useDiretoria";
 import { CombinarAcao, type Combinar } from "@/components/estrategia/Estrategia";
+import { empresa } from "@/lib/empresa";
 
 // Referências da casa (aprovadas no protótipo de 13/10)
 const REF = { presenca: 0.6, plantoesMes: 12, plantoesPorVisita: 8, conversao: 0.4 };
@@ -74,7 +75,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
       };
       for (const r of rows) {
         const c = chaveNome(r.corretor);
-        if (/gilberto/i.test(String(r.diretor ?? ""))) add(`g:${chaveGerente(gerenteC2S(r.gerente))}`, r.dia, c);
+        if (String(r.diretor ?? "") === empresa().diretoria_c2s) add(`g:${chaveGerente(gerenteC2S(r.gerente))}`, r.dia, c);
         add(`s:${r.superintendente}|${gerenteC2S(r.gerente)}`, r.dia, c);
       }
       return new Map([...m.entries()].map(([k, v]) => [k, v.map((x) => x.size)]));

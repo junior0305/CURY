@@ -9,6 +9,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { empresa } from "@/lib/empresa";
 
 /** Pasta parada há esse tanto de dias na mesma etapa merece cobrança. */
 export const DIAS_TRAVADA = 7;
@@ -78,10 +79,9 @@ const chave = (s: string | null | undefined) =>
   normNome(s ?? "").replace(/\bBN\b/g, "").trim().split(" ")[0] ?? "";
 
 /** Gerente no Junix: apelidos mapeados (ex.: "OTAVIONETO" = Jaguar no Comandra). */
-const APELIDO_GER: Record<string, string> = { OTAVIONETO: "JAGUAR" };
 const chaveGer = (g: string | null | undefined) => {
   const k = normNome(g ?? "").replace(/\s/g, "");
-  return APELIDO_GER[k] ?? chave(g);
+  return empresa().apelidos_gerente[k] ?? chave(g);
 };
 
 const titulo = (s: string) =>

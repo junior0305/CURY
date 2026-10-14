@@ -21,6 +21,7 @@ import MetaCascata from "@/components/manager-v10/MetaCascata";
 import type { Lead, LeadStatus, LostReason } from "@/types/lead";
 import { TIPO_TRABALHO_LABEL, LOST_REASON_LABEL } from "@/types/lead";
 import { useUnidadesFecha } from "@/hooks/useEstrategia";
+import { empresa } from "@/lib/empresa";
 
 // ── stages do funil (iguais ao Atender atual) ───────────────────────────────
 const STAGES: [LeadStatus, string][] = [
@@ -533,7 +534,7 @@ const CorretorPainel = () => {
                             <div><div className="kpi-label">Caixa libera</div><div className="kpi-num">{fechaInfo ? brl(fechaInfo.financiamento) : "—"}</div></div>
                             <div><div className="kpi-label">Subsídio</div><div className="kpi-num" style={{ color: "var(--accent)" }}>{fechaInfo?.subsidio ? brl(fechaInfo.subsidio) : "—"}</div></div>
                           </div>
-                          <div className="match-title"><span>🏢 Unidades que fecham a conta</span><span style={{ color: "var(--faint)", fontWeight: 600 }}>estoque Econ · estimativa planilha</span></div>
+                          <div className="match-title"><span>🏢 Unidades que fecham a conta</span><span style={{ color: "var(--faint)", fontWeight: 600 }}>estoque{empresa().nome ? ` ${empresa().nome}` : ""} · estimativa planilha</span></div>
                           {fechaLoading ? (
                             <div style={{ color: "var(--muted)", padding: 12 }}>Buscando no estoque…</div>
                           ) : !fecha?.length ? (

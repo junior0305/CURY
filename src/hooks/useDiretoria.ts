@@ -9,14 +9,14 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { buscarPlantao } from "@/utils/c2sMatching";
 import type { GerenteRollup, SuperRollup } from "@/hooks/useSuperintendente";
+import { empresa } from "@/lib/empresa";
 
 export const chaveNome = (s: string | null | undefined) =>
   (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase()
     .replace(/\bBN\b/g, "").replace(/[^A-Z ]/g, " ").trim().split(/\s+/)[0] ?? "";
-const APELIDO: Record<string, string> = { OTAVIONETO: "JAGUAR" };
 export const chaveGerente = (s: string | null | undefined) => {
   const k = (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z]/g, "");
-  return APELIDO[k] ?? chaveNome(s);
+  return empresa().apelidos_gerente[k] ?? chaveNome(s);
 };
 export const colado = (s: string | null | undefined) =>
   (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z]/g, "");
@@ -175,8 +175,7 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
 }
 
 // O Junix às vezes grava como "superintendente" um gerente da superintendência (ex.: SNOW UV é equipe da Adajes).
-const APELIDO_SUPER: Record<string, string> = { SNOWUV: "ADAJES" };
-export const superJunix = (s: string | null | undefined) => APELIDO_SUPER[colado(s)] ?? (s ?? "");
+export const superJunix = (s: string | null | undefined) => empresa().apelidos_super[colado(s)] ?? (s ?? "");
 
 // a qual super (e gerente) pertence uma linha do Junix
 export function donoJunix(supers: SuperDiretoria[], superintendente: string | null, gerente: string | null) {

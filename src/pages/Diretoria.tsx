@@ -77,7 +77,7 @@ export default function Diretoria() {
   ];
   const totalEmpresa = cons ? somar("Empresa", cons.linhas) : null;
 
-  const primeiroNome = (session?.user?.user_metadata as any)?.first_name || "Junior";
+  const primeiroNome = (session?.user?.user_metadata as any)?.first_name || "";
   const hojeD = new Date();
   const diasMes = new Date(hojeD.getFullYear(), hojeD.getMonth() + 1, 0).getDate();
 

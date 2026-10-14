@@ -39,6 +39,7 @@ import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import "@/styles/manager-v10.css";
 import "@/styles/cockpit-gerente.css";
 import "@/styles/disparar.css";
+import { empresa } from "@/lib/empresa";
 
 type Etapa = "bm" | "tpl" | "disp" | "conv" | "corretores";
 type Destino = "fila" | "escolher";
@@ -70,14 +71,14 @@ const achaVars = (txt: string) =>
    o que muda é o conteúdo das variáveis, e disso quem cuida é o gerente.
    Gastar token para reescrever a mesma estrutura contraria a disciplina de
    custo do projeto. Cada modelo já vem com exemplo do que entra em cada {{ }}. */
-const MODELOS: Record<string, { rotulo: string; corpo: string; ex: Record<string, string> }[]> = {
+const modelos = (): Record<string, { rotulo: string; corpo: string; ex: Record<string, string> }[]> => ({
   UTILITY: [
     { rotulo: "Retomada de cadastro",
       corpo: "Olá {{nome}}, você procurou a gente em {{quando}} sobre o {{empreendimento}}.\n\nSua consulta ficou sem retorno da nossa parte e continua registrada aqui.\n\n{{informacao}}\n\nSe quiser seguir, é só usar o botão abaixo.",
       ex: { quando: "março", empreendimento: "Cidade Lapa — Perdizes",
             informacao: "A condição que você consultou continua disponível." } },
     { rotulo: "Retorno de atendimento",
-      corpo: "{{nome}}, aqui é da Econ. Seu atendimento sobre o {{empreendimento}} ficou em aberto com a gente.\n\n{{pendencia}}\n\nQuer que eu retome de onde parou?",
+      corpo: `{{nome}}, aqui é da ${empresa().nome || "nossa equipe"}. Seu atendimento sobre o {{empreendimento}} ficou em aberto com a gente.\n\n{{pendencia}}\n\nQuer que eu retome de onde parou?`,
       ex: { empreendimento: "Cambuci", pendencia: "Faltou você nos enviar o comprovante de renda." } },
     { rotulo: "Confirmação de visita",
       corpo: "Olá {{nome}}, confirmando sua visita ao {{empreendimento}} em {{quando}}.\n\nEndereço: {{endereco}}\n\nSe precisar remarcar, é só responder aqui.",
@@ -96,7 +97,7 @@ const MODELOS: Record<string, { rotulo: string; corpo: string; ex: Record<string
       corpo: "{{nome}}, {{oferta}} no {{empreendimento}}. Quer os detalhes?",
       ex: { oferta: "Novas unidades liberadas", empreendimento: "Cambuci" } },
   ],
-};
+});
 const TIPOS = [
   { k: "UTILITY", rotulo: "Utilidade", nota: "retoma algo que a pessoa pediu", preco: "utility" as const },
   { k: "MARKETING", rotulo: "Marketing", nota: "anuncia algo novo", preco: "marketing" as const },
@@ -141,8 +142,8 @@ export default function Disparar() {
   /* ── etapa 2 · criador ── */
   const [tNome, setTNome] = useState("retomada_cadastro");
   const [tTipo, setTTipo] = useState("UTILITY");
-  const [tCorpo, setTCorpo] = useState(MODELOS.UTILITY[0].corpo);
-  const [tRod, setTRod] = useState("Econ Vendas · responda SAIR para não receber mais");
+  const [tCorpo, setTCorpo] = useState(() => modelos().UTILITY[0].corpo);
+  const [tRod, setTRod] = useState(`${empresa().nome_comercial || empresa().nome || "Nossa equipe"} · responda SAIR para não receber mais`);
   const [b1, setB1] = useState("Quero continuar");
   const [b2, setB2] = useState("Não tenho mais interesse");
   const [img, setImg] = useState<string | null>(null);
@@ -641,8 +642,8 @@ export default function Disparar() {
     return (
       <div className="fone">
         <div className="fone-top">
-          <div className="fone-av">{ini(data?.config?.label ?? "Econ")}</div>
-          <div><b>{data?.config?.label ?? "Econ Vendas"}</b><span>conta comercial</span></div>
+          <div className="fone-av">{ini(data?.config?.label ?? (empresa().nome || "C"))}</div>
+          <div><b>{data?.config?.label ?? (empresa().nome_comercial || "Conta comercial")}</b><span>conta comercial</span></div>
         </div>
         <div className="fone-corpo">
           <div className="bolha">
@@ -797,7 +798,7 @@ export default function Disparar() {
                             <label htmlFor="sobre">Recado do perfil</label>
                             <input id="sobre" maxLength={139}
                               value={sobre || perfilAtual?.sobre || ""}
-                              placeholder="Econ — imóveis Minha Casa Minha Vida"
+                              placeholder={`${empresa().nome || "Sua empresa"} — imóveis Minha Casa Minha Vida`}
                               onChange={(e) => setSobre(e.target.value)} />
                             <small>Aparece embaixo do nome quando o cliente abre a conversa.</small>
                           </div>
@@ -1013,7 +1014,7 @@ export default function Disparar() {
                       <div className="f" style={{ marginBottom: 10 }}>
                         <label htmlFor="disp-nome">Nome que o cliente vai ver</label>
                         <input id="disp-nome" autoComplete="off" value={nomeExib}
-                          disabled={conectando} placeholder="Econ — Dudu"
+                          disabled={conectando} placeholder={`${empresa().nome || "Sua empresa"} — nome do gerente`}
                           onChange={(e) => setNomeExib(e.target.value)} />
                         {nomeCheck ? (
                           <div className={`nome-v ${nomeCheck.ok ? "ok" : "ruim"}`}>
@@ -1464,7 +1465,7 @@ export default function Disparar() {
                   {sugTipo ? (
                     <>
                       <div className="ia-l">
-                        {MODELOS[sugTipo].map((m) => (
+                        {modelos()[sugTipo].map((m) => (
                           <button key={m.rotulo} className="ia-o" onClick={() => {
                             setTTipo(sugTipo); setTCorpo(m.corpo);
                             setValores((v) => ({ ...v, ...m.ex }));

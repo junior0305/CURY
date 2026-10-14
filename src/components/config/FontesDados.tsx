@@ -14,7 +14,7 @@ const SISTEMAS: Sistema[] = [
     campos: [
       { k: "C2S_TOKEN", rot: "Token de integração", segredo: true },
       { k: "C2S_BASE", rot: "Endereço da API", padrao: "https://api.contact2sale.com/integration", dica: "Deixe o padrão, a não ser que o C2S indique outro." },
-      { k: "C2S_EMPRESAS", rot: "Empresas no C2S (separadas por |)", dica: "Como aparecem no C2S. Ex.: Econ Vendas|Econ +" },
+      { k: "C2S_EMPRESAS", rot: "Empresas no C2S (separadas por |)", dica: "Como aparecem no C2S. Ex.: Minha Imobiliária Vendas|Minha Imobiliária +" },
     ],
     passos: ["Entre no C2S com um usuário administrador.", "Abra o menu Integrações.", "Clique em \"Gerar token\" e copie o código.", "Cole aqui, salve e clique em Testar conexão."] },
   { id: "junix", nome: "Junix (ImobFlow)", desc: "Vendas confirmadas, contratos e pastas na esteira da Caixa.",

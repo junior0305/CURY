@@ -12,6 +12,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { empresa } from "@/lib/empresa";
 
 export interface BrokerProfile {
   id: string;
@@ -210,8 +211,8 @@ export function casarCheckinsComEquipe(
   return classificarCheckinsEquipe(checkins, corretores, gerente).casados;
 }
 
-/** Diretoria cujo plantão o Comandra acompanha (o token do C2S é desse nó). */
-export const DIRETORIA_C2S = "Diretor Gilberto Junior";
+/** Diretoria cujo plantão o Comandra acompanha (o token do C2S é desse nó) — system_settings.empresa. */
+export const diretoriaC2S = () => empresa().diretoria_c2s;
 
 /** Ponto no plantão (C2S attendance_summaries → c2s_plantao), no formato que o
  *  casamento acima já entende. Uma linha por corretor/estande/dia; `tipos` leva o
@@ -221,7 +222,7 @@ export async function buscarPlantao(deIso: string): Promise<C2SCheckinRow[]> {
   for (let de = 0; ; de += 1000) {
     const { data, error } = await supabase.from("c2s_plantao" as any)
       .select("dia,corretor,gerente,diretor,estande,check_in")
-      .eq("diretor", DIRETORIA_C2S).gte("dia", deIso.slice(0, 10))
+      .eq("diretor", diretoriaC2S()).gte("dia", deIso.slice(0, 10))
       .order("id").range(de, de + 999);
     if (error) throw error;
     for (const r of (data ?? []) as any[]) {

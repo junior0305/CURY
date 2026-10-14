@@ -11,6 +11,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { empresa } from "@/lib/empresa";
 
 export interface ConfigWA {
   id: string;
@@ -628,7 +629,7 @@ export function acharCheiroOferta(texto: string): string[] {
 }
 
 /** A Meta recusa nome de exibição que não tenha relação com o negócio. */
-export function checarNome(nome: string, marca = "Econ") {
+export function checarNome(nome: string, marca = empresa().nome || "imóveis") {
   const v = nome.trim();
   if (!v) return { ok: false, sugestao: null as string | null, texto: "" };
   if (v.toLowerCase().includes(marca.toLowerCase()))

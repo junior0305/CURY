@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PlantaoEmpresa from "./PlantaoEmpresa";
 import AnunciosGerentes from "./AnunciosGerentes";
+import { empresa } from "@/lib/empresa";
 
 type Nivel = "gerente" | "corretor";
 
@@ -120,8 +121,7 @@ const nf = (n: number) => (n ?? 0).toLocaleString("pt-BR");
 // C2S grava "Gerente Fafa"/"LEITÃO", o Junix "FAFA"/"LEITAO": compara sem prefixo, acento, espaço e sufixo " BN"
 const chaveNome = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+BN$/, "").replace(/[^A-Z0-9]/g, "");
 // mesmo gerente com dois nomes no C2S (o Jaguar aparece também como "OtavioNeto")
-const APELIDO_GER: Record<string, string> = { OTAVIONETO: "JAGUAR" };
-const chaveGer = (s: string) => { const k = chaveNome((s || "").replace(/^ger[eê]n(te|cia)\s+/i, "")); return APELIDO_GER[k] || k; };
+const chaveGer = (s: string) => { const k = chaveNome((s || "").replace(/^ger[eê]n(te|cia)\s+/i, "")); return empresa().apelidos_gerente[k] || k; };
 const nf1 = (n: number) => (n ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 const moneyM = (n: number) => (n / 1e6).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "M";
 const moneyFull = (n: number) => Math.round(n).toLocaleString("pt-BR");
@@ -164,7 +164,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
   });
   // Plantão, visitas (C2S) e pastas (Junix) da diretoria. O C2S traz a rede inteira no
   // check-in, então filtra pela diretoria do token (a mesma que o Junix enxerga).
-  const DIRETORIA_C2S = "Diretor Gilberto Junior";
+  const DIRETORIA_C2S = empresa().diretoria_c2s;
   const { data: op } = useQuery({
     queryKey: ["biOperacaoEcon", dias],
     queryFn: async () => {
@@ -601,7 +601,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                 </div>
 
                 <div style={{ fontSize: 11, color: "#475569", marginTop: 10, padding: "0 4px" }}>
-                  Fontes: vendas, VGV e pastas = Junix · check-ins e visitas no estande = C2S (diretoria Gilberto Junior). Período anterior = mesmo número de dias, logo antes.
+                  Fontes: vendas, VGV e pastas = Junix · check-ins e visitas no estande = C2S ({empresa().diretoria_c2s || "diretoria configurada"}). Período anterior = mesmo número de dias, logo antes.
                 </div>
               </>
             )}

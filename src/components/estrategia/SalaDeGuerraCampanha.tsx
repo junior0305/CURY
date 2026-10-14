@@ -303,39 +303,9 @@ export default function SalaDeGuerraCampanha({
 
   // Cesta de Produtos & Verbas por Superintendente
   const [itensPorSuper, setItensPorSuper] = useState<Record<string, ItemVerbaSuper[]>>(() => {
+    // cada super começa com a cesta vazia: produtos e verbas são da empresa, não exemplos fixos no código
     const inicial: Record<string, ItemVerbaSuper[]> = {};
-
-    supers.forEach((s) => {
-      const nomeLower = s.nome.toLowerCase();
-      if (nomeLower.includes("adajes")) {
-        inicial[s.id] = [
-          { id: "ad_l1", tipo: "lancamento", produto: "Residencial Mooca (Novo Lançamento)", canal: "anuncio", valor: 5000 },
-          { id: "ad_l2", tipo: "lancamento", produto: "Torres Cury Tatuapé (Lançamento Futuro)", canal: "anuncio", valor: 5000 },
-          { id: "ad_e1", tipo: "estoque", produto: "Cury Bela Vista", canal: "rua", valor: 2000 },
-          { id: "ad_e2", tipo: "estoque", produto: "Mérito Mooca", canal: "pap", valor: 2000 },
-          { id: "ad_e3", tipo: "estoque", produto: "Único Santana", canal: "oferta_ativa", valor: 2000 },
-          { id: "ad_e4", tipo: "estoque", produto: "Cury Ipiranga", canal: "anuncio", valor: 2000 },
-          { id: "ad_e5", tipo: "estoque", produto: "Parque da Mooca", canal: "rua", valor: 2000 },
-        ];
-      } else if (nomeLower.includes("felipe") || nomeLower.includes("metlicz")) {
-        inicial[s.id] = [
-          { id: "fe_l1", tipo: "lancamento", produto: "Cury Cidade Tiradentes (Lançamento)", canal: "anuncio", valor: 7000 },
-          { id: "fe_e1", tipo: "estoque", produto: "Dez Guaianases", canal: "rua", valor: 3000 },
-          { id: "fe_e2", tipo: "estoque", produto: "Mérito Itaquera", canal: "pap", valor: 2000 },
-        ];
-      } else if (nomeLower.includes("liliane")) {
-        inicial[s.id] = [
-          { id: "li_l1", tipo: "lancamento", produto: "Torres da Lapa (Lançamento)", canal: "anuncio", valor: 5000 },
-          { id: "li_e1", tipo: "estoque", produto: "Cury Barra Funda", canal: "oferta_ativa", valor: 2500 },
-        ];
-      } else {
-        inicial[s.id] = [
-          { id: `${s.id}_l1`, tipo: "lancamento", produto: "Lançamento Foco Região Sul", canal: "anuncio", valor: 5000 },
-          { id: `${s.id}_e1`, tipo: "estoque", produto: "Estoque Principal da Região", canal: "rua", valor: 2000 },
-        ];
-      }
-    });
-
+    supers.forEach((s) => { inicial[s.id] = []; });
     return inicial;
   });
 
@@ -1681,7 +1651,7 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
               Avaliação de Viabilidade da Meta Oficial ({metaVendas} Vendas)
             </h3>
             <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#9FB3CC" }}>
-              Avaliando se a verba e os produtos alocados sustentam a entrega das metas oficiais de Adajes, Felipe, Liliane e Silva.
+              Avaliando se a verba e os produtos alocados sustentam a entrega das metas oficiais de cada superintendência.
             </p>
           </div>
           <div className="sdg-roi-chips">
