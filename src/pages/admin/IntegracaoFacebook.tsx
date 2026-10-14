@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Facebook, RefreshCw, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
+import { useTheme } from "@/contexts/ThemeContext";
+import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
+import "@/styles/manager-v10.css";
 
 type Page = {
   page_id: string; page_name: string | null; subscribed: boolean;
@@ -270,6 +273,19 @@ function LeadsTeste() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// /integracoes do gerente: mesma tela, dentro do layout do painel (menu lateral fixo),
+// para não parecer que saiu do Comandra. No /admin a tela continua sem o menu do gerente.
+export function IntegracaoGerente() {
+  const { mode, toggle } = useTheme();
+  useEffect(loadFonts, []);
+  return (
+    <div className="mgr10 app2">
+      <RailV10 atual="integracoes" mode={mode} toggle={toggle} />
+      <main className="shell2 integ-shell"><IntegracaoFacebook /></main>
     </div>
   );
 }

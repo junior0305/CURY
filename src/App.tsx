@@ -32,7 +32,7 @@ import LeadsV10 from "./pages/manager-v10/Leads";
 import DispararV10 from "./pages/manager-v10/Disparar";
 import PastasV10 from "./pages/manager-v10/Pastas";
 import EstrategiaV10 from "./pages/manager-v10/Estrategia";
-import IntegracaoFacebook from "./pages/admin/IntegracaoFacebook";
+import IntegracaoFacebook, { IntegracaoGerente } from "./pages/admin/IntegracaoFacebook";
 import PlantaoV10 from "./pages/manager-v10/Plantao";
 import CoachIndex from "./pages/manager-v2/CoachIndex";
 import CoachBroker from "./pages/manager-v2/CoachBroker";
@@ -200,7 +200,7 @@ const App = () => (
             <Route path="/diretor" element={<ProtectedDiretorRoute><Boundary><Diretoria /></Boundary></ProtectedDiretorRoute>} />
             <Route path="/super" element={<ProtectedSuperRoute><Boundary><Superintendente /></Boundary></ProtectedSuperRoute>} />
             <Route path="/manager" element={<ProtectedManagerRoute><ManagerV10 /></ProtectedManagerRoute>} />
-            <Route path="/integracoes" element={<ProtectedManagerRoute><IntegracaoFacebook /></ProtectedManagerRoute>} />
+            <Route path="/integracoes" element={<ProtectedManagerRoute><IntegracaoGerente /></ProtectedManagerRoute>} />
             <Route path="/manager-v1" element={<ProtectedManagerRoute><ManagerDashboard /></ProtectedManagerRoute>} />
             <Route path="/manager-v3" element={<ProtectedManagerRoute><ManagerV3 /></ProtectedManagerRoute>} />
             {/* v10 em construção — o /manager de produção segue intocado. */}
