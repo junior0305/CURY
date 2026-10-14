@@ -118,3 +118,4 @@ Mais de uma sessão de IA trabalha neste repositório e publica no mesmo site (c
 - 14/10 · Diretoria · Configurar → **Dados da empresa** (só diretor): edita `system_settings.empresa` pela RPC `salvar_empresa` (nome, nome comercial, diretoria no C2S, apelidos de gerente/super, notas para a IA).
 - 14/10 · Diretoria · Tela do diretor ganhou a aba "Configurar" (mesma tela Configuracoes, nível diretor).
 - 14/10 · Diretoria · Configurar → Equipe: diretor cadastra superintendente, gerente e corretor; super cadastra gerente e corretor (`src/components/config/CadastrarLider.tsx`, edge create-user já permitia).
+- 14/10 · Diretoria · Login com porta de entrada: `src/integrations/supabase/instancias.ts` (domínio do login → site da empresa). Login de outro domínio vai para o site dela antes da senha (e-mail no #hash). Lista vazia até a instância **planoego** (Portainer, mesmo VPS; banco próprio; login @planoeplanogo) subir. Contabo = só backup.

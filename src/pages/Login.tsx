@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { outraInstancia } from "@/integrations/supabase/instancias";
 import { useAuth } from "@/components/AuthProvider";
 import { loadFonts } from "@/components/manager-v10/RailV10";
 import "@/styles/login.css";
@@ -51,9 +52,23 @@ export default function Login() {
   loadFonts();
 
   useEffect(() => { if (session) navigate("/dashboard"); }, [session, navigate]);
+  // veio da porta de entrada (comandra.com.br) com o e-mail já digitado
+  useEffect(() => {
+    const m = window.location.hash.match(/email=([^&]+)/);
+    if (m) { setEmail(decodeURIComponent(m[1])); history.replaceState(null, "", window.location.pathname); }
+  }, []);
+  /** Login de outra empresa: leva para o site dela antes de pedir a senha. */
+  function irParaEmpresa(): boolean {
+    const destino = outraInstancia(email.trim().toLowerCase());
+    if (!destino) return false;
+    setAviso("Levando você para o Comandra da sua empresa…");
+    window.location.href = `${destino}/login#email=${encodeURIComponent(email.trim().toLowerCase())}`;
+    return true;
+  }
 
   async function entrar(e: React.FormEvent) {
     e.preventDefault();
+    if (irParaEmpresa()) return;
     if (!email.trim() || !senha) return;
     setEntrando(true); setErro(null); setAviso(null);
     try {
@@ -109,7 +124,7 @@ export default function Login() {
             <label htmlFor="lg-email">E-mail</label>
             <input id="lg-email" type="email" autoComplete="username" autoFocus
               placeholder="voce@curyvendas.com.br" disabled={entrando}
-              value={email} onChange={(e) => setEmail(e.target.value)} />
+              value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => irParaEmpresa()} />
           </div>
 
           <div className="lg-campo">
