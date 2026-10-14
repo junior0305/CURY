@@ -19,6 +19,9 @@ import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
+import FunilEquipeV3 from "@/components/manager-v10/FunilEquipeV3";
+import AlertaDisparoQueima, { useLeadsQueimaDisparo } from "@/components/manager-v10/AlertaDisparoQueima";
+import RaioXCorretorDrawer from "@/components/manager-v10/RaioXCorretorDrawer";
 import {
   Users,
   Target,
@@ -37,6 +40,7 @@ import {
   ExternalLink,
   Flame,
   Award,
+  Eye,
 } from "lucide-react";
 import "@/styles/cockpit-gerente.css";
 import "@/styles/time-gerente.css";
@@ -77,6 +81,21 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
   const [cadastrar, setCadastrar] = useState<string | false>(false);
   const [desligar, setDesligar] = useState<string | null>(null);
   const [ocupadoReset, setOcupadoReset] = useState<string | null>(null);
+  const [corretorRaioX, setCorretorRaioX] = useState<string | null>(null);
+
+  // Monitoramento de Disparos no Vácuo (>30min)
+  const { data: leadsQueima = [] } = useLeadsQueimaDisparo(managerId);
+  const queimaPorCorretor = useMemo(() => {
+    const map = new Map<string, typeof leadsQueima>();
+    for (const l of leadsQueima) {
+      if (l.brokerId) {
+        const arr = map.get(l.brokerId) || [];
+        arr.push(l);
+        map.set(l.brokerId, arr);
+      }
+    }
+    return map;
+  }, [leadsQueima]);
 
   // Filtro de Coaching
   const [filtroRadar, setFiltroRadar] = useState<"todos" | "crit" | "warn" | "good">("todos");
@@ -288,6 +307,9 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
         </div>
       </div>
 
+      {/* ── ALERTA DE RISCO FINANCEIRO: DISPAROS DE WHATSAPP NO VÁCUO (>30MIN) ── */}
+      <AlertaDisparoQueima managerId={managerId!} quem="Gerente" />
+
       {/* ── ALERTA DE VÍNCULOS PENDENTES C2S / JUNIX (SE HOUVER) ── */}
       <VincularNomes managerId={managerId} />
 
@@ -449,6 +471,9 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
           ══════════════════════════════════════════════════════════════════════ */}
       {subAba === "radar" && (
         <div className="time-radar-section">
+          {/* ── FUNIL ACIONÁVEL DA EQUIPE POR CANAL ── */}
+          <FunilEquipeV3 managerId={managerId!} onSelecionarCorretor={(id) => setCorretorRaioX(id)} />
+
           {/* Filtros rápidos de severidade */}
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--cv-text-muted)", marginRight: "4px" }}>
@@ -498,6 +523,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                 const p = gente.find((g) => g.profileId === a.profileId);
                 const perfilRH = equipeProfiles.find((ep) => ep.id === a.profileId);
                 const telLimpo = limparTel(perfilRH?.phone);
+                const leadsEmQueima = queimaPorCorretor.get(a.profileId) || [];
 
                 const msgWa = encodeURIComponent(
                   `Olá ${a.nome}! Vi aqui no sistema: "${a.fato}". Vamos alinhar rapidinho para destravar seus atendimentos?`
@@ -506,10 +532,13 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                 return (
                   <div key={a.chave + a.profileId} className={`time-coach-card ${a.tom}`}>
                     <div className="time-coach-header">
-                      <div className="time-coach-profile">
+                      <div className="time-coach-profile" style={{ cursor: "pointer" }} onClick={() => setCorretorRaioX(a.profileId)}>
                         <div className="time-coach-avatar">{ini(a.nome)}</div>
                         <div>
-                          <div className="time-coach-name">{a.nome}</div>
+                          <div className="time-coach-name" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            {a.nome}
+                            <Eye size={12} style={{ color: "var(--cv-brand)", opacity: 0.7 }} />
+                          </div>
                           <div className="time-coach-role">
                             {p ? `${p.atendimentos} atendimentos · ${p.vendas} vendas no período` : "Corretor"}
                           </div>
@@ -519,6 +548,37 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                         {a.tom === "crit" ? "Crítico" : a.tom === "warn" ? "Atenção" : "Destaque"}
                       </span>
                     </div>
+
+                    {/* Alerta de Resposta de Disparo Sem Retorno */}
+                    {leadsEmQueima.length > 0 && (
+                      <div
+                        style={{
+                          background: "var(--cv-rose-light, #FFE4E6)",
+                          border: "1px solid var(--cv-rose-border, #FECDD3)",
+                          borderRadius: "6px",
+                          padding: "6px 10px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          color: "var(--cv-rose, #E11D48)",
+                          margin: "8px 0 10px",
+                        }}
+                      >
+                        <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                          <Flame size={14} className="flame-pulse" />
+                          {leadsEmQueima.length} resposta{leadsEmQueima.length === 1 ? "" : "s"} de disparo no vácuo!
+                        </span>
+                        <button
+                          type="button"
+                          className="btn-acao-micro destaque"
+                          onClick={() => setCorretorRaioX(a.profileId)}
+                        >
+                          Puxar Lead
+                        </button>
+                      </div>
+                    )}
 
                     <p className="time-coach-fact">{a.fato}</p>
                     <p className="time-coach-read">{a.leitura}</p>
@@ -548,9 +608,18 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                         </button>
                       )}
 
+                      <button
+                        type="button"
+                        className="time-coach-btn-brief"
+                        style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}
+                        onClick={() => setCorretorRaioX(a.profileId)}
+                      >
+                        <Eye size={13} /> Raio-X
+                      </button>
+
                       {p && (
                         <button className="time-coach-btn-brief" onClick={() => setBrief(p)}>
-                          📋 Abrir Briefing 1:1
+                          📋 1:1
                         </button>
                       )}
                     </div>
@@ -1060,6 +1129,13 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
           }}
         />
       )}
+
+      {/* ── GAVETA LATERAL RAIO-X DO CORRETOR ── */}
+      <RaioXCorretorDrawer
+        brokerId={corretorRaioX}
+        managerId={managerId!}
+        onClose={() => setCorretorRaioX(null)}
+      />
     </div>
   );
 }

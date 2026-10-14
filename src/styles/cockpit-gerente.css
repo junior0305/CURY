@@ -733,3 +733,302 @@ html[data-theme="dark"] .cockpit-v3 {
   border-color: var(--cv-brand);
   background: var(--cv-brand-light);
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   ALERTA DE QUEIMA DE CAIXA (DISPAROS DE WHATSAPP > 30MIN)
+   ══════════════════════════════════════════════════════════════════════ */
+
+.alerta-queima-caixa {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  background: linear-gradient(135deg, rgba(225, 29, 72, 0.08) 0%, rgba(245, 158, 11, 0.06) 100%);
+  border: 1.5px solid var(--cv-rose-border, #FECDD3);
+  border-left: 5px solid var(--cv-rose, #E11D48);
+  border-radius: var(--cv-radius-md, 12px);
+  padding: 14px 18px;
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.08);
+  animation: fadeInAlert 0.3s ease;
+}
+
+.alerta-queima-caixa.compacto {
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+@keyframes fadeInAlert {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.alerta-queima-conteudo {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 280px;
+}
+
+.alerta-queima-icone {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--cv-rose-light, #FFE4E6);
+  color: var(--cv-rose, #E11D48);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.alerta-queima-icone.small {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.flame-pulse {
+  animation: flamePulseAnim 1.5s infinite ease-in-out;
+}
+
+@keyframes flamePulseAnim {
+  0% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(225, 29, 72, 0.4)); }
+  50% { transform: scale(1.15); filter: drop-shadow(0 0 6px rgba(225, 29, 72, 0.6)); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(225, 29, 72, 0.4)); }
+}
+
+.alerta-queima-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.alerta-queima-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 14.5px;
+  color: var(--cv-text-main, #0F172A);
+}
+
+.badge-risco-financeiro {
+  display: inline-flex;
+  align-items: center;
+  background: var(--cv-rose, #E11D48);
+  color: #FFFFFF;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.alerta-queima-sub {
+  font-size: 13px;
+  color: var(--cv-text-muted, #64748B);
+  margin: 0;
+}
+
+.alerta-queima-sub .highlight {
+  color: var(--cv-rose, #E11D48);
+  font-weight: 700;
+}
+
+.alerta-queima-acoes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-queima-primario {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--cv-rose, #E11D48);
+  color: #FFFFFF;
+  border: none;
+  border-radius: var(--cv-radius-sm, 8px);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 4px rgba(225, 29, 72, 0.2);
+}
+
+.btn-queima-primario:hover {
+  background: #BE123C;
+  transform: translateY(-1px);
+}
+
+.btn-queima-secundario {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--cv-surface, #FFFFFF);
+  color: var(--cv-text-main, #0F172A);
+  border: 1px solid var(--cv-border, #E2E8F0);
+  border-radius: var(--cv-radius-sm, 8px);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-queima-secundario:hover {
+  background: var(--cv-surface-subtle, #F1F5F9);
+}
+
+/* Modal de Queima de Caixa */
+.queima-modal {
+  max-width: 680px !important;
+  width: 95% !important;
+}
+
+.queima-aviso-box {
+  background: var(--cv-rose-light, #FFE4E6);
+  border: 1px solid var(--cv-rose-border, #FECDD3);
+  border-radius: var(--cv-radius-sm, 8px);
+  padding: 12px 14px;
+  color: #9F1239;
+  margin-bottom: 16px;
+}
+
+.queima-destino-row {
+  background: var(--cv-surface-subtle, #F1F5F9);
+  border: 1px solid var(--cv-border, #E2E8F0);
+  border-radius: var(--cv-radius-sm, 8px);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.btn-opcao-roleta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--cv-surface, #FFFFFF);
+  border: 1.5px solid var(--cv-border, #E2E8F0);
+  color: var(--cv-text-main, #0F172A);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-opcao-roleta.active {
+  border-color: var(--cv-brand, #0D9488);
+  background: var(--cv-brand-light, #CCFBF1);
+  color: var(--cv-brand, #0D9488);
+}
+
+.select-corretor-custom {
+  flex: 1;
+  min-width: 200px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  border: 1px solid var(--cv-border, #E2E8F0);
+  border-radius: 6px;
+  background: var(--cv-surface, #FFFFFF);
+  color: var(--cv-text-main, #0F172A);
+}
+
+.queima-lista-leads {
+  border: 1px solid var(--cv-border, #E2E8F0);
+  border-radius: var(--cv-radius-sm, 8px);
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.queima-lista-header {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.2fr 1.3fr;
+  padding: 8px 12px;
+  background: var(--cv-surface-subtle, #F1F5F9);
+  border-bottom: 1px solid var(--cv-border, #E2E8F0);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--cv-text-muted, #64748B);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.queima-lead-item {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.2fr 1.3fr;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--cv-border-subtle, #F1F5F9);
+  transition: background 0.1s ease;
+}
+
+.queima-lead-item:last-child {
+  border-bottom: none;
+}
+
+.queima-lead-item:hover {
+  background: var(--cv-surface-subtle, #F1F5F9);
+}
+
+.queima-lead-cliente {
+  display: flex;
+  flex-direction: column;
+}
+
+.badge-tempo-vacuo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--cv-rose-light, #FFE4E6);
+  color: var(--cv-rose, #E11D48);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.btn-acao-micro {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--cv-surface, #FFFFFF);
+  border: 1px solid var(--cv-border, #E2E8F0);
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--cv-text-main, #0F172A);
+  transition: all 0.1s;
+}
+
+.btn-acao-micro:hover {
+  background: var(--cv-surface-subtle, #F1F5F9);
+}
+
+.btn-acao-micro.destaque {
+  border-color: var(--cv-rose-border, #FECDD3);
+  color: var(--cv-rose, #E11D48);
+  background: var(--cv-rose-light, #FFE4E6);
+}
+
+.btn-acao-micro.destaque:hover {
+  background: var(--cv-rose, #E11D48);
+  color: #FFFFFF;
+}
+
+.queima-lead-acoes {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+

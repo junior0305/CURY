@@ -8,6 +8,7 @@ import { definirRecebimento } from "@/hooks/useTempoReal";
 import { cobrarCorretor, redistribuir, useConversaLead } from "@/hooks/useLeads";
 import { buscarPlantao } from "@/utils/c2sMatching";
 import { chaveNome, chaveGerente, gerenteC2S } from "@/hooks/useDiretoria";
+import AlertaDisparoQueima from "@/components/manager-v10/AlertaDisparoQueima";
 import "@/styles/cockpit-gerente.css";
 
 interface CockpitGerenteV3Props {
@@ -432,6 +433,9 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
           />
         </div>
       </header>
+
+      {/* ── ALERTA DE RISCO FINANCEIRO: RESPOSTAS DE DISPAROS NO VÁCUO (>30MIN) ── */}
+      <AlertaDisparoQueima managerId={managerId} quem={quem} />
 
       {/* ── BLOCO 1: PLACAR HERO DO MÊS (JUNIX) ── */}
       <section className="hero-placar-v3">
