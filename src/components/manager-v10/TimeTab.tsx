@@ -1,25 +1,23 @@
-// ABA TIME v3 — Gestão da Equipe & Coaching Tático do Gerente
+// ABA TIME v3 — Gestão da Equipe & Liderança da Tropa
 //
-// 1. Visão Executiva: Efetivo Ativo, Meta Cascata do Mês, Meta da Semana, Radar de Urgências.
-// 2. Quatro Modos Táticos:
-//    - Radar de Coaching & Urgências (quem precisa de atenção imediata)
-//    - Metas do Mês & Desempenho (meta geral e de cada corretor editável inline)
-//    - Gestão da Tropa & RH (roleta, reset de senha mudar@123, desligamento/transferência)
-//    - Rampa de Novos (acompanhamento dos primeiros 90 dias de casa)
+// Foco 100% no Gerente de Vendas:
+// 1. 🚨 Quem Cobrar Agora: Urgências imediatas (leads parados, disparos no vácuo, no-show).
+// 2. 🏆 Tabela da Tropa: Gestão unificada da tropa (presença, roleta, leads, visitas, pastas, vendas, meta e desligamento).
+// 3. 🌱 Rampa de Novos (90d): Acompanhamento e ações para novas contratações (cadastrar e inativar/desligar).
 
 import { useState, useMemo } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useTime, assumirMeta, type PessoaTime, type Achado } from "@/hooks/useTime";
+import { useTime, type PessoaTime, type Achado } from "@/hooks/useTime";
 import { usePeriodo } from "@/hooks/usePeriodo";
+import { definirRecebimento } from "@/hooks/useTempoReal";
 import Briefing from "@/components/manager-v10/Briefing";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
-import FunilEquipeV3 from "@/components/manager-v10/FunilEquipeV3";
 import AlertaDisparoQueima, { useLeadsQueimaDisparo } from "@/components/manager-v10/AlertaDisparoQueima";
 import RaioXCorretorDrawer from "@/components/manager-v10/RaioXCorretorDrawer";
 import {
@@ -41,12 +39,14 @@ import {
   Flame,
   Award,
   Eye,
+  RefreshCw,
+  X,
+  ShieldAlert,
 } from "lucide-react";
 import "@/styles/cockpit-gerente.css";
 import "@/styles/time-gerente.css";
 
 const ini = (n: string) => n.trim().slice(0, 2).toUpperCase();
-const um = (n: number | null) => (n == null ? "—" : n.toFixed(1).replace(".", ","));
 const limparTel = (t: string | null | undefined) => {
   if (!t) return "";
   const n = t.replace(/\D/g, "");
@@ -68,7 +68,7 @@ const nomeMes = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString(
 type PessoaMeta = { id: string; nome: string; papel: string; meta: number | null; realizado: number; pode_editar: boolean };
 type PainelMetas = { mes: string; dono: PessoaMeta; filhos: PessoaMeta[] };
 
-type SubAba = "radar" | "metas" | "equipe" | "novos";
+type SubAba = "urgencias" | "tropa" | "novos";
 
 export default function TimeTab({ managerId }: { managerId: string | undefined }) {
   const { session } = useAuth();
@@ -76,11 +76,13 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
   const { periodo } = usePeriodo();
   const { data, isLoading } = useTime(managerId, periodo.dias);
 
-  const [subAba, setSubAba] = useState<SubAba>("radar");
+  const [subAba, setSubAba] = useState<SubAba>("urgencias");
   const [brief, setBrief] = useState<PessoaTime | null>(null);
   const [cadastrar, setCadastrar] = useState<string | false>(false);
   const [desligar, setDesligar] = useState<string | null>(null);
+  const [seletorDesligarAberto, setSeletorDesligarAberto] = useState(false);
   const [ocupadoReset, setOcupadoReset] = useState<string | null>(null);
+  const [ocupadoRoleta, setOcupadoRoleta] = useState<string | null>(null);
   const [corretorRaioX, setCorretorRaioX] = useState<string | null>(null);
 
   // Monitoramento de Disparos no Vácuo (>30min)
@@ -97,20 +99,15 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
     return map;
   }, [leadsQueima]);
 
-  // Filtro de Coaching
+  // Filtro de Urgências
   const [filtroRadar, setFiltroRadar] = useState<"todos" | "crit" | "warn" | "good">("todos");
 
-  // Busca e Filtros de RH
-  const [buscaEquipe, setBuscaEquipe] = useState("");
-  const [filtroRH, setFiltroRH] = useState<"todos" | "online" | "pausados" | "senha_provisoria">("todos");
-
-  // Meta da Semana
-  const [alvoSemana, setAlvoSemana] = useState<number | null>(null);
-  const [salvandoMetaSemana, setSalvandoMetaSemana] = useState(false);
+  // Busca e Filtros da Tabela da Tropa
+  const [buscaTropa, setBuscaTropa] = useState("");
+  const [filtroTropa, setFiltroTropa] = useState<"todos" | "online" | "pausados" | "senha_provisoria">("todos");
 
   // Meta do Mês (Cascata)
-  const [deslocMes, setDeslocMes] = useState(0);
-  const mesAtual = inicioMes(deslocMes);
+  const mesAtual = inicioMes(0);
 
   const { data: metasData } = useQuery({
     queryKey: ["metas-painel", mesAtual, managerId ?? "eu"],
@@ -122,7 +119,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
     },
   });
 
-  // Lista de corretores detalhada para Gestão de RH
+  // Lista de corretores detalhada para Gestão da Tropa
   const { data: equipeProfiles = [] } = useQuery({
     queryKey: ["equipe-rh-lista", managerId],
     enabled: !!managerId,
@@ -130,7 +127,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("id,first_name,last_name,email,phone,last_seen_at,lead_assignment_enabled,must_change_password")
+        .select("id,first_name,last_name,email,phone,last_seen_at,lead_assignment_enabled,must_change_password,created_at")
         .eq("manager_id", managerId!)
         .eq("role", "BROKER")
         .eq("is_active", true)
@@ -151,139 +148,82 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
     }
   }
 
-  // Assumir Meta da Semana
-  const sugeridoSemana = Math.max(
-    1,
-    Math.round(
-      data?.ultimasSemanas?.filter(Boolean)?.length
-        ? data.ultimasSemanas.reduce((a, n) => a + n, 0) / data.ultimasSemanas.length
-        : 3
-    )
-  );
-  const escolhidoSemana = alvoSemana ?? data?.metaSemana ?? sugeridoSemana;
-  const razaoConversao = data?.time?.atendPorVenda ?? 3;
-  const precisaAtendimentos = Math.ceil(escolhidoSemana * razaoConversao);
-
-  async function salvarMetaSemana() {
-    if (!data?.teamId) {
-      toast.error("Sua equipe não está cadastrada em times.");
-      return;
-    }
-    setSalvandoMetaSemana(true);
+  // Alternar Roleta de um corretor
+  async function alternarRoleta(id: string, ativoAtual: boolean, nome: string) {
+    setOcupadoRoleta(id);
     try {
-      await assumirMeta(data.teamId, escolhidoSemana, session!.user.id);
-      toast.success(`Meta assumida: ${escolhidoSemana} venda${escolhidoSemana === 1 ? "" : "s"} esta semana!`);
-      qc.invalidateQueries({ queryKey: ["aba-time"] });
+      await definirRecebimento(id, !ativoAtual);
+      toast.success(!ativoAtual ? `${nome} ativado na roleta de novos leads!` : `${nome} pausado da roleta.`);
+      qc.invalidateQueries({ queryKey: ["equipe-rh-lista", managerId] });
+      qc.invalidateQueries({ queryKey: ["aba-time", managerId] });
+      qc.invalidateQueries({ queryKey: ["v10", managerId] });
     } catch (e: any) {
-      toast.error(`Erro ao salvar: ${e?.message ?? e}`);
+      toast.error(`Erro ao alterar roleta: ${e?.message ?? e}`);
     } finally {
-      setSalvandoMetaSemana(false);
+      setOcupadoRoleta(null);
     }
   }
 
-  // Reset de Senha (mudar@123)
-  async function resetarSenha(p: any) {
-    setOcupadoReset(p.id);
+  // Resetar Senha para mudar@123
+  async function resetarSenha(corretor: any) {
+    const nome = [corretor.first_name, corretor.last_name].filter(Boolean).join(" ");
+    if (!confirm(`Tem certeza que deseja redefinir a senha de ${nome} para mudar@123?`)) return;
+
+    setOcupadoReset(corretor.id);
     try {
-      const { data: r, error } = await supabase.functions.invoke("create-user", {
-        body: { action: "reset-password", userId: p.id },
+      const { error } = await supabase.functions.invoke("create-user", {
+        body: { action: "reset-password", userId: corretor.id },
       });
-      if (error || (r as any)?.error) throw new Error((r as any)?.error || error?.message);
-      toast.success(`Senha de ${p.first_name} redefinida para mudar@123`);
+      if (error) throw error;
+
+      await supabase
+        .from("profiles")
+        .update({ must_change_password: true } as any)
+        .eq("id", corretor.id);
+
+      toast.success(`Senha de ${nome} redefinida para mudar@123 com sucesso!`);
       qc.invalidateQueries({ queryKey: ["equipe-rh-lista", managerId] });
     } catch (e: any) {
-      toast.error(e?.message ?? "Não consegui resetar a senha.");
+      toast.error(`Erro ao resetar senha: ${e?.message ?? e}`);
     } finally {
       setOcupadoReset(null);
     }
   }
 
-  // Alternar Roleta do Corretor
-  async function toggleRoleta(p: any, ativo: boolean) {
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ lead_assignment_enabled: ativo })
-        .eq("id", p.id);
-      if (error) throw error;
-      toast.success(`${p.first_name || "Corretor"} ${ativo ? "entrou na roleta" : "pausado da roleta"}`);
-      qc.invalidateQueries({ queryKey: ["equipe-rh-lista", managerId] });
-      qc.invalidateQueries({ queryKey: ["aba-time"] });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Erro ao alterar roleta.");
-    }
-  }
-
-  if (isLoading) {
+  if (isLoading || !data) {
     return (
-      <div className="time-v3">
-        <div style={{ padding: "40px", textAlign: "center", color: "var(--cv-text-muted)" }}>
-          Carregando indicadores do time...
-        </div>
+      <div className="time-v3" style={{ padding: "60px 20px", textAlign: "center" }}>
+        <RefreshCw size={28} className="flame-pulse" style={{ color: "var(--cv-brand)", margin: "0 auto 12px" }} />
+        <p style={{ color: "var(--cv-text-muted)" }}>Carregando dados da tropa...</p>
       </div>
     );
   }
 
-  if (!data || data.gente.length === 0) {
-    return (
-      <div className="time-v3">
-        <div style={{ background: "var(--cv-surface)", border: "1px solid var(--cv-border)", borderRadius: "12px", padding: "40px", textAlign: "center" }}>
-          <Users size={36} style={{ color: "var(--cv-brand)", margin: "0 auto 12px" }} />
-          <h2 style={{ fontSize: "18px", fontWeight: "800", margin: "0 0 6px" }}>Nenhum corretor cadastrado nesta equipe</h2>
-          <p style={{ color: "var(--cv-text-muted)", fontSize: "14px", margin: "0 0 16px" }}>
-            Cadastre os corretores da sua equipe para começar a acompanhar as metas e atendimentos.
-          </p>
-          <button className="time-btn-primary" onClick={() => setCadastrar("")}>
-            <UserPlus size={16} /> Cadastrar Primeiro Corretor
-          </button>
-        </div>
-        {cadastrar !== false && (
-          <CadastrarCorretor
-            managerId={managerId!}
-            nomeInicial={cadastrar}
-            onFechar={() => setCadastrar(false)}
-            onPronto={() => {
-              setCadastrar(false);
-              qc.invalidateQueries({ queryKey: ["aba-time"] });
-              qc.invalidateQueries({ queryKey: ["equipe-rh-lista", managerId] });
-            }}
-          />
-        )}
-      </div>
-    );
-  }
+  const { gente, achados, novatos } = data;
 
-  const { gente, achados, time, novatos } = data;
-
-  // Cálculos do Header
+  // Contadores
   const onlineCount = equipeProfiles.filter((p) => p.last_seen_at && Date.now() - new Date(p.last_seen_at).getTime() < 15 * 60_000).length;
   const roletaCount = equipeProfiles.filter((p) => p.lead_assignment_enabled !== false).length;
   const criticosCount = achados.filter((a) => a.tom === "crit").length;
 
-  const donoMeta = metasData?.dono;
-  const hoje = new Date();
-  const diasMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
-  const projecaoMes = deslocMes === 0 && hoje.getDate() > 0 && donoMeta ? Math.round((donoMeta.realizado / hoje.getDate()) * diasMes) : null;
-  const pctMetaMes = donoMeta?.meta ? Math.min(100, Math.round((donoMeta.realizado / donoMeta.meta) * 100)) : 0;
-  const somaMetasFilhos = metasData?.filhos?.reduce((a, f) => a + (f.meta ?? 0), 0) ?? 0;
-
-  // Filtragem de Achados do Radar
+  // Filtragem de Urgências do Radar
   const achadosFiltrados = achados.filter((a) => (filtroRadar === "todos" ? true : a.tom === filtroRadar));
 
-  // Filtragem de Pessoas do RH
-  const equipeFiltrada = equipeProfiles.filter((p) => {
+  // Filtragem da Tropa
+  const tropaFiltrada = equipeProfiles.filter((p) => {
     const nomeCompleto = `${p.first_name || ""} ${p.last_name || ""}`.toLowerCase();
     const email = (p.email || "").toLowerCase();
-    const termo = buscaEquipe.toLowerCase().trim();
-    if (termo && !nomeCompleto.includes(termo) && !email.includes(termo)) return false;
+    const tel = (p.phone || "").toLowerCase();
+    const termo = buscaTropa.toLowerCase().trim();
+    if (termo && !nomeCompleto.includes(termo) && !email.includes(termo) && !tel.includes(termo)) return false;
 
-    if (filtroRH === "online") {
+    if (filtroTropa === "online") {
       return p.last_seen_at && Date.now() - new Date(p.last_seen_at).getTime() < 15 * 60_000;
     }
-    if (filtroRH === "pausados") {
+    if (filtroTropa === "pausados") {
       return p.lead_assignment_enabled === false;
     }
-    if (filtroRH === "senha_provisoria") {
+    if (filtroTropa === "senha_provisoria") {
       return !!p.must_change_password;
     }
     return true;
@@ -291,18 +231,29 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
 
   return (
     <div className="time-v3">
-      {/* ── CABEÇALHO DA ABA TIME ── */}
+      {/* ── CABEÇALHO LIMPO E DIRETO ── */}
       <div className="time-v3-header">
         <div className="time-v3-title">
-          <h1>Gestão da Equipe & Coaching</h1>
+          <h1>Gestão da Equipe & Tropa</h1>
           <p>
-            Alocação tática, metas individuais e radar de acompanhamento dos corretores · {gente.length} corretores
+            Controle de produção, alocação de leads e acompanhamento de metas · {gente.length} corretores cadastrados
           </p>
         </div>
+
         <div className="time-v3-actions">
           <SeletorPeriodo />
-          <button className="time-btn-primary" onClick={() => setCadastrar("")}>
+
+          <button className="time-btn-primary" onClick={() => setCadastrar("")} title="Cadastrar novo corretor na equipe">
             <UserPlus size={16} /> Cadastrar Corretor
+          </button>
+
+          <button
+            className="time-btn-action danger"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            onClick={() => setSeletorDesligarAberto(true)}
+            title="Inativar ou desligar corretor da equipe e redistribuir leads"
+          >
+            <UserX size={15} /> Inativar Corretor
           </button>
         </div>
       </div>
@@ -313,146 +264,62 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       {/* ── ALERTA DE VÍNCULOS PENDENTES C2S / JUNIX (SE HOUVER) ── */}
       <VincularNomes managerId={managerId} />
 
-      {/* ── SCORE ROW / KPI CARDS TÁTICOS ── */}
-      <div className="time-kpis-grid">
-        {/* KPI 1: Efetivo Ativo */}
-        <div className="time-kpi-card" onClick={() => setSubAba("equipe")}>
-          <div className="time-kpi-top">
-            <span className="time-kpi-label">Efetivo da Tropa</span>
-            <span className="time-kpi-badge brand">
-              <Users size={12} /> {roletaCount} na roleta
-            </span>
-          </div>
-          <div className="time-kpi-value-row">
-            <span className="time-kpi-num">{gente.length}</span>
-            <span className="time-kpi-sub">corretores ({onlineCount} online)</span>
-          </div>
-          <div className="time-kpi-progress">
-            <div
-              className="time-kpi-progress-bar"
-              style={{
-                width: `${gente.length ? (roletaCount / gente.length) * 100 : 0}%`,
-                background: "var(--cv-brand)",
-              }}
-            />
-          </div>
+      {/* ── BARRA RESUMO COMPACTA (ZERO POLUIÇÃO VISUAL) ── */}
+      <div className="time-resumo-compacto-bar">
+        <div className="time-resumo-item">
+          <Users size={16} style={{ color: "var(--cv-brand)" }} />
+          <span><b>{gente.length}</b> corretores na tropa</span>
         </div>
 
-        {/* KPI 2: Meta do Mês (Junix) */}
-        <div className="time-kpi-card" onClick={() => setSubAba("metas")}>
-          <div className="time-kpi-top">
-            <span className="time-kpi-label">Meta de {nomeMes(mesAtual)}</span>
-            {donoMeta?.meta ? (
-              <span className={`time-kpi-badge ${pctMetaMes >= 100 ? "green" : pctMetaMes >= 60 ? "amber" : "rose"}`}>
-                {pctMetaMes}%
-              </span>
-            ) : null}
-          </div>
-          <div className="time-kpi-value-row">
-            <span className="time-kpi-num">{donoMeta?.realizado ?? 0}</span>
-            <span className="time-kpi-sub">de {donoMeta?.meta ?? "—"} vendas (Junix)</span>
-          </div>
-          <div className="time-kpi-progress">
-            <div
-              className="time-kpi-progress-bar"
-              style={{
-                width: `${pctMetaMes}%`,
-                background: pctMetaMes >= 100 ? "var(--cv-green)" : pctMetaMes >= 60 ? "var(--cv-amber)" : "var(--cv-rose)",
-              }}
-            />
-          </div>
+        <div className="time-resumo-divider" />
+
+        <div className="time-resumo-item">
+          <span className="dot-online" />
+          <span><b>{onlineCount}</b> online agora</span>
         </div>
 
-        {/* KPI 3: Meta da Semana (Compromisso) */}
-        <div className="time-kpi-card">
-          <div className="time-kpi-top">
-            <span className="time-kpi-label">Meta da Semana</span>
-            <span className="time-kpi-badge blue">
-              <Zap size={12} /> Compromisso
-            </span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-            <div className="time-week-stepper">
-              <button
-                className="time-stepper-btn"
-                onClick={() => setAlvoSemana(Math.max(0, escolhidoSemana - 1))}
-                aria-label="Diminuir"
-              >
-                −
-              </button>
-              <span className="time-stepper-val">{escolhidoSemana}</span>
-              <button
-                className="time-stepper-btn"
-                onClick={() => setAlvoSemana(escolhidoSemana + 1)}
-                aria-label="Aumentar"
-              >
-                +
-              </button>
+        <div className="time-resumo-divider" />
+
+        <div className="time-resumo-item">
+          <RefreshCw size={14} style={{ color: "var(--cv-blue)" }} />
+          <span><b>{roletaCount}</b> na roleta de novos leads</span>
+        </div>
+
+        <div className="time-resumo-divider" />
+
+        <div className="time-resumo-item">
+          <Sparkles size={15} style={{ color: "var(--cv-purple)" }} />
+          <span><b>{novatos.length}</b> contratações recentes (&lt;90d)</span>
+        </div>
+
+        {criticosCount > 0 && (
+          <>
+            <div className="time-resumo-divider" />
+            <div className="time-resumo-item" style={{ color: "var(--cv-rose)", fontWeight: 700 }}>
+              <AlertTriangle size={15} />
+              <span><b>{criticosCount}</b> pendências urgentes</span>
             </div>
-            <button
-              className="time-btn-primary"
-              style={{ padding: "6px 10px", fontSize: "12px" }}
-              disabled={salvandoMetaSemana}
-              onClick={salvarMetaSemana}
-            >
-              {salvandoMetaSemana ? "Salvando..." : "Assumir"}
-            </button>
-          </div>
-          <div style={{ fontSize: "11px", color: "var(--cv-text-muted)" }}>
-            Necessita ~{precisaAtendimentos} atendimentos no ritmo atual
-          </div>
-        </div>
-
-        {/* KPI 4: Radar de Urgências */}
-        <div className="time-kpi-card" onClick={() => setSubAba("radar")}>
-          <div className="time-kpi-top">
-            <span className="time-kpi-label">Radar de Coaching</span>
-            <span className={`time-kpi-badge ${criticosCount > 0 ? "rose" : "green"}`}>
-              {criticosCount > 0 ? `${criticosCount} críticos` : "Em dia"}
-            </span>
-          </div>
-          <div className="time-kpi-value-row">
-            <span className="time-kpi-num">{achados.length}</span>
-            <span className="time-kpi-sub">alertas de acompanhamento</span>
-          </div>
-          <div style={{ fontSize: "11.5px", color: "var(--cv-text-muted)" }}>
-            {time.leadsParados > 0 ? (
-              <span style={{ color: "var(--cv-rose)", fontWeight: 600 }}>
-                ⚠️ {time.leadsParados} clientes responderam e estão sem retorno
-              </span>
-            ) : (
-              "Sem clientes travados no momento"
-            )}
-          </div>
-        </div>
+          </>
+        )}
       </div>
 
-      {/* ── BARRA DE SUB-NAVEGAÇÃO (4 MODOS TÁTICOS) ── */}
+      {/* ── BARRA DE NAVEGAÇÃO: 3 VISÕES CLARAS ── */}
       <div className="time-tabs-bar">
         <button
-          className={`time-tab-btn ${subAba === "radar" ? "active" : ""}`}
-          onClick={() => setSubAba("radar")}
+          className={`time-tab-btn ${subAba === "urgencias" ? "active" : ""}`}
+          onClick={() => setSubAba("urgencias")}
         >
           <AlertTriangle size={15} />
-          Radar de Coaching
+          Quem Cobrar Agora
           <span className={`time-tab-pill ${criticosCount > 0 ? "hot" : ""}`}>{achados.length}</span>
         </button>
 
         <button
-          className={`time-tab-btn ${subAba === "metas" ? "active" : ""}`}
-          onClick={() => setSubAba("metas")}
-        >
-          <Target size={15} />
-          Metas & Desempenho
-          <span className="time-tab-pill">{metasData?.filhos?.length ?? gente.length}</span>
-        </button>
-
-        <button
-          className={`time-tab-btn ${subAba === "equipe" ? "active" : ""}`}
-          onClick={() => setSubAba("equipe")}
+          className={`time-tab-btn ${subAba === "tropa" ? "active" : ""}`}
+          onClick={() => setSubAba("tropa")}
         >
           <Users size={15} />
-          Gestão da Tropa & RH
+          Tabela da Tropa (Produção)
           <span className="time-tab-pill">{gente.length}</span>
         </button>
 
@@ -467,13 +334,10 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
-          MODO 1: RADAR DE COACHING & URGÊNCIAS
+          VISÃO 1: 🚨 QUEM COBRAR AGORA (FOCO & URGÊNCIAS)
           ══════════════════════════════════════════════════════════════════════ */}
-      {subAba === "radar" && (
+      {subAba === "urgencias" && (
         <div className="time-radar-section">
-          {/* ── FUNIL ACIONÁVEL DA EQUIPE POR CANAL ── */}
-          <FunilEquipeV3 managerId={managerId!} onSelecionarCorretor={(id) => setCorretorRaioX(id)} />
-
           {/* Filtros rápidos de severidade */}
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--cv-text-muted)", marginRight: "4px" }}>
@@ -512,9 +376,9 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
           {achadosFiltrados.length === 0 ? (
             <div style={{ background: "var(--cv-surface)", border: "1px solid var(--cv-border)", borderRadius: "12px", padding: "40px", textAlign: "center" }}>
               <CheckCircle2 size={36} style={{ color: "var(--cv-green)", margin: "0 auto 12px" }} />
-              <h3 style={{ fontSize: "16px", fontWeight: "700", margin: "0 0 6px" }}>Nenhum corretor fora do padrão neste filtro</h3>
+              <h3 style={{ fontSize: "16px", fontWeight: "700", margin: "0 0 6px" }}>Tropa 100% em dia!</h3>
               <p style={{ color: "var(--cv-text-muted)", fontSize: "13.5px", margin: 0 }}>
-                A equipe está operando de acordo com as metas e sem gargalos críticos de atendimento.
+                Nenhum corretor com clientes travados ou pendências fora do padrão neste filtro.
               </p>
             </div>
           ) : (
@@ -526,7 +390,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                 const leadsEmQueima = queimaPorCorretor.get(a.profileId) || [];
 
                 const msgWa = encodeURIComponent(
-                  `Olá ${a.nome}! Vi aqui no sistema: "${a.fato}". Vamos alinhar rapidinho para destravar seus atendimentos?`
+                  `Olá ${a.nome}! Vi aqui no Comandra: "${a.fato}". Vamos alinhar rapidinho para destravar seus atendimentos?`
                 );
 
                 return (
@@ -596,13 +460,13 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                           target="_blank"
                           rel="noreferrer"
                         >
-                          <MessageCircle size={14} /> Cobrar no WhatsApp
+                          <MessageCircle size={14} /> WhatsApp
                         </a>
                       ) : (
                         <button
                           className="time-coach-btn-wa"
                           style={{ opacity: 0.6 }}
-                          onClick={() => toast.info(`Corretor ${a.nome} não possui telefone cadastrado no perfil.`)}
+                          onClick={() => toast.info(`Corretor ${a.nome} não possui telefone cadastrado.`)}
                         >
                           <MessageCircle size={14} /> WhatsApp (sem tel)
                         </button>
@@ -622,380 +486,228 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                           📋 1:1
                         </button>
                       )}
+
+                      <button
+                        type="button"
+                        className="time-btn-action danger"
+                        style={{ padding: "4px 8px", fontSize: "11px" }}
+                        title="Desligar corretor"
+                        onClick={() => setDesligar(a.profileId)}
+                      >
+                        <UserX size={12} />
+                      </button>
                     </div>
                   </div>
                 );
               })}
             </div>
           )}
-
-          {/* Diagnóstico Coletivo da Tropa */}
-          {time.checkinsPorAtend !== null && (
-            <div className="time-diagnostico-card">
-              <div className="time-diag-title-row">
-                <div className="time-diag-title">
-                  <h3>Diagnóstico Estrutural do Time</h3>
-                  <p style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--cv-text-muted)" }}>
-                    {time.checkinsPorAtend > 4
-                      ? "O time comparece ao plantão, mas tem dificuldade na abordagem inicial."
-                      : "A abordagem no balcão está funcionando bem — o foco deve ser no fechamento e documentação."}
-                  </p>
-                </div>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button
-                    className="time-btn-primary"
-                    style={{ fontSize: "12.5px", padding: "6px 12px" }}
-                    onClick={() => toast.info("Treino de abordagem agendado na pauta da equipe.")}
-                  >
-                    Marcar Treino de Abordagem
-                  </button>
-                </div>
-              </div>
-
-              <div className="time-diag-metrics">
-                <div className="time-diag-metric-box">
-                  <b>{um(time.checkinsPorAtend)} check-ins</b>
-                  <span>para cada 1 atendimento na equipe</span>
-                </div>
-
-                {time.checkinsPorAtendSemTopo && (
-                  <div className="time-diag-metric-box pior">
-                    <b>{um(time.checkinsPorAtendSemTopo)} check-ins</b>
-                    <span>excluindo os melhores da equipe (ponto de atenção)</span>
-                  </div>
-                )}
-
-                <div className="time-diag-metric-box">
-                  <b>{um(time.atendPorVenda)} atendimentos</b>
-                  <span>para converter 1 venda confirmada</span>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          MODO 2: METAS DO MÊS & DESEMPENHO INDIVIDUAL (CASCATA)
+          VISÃO 2: 🏆 TABELA UNIFICADA DA TROPA (PRODUÇÃO & GESTÃO)
           ══════════════════════════════════════════════════════════════════════ */}
-      {subAba === "metas" && (
-        <div className="time-metas-section">
-          {/* Card Hero da Meta do Gerente */}
-          <div className="time-meta-hero">
-            <div className="time-meta-hero-top">
-              <div className="time-meta-hero-left">
-                <span className="time-meta-big-num mono">{donoMeta?.realizado ?? 0}</span>
-                <span className="time-meta-label">de</span>
-                <span className="time-meta-target mono">{donoMeta?.meta ?? "—"}</span>
-                <span className="time-meta-label">vendas em {nomeMes(mesAtual)}</span>
-
-                {projecaoMes != null && donoMeta?.meta ? (
-                  <span className={`time-meta-pace-badge ${projecaoMes >= donoMeta.meta ? "ok" : "behind"}`}>
-                    Ritmo para {projecaoMes} vendas {projecaoMes >= donoMeta.meta ? "· bate a meta 🎯" : `· faltam ${donoMeta.meta - projecaoMes}`}
-                  </span>
-                ) : null}
-              </div>
-
-              <div style={{ display: "flex", gap: "6px" }}>
-                <button
-                  className={`time-btn-action ${deslocMes === 0 ? "active" : ""}`}
-                  style={deslocMes === 0 ? { background: "var(--cv-brand)", color: "#fff", borderColor: "var(--cv-brand)" } : {}}
-                  onClick={() => setDeslocMes(0)}
-                >
-                  Este Mês
-                </button>
-                <button
-                  className={`time-btn-action ${deslocMes === 1 ? "active" : ""}`}
-                  style={deslocMes === 1 ? { background: "var(--cv-brand)", color: "#fff", borderColor: "var(--cv-brand)" } : {}}
-                  onClick={() => setDeslocMes(1)}
-                >
-                  Próximo Mês
-                </button>
-              </div>
-            </div>
-
-            <div className="time-meta-bar-wrap">
-              <div className="time-meta-bar-fill" style={{ width: `${pctMetaMes}%` }} />
-            </div>
-
-            {donoMeta?.meta ? (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-                <div className={`time-meta-distribution-pill ${somaMetasFilhos < donoMeta.meta ? "alert" : ""}`}>
-                  <Target size={14} />
-                  {somaMetasFilhos < donoMeta.meta
-                    ? `Distribuído ${somaMetasFilhos} de ${donoMeta.meta} — faltam distribuir ${donoMeta.meta - somaMetasFilhos} vendas`
-                    : somaMetasFilhos > donoMeta.meta
-                    ? `Distribuído ${somaMetasFilhos} de ${donoMeta.meta} (${somaMetasFilhos - donoMeta.meta} de folga acima da meta)`
-                    : `Distribuído exatamente ${somaMetasFilhos} de ${donoMeta.meta} ✓`}
-                </div>
-                <span style={{ fontSize: "12.5px", color: "var(--cv-text-muted)" }}>
-                  Altere a meta de cada corretor na coluna "Meta" abaixo.
-                </span>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Tabela de Metas Individuais dos Corretores */}
-          <div className="time-table-card">
-            <div className="time-table-responsive">
-              <table className="time-table">
-                <thead>
-                  <tr>
-                    <th>Corretor</th>
-                    <th style={{ textAlign: "center" }}>Realizado (Junix)</th>
-                    <th style={{ textAlign: "right" }}>Meta do Mês</th>
-                    <th>Atingimento</th>
-                    <th style={{ textAlign: "center" }}>Tendência</th>
-                    <th style={{ textAlign: "right" }}>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(metasData?.filhos ?? []).map((f) => {
-                    const pessoaTime = gente.find((g) => g.profileId === f.id);
-                    const pctFilho = f.meta ? Math.min(100, Math.round((f.realizado / f.meta) * 100)) : 0;
-                    const deltaVendas = pessoaTime ? pessoaTime.vendas - pessoaTime.vendasAntes : 0;
-
-                    return (
-                      <tr key={f.id}>
-                        <td>
-                          <div className="time-broker-cell">
-                            <div className="time-broker-avatar">{ini(f.nome)}</div>
-                            <div className="time-broker-info">
-                              <b>{f.nome}</b>
-                              <span>{f.papel === "BROKER" ? "Corretor" : f.papel}</span>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td style={{ textAlign: "center" }}>
-                          <span className="mono" style={{ fontSize: "16px", fontWeight: 800 }}>
-                            {f.realizado}
-                          </span>
-                        </td>
-
-                        <td style={{ textAlign: "right" }}>
-                          {f.pode_editar ? (
-                            <input
-                              type="number"
-                              min={0}
-                              defaultValue={f.meta ?? ""}
-                              className="time-input-meta"
-                              placeholder="—"
-                              onBlur={(e) => {
-                                const val = parseInt(e.target.value, 10);
-                                if (!isNaN(val) && val !== f.meta) {
-                                  definirMetaIndividual(f.id, val, f.nome);
-                                }
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                              }}
-                            />
-                          ) : (
-                            <span className="mono" style={{ fontSize: "15px", fontWeight: 700 }}>
-                              {f.meta ?? "—"}
-                            </span>
-                          )}
-                        </td>
-
-                        <td style={{ minWidth: "160px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <div style={{ flex: 1, height: "6px", background: "var(--cv-surface-subtle)", borderRadius: "3px", overflow: "hidden" }}>
-                              <div
-                                style={{
-                                  width: `${pctFilho}%`,
-                                  height: "100%",
-                                  background: pctFilho >= 100 ? "var(--cv-green)" : pctFilho >= 60 ? "var(--cv-brand)" : "var(--cv-rose)",
-                                  borderRadius: "3px",
-                                }}
-                              />
-                            </div>
-                            <span className="mono" style={{ fontSize: "12px", fontWeight: 700, minWidth: "36px" }}>
-                              {f.meta ? `${pctFilho}%` : "—"}
-                            </span>
-                          </div>
-                        </td>
-
-                        <td style={{ textAlign: "center" }}>
-                          {deltaVendas > 0 ? (
-                            <span className="time-kpi-badge green" title={`Vendeu +${deltaVendas} que no período anterior`}>
-                              <TrendingUp size={12} /> +{deltaVendas}
-                            </span>
-                          ) : deltaVendas < 0 ? (
-                            <span className="time-kpi-badge rose" title={`Vendeu ${deltaVendas} em relação ao período anterior`}>
-                              <TrendingDown size={12} /> {deltaVendas}
-                            </span>
-                          ) : (
-                            <span style={{ color: "var(--cv-text-dim)", fontSize: "13px" }}>—</span>
-                          )}
-                        </td>
-
-                        <td style={{ textAlign: "right" }}>
-                          <div style={{ display: "inline-flex", gap: "6px" }}>
-                            {pessoaTime && (
-                              <button
-                                className="time-btn-action"
-                                title="Abrir Briefing 1:1"
-                                onClick={() => setBrief(pessoaTime)}
-                              >
-                                📋 1:1
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════════
-          MODO 3: GESTÃO DA TROPA & AÇÕES DE RH
-          ══════════════════════════════════════════════════════════════════════ */}
-      {subAba === "equipe" && (
+      {subAba === "tropa" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {/* Barra de Busca e Filtros de RH */}
+          {/* Barra de Busca e Filtros Rápidos */}
           <div className="time-search-bar">
             <div className="time-search-input-wrap">
               <Search size={15} className="time-search-icon" />
               <input
                 type="text"
                 className="time-search-input"
-                placeholder="Buscar corretor por nome ou e-mail..."
-                value={buscaEquipe}
-                onChange={(e) => setBuscaEquipe(e.target.value)}
+                placeholder="Buscar corretor por nome, telefone ou e-mail..."
+                value={buscaTropa}
+                onChange={(e) => setBuscaTropa(e.target.value)}
               />
             </div>
 
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
               <button
-                className={`time-btn-action ${filtroRH === "todos" ? "active" : ""}`}
-                style={filtroRH === "todos" ? { background: "var(--cv-brand)", color: "#fff", borderColor: "var(--cv-brand)" } : {}}
-                onClick={() => setFiltroRH("todos")}
+                className={`time-btn-action ${filtroTropa === "todos" ? "active" : ""}`}
+                style={filtroTropa === "todos" ? { background: "var(--cv-brand)", color: "#fff", borderColor: "var(--cv-brand)" } : {}}
+                onClick={() => setFiltroTropa("todos")}
               >
                 Todos ({equipeProfiles.length})
               </button>
               <button
-                className={`time-btn-action ${filtroRH === "online" ? "active" : ""}`}
-                style={filtroRH === "online" ? { background: "var(--cv-brand)", color: "#fff", borderColor: "var(--cv-brand)" } : {}}
-                onClick={() => setFiltroRH("online")}
+                className={`time-btn-action ${filtroTropa === "online" ? "active" : ""}`}
+                style={filtroTropa === "online" ? { background: "var(--cv-brand)", color: "#fff", borderColor: "var(--cv-brand)" } : {}}
+                onClick={() => setFiltroTropa("online")}
               >
                 🟢 Online ({onlineCount})
               </button>
               <button
-                className={`time-btn-action ${filtroRH === "pausados" ? "active" : ""}`}
-                style={filtroRH === "pausados" ? { background: "var(--cv-amber)", color: "#fff", borderColor: "var(--cv-amber)" } : {}}
-                onClick={() => setFiltroRH("pausados")}
+                className={`time-btn-action ${filtroTropa === "pausados" ? "active" : ""}`}
+                style={filtroTropa === "pausados" ? { background: "var(--cv-amber)", color: "#fff", borderColor: "var(--cv-amber)" } : {}}
+                onClick={() => setFiltroTropa("pausados")}
               >
                 ⏸️ Fora da Roleta ({equipeProfiles.filter((p) => p.lead_assignment_enabled === false).length})
               </button>
               <button
-                className={`time-btn-action ${filtroRH === "senha_provisoria" ? "active" : ""}`}
-                style={filtroRH === "senha_provisoria" ? { background: "var(--cv-rose)", color: "#fff", borderColor: "var(--cv-rose)" } : {}}
-                onClick={() => setFiltroRH("senha_provisoria")}
+                className={`time-btn-action ${filtroTropa === "senha_provisoria" ? "active" : ""}`}
+                style={filtroTropa === "senha_provisoria" ? { background: "var(--cv-rose)", color: "#fff", borderColor: "var(--cv-rose)" } : {}}
+                onClick={() => setFiltroTropa("senha_provisoria")}
               >
                 🔑 Senha Provisória ({equipeProfiles.filter((p) => p.must_change_password).length})
               </button>
             </div>
           </div>
 
-          {/* Tabela de Gestão de RH */}
+          {/* Tabela Consolidada de Produção */}
           <div className="time-table-card">
             <div className="time-table-responsive">
               <table className="time-table">
                 <thead>
                   <tr>
-                    <th>Status</th>
                     <th>Corretor</th>
-                    <th>Contato</th>
+                    <th>Presença</th>
                     <th style={{ textAlign: "center" }}>Roleta</th>
-                    <th>Senha</th>
-                    <th style={{ textAlign: "right" }}>Ações de RH</th>
+                    <th style={{ textAlign: "right" }}>Leads</th>
+                    <th style={{ textAlign: "right" }}>Visitas</th>
+                    <th style={{ textAlign: "right" }}>Vendas (Junix)</th>
+                    <th style={{ textAlign: "center" }}>Meta do Mês</th>
+                    <th style={{ textAlign: "right" }}>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {equipeFiltrada.map((p) => {
-                    const online = p.last_seen_at && Date.now() - new Date(p.last_seen_at).getTime() < 15 * 60_000;
+                  {tropaFiltrada.map((p) => {
+                    const pessoaTime = gente.find((g) => g.profileId === p.id);
+                    const metaFilho = metasData?.filhos?.find((f) => f.id === p.id);
+                    const nomeCompleto = [p.first_name, p.last_name].filter(Boolean).join(" ") || "—";
                     const telLimpo = limparTel(p.phone);
+                    const online = p.last_seen_at && Date.now() - new Date(p.last_seen_at).getTime() < 15 * 60_000;
+                    const ativoRoleta = p.lead_assignment_enabled !== false;
+                    const diasDeCasa = p.created_at ? Math.round((Date.now() - new Date(p.created_at).getTime()) / 86_400_000) : 999;
+                    const ehNovato = diasDeCasa <= 90;
+
+                    const realizado = metaFilho?.realizado ?? pessoaTime?.vendas ?? 0;
+                    const metaAlvo = metaFilho?.meta ?? null;
+                    const pctMeta = metaAlvo ? Math.min(100, Math.round((realizado / metaAlvo) * 100)) : 0;
 
                     return (
                       <tr key={p.id}>
-                        <td style={{ width: "120px" }}>
-                          <span className={`time-status-dot ${online ? "online" : ""}`} />
-                          <span style={{ fontSize: "12px", color: online ? "var(--cv-green)" : "var(--cv-text-muted)", fontWeight: online ? 700 : 500 }}>
-                            {quandoAcesso(p.last_seen_at)}
-                          </span>
-                        </td>
-
+                        {/* Corretor */}
                         <td>
-                          <div className="time-broker-cell">
-                            <div className="time-broker-avatar">{ini(p.first_name || "CO")}</div>
+                          <div className="time-broker-cell" style={{ cursor: "pointer" }} onClick={() => setCorretorRaioX(p.id)}>
+                            <div className="time-broker-avatar">{ini(nomeCompleto)}</div>
                             <div className="time-broker-info">
-                              <b>{[p.first_name, p.last_name].filter(Boolean).join(" ") || "—"}</b>
-                              <span>{p.email || "Sem e-mail"}</span>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <b>{nomeCompleto}</b>
+                                {ehNovato && <span className="time-kpi-badge purple" style={{ fontSize: "10px", padding: "1px 5px" }}>Novo</span>}
+                              </div>
+                              <span>{p.phone || p.email}</span>
                             </div>
                           </div>
                         </td>
 
+                        {/* Presença */}
                         <td>
-                          {telLimpo ? (
-                            <a
-                              href={`https://wa.me/${telLimpo}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "#25D366", fontWeight: 600, fontSize: "13px", textDecoration: "none" }}
-                            >
-                              <MessageCircle size={14} /> {p.phone}
-                            </a>
-                          ) : (
-                            <span style={{ color: "var(--cv-text-dim)", fontSize: "12px" }}>Sem telefone</span>
-                          )}
+                          <span className={`time-kpi-badge ${online ? "green" : "subtle"}`}>
+                            {online ? "🟢 Online" : quandoAcesso(p.last_seen_at)}
+                          </span>
                         </td>
 
+                        {/* Roleta Switch */}
                         <td style={{ textAlign: "center" }}>
-                          <label className="time-switch" title={p.lead_assignment_enabled !== false ? "Na roleta de leads" : "Fora da roleta"}>
+                          <button
+                            type="button"
+                            className={`time-roleta-toggle ${ativoRoleta ? "ativo" : "inativo"}`}
+                            disabled={ocupadoRoleta === p.id}
+                            title={ativoRoleta ? "Recebendo leads da roleta. Clique para pausar." : "Pausado da roleta. Clique para ativar."}
+                            onClick={() => alternarRoleta(p.id, ativoRoleta, nomeCompleto)}
+                          >
+                            <span className="time-roleta-knob" />
+                          </button>
+                        </td>
+
+                        {/* Leads na Mão */}
+                        <td style={{ textAlign: "right" }} className="mono">
+                          <span style={{ fontWeight: 700, color: (pessoaTime?.carteira ?? 0) > 30 ? "var(--cv-amber)" : "inherit" }}>
+                            {pessoaTime?.carteira ?? "—"}
+                          </span>
+                        </td>
+
+                        {/* Visitas no Período */}
+                        <td style={{ textAlign: "right" }} className="mono">
+                          <span style={{ fontWeight: 600, color: "var(--cv-purple)" }}>
+                            {pessoaTime?.checkins || pessoaTime?.atendimentos || 0}
+                          </span>
+                        </td>
+
+                        {/* Vendas */}
+                        <td style={{ textAlign: "right" }} className="mono">
+                          <b style={{ color: realizado > 0 ? "var(--cv-green)" : "var(--cv-text-dim)" }}>
+                            {realizado} un
+                          </b>
+                        </td>
+
+                        {/* Meta Individual */}
+                        <td style={{ textAlign: "center" }}>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
                             <input
-                              type="checkbox"
-                              checked={p.lead_assignment_enabled !== false}
-                              onChange={(e) => toggleRoleta(p, e.target.checked)}
+                              type="number"
+                              min={0}
+                              max={30}
+                              className="time-meta-inline-input mono"
+                              defaultValue={metaAlvo ?? ""}
+                              placeholder="0"
+                              title="Meta mensal de vendas"
+                              onBlur={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                if (!isNaN(val) && val >= 0 && val !== metaAlvo) {
+                                  definirMetaIndividual(p.id, val, nomeCompleto);
+                                }
+                              }}
                             />
-                            <span className="time-switch-slider" />
-                          </label>
+                            <span className="mono" style={{ fontSize: "11.5px", color: "var(--cv-text-muted)", minWidth: "32px" }}>
+                              {metaAlvo ? `${pctMeta}%` : "—"}
+                            </span>
+                          </div>
                         </td>
 
-                        <td>
-                          {p.must_change_password ? (
-                            <span className="time-kpi-badge rose">
-                              <Key size={11} /> Provisória (mudar@123)
-                            </span>
-                          ) : (
-                            <span className="time-kpi-badge green">
-                              <CheckCircle2 size={11} /> Ativa
-                            </span>
-                          )}
-                        </td>
-
+                        {/* Ações */}
                         <td style={{ textAlign: "right" }}>
-                          <div style={{ display: "inline-flex", gap: "6px" }}>
+                          <div style={{ display: "inline-flex", gap: "5px" }}>
+                            {telLimpo && (
+                              <a
+                                href={`https://wa.me/${telLimpo}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="time-btn-action"
+                                title="Abrir conversa no WhatsApp"
+                              >
+                                <MessageCircle size={13} />
+                              </a>
+                            )}
+
                             <button
+                              type="button"
+                              className="time-btn-action"
+                              title="Raio-X de clientes e atendimentos"
+                              onClick={() => setCorretorRaioX(p.id)}
+                            >
+                              <Eye size={13} />
+                            </button>
+
+                            <button
+                              type="button"
                               className="time-btn-action"
                               disabled={ocupadoReset === p.id}
                               title="Redefinir senha para mudar@123"
                               onClick={() => resetarSenha(p)}
                             >
-                              <Key size={12} /> {ocupadoReset === p.id ? "Resetando..." : "Resetar Senha"}
+                              <Key size={13} />
                             </button>
 
                             <button
+                              type="button"
                               className="time-btn-action danger"
-                              title="Desligar corretor e transferir carteira"
+                              title="Desligar/Inativar corretor da equipe"
                               onClick={() => setDesligar(p.id)}
                             >
-                              <UserX size={12} /> Desligar
+                              <UserX size={13} />
                             </button>
                           </div>
                         </td>
@@ -1010,7 +722,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          MODO 4: RAMPA DE NOVOS (ÚLTIMOS 90 DIAS)
+          VISÃO 3: 🌱 RAMPA DE NOVOS (ÚLTIMOS 90 DIAS)
           ══════════════════════════════════════════════════════════════════════ */}
       {subAba === "novos" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -1020,12 +732,23 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                 Novas Contratações ({novatos.length})
               </h3>
               <p style={{ margin: "3px 0 0", fontSize: "13px", color: "var(--cv-text-muted)" }}>
-                Corretores cadastrados nos últimos 90 dias e seus marcos de ativação na equipe
+                Acompanhamento da rampa dos primeiros 90 dias e ativação de vendas
               </p>
             </div>
-            <button className="time-btn-primary" onClick={() => setCadastrar("")}>
-              <UserPlus size={15} /> Cadastrar Corretor
-            </button>
+
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button className="time-btn-primary" onClick={() => setCadastrar("")}>
+                <UserPlus size={15} /> Cadastrar Corretor
+              </button>
+
+              <button
+                className="time-btn-action danger"
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                onClick={() => setSeletorDesligarAberto(true)}
+              >
+                <UserX size={15} /> Inativar Corretor
+              </button>
+            </div>
           </div>
 
           {novatos.length === 0 ? (
@@ -1033,19 +756,21 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
               <Clock size={36} style={{ color: "var(--cv-text-dim)", margin: "0 auto 12px" }} />
               <h3 style={{ fontSize: "16px", fontWeight: "700", margin: "0 0 6px" }}>Nenhuma contratação nos últimos 90 dias</h3>
               <p style={{ color: "var(--cv-text-muted)", fontSize: "13.5px", margin: "0 0 16px" }}>
-                Quando você cadastrar novos corretores, eles aparecerão aqui para acompanhamento da rampa inicial.
+                Quando você cadastrar novos corretores, eles aparecerão aqui para acompanhamento dos marcos de rampa.
               </p>
+              <button className="time-btn-primary" style={{ margin: "0 auto" }} onClick={() => setCadastrar("")}>
+                <UserPlus size={15} /> Cadastrar Novo Corretor
+              </button>
             </div>
           ) : (
             <div className="time-novos-grid">
               {novatos.map((n) => {
-                const diasDeCasa = n.criadoEm
-                  ? Math.round((Date.now() - new Date(n.criadoEm).getTime()) / 86_400_000)
-                  : 0;
-
-                const jaVendeu = n.primeiraVenda != null;
-                const jaAtendeu = n.primeiroAtend != null;
-                const bateuPonto = n.primeiroPonto != null;
+                const diasDeCasa = n.criadoEm ? Math.round((Date.now() - new Date(n.criadoEm).getTime()) / 86_400_000) : 0;
+                const bateuPonto = n.primeiroPonto !== null;
+                const jaAtendeu = n.primeiroAtend !== null;
+                const jaVendeu = n.primeiraVenda !== null;
+                const perfilRH = equipeProfiles.find((ep) => ep.id === n.profileId);
+                const telLimpo = limparTel(perfilRH?.phone);
 
                 const estado = jaVendeu
                   ? { badge: "green", rotulo: "Já Vende", txt: `1ª Venda com ${n.primeiraVenda} dias` }
@@ -1058,7 +783,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                 return (
                   <div key={n.profileId} className="time-novo-card">
                     <div className="time-novo-top">
-                      <div className="time-broker-cell">
+                      <div className="time-broker-cell" style={{ cursor: "pointer" }} onClick={() => setCorretorRaioX(n.profileId)}>
                         <div className="time-broker-avatar">{ini(n.apelido ?? n.nome)}</div>
                         <div className="time-broker-info">
                           <b>{n.apelido ?? n.nome}</b>
@@ -1085,9 +810,47 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                       </div>
                     </div>
 
-                    <div style={{ display: "flex", gap: "8px", marginTop: "auto" }}>
-                      <button className="time-coach-btn-brief" style={{ flex: 1 }} onClick={() => setBrief(n)}>
-                        📋 Briefing 1:1
+                    <div style={{ display: "flex", gap: "6px", marginTop: "auto", flexWrap: "wrap" }}>
+                      {telLimpo && (
+                        <a
+                          href={`https://wa.me/${telLimpo}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="time-coach-btn-wa"
+                          style={{ flex: 1, padding: "6px 10px" }}
+                        >
+                          <MessageCircle size={13} /> Zap
+                        </a>
+                      )}
+
+                      <button
+                        type="button"
+                        className="time-coach-btn-brief"
+                        style={{ padding: "6px 10px" }}
+                        onClick={() => setBrief(n)}
+                        title="Briefing 1:1"
+                      >
+                        📋 1:1
+                      </button>
+
+                      <button
+                        type="button"
+                        className="time-coach-btn-brief"
+                        style={{ padding: "6px 10px" }}
+                        onClick={() => setCorretorRaioX(n.profileId)}
+                        title="Raio-X do corretor"
+                      >
+                        <Eye size={13} />
+                      </button>
+
+                      <button
+                        type="button"
+                        className="time-btn-action danger"
+                        style={{ padding: "6px 10px" }}
+                        title="Inativar ou desligar corretor da equipe"
+                        onClick={() => setDesligar(n.profileId)}
+                      >
+                        <UserX size={13} /> Inativar
                       </button>
                     </div>
                   </div>
@@ -1095,9 +858,79 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
               })}
             </div>
           )}
+        </div>
+      )}
 
-          <div style={{ background: "var(--cv-surface-subtle)", borderRadius: "8px", padding: "12px 16px", fontSize: "13px", color: "var(--cv-text-muted)", lineHeight: 1.5 }}>
-            💡 <b>Dica de Rampa:</b> Corretores que ultrapassam 30 dias de casa sem registrar atendimento dificilmente engatam sozinhos. O momento de alinhar expectativas e marcar um plantão monitorado é nas primeiras 3 semanas.
+      {/* ── MODAL SELETOR DE DESLIGAR CORRETOR (ACIONADO PELO CABEÇALHO) ── */}
+      {seletorDesligarAberto && (
+        <div className="modal-backdrop-v3" onClick={() => setSeletorDesligarAberto(false)}>
+          <div className="modal-content-v3" style={{ maxWidth: "520px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-v3">
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div className="alerta-queima-icone small" style={{ background: "var(--cv-rose-light)", color: "var(--cv-rose)" }}>
+                  <UserX size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "17px", fontWeight: "800", color: "var(--cv-text-main)" }}>
+                    Inativar / Desligar Corretor
+                  </h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "var(--cv-text-muted)" }}>
+                    Escolha o corretor que saiu para bloquear acesso e redistribuir a carteira
+                  </p>
+                </div>
+              </div>
+              <button type="button" className="modal-close-btn-v3" onClick={() => setSeletorDesligarAberto(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body-v3">
+              <div style={{ maxHeight: "350px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
+                {equipeProfiles.map((p) => {
+                  const nome = [p.first_name, p.last_name].filter(Boolean).join(" ") || "Corretor";
+                  return (
+                    <div
+                      key={p.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "10px 14px",
+                        border: "1px solid var(--cv-border)",
+                        borderRadius: "8px",
+                        background: "var(--cv-surface)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div className="time-broker-avatar">{ini(nome)}</div>
+                        <div>
+                          <b style={{ fontSize: "13.5px", color: "var(--cv-text-main)" }}>{nome}</b>
+                          <div style={{ fontSize: "12px", color: "var(--cv-text-muted)" }}>{p.phone || p.email}</div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="time-btn-action danger"
+                        style={{ padding: "6px 12px", fontSize: "12px", fontWeight: 700 }}
+                        onClick={() => {
+                          setSeletorDesligarAberto(false);
+                          setDesligar(p.id);
+                        }}
+                      >
+                        <UserX size={13} /> Desligar
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="modal-footer-v3">
+              <button type="button" className="time-btn-action" onClick={() => setSeletorDesligarAberto(false)}>
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
