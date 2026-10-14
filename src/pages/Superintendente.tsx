@@ -37,6 +37,7 @@ import SalaDeGuerraSuper from "@/components/superintendente/SalaDeGuerraSuper";
 import PastasSuper from "@/components/superintendente/PastasSuper";
 import LeadsAnunciosSuper from "@/components/superintendente/LeadsAnunciosSuper";
 import Configuracoes from "@/components/config/Configuracoes";
+import PainelGeralSuper from "@/components/superintendente/PainelGeralSuper";
 import { useDiretorId, useDiretoria } from "@/hooks/useDiretoria";
 
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "Semana"], [30, "Mês"]];
@@ -114,6 +115,8 @@ export default function Superintendente() {
             ? "bi"
             : aba === "config"
             ? "config"
+            : aba === "campanhas" || aba === "plano" || aba === "gastos"
+            ? aba
             : "tempo"
         }
         mode={mode}
@@ -125,33 +128,22 @@ export default function Superintendente() {
           else if (k === "time") setAba("time");
           else if (k === "bi") setAba("bi");
           else if (k === "config") setAba("config");
+          else if (k === "campanhas" || k === "plano" || k === "gastos") setAba(k);
+          else if (ehDiretoria) nav("/diretor");
           else setAba("consolidado");
         }}
       />
       <main className="shell2">
         <div className="sup-wrap">
-          <div className="sup-top">
-            <div>
-              <h1>{ehDiretoria ? "Diretoria" : "Superintendência"}</h1>
-              <p>{ehDiretoria ? "A empresa inteira — todas as superintendências e equipes, num lugar só"
-                : "A operação inteira das suas equipes, num lugar só"}</p>
+          {aba !== "consolidado" ? (
+            <div className="sup-top">
+              <div>
+                <h1>{ehDiretoria ? "Diretoria" : "Superintendência"}</h1>
+                <p>{ehDiretoria ? "A empresa inteira — todas as superintendências e equipes, num lugar só"
+                  : "A operação inteira das suas equipes, num lugar só"}</p>
+              </div>
             </div>
-            <div className="sup-per">
-              <button className={aba === "consolidado" ? "on" : ""} onClick={() => setAba("consolidado")}>Consolidado</button>
-              <button className={aba === "estrategia" ? "on" : ""} onClick={() => setAba("estrategia")}>🎯 Sala de Guerra</button>
-              <button className={aba === "pastas" ? "on" : ""} onClick={() => setAba("pastas")}>📁 Pastas</button>
-              <button className={aba === "leads" ? "on" : ""} onClick={() => setAba("leads")}>📢 Leads & Anúncios</button>
-              <button className={aba === "time" ? "on" : ""} onClick={() => setAba("time")}>👥 Minha Tropa</button>
-              <button className={aba === "bi" ? "on" : ""} onClick={() => setAba("bi")}>📊 B.I.</button>
-              <button className={aba === "campanhas" ? "on" : ""} onClick={() => setAba("campanhas")}>Campanhas</button>
-              <button className={aba === "plano" ? "on" : ""} onClick={() => setAba("plano")}>Plano</button>
-              <button className={aba === "gastos" ? "on" : ""} onClick={() => setAba("gastos")}>Gastos</button>
-              <button className={aba === "config" ? "on" : ""} onClick={() => setAba("config")}>⚙ Configurar</button>
-              {aba === "consolidado" ? PERIODOS.map(([n, r]) => (
-                <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{r}</button>
-              )) : null}
-            </div>
-          </div>
+          ) : null}
 
           {!ehDiretoria ? <MinhasTarefas donoId={superId ?? undefined} /> : null}
           {aba === "estrategia" && superId ? (
@@ -181,84 +173,8 @@ export default function Superintendente() {
               .flatMap((g) => g.corretores_lista.filter((c) => c.plantao_hoje).map((c) => c.id)))} />
           ) : aba === "bi" ? (
             <BiTab scope="super" managerId={superId} />
-          ) : error ? (
-            <div className="sup-vazio" style={{ color: "var(--red)" }}>
-              Não consegui somar as equipes. Erro: {String((error as any)?.message ?? error)}
-            </div>
-          ) : isLoading || !data ? (
-            <p className="sup-vazio">Somando as equipes…</p>
           ) : (
-            <>
-              {/* o consolidado — a soma de todas as equipes */}
-              <div className="sup-kpis">
-                <div className="sup-k"><span>Gerentes</span><b>{t!.gerentes}</b></div>
-                <div className="sup-k"><span>Corretores</span><b>{t!.corretores}</b>
-                  <i>{t!.online} online agora</i></div>
-                <div className="sup-k"><span>No plantão hoje</span><b>{t!.plantao_hoje}</b>
-                  <i>{t!.plantao_semana} na semana · check-in C2S</i></div>
-                <div className="sup-k"><span>Leads no período</span><b>{t!.leads_periodo}</b></div>
-                <div className="sup-k"><span>Carteira viva</span><b>{t!.carteira}</b>
-                  <i>{t!.em_conversa} em conversa</i></div>
-                <div className="sup-k bom"><span>Vendas no mês</span><b>{t!.vendas_mes}</b></div>
-              </div>
-
-              <MetaCascata dono={superId} />
-
-              <ConsolidadoFontes superId={superId} dias={dias} onAbrir={abrir} />
-
-              {/* a estrutura inteira: cada gerente abre a lista dos corretores dele;
-                  "Abrir painel" entra no painel completo do gerente */}
-              <div className="sup-h">Suas equipes <span>toque para ver os corretores · "Abrir painel" entra no gerente</span></div>
-              <div className="sup-estrutura">
-                {data.gerentes.map((g: GerenteRollup) => {
-                  const exp = !!aberto[g.id];
-                  return (
-                    <div className={`sup-ger${exp ? " exp" : ""}`} key={g.id}>
-                      <div className="sup-ger-h" role="button" tabIndex={0}
-                        onClick={() => toggleGer(g.id)}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleGer(g.id); } }}>
-                        <span className="sup-caret" aria-hidden="true">{exp ? "▾" : "▸"}</span>
-                        <b>{g.nome}</b>
-                        <span className="sup-ger-cor">{g.corretores} corretores
-                          {g.online ? <i className="sup-on" title={`${g.online} online agora`} /> : null}</span>
-                        <span className="sup-ger-nums">
-                          <em><b>{g.plantao_hoje}</b> no plantão</em>
-                          <em><b>{g.leads_periodo}</b> leads</em>
-                          <em><b>{g.carteira}</b> carteira</em>
-                          <em><b>{g.em_conversa}</b> conversa</em>
-                          <em className="bom"><b>{g.vendas_mes}</b> vendas</em>
-                        </span>
-                        <button className="sup-abrir" onClick={(e) => { e.stopPropagation(); abrir(g.id); }}>
-                          Abrir painel →
-                        </button>
-                      </div>
-                      {exp ? (
-                        <div className="sup-cors">
-                          {g.corretores_lista.length ? g.corretores_lista.map((c: CorretorRollup) => (
-                            <div className="sup-cor" key={c.id}>
-                              <span className="sup-cor-nm">
-                                <s className={c.online ? "on" : "off"} />
-                                {c.nome}
-                                {c.plantao_hoje ? <em style={{ marginLeft: 6, fontStyle: "normal", fontSize: 11, color: "var(--good)", fontWeight: 700 }}>• no plantão</em> : null}
-                              </span>
-                              <span className="sup-cor-nums">
-                                <em><b>{c.leads_periodo}</b> leads</em>
-                                <em><b>{c.carteira}</b> carteira</em>
-                                <em><b>{c.em_conversa}</b> conversa</em>
-                                <em className="bom"><b>{c.vendas_mes}</b> vendas</em>
-                              </span>
-                            </div>
-                          )) : <p className="sup-vazio" style={{ padding: "10px 0" }}>Sem corretores ativos.</p>}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-                {!data.gerentes.length ? (
-                  <p className="sup-vazio">Nenhum gerente ligado a você ainda.</p>
-                ) : null}
-              </div>
-            </>
+            <PainelGeralSuper superId={superId} ehDiretoria={ehDiretoria} dias={dias} setDias={setDias} onAbrir={abrir} />
           )}
         </div>
       </main>

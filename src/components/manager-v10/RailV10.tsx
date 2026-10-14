@@ -4,7 +4,7 @@
 // páginas próprias como /manager/anuncios. Duplicar a barra seria duplicar a
 // ordem dos botões, e ela já mudou duas vezes.
 
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
 
 export function loadFonts() {
@@ -17,7 +17,7 @@ export function loadFonts() {
   document.head.appendChild(l);
 }
 
-export type Aba = "tempo" | "time" | "leads" | "pastas" | "anuncios" | "disparar" | "estrategia" | "plantao" | "integracoes" | "bi" | "regua" | "config";
+export type Aba = "tempo" | "time" | "leads" | "pastas" | "anuncios" | "disparar" | "estrategia" | "plantao" | "integracoes" | "bi" | "regua" | "config" | "campanhas" | "plano" | "gastos";
 
 export const ICONES: Record<Aba, string> = {
   tempo: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3.5 2",
@@ -31,6 +31,9 @@ export const ICONES: Record<Aba, string> = {
   integracoes: "M10 3v5M14 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4",
   bi: "M5 20V10M12 20V4M19 20v-7",
   regua: "M3 7h18v10H3zM7 7v4M11 7v6M15 7v4M19 7v6",
+  campanhas: "M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM15 9a3 3 0 0 1 0 6M18 6a7 7 0 0 1 0 12",
+  plano: "M9 4h6v3H9zM6 6h12v15H6zM9 12h6M9 16h4",
+  gastos: "M3 7h18v12H3zM3 10h18M16 15h2",
   config: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
 };
 
@@ -53,6 +56,9 @@ export const ABAS_SUPER: { k: Aba; label: string; to: string }[] = [
   { k: "leads", label: "Leads & Mídia", to: "/super?aba=leads" },
   { k: "time", label: "Minha Tropa", to: "/super?aba=time" },
   { k: "bi", label: "B.I.", to: "/super?aba=bi" },
+  { k: "campanhas", label: "Campanhas", to: "/super?aba=campanhas" },
+  { k: "plano", label: "Plano", to: "/super?aba=plano" },
+  { k: "gastos", label: "Gastos", to: "/super?aba=gastos" },
   { k: "config", label: "Configurar", to: "/super?aba=config" },
 ];
 
@@ -68,7 +74,10 @@ export function RailV10({
   pip?: number;
 }) {
   const { signOut, role } = useAuth();
-  const ehSuper = role === "SUPERINTENDENT";
+  const { pathname } = useLocation();
+  // Diretor e admin abrindo o /super usam o mesmo menu do super (antes caíam no menu do gerente
+  // e as abas do super apareciam como botões no alto da tela).
+  const ehSuper = role === "SUPERINTENDENT" || ((role === "DIRECTOR" || role === "ADMIN") && pathname.startsWith("/super"));
   const listaAbas = ehSuper ? ABAS_SUPER : ABAS;
 
   const destino = (a: { k: Aba; to: string }) => {
