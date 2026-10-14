@@ -37,6 +37,7 @@ import SalaDeGuerraSuper from "@/components/superintendente/SalaDeGuerraSuper";
 import PastasSuper from "@/components/superintendente/PastasSuper";
 import LeadsAnunciosSuper from "@/components/superintendente/LeadsAnunciosSuper";
 import Configuracoes from "@/components/config/Configuracoes";
+import { useDiretorId, useDiretoria } from "@/hooks/useDiretoria";
 
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "Semana"], [30, "Mês"]];
 
@@ -84,6 +85,9 @@ export default function Superintendente() {
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
   const toggleGer = (id: string) => setAberto((v) => ({ ...v, [id]: !v[id] }));
   const { data, isLoading, error } = useSuperintendenteRollup(superId, dias);
+  // Pastas precisa da lista de superintendências (dono de cada pasta do Junix); só busca quando a aba abre
+  const { data: dirIdPastas } = useDiretorId(aba === "pastas" ? role : null, session?.user?.id);
+  const { data: diretoriaPastas } = useDiretoria(aba === "pastas" ? dirIdPastas : null, 30);
   loadFonts();
 
   const abrir = (id: string) => nav(`/manager?manager=${id}`);
@@ -158,12 +162,13 @@ export default function Superintendente() {
           ) : aba === "pastas" && superId ? (
             <PastasSuper
               superId={superId}
+              supers={diretoriaPastas?.supers ?? []}
               superNome={superPerfil || session?.user?.user_metadata?.name || session?.user?.email?.split("@")[0] || ""}
             />
           ) : aba === "leads" && superId ? (
             <LeadsAnunciosSuper
               superId={superId}
-              dias={dias}
+              superNome={superPerfil || session?.user?.user_metadata?.name || session?.user?.email?.split("@")[0] || ""}
             />
           ) : (aba === "plano" || aba === "gastos") && superId && session?.user?.id ? (
             <PlanoSuper aba={aba} superId={superId} meuId={session.user.id} />
