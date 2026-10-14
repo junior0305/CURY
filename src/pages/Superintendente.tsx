@@ -170,11 +170,11 @@ export default function Superintendente() {
           ) : aba === "bi" ? (
             <BiTab scope="super" managerId={superId} />
           ) : (
-            superId && !ehDiretoria ? (
+            superId ? (
               <PainelGeral superId={superId}
                 superNome={superPerfil || session?.user?.user_metadata?.name || "Superintendente"}
                 onAbrir={abrir} irPara={(a) => setAba(a === "midia" ? "midia" : a === "pastas" ? "pastas" : "leads")} />
-            ) : <PainelGeralSuper superId={superId} ehDiretoria={ehDiretoria} dias={dias} setDias={setDias} onAbrir={abrir} />
+            ) : <p className="sup-vazio">Carregando…</p>
           )}
         </div>
       </main>

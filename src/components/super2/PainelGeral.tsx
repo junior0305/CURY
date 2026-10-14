@@ -38,7 +38,11 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
   const mes = inicioMes(desloc);
   const { data: metas } = useMetasDiretoria(superId, mes);
   const gerentes = useMemo(() => supers.flatMap((s) => s.gerentes).filter((g) => !/revisor/i.test(g.nome)), [supers]);
-  const s0 = supers[0];
+  // diretor/admin no /super enxerga todas as superintendências: junta os mapas de cada uma
+  const s0 = useMemo(() => ({
+    plantaoSemLogin: Object.assign({}, ...supers.map((s) => s.plantaoSemLogin ?? {})) as Record<string, string[]>,
+    logadosHoje: Object.assign({}, ...supers.map((s) => s.logadosHoje ?? {})) as Record<string, boolean>,
+  }), [supers]);
 
   const { data: extra } = useQuery({
     queryKey: ["s2-painel-extra", gerentes.map((g) => g.id).join(",")], enabled: gerentes.length > 0, staleTime: 5 * 60_000,
@@ -152,7 +156,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end", justifyContent: "space-between" }}>
         <div className="dir-ola" style={{ color: "var(--ink)" }}>
-          <small style={{ color: "var(--ink-3)" }}>Superintendência {superNome} · {nomeMes(inicioMes())} · dia {hoje.getDate()} de {diasMes}</small>
+          <small style={{ color: "var(--ink-3)" }}>{supers.length > 1 ? "Diretoria · todas as superintendências" : `Superintendência ${superNome}`} · {nomeMes(inicioMes())} · dia {hoje.getDate()} de {diasMes}</small>
           <b style={{ color: "var(--ink)" }}>{saudacao()}, {superNome.split(" ")[0]}</b>
         </div>
         <SeletorPeriodoSuper p={p} estilo="dir" />
@@ -170,7 +174,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
               </span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap", fontSize: 14, color: "var(--ink-3)" }}>
-              Meta da superintendência <b className="mono" style={{ color: "var(--ink)" }}>{d?.meta ?? "—"}</b>
+              {supers.length > 1 ? "Meta da empresa" : "Meta da superintendência"} <b className="mono" style={{ color: "var(--ink)" }}>{d?.meta ?? "—"}</b>
               {projecao != null && d?.meta ? <span>· no ritmo de hoje fecha em <b style={{ color: "var(--ink)" }}>{projecao}</b></span> : null}
               {projecao != null && d?.meta ? <span className={`dir-chip ${projecao >= d.meta ? "c-grn" : "c-red"}`}>{projecao >= d.meta ? "no ritmo" : "abaixo do ritmo"}</span> : null}
             </div>
