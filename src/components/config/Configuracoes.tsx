@@ -44,6 +44,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
   };
   // fontes de dados: só o diretor escolhe
   const secoes = SECOES.filter((s) => s.k !== "fontes" || nivel === "diretor");
+  const secaoOk: Secao = secoes.some((x) => x.k === secao) ? secao : "avisos";
 
   return (
     <div className="cfg">
@@ -54,16 +55,16 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
       </header>
       <nav className="cfg-tabs" aria-label="Seções das configurações">
         {secoes.map((s) => (
-          <button key={s.k} className={secao === s.k ? "on" : ""} onClick={() => ir(s.k)}>
+          <button key={s.k} className={secaoOk === s.k ? "on" : ""} onClick={() => ir(s.k)}>
             <b>{s.label}</b><span>{s.sub}</span>
           </button>
         ))}
       </nav>
       <section className="cfg-corpo">
-        {secao === "avisos" ? <ReguaEquipe nivel={nivel} donoId={donoId} />
-          : secao === "equipe" ? <Equipe nivel={nivel} donoId={donoId} />
-          : secao === "whatsapp" ? <MeuWhatsApp />
-          : secao === "fontes" ? <FontesDados />
+        {secaoOk === "avisos" ? <ReguaEquipe nivel={nivel} donoId={donoId} />
+          : secaoOk === "equipe" ? <Equipe nivel={nivel} donoId={donoId} />
+          : secaoOk === "whatsapp" ? <MeuWhatsApp />
+          : secaoOk === "fontes" ? <FontesDados />
           : <><ContasAnuncio /><GestorTrafego donoId={donoId} /><div className="integ-shell"><IntegracaoFacebook /></div></>}
       </section>
     </div>
