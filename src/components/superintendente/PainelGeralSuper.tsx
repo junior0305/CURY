@@ -55,7 +55,7 @@ export default function PainelGeralSuper({ superId, ehDiretoria, dias, setDias, 
       ) : null}
 
       <div className="pg-kpis">
-        <Kpi titulo="Vendas (Junix)" valor={f ? nf(f.vendas) : "…"} sub={f ? `${vgvCurto(f.vgv)} em VGV · ${nf(t?.vendas_mes ?? 0)} no mês` : ""} tom="grn" />
+        <Kpi titulo="Vendas (Junix)" valor={f ? nf(f.vendas) : "…"} sub={f ? `${vgvCurto(f.vgv)} em VGV · ${per}` : ""} tom="grn" />
         <Kpi titulo="Visitas (C2S)" valor={f ? nf(f.visitas) : "…"} sub={f ? `${nf(f.plantaoDias)} corretor-dias no plantão` : ""} />
         <Kpi titulo="Plantão hoje" valor={t ? nf(t.plantao_hoje) : "…"} sub={t ? `${nf(t.corretores)} corretores · ${nf(t.online)} online agora` : ""} />
         <Kpi titulo="Leads no período" valor={t ? nf(t.leads_periodo) : "…"} sub={t ? `carteira viva ${nf(t.carteira)} · ${nf(t.em_conversa)} em conversa` : ""} />
@@ -73,8 +73,8 @@ export default function PainelGeralSuper({ superId, ehDiretoria, dias, setDias, 
       {aba === "equipes" ? (
         carregandoRoll || !roll ? <div className="pg-card"><p className="pg-vazio">Somando as equipes…</p></div> : (
           <div className="pg-card pg-tab">
-            <div className="pg-tr pg-th"><span>Gerente</span><span>Corretores</span><span>Plantão hoje</span><span>Leads</span><span>Carteira</span><span>Em conversa</span><span>Vendas no mês</span><span /></div>
-            {roll.gerentes.map((g: GerenteRollup) => {
+            <div className="pg-tr pg-th"><span>Gerente</span><span>Corretores</span><span>Plantão hoje</span><span>Leads</span><span>Carteira</span><span>Em conversa</span><span>Vendas (Junix)</span><span /></div>
+            {roll.gerentes.filter((g: GerenteRollup) => !/revisor/i.test(g.nome)).map((g: GerenteRollup) => {
               const exp = !!aberto[g.id];
               return (
                 <div key={g.id}>
@@ -87,7 +87,7 @@ export default function PainelGeralSuper({ superId, ehDiretoria, dias, setDias, 
                     <span className="mono">{g.leads_periodo}</span>
                     <span className="mono">{g.carteira}</span>
                     <span className="mono">{g.em_conversa}</span>
-                    <span className={`mono ${g.vendas_mes ? "pg-bom" : ""}`}>{g.vendas_mes}</span>
+                    {(() => { const v = cons?.linhas.find((x) => x.id === g.id)?.vendas ?? 0; return <span className={`mono ${v ? "pg-bom" : ""}`}>{v}</span>; })()}
                     <span><button className="pg-btn" onClick={(e) => { e.stopPropagation(); onAbrir(g.id); }}>Abrir painel →</button></span>
                   </div>
                   {exp ? (
@@ -99,7 +99,7 @@ export default function PainelGeralSuper({ superId, ehDiretoria, dias, setDias, 
                           <span className="mono">{c.leads_periodo}</span>
                           <span className="mono">{c.carteira}</span>
                           <span className="mono">{c.em_conversa}</span>
-                          <span className={`mono ${c.vendas_mes ? "pg-bom" : ""}`}>{c.vendas_mes}</span>
+                          <span />
                           <span />
                         </div>
                       )) : <p className="pg-vazio">Sem corretores ativos.</p>}

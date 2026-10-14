@@ -38,6 +38,10 @@ import PastasSuper from "@/components/superintendente/PastasSuper";
 import LeadsAnunciosSuper from "@/components/superintendente/LeadsAnunciosSuper";
 import Configuracoes from "@/components/config/Configuracoes";
 import PainelGeralSuper from "@/components/superintendente/PainelGeralSuper";
+import SalaDeGuerra from "@/components/super2/SalaDeGuerra";
+import PastasDoSuper from "@/components/super2/Pastas";
+import LeadsMidia from "@/components/super2/LeadsMidia";
+import Tropa from "@/components/super2/Tropa";
 import { useDiretorId, useDiretoria } from "@/hooks/useDiretoria";
 
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "Semana"], [30, "Mês"]];
@@ -77,9 +81,10 @@ export default function Superintendente() {
   const [dias, setDias] = useState(30);
   const [params] = useSearchParams();
   const abaUrl = params.get("aba");
+  const subGuerra = abaUrl === "plano" || abaUrl === "gastos" ? abaUrl : undefined;
   const [aba, setAba] = useState<AbaSuper>(
     abaUrl === "estrategia" || abaUrl === "pastas" || abaUrl === "leads" || abaUrl === "time" || abaUrl === "bi" || abaUrl === "campanhas" || abaUrl === "plano" || abaUrl === "gastos" || abaUrl === "config" || abaUrl === "regua"
-      ? ((abaUrl === "regua" ? "config" : abaUrl) as AbaSuper)
+      ? ((abaUrl === "regua" ? "config" : abaUrl === "plano" || abaUrl === "gastos" ? "estrategia" : abaUrl === "campanhas" ? "consolidado" : abaUrl) as AbaSuper)
       : "consolidado"
   );
   // quais gerentes estão expandidos (mostrando os corretores)
@@ -115,8 +120,6 @@ export default function Superintendente() {
             ? "bi"
             : aba === "config"
             ? "config"
-            : aba === "campanhas" || aba === "plano" || aba === "gastos"
-            ? aba
             : "tempo"
         }
         mode={mode}
@@ -128,14 +131,13 @@ export default function Superintendente() {
           else if (k === "time") setAba("time");
           else if (k === "bi") setAba("bi");
           else if (k === "config") setAba("config");
-          else if (k === "campanhas" || k === "plano" || k === "gastos") setAba(k);
           else if (ehDiretoria) nav("/diretor");
           else setAba("consolidado");
         }}
       />
       <main className="shell2">
         <div className="sup-wrap">
-          {aba !== "consolidado" ? (
+          {aba === "bi" ? (
             <div className="sup-top">
               <div>
                 <h1>{ehDiretoria ? "Diretoria" : "Superintendência"}</h1>
@@ -145,32 +147,19 @@ export default function Superintendente() {
             </div>
           ) : null}
 
-          {!ehDiretoria ? <MinhasTarefas donoId={superId ?? undefined} /> : null}
+          {!ehDiretoria && aba === "consolidado" ? <MinhasTarefas donoId={superId ?? undefined} /> : null}
           {aba === "estrategia" && superId ? (
-            <SalaDeGuerraSuper
-              superId={superId}
+            <SalaDeGuerra superId={superId}
               superNome={superPerfil || session?.user?.user_metadata?.name || session?.user?.email?.split("@")[0] || "Superintendente"}
-            />
+              abaInicial={subGuerra} />
           ) : aba === "pastas" && superId ? (
-            <PastasSuper
-              superId={superId}
-              supers={diretoriaPastas?.supers ?? []}
-              superNome={superPerfil || session?.user?.user_metadata?.name || session?.user?.email?.split("@")[0] || ""}
-            />
+            <PastasDoSuper superId={superId} />
           ) : aba === "leads" && superId ? (
-            <LeadsAnunciosSuper
-              superId={superId}
-              superNome={superPerfil || session?.user?.user_metadata?.name || session?.user?.email?.split("@")[0] || ""}
-            />
-          ) : (aba === "plano" || aba === "gastos") && superId && session?.user?.id ? (
-            <PlanoSuper aba={aba} superId={superId} meuId={session.user.id} />
+            <LeadsMidia superId={superId} />
           ) : aba === "config" ? (
             <Configuracoes nivel={ehDiretoria ? "diretor" : "super"} donoId={ehDiretoria ? null : (session?.user?.id ?? null)} />
-          ) : aba === "campanhas" ? (
-            <CampanhasNaoLead superId={superId} />
-          ) : aba === "time" ? (
-            <TimeSuper superId={superId} plantaoHoje={new Set((data?.gerentes ?? [])
-              .flatMap((g) => g.corretores_lista.filter((c) => c.plantao_hoje).map((c) => c.id)))} />
+          ) : aba === "time" && superId ? (
+            <Tropa superId={superId} />
           ) : aba === "bi" ? (
             <BiTab scope="super" managerId={superId} />
           ) : (

@@ -20,7 +20,8 @@ const foneWa = (f: string | null | undefined) => { const d = String(f ?? "").rep
 
 type Pasta = PastaLida & { valor: number; superId: string; superNome: string; gerenteId: string | null; gerenteNome: string };
 
-export default function PastasPainel({ diretorId, supers, pastas }: { diretorId: string; supers: SuperDiretoria[]; pastas: PastaJunix[] }) {
+export default function PastasPainel({ diretorId, supers, pastas, modoSuper }: { diretorId: string; supers: SuperDiretoria[]; pastas: PastaJunix[];
+  /** tela do superintendente: ele cobra o gerente (não ele mesmo) */ modoSuper?: boolean }) {
   const qc = useQueryClient();
   const { data: metas } = useMetasDiretoria(diretorId, inicioMes());
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
@@ -173,8 +174,9 @@ export default function PastasPainel({ diretorId, supers, pastas }: { diretorId:
                 </div>
                 <div className="r">
                   <span className={`dir-chip ${p.chance >= 0.6 ? "c-grn" : p.chance >= 0.3 ? "c-blue" : "c-gray"}`}>{Math.round(p.chance * 100)}% no mês</span>
+                  {modoSuper ? (p.gerenteId ? <button className="dir-btn solid" onClick={() => cobrar(p, "gerente")}>Cobrar {p.gerenteNome.split(" ")[0]}</button> : null) : <>
                   {p.superId !== "fora" ? <button className="dir-btn solid" onClick={() => cobrar(p, "super")}>Cobrar {p.superNome.split(" ")[0]}</button> : null}
-                  {p.gerenteId ? <button className="pst-link" onClick={() => cobrar(p, "gerente")}>ou cobrar o {p.gerenteNome.split(" ")[0]} direto</button> : null}
+                  {p.gerenteId ? <button className="pst-link" onClick={() => cobrar(p, "gerente")}>ou cobrar o {p.gerenteNome.split(" ")[0]} direto</button> : null}</>}
                 </div>
               </div>))}
           </div>
@@ -194,7 +196,7 @@ export default function PastasPainel({ diretorId, supers, pastas }: { diretorId:
                 {ps.length ? <ul>{ps.map((p) => <li key={p.proposta_id}><b>{cliCurto(p.cliente)}</b> · {titulo(p.empreendimento)}<br /><small>{titulo(p.corretor)} · {p.gerenteNome} · {p.superNome} · {det(p)}</small></li>)}</ul>
                   : <div className="pst-s">Nada aqui.</div>}
                 <div className="pst-lim-acts">
-                  {[...porS.entries()].filter(([sid]) => sid !== "fora").map(([sid, xs]) => {
+                  {modoSuper ? null : [...porS.entries()].filter(([sid]) => sid !== "fora").map(([sid, xs]) => {
                     const sNome = supers.find((s) => s.id === sid)?.nome.split(" ")[0] ?? "";
                     const texto = `${sNome}, preciso que a sua equipe revise ${xs.length === 1 ? "esta pasta" : `estas ${xs.length} pastas`} (${tit.toLowerCase()}): ` +
                       xs.map((p) => `${cliCurto(p.cliente)} (${titulo(p.empreendimento)}, gerente ${p.gerenteNome})`).join("; ") + `. ${desc} Me dá um retorno até sexta?`;
