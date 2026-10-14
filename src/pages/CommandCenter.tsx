@@ -63,24 +63,7 @@ export default function CommandCenter() {
   const [notifyResult, setNotifyResult] = useState<{ sent: number; skipped: number } | null>(null);
   const navigate = useNavigate();
 
-  async function handleNotifyDisconnected() {
-    setNotifying(true);
-    setNotifyResult(null);
-    try {
-      const { data, error } = await supabase.functions.invoke('notify-disconnected-brokers');
-      if (error) throw error;
-      setNotifyResult({ sent: data.sent ?? 0, skipped: data.skipped ?? 0 });
-      if ((data.sent ?? 0) > 0) {
-        toast.success(`✅ ${data.sent} corretor(es) notificados via WhatsApp do gerente`);
-      } else {
-        toast.info('Nenhuma notificação necessária (todos conectados ou já notificados hoje)');
-      }
-    } catch (err: any) {
-      toast.error(`Erro ao notificar: ${err.message}`);
-    } finally {
-      setNotifying(false);
-    }
-  }
+  async function handleNotifyDisconnected() { /* desativado em 14/10 */ }
 
   useEffect(() => {
     loadWarData();
@@ -323,16 +306,7 @@ export default function CommandCenter() {
             <span className="text-orange-300 font-semibold"> Não reenvia para quem já foi notificado nas últimas 8h.</span>
           </p>
           <div className="flex items-center gap-4 flex-wrap">
-            <Button
-              onClick={handleNotifyDisconnected}
-              disabled={notifying}
-              className="bg-orange-600 hover:bg-orange-500 text-white font-bold gap-2"
-            >
-              {notifying
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
-                : <><Send className="w-4 h-4" /> Notificar Desconectados</>
-              }
-            </Button>
+            <span className="text-xs text-slate-500">Desativado em 14/10: o corretor não usa mais chip conectado ao Comandra.</span>
             {notifyResult && (
               <span className="text-sm text-gray-300">
                 Último disparo: <span className="text-green-400 font-bold">{notifyResult.sent} enviados</span>

@@ -694,9 +694,9 @@ export function BriefingOps() {
                         ? (
                           <button
                             onClick={async () => {
-                              const { data, error } = await supabase.functions.invoke('notify-waiting-lead', { body: { lead_id: l.id } });
-                              if (!error && (data as any)?.success) showSuccess(`Cutucão enviado pro ${(data as any).broker || l.broker_name} no WhatsApp do Junior 📲`);
-                              else showError((data as any)?.detail || error?.message || 'Não consegui enviar agora');
+                              const { data, error } = await supabase.functions.invoke('cobrar-corretor', { body: { lead_id: l.id, motivo: 'respondeu' } });
+                              if (!error && (data as any)?.ok) showSuccess((data as any).ja_cobrados?.length ? `${l.broker_name} já foi cobrado nas últimas 12h` : `Cobrança enviada para ${l.broker_name} 📲`);
+                              else showError((data as any)?.error || error?.message || 'Não consegui enviar agora');
                             }}
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold hover:bg-emerald-500/30 transition-colors"
                           >

@@ -83,24 +83,7 @@ export default function SistemaControl() {
   const [notifying, setNotifying] = useState(false);
   const [notifyResult, setNotifyResult] = useState<{ sent: number; skipped: number } | null>(null);
 
-  async function handleNotifyDisconnected() {
-    setNotifying(true);
-    setNotifyResult(null);
-    try {
-      const { data, error } = await supabase.functions.invoke("notify-disconnected-brokers");
-      if (error) throw error;
-      setNotifyResult({ sent: data.sent ?? 0, skipped: data.skipped ?? 0 });
-      if ((data.sent ?? 0) > 0) {
-        toast.success(`✅ ${data.sent} corretor(es) notificados via WhatsApp do gerente`);
-      } else {
-        toast.info("Nenhuma notificação enviada — todos conectados ou já notificados nas últimas 8h");
-      }
-    } catch (err: any) {
-      toast.error(`Erro ao notificar: ${err.message}`);
-    } finally {
-      setNotifying(false);
-    }
-  }
+  async function handleNotifyDisconnected() { /* desativado em 14/10 */ }
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -461,14 +444,7 @@ export default function SistemaControl() {
               Não reenvia para quem já foi notificado nas últimas 8h.
             </p>
             <div className="flex items-center gap-4 flex-wrap">
-              <Button
-                size="sm"
-                onClick={handleNotifyDisconnected}
-                disabled={notifying}
-                className="bg-orange-600 hover:bg-orange-500 text-white font-bold gap-2 text-xs"
-              >
-                {notifying ? "Enviando..." : "📲 Notificar Desconectados"}
-              </Button>
+              <span className="text-xs text-slate-500">Desativado em 14/10: o corretor não usa mais chip conectado ao Comandra.</span>
               {notifyResult && (
                 <span className="text-xs text-slate-400">
                   <span className="text-green-400 font-bold">{notifyResult.sent} enviados</span>

@@ -20,6 +20,7 @@ import {
   type Cobranca,
 } from "@/hooks/useLeads";
 import OrigemDrawer from "@/components/manager-v10/OrigemDrawer";
+import AlertaDisparoQueima from "@/components/manager-v10/AlertaDisparoQueima";
 import { usePeriodo } from "@/hooks/usePeriodo";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
@@ -216,6 +217,9 @@ export default function Leads() {
               </Link>
             </div>
           </div>
+
+          {/* ── ALERTA DE RISCO FINANCEIRO: DISPAROS DE WHATSAPP NO VÁCUO (>30MIN) ── */}
+          {userId && <AlertaDisparoQueima managerId={userId} quem="Gerente" />}
 
           {/* ── SCORE ROW / KPI CARDS ── */}
           <div className="leads-kpis-grid">

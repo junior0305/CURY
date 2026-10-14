@@ -104,6 +104,41 @@
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
 }
 
+/* ── ALERTA COMPACTO DE VÍNCULO C2S / JUNIX ── */
+.alerta-vinculo-compacto {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--cv-amber-light, #FEF3C7);
+  border: 1.5px solid var(--cv-amber-border, #FDE68A);
+  border-radius: var(--cv-radius-md, 12px);
+  padding: 10px 16px;
+  flex-wrap: wrap;
+}
+
+.alerta-vinculo-texto {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 260px;
+}
+
+.alerta-vinculo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--cv-amber, #D97706);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
 /* ── SCORE ROW / KPI CARDS ── */
 .time-kpis-grid {
   display: grid;
