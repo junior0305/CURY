@@ -146,11 +146,12 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
       });
 
       const plantaoHojeTotal = new Set(plantao.map((r) => `${chaveGerente(r.gerente)}|${chaveNome(r.corretor)}`)).size;
-      // super sem gerente no Comandra: plantão direto do C2S (nome exato; "Silva" não pode pegar "Silvano")
+      // super sem corretor no Comandra (sem gerente, ou gerentes recém-cadastrados ainda sem time, como o Silva em 14/10):
+      // plantão direto do C2S (nome exato; "Silva" não pode pegar "Silvano")
       const de = diaSP(Date.now() - (dias - 1) * 864e5);
       const de30 = diaSP(Date.now() - (Math.max(dias, 30) - 1) * 864e5);
       for (const s of supers) {
-        if (s.gerentes.length) continue;
+        if (s.gerentes.some((g) => g.corretores > 0)) continue;
         const nomes = nomesSuperC2S(s.nome);
         const rows: any[] = [];
         for (let a = 0; ; a += 1000) {

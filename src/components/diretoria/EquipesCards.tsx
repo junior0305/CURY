@@ -193,7 +193,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
                 <div><h3>{c.s.nome}</h3>
                   <div className="eqc-s">{c.corretores} corretores · {c.s.c2s ? c.s.c2s.gerentes.length : c.s.gerentes.length} gerentes · {mi(c.vgv)} no placar no período</div></div>
                 <div className="eqc-chips">
-                  {c.s.c2s ? <span className="dir-chip c-gray">plantão do C2S · gerentes sem conta</span> : null}
+                  {c.s.c2s ? <span className="dir-chip c-gray">plantão do C2S · corretores sem conta</span> : null}
                   {c.semPlantao ? <span className="dir-chip c-org">fora do C2S</span> : null}
                 </div>
               </div>

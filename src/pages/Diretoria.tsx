@@ -313,7 +313,7 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
   const logados = corretores.filter((x) => x.s.logadosHoje[x.c.id]).length;
   const plantaoComLogin = corretores.filter((x) => x.c.plantao_hoje).length;
   // super sem gerente no Comandra (plantão lido do C2S): todo mundo dele no plantão está sem login
-  const semLogin = gerentes.reduce((a, { s, g }) => a + (s.plantaoSemLogin[g.id]?.length ?? 0), 0) + supers.reduce((a, s) => a + (s.c2s?.hoje ?? 0), 0);
+  const semLogin = gerentes.reduce((a, { s, g }) => a + (s.c2s ? 0 : s.plantaoSemLogin[g.id]?.length ?? 0), 0) + supers.reduce((a, s) => a + (s.c2s?.hoje ?? 0), 0);
   const nuncaEntraram = corretores.filter((x) => !x.c.ultimo_acesso).length;
 
   // decida hoje: as 3 coisas mais caras agora, do dado
@@ -975,7 +975,8 @@ function Equipes({ supers, linhasDoSuper, aberto, tog, abrirPainel, carregandoCo
     logados: g.corretores_lista.filter((c) => s.logadosHoje[c.id]).length, online: g.online });
   const somaN = (xs: ReturnType<typeof numsGer>[]) => xs.reduce((a, x) => ({ corretores: a.corretores + x.corretores, plantaoHoje: a.plantaoHoje + x.plantaoHoje,
     semLogin: a.semLogin + x.semLogin, logados: a.logados + x.logados, online: a.online + x.online }), { corretores: 0, plantaoHoje: 0, semLogin: 0, logados: 0, online: 0 });
-  const todos = supers.flatMap((s) => s.gerentes.map((g) => numsGer(s, g)));
+  // super lido pelo C2S entra no total pelo C2S (os gerentes dele com conta ainda não têm corretor)
+  const todos = supers.filter((s) => !s.c2s).flatMap((s) => s.gerentes.map((g) => numsGer(s, g)));
 
   return (
     <div className="dir-card" style={{ padding: "18px 0 6px" }}>
@@ -996,14 +997,18 @@ function Equipes({ supers, linhasDoSuper, aberto, tog, abrirPainel, carregandoCo
                 </tr>,
                 ...(aberto[kS] && s.c2s ? [
                   <tr key={`c2sx:${s.id}`} className="n3"><td colSpan={10} style={{ textAlign: "left" }}>
-                    Plantão lido do C2S: os gerentes desta superintendência ainda não têm conta no Comandra (no C2S ela ainda consta na diretoria anterior).</td></tr>,
-                  ...s.c2s.gerentes.map((g) => (
+                    Plantão lido do C2S: os corretores desta superintendência ainda não têm conta no Comandra.</td></tr>,
+                  ...s.c2s.gerentes.map((g) => {
+                    const gc = s.gerentes.find((x) => chaveGerente(x.nome) === chaveGerente(g.nome));
+                    return (
                     <tr key={`c2s:${s.id}:${g.nome}`} className="n1">
-                      <td>{g.nome} <span style={{ color: "var(--ink-3)", fontSize: 11.5 }}>· {g.corretores} no plantão · sem conta no Comandra</span></td>
+                      <td>{g.nome} <span style={{ color: "var(--ink-3)", fontSize: 11.5 }}>· {g.corretores} no plantão · {gc ? "gerente com conta, corretores sem" : "sem conta no Comandra"}</span>
+                        {gc ? <button className="dir-abrir" onClick={(e) => { e.stopPropagation(); abrirPainel(gc.id); }}>abrir painel ›</button> : null}</td>
                       <td><Z n={g.corretores30} /></td><td><Z n={g.hoje} /></td><td><Z n={g.hoje} /></td><td /><td /><td><Z n={g.dias} /></td><td /><td /><td />
-                    </tr>)),
+                    </tr>); }),
                 ] : []),
-                ...(aberto[kS] ? s.gerentes.flatMap((g) => {
+                // com a leitura do C2S, o gerente com conta já aparece na linha dele acima (sem repetir)
+                ...(aberto[kS] ? s.gerentes.filter((g) => !s.c2s?.gerentes.some((x) => chaveGerente(x.nome) === chaveGerente(g.nome))).flatMap((g) => {
                   const kG = `g:${g.id}`; const sem = s.plantaoSemLogin[g.id] ?? [];
                   return [
                     <tr key={kG} className="n1" onClick={() => tog(kG)}>
