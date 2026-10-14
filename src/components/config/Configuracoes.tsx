@@ -17,19 +17,21 @@ import { toast } from "sonner";
 import { salvarGestor } from "@/hooks/useAnuncios";
 import ContasAnuncio from "@/components/config/ContasAnuncio";
 import FontesDados from "@/components/config/FontesDados";
+import DadosEmpresa from "@/components/config/DadosEmpresa";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
 import IntegracaoFacebook from "@/pages/admin/IntegracaoFacebook";
 import "@/styles/manager-v10.css";
 
 type Nivel = "diretor" | "super" | "gerente";
-type Secao = "avisos" | "equipe" | "whatsapp" | "facebook" | "fontes";
+type Secao = "avisos" | "equipe" | "whatsapp" | "facebook" | "fontes" | "empresa";
 const SECOES: { k: Secao; label: string; sub: string }[] = [
   { k: "avisos", label: "Avisos e cobranças", sub: "O que o sistema cobra e quando" },
   { k: "equipe", label: "Equipe", sub: "Cadastrar, desabilitar e desligar corretor" },
   { k: "whatsapp", label: "Meu WhatsApp", sub: "O chip que envia as suas mensagens" },
   { k: "facebook", label: "Facebook e leads", sub: "Páginas, formulários e quem recebe" },
   { k: "fontes", label: "Fontes de dados", sub: "C2S, Junix, Salesforce" },
+  { k: "empresa", label: "Dados da empresa", sub: "Nome, diretoria no C2S, apelidos" },
 ];
 
 const sb = supabase as any;
@@ -43,7 +45,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
     const p = new URLSearchParams(params); p.set("secao", k); setParams(p, { replace: true });
   };
   // fontes de dados: só o diretor escolhe
-  const secoes = SECOES.filter((s) => s.k !== "fontes" || nivel === "diretor");
+  const secoes = SECOES.filter((s) => (s.k !== "fontes" && s.k !== "empresa") || nivel === "diretor");
   const secaoOk: Secao = secoes.some((x) => x.k === secao) ? secao : "avisos";
 
   return (
@@ -65,6 +67,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
           : secaoOk === "equipe" ? <Equipe nivel={nivel} donoId={donoId} />
           : secaoOk === "whatsapp" ? <MeuWhatsApp />
           : secaoOk === "fontes" ? <FontesDados />
+          : secaoOk === "empresa" ? <DadosEmpresa />
           : <><ContasAnuncio /><GestorTrafego donoId={donoId} /><div className="integ-shell"><IntegracaoFacebook /></div></>}
       </section>
     </div>
