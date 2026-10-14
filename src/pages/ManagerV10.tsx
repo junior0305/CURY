@@ -229,16 +229,7 @@ export default function ManagerV10() {
         {view === "tempo" ? (
           <CockpitGerenteV3 managerId={userId} quem={session?.user?.id ?? userId} />
         ) : view === "time" ? (
-          <>
-            <header className="top2">
-              <div>
-                <h1>Time</h1>
-                <p>A estratégia e alocação da equipe</p>
-              </div>
-              <div className="top2-r"><SeletorPeriodo /></div>
-            </header>
-            <TimeTab managerId={userId} />
-          </>
+          <TimeTab managerId={userId} />
         ) : (
           <>
             <header className="top2">
