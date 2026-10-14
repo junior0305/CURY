@@ -33,7 +33,7 @@ const SISTEMAS: Sistema[] = [
       { k: "SF_TOKEN", rot: "Token de segurança", segredo: true, dica: "No Salesforce: Configurações pessoais → Redefinir meu token de segurança. Chega por e-mail." },
       { k: "SF_HOST", rot: "Servidor de login", padrao: "login.salesforce.com" },
     ],
-    passos: ["Use um usuário de integração do Salesforce (não o seu pessoal).", "No Salesforce, abra Configurações pessoais → Redefinir meu token de segurança; o token chega por e-mail.", "Preencha usuário, senha e token aqui.", "Salve e clique em Testar conexão."] },
+    passos: ["Pode ser o seu login pessoal do Salesforce (o mesmo e-mail e senha com que você entra) ou um usuário só para integração, se a empresa tiver.", "No Salesforce, abra Configurações pessoais → Redefinir meu token de segurança; o token chega por e-mail.", "Preencha usuário, senha e token aqui.", "Salve e clique em Testar conexão.", "Com login pessoal, o Comandra enxerga o mesmo que você enxerga no Salesforce. Se você trocar a senha, o Salesforce troca o token junto: gere o token de novo e atualize aqui."] },
 ];
 
 export default function FontesDados() {
