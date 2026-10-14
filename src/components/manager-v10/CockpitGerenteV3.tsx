@@ -26,6 +26,32 @@ const diaSP = (offsetDias = 0) => {
 const horas = (iso: string | null | undefined) =>
   iso ? (Date.now() - new Date(iso).getTime()) / 3_600_000 : Infinity;
 
+// Dia do lead no horário de Brasília (created_at vem em UTC: lead das 21h caía no dia seguinte).
+const diaDe = (iso: string) => new Date(new Date(iso).getTime() - 3 * 3600e3).toISOString().slice(0, 10);
+
+// O corretor atende pelo WhatsApp pessoal (sem chip), então "mensagem do corretor" sozinha não basta:
+// conta como atendido quem mudou de status, teve tentativa ou interação depois de chegar.
+type LeadSinal = V10Lead & { campanha_nome?: string | null; contact_attempts?: number | null };
+function atendido(l: LeadSinal) {
+  if (l.last_broker_whatsapp_at) return true;
+  if (l.status && l.status !== "NEW") return true;
+  if ((l.contact_attempts ?? 0) > 0) return true;
+  if (l.last_interaction_at && l.created_at &&
+      new Date(l.last_interaction_at).getTime() > new Date(l.created_at).getTime() + 5 * 60_000) return true;
+  return false;
+}
+// Parado: cliente respondeu e ninguém voltou, ou chegou há 2h+ sem nenhum sinal de atendimento.
+// Pescado não entra: é contato que o próprio corretor puxou para ligar.
+function parado(l: LeadSinal) {
+  if (classificarOrigem(l) === "pescado") return false;
+  const resp = horas(l.last_lead_response_at);
+  if (Number.isFinite(resp) && resp > 2 && resp < 48) {
+    const depois = Math.min(horas(l.last_broker_whatsapp_at), horas(l.last_interaction_at));
+    if (depois > resp) return true;
+  }
+  return !atendido(l) && horas(l.created_at) > 2;
+}
+
 const brl = (n: number) =>
   (n < 0 ? "-" : "") + "R$ " + Math.abs(Math.round(n)).toLocaleString("pt-BR");
 
@@ -39,12 +65,14 @@ function classificarOrigem(lead: { source?: string | null; fb_campaign?: string 
   return "anuncio";
 }
 
-function rotuloOrigem(lead: { source?: string | null; fb_campaign?: string | null }) {
+function rotuloOrigem(lead: { source?: string | null; fb_campaign?: string | null; campanha_nome?: string | null }) {
   const cat = classificarOrigem(lead);
+  // Make manda o ID da campanha; o nome fica em campanha_nome.
+  const campanha = lead.campanha_nome || (lead.fb_campaign && !/^\d{10,}$/.test(lead.fb_campaign) ? lead.fb_campaign : "");
   if (cat === "disparo") return { cat, label: "💬 Disparo WhatsApp · " + (lead.fb_campaign || "Base Oficial") };
   if (cat === "pescado") return { cat, label: "🎣 Pescado · " + (lead.source === "cold_pool" ? "Cold Pool Cury" : lead.fb_campaign || "Carteira Cury") };
   if (cat === "acao") return { cat, label: "🏃 Ação / Stand · " + (lead.source?.replace(/_/g, " ") || "Presencial") };
-  return { cat, label: "📢 Meta Ads · " + (lead.fb_campaign || "Facebook/Instagram") };
+  return { cat, label: "📢 Meta Ads · " + (campanha || "Facebook/Instagram") };
 }
 
 export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Props) {
@@ -85,6 +113,25 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
     },
   });
 
+  // Gasto real das contas de anúncio do gerente (robô fb_saude, de hora em hora).
+  const { data: midia } = useQuery({
+    queryKey: ["cockpit-midia", managerId],
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const { data } = await supabase.from("fb_saude" as any).select("dados").eq("dono_id", managerId);
+      const contas = ((data ?? []) as any[]).map((r) => r.dados || {});
+      if (!contas.length) return null;
+      const porDia: Record<string, number> = {};
+      let gasto7 = 0, leads7 = 0;
+      for (const c of contas) {
+        gasto7 += Number(c.gasto_7d) || 0;
+        leads7 += (Number(c.form_7d) || 0) + (Number(c.conversas_7d) || 0);
+        for (const [d, v] of Object.entries(c.gasto_por_dia || {})) porDia[d] = (porDia[d] || 0) + (Number(v) || 0);
+      }
+      return { porDia, gasto7, leads7, cpl: leads7 ? gasto7 / leads7 : null };
+    },
+  });
+
   // Query de Conversa para o Modal "Espiar"
   const { data: mensagensConversa } = useConversaLead(espiarLead?.id ?? null);
 
@@ -98,7 +145,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
       const brokerIds = (bs ?? []).map((b) => b.id);
 
       let q = supabase.from("leads")
-        .select("id, name, phone, status, broker_id, created_at, last_interaction_at, last_lead_response_at, last_broker_whatsapp_at, contact_attempts, tag, source, fb_campaign, lead_temperature")
+        .select("id, name, phone, status, broker_id, created_at, last_interaction_at, last_lead_response_at, last_broker_whatsapp_at, contact_attempts, tag, source, fb_campaign, campanha_nome, lead_temperature")
         .neq("status", "EXCLUDED");
 
       if (brokerIds.length > 0) {
@@ -168,7 +215,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
     return listaLeadsBase.filter((l) => {
       const criada = l.created_at;
       if (!criada) return false;
-      const criadaDia = criada.slice(0, 10);
+      const criadaDia = diaDe(criada);
 
       if (periodo === "hoje") return criadaDia === hojeStr;
       if (periodo === "ontem") return criadaDia === ontemStr;
@@ -222,13 +269,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
     const porDia = restantes > 0 ? (faltam / restantes).toFixed(1) : "0";
 
     const leadsPeriodo = leadsFiltradosPorData.length;
-    const leadsParados = leadsFiltradosPorData.filter((l) => {
-      const resp = horas(l.last_lead_response_at);
-      if (Number.isFinite(resp) && resp > 2 && resp < 48) {
-        return horas(l.last_broker_whatsapp_at) > resp;
-      }
-      return !l.last_broker_whatsapp_at && horas(l.created_at) > 2;
-    }).length;
+    const leadsParados = leadsFiltradosPorData.filter((l) => parado(l as LeadSinal)).length;
 
     return { vendas, meta, vgv, projecao, porDia, leadsPeriodo, leadsParados };
   }, [v10, cruz, leadsFiltradosPorData]);
@@ -446,12 +487,29 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
         {/* Poder de Fogo da Equipe */}
         <div className="kpi-card-v3">
           <span className="kpi-title-v3">💥 Poder de Fogo (Mídia)</span>
-          <div className="kpi-val-v3 mono" style={{ fontSize: 24, color: "var(--cv-text-main)" }}>
-            {brl(heroPlacar.leadsPeriodo * (v10?.dinheiro?.custoLead ?? 25))}
-          </div>
-          <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
-            CPL estimado: <b className="mono">R$ {Math.round(v10?.dinheiro?.custoLead ?? 25)}/lead</b> · {heroPlacar.leadsPeriodo} leads
-          </span>
+          {midia ? (() => {
+            // dia a dia só existe para os últimos dias; semana e mês usam os 7 dias do robô
+            const doDia = periodo === "hoje" ? midia.porDia[diaSP(0)] : periodo === "ontem" ? midia.porDia[diaSP(1)]
+              : periodo === "data" ? midia.porDia[dataCustom] : undefined;
+            const porDiaOk = periodo === "hoje" || periodo === "ontem" || periodo === "data";
+            const valor = porDiaOk ? doDia : midia.gasto7;
+            return <>
+              <div className="kpi-val-v3 mono" style={{ fontSize: 24, color: "var(--cv-text-main)" }}>
+                {valor != null ? brl(valor) : "—"}
+              </div>
+              <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
+                {porDiaOk ? (valor != null ? "gasto real no dia" : "sem gasto registrado nesse dia") : "gasto real nos últimos 7 dias"}
+                {midia.cpl ? <> · CPL 7 dias: <b className="mono">{brl(midia.cpl)}</b></> : null}
+              </span>
+            </>;
+          })() : <>
+            <div className="kpi-val-v3 mono" style={{ fontSize: 24, color: "var(--cv-text-main)" }}>
+              {brl(heroPlacar.leadsPeriodo * (v10?.dinheiro?.custoLead ?? 25))}
+            </div>
+            <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
+              sem conta de anúncio ligada · estimado a R$ {Math.round(v10?.dinheiro?.custoLead ?? 25)}/lead
+            </span>
+          </>}
         </div>
       </section>
 
@@ -567,10 +625,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                   const orig = rotuloOrigem(lead);
 
                   // Estado de atendimento
-                  const tempoCriadoHoras = horas(lead.created_at);
-                  const respHoras = horas(lead.last_lead_response_at);
-                  const isParado = (Number.isFinite(respHoras) && respHoras > 2 && horas(lead.last_broker_whatsapp_at) > respHoras) ||
-                    (!lead.last_broker_whatsapp_at && tempoCriadoHoras > 2);
+                  const isParado = parado(lead as LeadSinal);
 
                   const horaStr = new Date(lead.created_at).toLocaleTimeString("pt-BR", {
                     hour: "2-digit",
@@ -633,7 +688,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                           <span className="lead-status-pill-v3 urgente">
                             🔥 Cliente aguardando (+2h)
                           </span>
-                        ) : lead.last_broker_whatsapp_at ? (
+                        ) : atendido(lead as LeadSinal) ? (
                           <span className="lead-status-pill-v3 andando">
                             ✓ Em atendimento
                           </span>
