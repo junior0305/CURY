@@ -18,6 +18,7 @@ import { salvarGestor } from "@/hooks/useAnuncios";
 import ContasAnuncio from "@/components/config/ContasAnuncio";
 import FontesDados from "@/components/config/FontesDados";
 import DadosEmpresa from "@/components/config/DadosEmpresa";
+import CadastrarLider from "@/components/config/CadastrarLider";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
 import IntegracaoFacebook from "@/pages/admin/IntegracaoFacebook";
@@ -79,6 +80,22 @@ function Equipe({ nivel, donoId }: { nivel: Nivel; donoId: string | null }) {
   const { session } = useAuth();
   const eu = donoId ?? session?.user?.id ?? null;
   const [cadastrar, setCadastrar] = useState(false);
+  const [lider, setLider] = useState<"" | "SUPERINTENDENT" | "MANAGER">("");
+  // diretor cadastra superintendente (responde a ele) e gerente (escolhe a superintendência);
+  // super cadastra gerente na superintendência dele
+  const { data: chefes } = useQuery({
+    queryKey: ["cfg-chefes", eu, nivel], enabled: nivel !== "gerente" && !!eu, staleTime: 300_000,
+    queryFn: async () => {
+      const nomeDe = (p: any) => [p.first_name, p.last_name].filter(Boolean).join(" ");
+      if (nivel === "super") {
+        const { data: me } = await sb.from("profiles").select("id, first_name, last_name").eq("id", eu).maybeSingle();
+        return { diretor: [] as { id: string; nome: string }[], supers: me ? [{ id: me.id, nome: nomeDe(me) }] : [] };
+      }
+      const { data: dirs } = await sb.from("profiles").select("id, first_name, last_name").eq("role", "DIRECTOR").neq("is_active", false).order("created_at");
+      const { data: sups } = await sb.from("profiles").select("id, first_name, last_name").eq("role", "SUPERINTENDENT").neq("is_active", false).order("first_name");
+      return { diretor: (dirs ?? []).map((p: any) => ({ id: p.id, nome: nomeDe(p) })), supers: (sups ?? []).map((p: any) => ({ id: p.id, nome: nomeDe(p) })) };
+    },
+  });
   // super e diretor escolhem o gerente; o gerente cadastra na própria equipe
   const { data: gerentes = [] } = useQuery({
     queryKey: ["cfg-gerentes", eu, nivel], enabled: nivel !== "gerente" && !!eu, staleTime: 300_000,
@@ -105,10 +122,19 @@ function Equipe({ nivel, donoId }: { nivel: Nivel; donoId: string | null }) {
             </select>
           </label>
         ) : <p className="cfg-dica"><b>Desabilitar</b> tira o corretor da roleta: ele para de receber lead novo, mas continua entrando e atendendo a carteira. <b>Desligar</b> é para quem saiu da empresa: separa a carteira e tira o acesso.</p>}
-        <button className="cfg-btn prim" onClick={() => setCadastrar(true)} disabled={!managerId}>+ Cadastrar corretor</button>
+        <div className="cfg-pessoa-acoes">
+          {nivel === "diretor" ? <button className="cfg-btn" onClick={() => setLider("SUPERINTENDENT")} disabled={!chefes?.diretor.length}>+ Cadastrar superintendente</button> : null}
+          {nivel !== "gerente" ? <button className="cfg-btn" onClick={() => setLider("MANAGER")} disabled={!chefes?.supers.length}>+ Cadastrar gerente</button> : null}
+          <button className="cfg-btn prim" onClick={() => setCadastrar(true)} disabled={!managerId}>+ Cadastrar corretor</button>
+        </div>
       </div>
       {managerId ? <ListaCorretores managerId={managerId} /> : null}
       {managerId ? <VincularNomes managerId={managerId} /> : null}
+      {lider && chefes ? (
+        <CadastrarLider papel={lider} chefes={lider === "SUPERINTENDENT" ? chefes.diretor : chefes.supers}
+          onFechar={() => setLider("")}
+          onPronto={() => { setLider(""); qc.invalidateQueries({ queryKey: ["cfg-chefes"] }); qc.invalidateQueries({ queryKey: ["cfg-gerentes"] }); }} />
+      ) : null}
       {cadastrar && managerId ? (
         <CadastrarCorretor managerId={managerId} gerentes={nivel === "gerente" ? undefined : gerentes}
           onFechar={() => setCadastrar(false)}
