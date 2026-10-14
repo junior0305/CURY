@@ -1,128 +1,386 @@
-// Pastas do superintendente: o painel de Pastas da diretoria, só com as pastas das equipes dele
-// (ligadas pelo corretor no Comandra — ver escopo.ts), filtradas pela data de cadastro no Junix no
-// período do seletor único, e a lista completa com filtro por situação e por gerente.
-// A cobrança vai para o gerente.
+// Pastas do Superintendente — 100% no Design System do Cockpit do Gerente
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/components/AuthProvider";
 import PastasPainel from "@/components/diretoria/PastasPainel";
 import { lerPastas, ROTULO_ETAPA } from "@/components/diretoria/pastasAnalise";
 import { useEscopoSuper } from "./escopo";
-import { usePeriodoSuper, SeletorPeriodoSuper } from "./Periodo";
-import "@/styles/diretoria.css";
+import { usePeriodoSuper } from "./Periodo";
+import "@/styles/cockpit-gerente.css";
 
 type Situacao = "todas" | "vivas" | "paradas" | "reprovadas" | "mortas";
-const titulo = (t: string | null | undefined) => (t ?? "—").replace(/\s+BN\s*$/i, "").replace(/^Condom[ií]nio\s+/i, "").toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+
+const titulo = (t: string | null | undefined) =>
+  (t ?? "—")
+    .replace(/\s+BN\s*$/i, "")
+    .replace(/^Condom[ií]nio\s+/i, "")
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (c) => c.toUpperCase());
 
 export default function PastasDoSuper({ superId }: { superId: string }) {
+  const { session } = useAuth();
   const { diretorId, supers, pastas, carregando } = useEscopoSuper(superId);
   const p = usePeriodoSuper("30d");
   const [todoPeriodo, setTodoPeriodo] = useState(false);
   const [sit, setSit] = useState<Situacao>("todas");
   const [ger, setGer] = useState("todos");
 
-  const doPeriodo = useMemo(() => todoPeriodo ? pastas : pastas.filter((x) => {
-    const d = String(x.cadastrada_em || "").slice(0, 10);
-    return d && d >= p.janela.de && d <= p.janela.ate;
-  }), [pastas, todoPeriodo, p.janela.de, p.janela.ate]);
+  const doPeriodo = useMemo(() => {
+    if (todoPeriodo) return pastas;
+    return pastas.filter((x) => {
+      const d = String(x.cadastrada_em || "").slice(0, 10);
+      return d && d >= p.janela.de && d <= p.janela.ate;
+    });
+  }, [pastas, todoPeriodo, p.janela.de, p.janela.ate]);
 
   const lidas = useMemo(() => lerPastas(doPeriodo), [doPeriodo]);
   const gerentes = useMemo(() => [...new Set(lidas.map((x) => x.gerente || "—"))].sort(), [lidas]);
-  const situacao = (x: any): Exclude<Situacao, "todas"> => x.reprovada ? "reprovadas" : !x.viva ? "mortas" : (x.dias ?? 0) >= 7 ? "paradas" : "vivas";
+
+  const situacao = (x: any): Exclude<Situacao, "todas"> =>
+    x.reprovada ? "reprovadas" : !x.viva ? "mortas" : (x.dias ?? 0) >= 7 ? "paradas" : "vivas";
+
   const conta = (s: Exclude<Situacao, "todas">) => lidas.filter((x) => situacao(x) === s).length;
-  const lista = lidas.filter((x) => (sit === "todas" || situacao(x) === sit) && (ger === "todos" || (x.gerente || "—") === ger))
+
+  const lista = lidas
+    .filter((x) => (sit === "todas" || situacao(x) === sit) && (ger === "todos" || (x.gerente || "—") === ger))
     .sort((a, b) => (a.viva === b.viva ? (b.dias ?? 0) - (a.dias ?? 0) : a.viva ? -1 : 1));
-  const ROT_SIT: Record<string, string> = { vivas: "viva", paradas: "parada 7d+", reprovadas: "reprovada", mortas: "sem chance (60d+, duplicada ou cancelada)" };
+
+  const paradasCriticas = useMemo(() => lidas.filter((x) => situacao(x) === "paradas"), [lidas]);
+
+  async function cobrarGerente(gerenteNome: string, clienteNome: string, dias: number, etapa: string) {
+    const texto = `${gerenteNome}, a pasta do cliente ${titulo(clienteNome)} está travada há ${dias} dias na etapa de ${etapa}. Consegue priorizar o desatravamento hoje junto ao correspondente Caixa?`;
+    toast.success("Mensagem de cobrança pronta!");
+
+    const { data: gerPerfil } = await supabase.from("profiles").select("id, phone").ilike("first_name", `%${gerenteNome}%`).maybeSingle();
+    if (gerPerfil?.id) {
+      await (supabase as any)
+        .from("cobrancas")
+        .insert({ de_id: session?.user?.id, para_id: gerPerfil.id, motivo: "pasta_travada", canal: "whatsapp", mensagem: texto })
+        .then(() => {}, () => {});
+    }
+
+    const f = String(gerPerfil?.phone ?? "").replace(/\D/g, "");
+    if (f) window.open(`https://wa.me/${f.startsWith("55") ? f : "55" + f}?text=${encodeURIComponent(texto)}`, "_blank");
+    else {
+      navigator.clipboard.writeText(texto);
+      toast.info(`Texto copiado para a área de transferência.`);
+    }
+  }
 
   return (
-    <div className="ps2">
-      <style>{CSS}</style>
-      <header className="ps2-top">
-        <div>
-          <h1>Pastas</h1>
-          <p>Pastas do Junix dos corretores das suas equipes · {todoPeriodo ? "todas, desde o início" : `cadastradas ${p.texto}`}</p>
+    <div className="cockpit-v3">
+      {/* ── CABEÇALHO DO COCKPIT NO PADRÃO EXECUTIVO ── */}
+      <header className="cockpit-v3-header">
+        <div className="cockpit-v3-title">
+          <h1>📁 Pastas & Aprovação de Crédito (Junix)</h1>
+          <p>
+            Superintendência · Pastas dos corretores das suas equipes ·{" "}
+            {todoPeriodo ? "Todas desde o início" : `Cadastradas ${p.texto}`}
+          </p>
         </div>
-        <div className="ps2-per">
-          {!todoPeriodo ? <SeletorPeriodoSuper p={p} estilo="dir" /> : null}
-          <label className="ps2-chk"><input type="checkbox" checked={todoPeriodo} onChange={(e) => setTodoPeriodo(e.target.checked)} /> Ver todas, sem filtro de data</label>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12.5,
+              color: "var(--cv-text-muted)",
+              cursor: "pointer",
+              userSelect: "none",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={todoPeriodo}
+              onChange={(e) => setTodoPeriodo(e.target.checked)}
+            />
+            Ver todas sem filtro de data
+          </label>
+
+          {!todoPeriodo && (
+            <div className="periodo-bar-v3">
+              {(["hoje", "7d", "30d"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={`periodo-btn-v3 ${p.per === k ? "active" : ""}`}
+                  onClick={() => p.setPer(k)}
+                >
+                  {k === "hoje" ? "Hoje" : k === "7d" ? "7 dias" : "30 dias"}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </header>
 
-      {carregando || !diretorId ? <div className="ps2-card ps2-vazio">Lendo as pastas do Junix…</div>
-        : !pastas.length ? <div className="ps2-card ps2-vazio">Nenhuma pasta no Junix é de corretor das suas equipes. Se algum corretor tem pasta e não aparece aqui, o nome dele no Junix está diferente do cadastro no Comandra.</div>
-        : (
-          <>
-            <div className="dir ps2-dir">
-              {doPeriodo.length ? <PastasPainel diretorId={diretorId} supers={supers} pastas={doPeriodo} modoSuper />
-                : <div className="dir-card dir-vazio">Nenhuma pasta cadastrada {p.texto}. {pastas.length} pasta(s) das suas equipes no total: marque "Ver todas".</div>}
+      {carregando || !diretorId ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--cv-text-muted)" }}>
+          Lendo as pastas do Junix das suas equipes…
+        </div>
+      ) : !pastas.length ? (
+        <div className="alerta-queima-caixa">
+          <div className="alerta-queima-conteudo">
+            <span style={{ fontSize: 20 }}>ℹ️</span>
+            <div className="alerta-queima-texto">
+              <b>Nenhuma pasta vinculada a corretores das suas equipes</b>
+              <p className="alerta-queima-sub">
+                Se algum corretor possui pasta ativa no Junix e não aparece aqui, confira se o nome dele no Junix está exatamente igual ao cadastro do Comandra.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* ── PLACAR HERO DE PASTAS ── */}
+          <section className="hero-placar-v3">
+            <div className="kpi-card-v3 destaque">
+              <span className="kpi-title-v3">📁 Pastas Vivas no Funil</span>
+              <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-brand)" }}>
+                {conta("vivas")} un
+              </div>
+              <span className="kpi-sub-v3">
+                em análise ou montagem de crédito na Caixa
+              </span>
             </div>
 
-            <section className="ps2-sec">
-              <h2>Todas as pastas {todoPeriodo ? "" : `cadastradas ${p.texto}`} <small>{lidas.length} pasta(s)</small></h2>
-              <div className="ps2-filtros">
+            <div className="kpi-card-v3">
+              <span className="kpi-title-v3">⚠️ Paradas há 7d+ (Gargalo)</span>
+              <div
+                className="kpi-val-v3 mono"
+                style={{ fontSize: 26, color: conta("paradas") > 0 ? "var(--cv-rose)" : "inherit" }}
+              >
+                {conta("paradas")} un
+              </div>
+              <span className="kpi-sub-v3">
+                risco de perda do cliente por demora na esteira
+              </span>
+            </div>
+
+            <div className="kpi-card-v3">
+              <span className="kpi-title-v3">❌ Reprovadas Caixa</span>
+              <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-rose)" }}>
+                {conta("reprovadas")} un
+              </div>
+              <span className="kpi-sub-v3">
+                condicionadas ou recusadas no período
+              </span>
+            </div>
+
+            <div className="kpi-card-v3">
+              <span className="kpi-title-v3">📋 Total de Pastas Cadastradas</span>
+              <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-text-main)" }}>
+                {lidas.length} un
+              </div>
+              <span className="kpi-sub-v3">
+                {todoPeriodo ? "histórico completo" : `cadastradas ${p.texto}`}
+              </span>
+            </div>
+          </section>
+
+          {/* ── ALERTA DE GARGALO DE CRÉDITO ── */}
+          {paradasCriticas.length > 0 && (
+            <div className="alerta-queima-caixa">
+              <div className="alerta-queima-conteudo">
+                <div className="alerta-queima-icone">
+                  <span style={{ fontSize: 18 }}>🔥</span>
+                </div>
+                <div className="alerta-queima-texto">
+                  <div className="alerta-queima-titulo">
+                    <span className="badge-risco-financeiro">GARGALO DE CRÉDITO</span>
+                    <b>{paradasCriticas.length} pastas travadas há 7+ dias na esteira Caixa</b>
+                  </div>
+                  <p className="alerta-queima-sub">
+                    Pastas que passam de 7 dias sem evolução costumam esfriar ou cair por validade documental. Acione os gerentes responsáveis para destravamento.
+                  </p>
+                </div>
+              </div>
+              <div className="alerta-queima-acoes">
+                <button
+                  type="button"
+                  className="btn-queima-primario"
+                  onClick={() => setSit("paradas")}
+                >
+                  Filtrar as {paradasCriticas.length} Paradas
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── PAINEL DE PIPELINE E RESUMO DE DIRETORIA ── */}
+          <div style={{ background: "var(--cv-surface)", borderRadius: "var(--cv-radius-md)", border: "1px solid var(--cv-border)", padding: "16px 20px" }}>
+            <PastasPainel diretorId={diretorId} supers={supers} pastas={doPeriodo} modoSuper />
+          </div>
+
+          {/* ── LISTAGEM COMPLETA DAS PASTAS ── */}
+          <section className="tropa-section-v3">
+            <div className="tropa-header-v3">
+              <div className="tropa-title-v3">
+                <h2>📋 Lista Detalhada de Pastas</h2>
+                <span>Acompanhe o andamento de cada proposta e cobre o gerente com 1 clique</span>
+              </div>
+            </div>
+
+            {/* Pílulas de Filtro de Situação */}
+            <div className="origem-pills-bar-v3" style={{ justifyContent: "space-between" }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {(["todas", "vivas", "paradas", "reprovadas", "mortas"] as Situacao[]).map((s) => (
-                  <button key={s} className={sit === s ? "on" : ""} onClick={() => setSit(s)}>
-                    {s === "todas" ? "Todas" : s === "vivas" ? "Vivas" : s === "paradas" ? "Paradas 7d+" : s === "reprovadas" ? "Reprovadas" : "Sem chance"}
-                    <span>{s === "todas" ? lidas.length : conta(s)}</span>
+                  <button
+                    key={s}
+                    type="button"
+                    className={`origem-pill-btn-v3 ${sit === s ? "active" : ""}`}
+                    onClick={() => setSit(s)}
+                  >
+                    {s === "todas"
+                      ? "Todas"
+                      : s === "vivas"
+                      ? "Vivas"
+                      : s === "paradas"
+                      ? "⚠️ Paradas 7d+"
+                      : s === "reprovadas"
+                      ? "Reprovadas"
+                      : "Sem chance"}{" "}
+                    <span className="mono">{s === "todas" ? lidas.length : conta(s)}</span>
                   </button>
                 ))}
-                <select value={ger} onChange={(e) => setGer(e.target.value)} aria-label="Gerente">
-                  <option value="todos">Todos os gerentes</option>
-                  {gerentes.map((g) => <option key={g} value={g}>{g}</option>)}
-                </select>
               </div>
-              <div className="ps2-card ps2-tw">
-                <table>
-                  <thead><tr><th>Cliente</th><th>Empreendimento</th><th>Etapa</th><th>Corretor</th><th>Gerente</th><th>Na etapa</th><th>Cadastrada</th><th>Situação</th></tr></thead>
-                  <tbody>
-                    {lista.map((x) => {
+
+              <select
+                value={ger}
+                onChange={(e) => setGer(e.target.value)}
+                style={{
+                  background: "var(--cv-surface)",
+                  border: "1px solid var(--cv-border)",
+                  borderRadius: "var(--cv-radius-sm)",
+                  padding: "6px 12px",
+                  fontSize: 13,
+                  color: "var(--cv-text-main)",
+                  outline: "none",
+                }}
+              >
+                <option value="todos">Todos os gerentes</option>
+                {gerentes.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="tropa-table-container-v3">
+              <table className="tropa-table-v3">
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Empreendimento</th>
+                    <th>Etapa Caixa</th>
+                    <th>Corretor</th>
+                    <th>Gerente</th>
+                    <th style={{ textAlign: "center" }}>Na Etapa</th>
+                    <th>Cadastrada</th>
+                    <th>Situação</th>
+                    <th style={{ textAlign: "right" }}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lista.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} style={{ textAlign: "center", padding: 30, color: "var(--cv-text-muted)" }}>
+                        Nenhuma pasta encontrada com os filtros selecionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    lista.map((x) => {
                       const s = situacao(x);
+                      const etapaNome = (ROTULO_ETAPA as any)[x.etapa ?? ""] ?? titulo(x.etapa);
+                      const travada = (x.dias ?? 0) >= 7;
+
                       return (
                         <tr key={x.proposta_id}>
-                          <td><b>{titulo(x.cliente)}</b></td>
-                          <td>{titulo(x.empreendimento)}</td>
-                          <td>{(ROTULO_ETAPA as any)[x.etapa ?? ""] ?? titulo(x.etapa)}</td>
-                          <td>{titulo(x.corretor)}</td>
-                          <td>{x.gerente}</td>
-                          <td className={(x.dias ?? 0) >= 7 ? "ps2-ruim" : ""}>{x.dias ?? "—"} dias</td>
-                          <td>{x.cadastrada_em ? String(x.cadastrada_em).slice(0, 10).split("-").reverse().join("/") : "—"}</td>
-                          <td><em className={s}>{ROT_SIT[s]}</em></td>
+                          <td>
+                            <b style={{ color: "var(--cv-text-main)" }}>{titulo(x.cliente)}</b>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: 13 }}>{titulo(x.empreendimento)}</span>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: 13, color: "var(--cv-text-muted)" }}>{etapaNome}</span>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: 13 }}>{titulo(x.corretor)}</span>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: 13, fontWeight: 600 }}>{x.gerente}</span>
+                          </td>
+                          <td style={{ textAlign: "center" }}>
+                            <span
+                              className="mono"
+                              style={{
+                                color: travada ? "var(--cv-rose)" : "inherit",
+                                fontWeight: travada ? 800 : 500,
+                              }}
+                            >
+                              {x.dias ?? "—"} dias
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: 12.5, color: "var(--cv-text-muted)" }}>
+                              {x.cadastrada_em
+                                ? String(x.cadastrada_em).slice(0, 10).split("-").reverse().join("/")
+                                : "—"}
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              className={`mini-badge-v3 ${s === "vivas" ? "online" : "offline"}`}
+                              style={{
+                                background:
+                                  s === "vivas"
+                                    ? "var(--cv-green-light)"
+                                    : s === "paradas"
+                                    ? "var(--cv-amber-light)"
+                                    : "var(--cv-rose-light)",
+                                color:
+                                  s === "vivas"
+                                    ? "var(--cv-green)"
+                                    : s === "paradas"
+                                    ? "var(--cv-amber)"
+                                    : "var(--cv-rose)",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {s === "vivas"
+                                ? "Viva"
+                                : s === "paradas"
+                                ? "Parada 7d+"
+                                : s === "reprovadas"
+                                ? "Reprovada"
+                                : "Cancelada"}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            <button
+                              type="button"
+                              className="btn-queima-secundario"
+                              style={{ padding: "4px 8px", fontSize: 11.5 }}
+                              onClick={() => cobrarGerente(x.gerente, x.cliente, x.dias ?? 0, etapaNome)}
+                            >
+                              💬 Cobrar
+                            </button>
+                          </td>
                         </tr>
                       );
-                    })}
-                    {!lista.length ? <tr><td colSpan={8} className="ps2-vazio">Nenhuma pasta com esse filtro.</td></tr> : null}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </>
-        )}
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }
-
-const CSS = `
-.mgr10 .ps2{display:grid;gap:var(--s3);padding-block:var(--s3) var(--s5)}
-.mgr10 .ps2-top{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between}
-.mgr10 .ps2-top h1{font-size:28px}
-.mgr10 .ps2-top p{color:var(--ink-2);margin-top:4px;font-size:14px}
-.mgr10 .ps2-per{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.mgr10 .ps2-chk{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ink-2)}
-.mgr10 .ps2-dir{min-height:0;background:transparent;display:flex;flex-direction:column;gap:20px;padding:0}
-.mgr10 .ps2-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
-.mgr10 .ps2-vazio{color:var(--ink-3);font-size:14px}
-.mgr10 .ps2-sec{display:grid;gap:10px}
-.mgr10 .ps2-sec h2{font-size:17px}
-.mgr10 .ps2-sec h2 small{font-size:12.5px;color:var(--ink-3);font-weight:500;margin-left:8px}
-.mgr10 .ps2-filtros{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.mgr10 .ps2-filtros button{display:flex;gap:6px;align-items:center;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink-2)}
-.mgr10 .ps2-filtros button span{font-size:11.5px;background:var(--sunk);padding:0 6px;border-radius:999px}
-.mgr10 .ps2-filtros button.on{border-color:var(--blue);background:var(--blue-air);color:var(--blue)}
-.mgr10 .ps2-filtros select{font:inherit;font-size:13px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:6px 10px;margin-left:auto}
-.mgr10 .ps2-tw{padding:0;overflow-x:auto}
-.mgr10 .ps2-tw table{border-collapse:collapse;width:100%;font-size:13.5px}
-.mgr10 .ps2-tw th,.mgr10 .ps2-tw td{padding:10px 12px;text-align:left;border-top:1px solid var(--hair);white-space:nowrap}
-.mgr10 .ps2-tw thead th{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);background:var(--sunk);border-top:0}
-.mgr10 .ps2-ruim{color:var(--red);font-weight:700}
-.mgr10 .ps2 em{font-style:normal;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
-.mgr10 .ps2 em.vivas{color:var(--good);background:var(--good-air)} .mgr10 .ps2 em.paradas{color:var(--amber);background:var(--amber-air)}
-.mgr10 .ps2 em.reprovadas{color:var(--red);background:var(--red-air)} .mgr10 .ps2 em.mortas{color:var(--ink-3);background:var(--sunk)}
-`;

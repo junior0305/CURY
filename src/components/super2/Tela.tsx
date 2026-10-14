@@ -1,29 +1,29 @@
-// Moldura das telas do superintendente: o mesmo visual da tela do diretor (classe .dir de diretoria.css:
-// cores, fonte e cartões), dentro do painel com o menu lateral. Traduz os tokens que as telas do super
-// usam para os do diretor, sem mexer no arquivo do diretor.
+// Moldura das telas do superintendente: 100% alinhado ao Design System do Cockpit do Gerente (cockpit-gerente.css)
 import type { ReactNode } from "react";
-import "@/styles/diretoria.css";
+import "@/styles/cockpit-gerente.css";
 
 export default function TelaSuper({ children }: { children: ReactNode }) {
   return (
-    <div className="dir s2-tela">
-      <style>{`
-.mgr10 .s2-tela{min-height:0;background:transparent;padding:0;width:100%;box-sizing:border-box;
-  --good:var(--grn);--good-air:var(--grn-bg);--amber:var(--org);--amber-air:var(--org-bg);
-  --red-air:var(--red-bg);--blue-air:var(--blue-bg);--hair:var(--line-2);--r:16px}
-.mgr10 .s2-tela h1{font-weight:800;letter-spacing:-.02em}
-.mgr10 .s2-sub{display:flex;gap:4px;margin-top:20px}
-`}</style>
+    <div className="cockpit-v3" style={{ width: "100%", maxWidth: 1600, margin: "0 auto" }}>
       {children}
     </div>
   );
 }
 
-/** Abas internas no estilo do diretor (ex.: Leads | Mídia). */
+/** Abas internas no estilo pílulas do Cockpit do Gerente (.origem-pills-bar-v3). */
 export function AbasInternas<T extends string>({ abas, atual, onTroca }: { abas: [T, string][]; atual: T; onTroca: (k: T) => void }) {
   return (
-    <div className="s2-sub">
-      <div className="dir-per">{abas.map(([k, r]) => <button key={k} className={atual === k ? "on" : ""} onClick={() => onTroca(k)}>{r}</button>)}</div>
+    <div className="origem-pills-bar-v3" style={{ margin: "4px 0 16px" }}>
+      {abas.map(([k, r]) => (
+        <button
+          key={k}
+          type="button"
+          className={`origem-pill-btn-v3 ${atual === k ? "active" : ""}`}
+          onClick={() => onTroca(k)}
+        >
+          {r}
+        </button>
+      ))}
     </div>
   );
 }

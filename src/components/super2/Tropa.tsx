@@ -1,131 +1,457 @@
-// Minha Tropa do superintendente: começa no GERAL (todas as equipes lado a lado e o ranking de todos os
-// corretores) e, escolhendo um gerente, mostra o mesmo Time que o gerente usa (TimeTab).
+// Gestão de Equipes da Superintendência — 100% no Design System do Cockpit do Gerente
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/components/AuthProvider";
 import TimeTab from "@/components/manager-v10/TimeTab";
+import CadastrarGerente from "@/components/superintendente/CadastrarGerente";
+import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import { useConsolidadoSuper } from "@/hooks/useConsolidadoSuper";
 import { useEscopoSuper } from "./escopo";
-import { usePeriodoSuper, SeletorPeriodoSuper } from "./Periodo";
+import { usePeriodoSuper } from "./Periodo";
+import "@/styles/cockpit-gerente.css";
+
+const nf = (n: number) => (n ?? 0).toLocaleString("pt-BR");
+const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
 
 export default function Tropa({ superId }: { superId: string }) {
+  const qc = useQueryClient();
+  const { session } = useAuth();
   const p = usePeriodoSuper("7d");
   const { supers, carregando } = useEscopoSuper(superId, p.dias);
   const { data: cons } = useConsolidadoSuper(superId, p.dias);
-  const gerentes = useMemo(() => supers.flatMap((s) => s.gerentes).filter((g) => !/revisor/i.test(g.nome)), [supers]);
+
+  const gerentes = useMemo(
+    () => supers.flatMap((s) => s.gerentes).filter((g) => !/revisor/i.test(g.nome)),
+    [supers]
+  );
+
   const [ger, setGer] = useState<string>("geral");
+  const [busca, setBusca] = useState("");
   const [ordem, setOrdem] = useState<"leads" | "carteira" | "conversa" | "plantao">("leads");
-  useEffect(() => { if (ger !== "geral" && !gerentes.some((g) => g.id === ger)) setGer("geral"); }, [gerentes, ger]);
+  const [modalGerenteAberto, setModalGerenteAberto] = useState(false);
+  const [modalCorretorAberto, setModalCorretorAberto] = useState(false);
+
+  useEffect(() => {
+    if (ger !== "geral" && !gerentes.some((g) => g.id === ger)) setGer("geral");
+  }, [gerentes, ger]);
+
   const vendasDe = (id: string) => cons?.linhas.find((l) => l.id === id)?.vendas ?? 0;
   const visitasDe = (id: string) => cons?.linhas.find((l) => l.id === id)?.visitas ?? 0;
-  const corretores = useMemo(() => gerentes.flatMap((g) => (g.corretores_lista ?? []).map((c) => ({ ...c, gerente: g.nome })))
-    .sort((a, b) => ordem === "leads" ? b.leads_periodo - a.leads_periodo : ordem === "carteira" ? b.carteira - a.carteira
-      : ordem === "conversa" ? b.em_conversa - a.em_conversa : Number(!!b.plantao_hoje) - Number(!!a.plantao_hoje)), [gerentes, ordem]);
-  const tot = gerentes.reduce((a, g) => ({ cor: a.cor + g.corretores, on: a.on + g.online, pl: a.pl + g.plantao_hoje, plS: a.plS + g.plantao_semana, leads: a.leads + g.leads_periodo, cart: a.cart + g.carteira, conv: a.conv + g.em_conversa }),
-    { cor: 0, on: 0, pl: 0, plS: 0, leads: 0, cart: 0, conv: 0 });
-  const th = (k: typeof ordem, r: string) => <button className={ordem === k ? "on" : ""} onClick={() => setOrdem(k)}>{r}{ordem === k ? " ▾" : ""}</button>;
+
+  const corretores = useMemo(
+    () =>
+      gerentes
+        .flatMap((g) => (g.corretores_lista ?? []).map((c) => ({ ...c, gerente: g.nome, gerenteId: g.id })))
+        .sort((a, b) =>
+          ordem === "leads"
+            ? b.leads_periodo - a.leads_periodo
+            : ordem === "carteira"
+            ? b.carteira - a.carteira
+            : ordem === "conversa"
+            ? b.em_conversa - a.em_conversa
+            : Number(!!b.plantao_hoje) - Number(!!a.plantao_hoje)
+        ),
+    [gerentes, ordem]
+  );
+
+  const corretoresFiltrados = useMemo(() => {
+    if (!busca.trim()) return corretores;
+    const b = busca.toLowerCase();
+    return corretores.filter(
+      (c) => c.nome.toLowerCase().includes(b) || c.gerente.toLowerCase().includes(b)
+    );
+  }, [corretores, busca]);
+
+  const tot = gerentes.reduce(
+    (a, g) => ({
+      cor: a.cor + g.corretores,
+      on: a.on + g.online,
+      pl: a.pl + g.plantao_hoje,
+      plS: a.plS + g.plantao_semana,
+      leads: a.leads + g.leads_periodo,
+      cart: a.cart + g.carteira,
+      conv: a.conv + g.em_conversa,
+      vendas: a.vendas + vendasDe(g.id),
+      visitas: a.visitas + visitasDe(g.id),
+    }),
+    { cor: 0, on: 0, pl: 0, plS: 0, leads: 0, cart: 0, conv: 0, vendas: 0, visitas: 0 }
+  );
+
+  async function cobrarGerente(gerenteId: string, gerenteNome: string) {
+    const texto = `${gerenteNome}, como está o alinhamento com a equipe hoje? Vi a posição de plantão e esteira aqui no painel da superintendência.`;
+    await (supabase as any)
+      .from("cobrancas")
+      .insert({ de_id: session?.user?.id, para_id: gerenteId, motivo: "alinhamento_equipe", canal: "whatsapp", mensagem: texto })
+      .then(() => {}, () => {});
+
+    const { data: pData } = await supabase.from("profiles").select("phone").eq("id", gerenteId).maybeSingle();
+    const f = String(pData?.phone ?? "").replace(/\D/g, "");
+    if (f) window.open(`https://wa.me/${f.startsWith("55") ? f : "55" + f}?text=${encodeURIComponent(texto)}`, "_blank");
+    else toast.info(`${gerenteNome} não tem telefone cadastrado.`);
+  }
 
   return (
-    <div className="tr2">
-      <style>{CSS}</style>
-      <header className="tr2-top">
-        <div><h1>Minha Tropa</h1><p>{ger === "geral" ? `Todas as equipes · ${p.texto}` : "A mesma tela que o gerente usa no Time dele"}</p></div>
-        {ger === "geral" ? <SeletorPeriodoSuper p={p} opcoes={["hoje", "7d", "30d"]} estilo="dir" /> : null}
+    <div className="cockpit-v3">
+      {/* ── CABEÇALHO DO COCKPIT NO PADRÃO EXECUTIVO ── */}
+      <header className="cockpit-v3-header">
+        <div className="cockpit-v3-title">
+          <h1>👥 Gestão de Equipes & Tropa</h1>
+          <p>
+            {ger === "geral"
+              ? `Superintendência · Visão consolidada de todas as equipes · ${p.texto}`
+              : `Superintendência · Visualizando equipe de ${gerentes.find((g) => g.id === ger)?.nome ?? "Gerente"}`}
+          </p>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="btn-queima-primario"
+            style={{ background: "var(--cv-brand)", boxShadow: "none" }}
+            onClick={() => setModalGerenteAberto(true)}
+          >
+            <span>👔</span> + Cadastrar Gerente
+          </button>
+          <button
+            type="button"
+            className="btn-queima-secundario"
+            onClick={() => setModalCorretorAberto(true)}
+          >
+            <span>👤</span> + Cadastrar Corretor
+          </button>
+
+          {ger === "geral" && (
+            <div className="periodo-bar-v3">
+              {(["hoje", "7d", "30d"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={`periodo-btn-v3 ${p.per === k ? "active" : ""}`}
+                  onClick={() => p.setPer(k)}
+                >
+                  {k === "hoje" ? "Hoje" : k === "7d" ? "7 dias" : "Mês"}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </header>
-      <nav className="tr2-chips" aria-label="Equipes">
-        <button className={ger === "geral" ? "on" : ""} onClick={() => setGer("geral")}>Geral<small>{tot.cor} corretores · {gerentes.length} equipes</small></button>
+
+      {/* ── SELETOR DE EQUIPE EM PÍLULAS ── */}
+      <div className="origem-pills-bar-v3">
+        <button
+          type="button"
+          className={`origem-pill-btn-v3 ${ger === "geral" ? "active" : ""}`}
+          onClick={() => setGer("geral")}
+        >
+          🌐 Todas as Equipes <span className="mono">{tot.cor} corretores</span>
+        </button>
         {gerentes.map((g) => (
-          <button key={g.id} className={ger === g.id ? "on" : ""} onClick={() => setGer(g.id)}>
-            {g.nome}<small>{g.corretores} corretores · {g.plantao_hoje} no plantão</small>
+          <button
+            key={g.id}
+            type="button"
+            className={`origem-pill-btn-v3 ${ger === g.id ? "active" : ""}`}
+            onClick={() => setGer(g.id)}
+          >
+            👔 {g.nome} <span className="mono">{g.corretores} corr · {g.online} on</span>
           </button>
         ))}
-      </nav>
+      </div>
 
-      {ger !== "geral" ? <div className="tr2-time"><TimeTab key={ger} managerId={ger} /></div>
-        : carregando ? <p className="tr2-vazio">Somando as equipes…</p> : (
-          <>
-            <div className="tr2-kpis">
-              <div className="tr2-kpi"><span>Corretores</span><b>{tot.cor}</b><small>{tot.on} online agora</small></div>
-              <div className="tr2-kpi"><span>Plantão hoje</span><b>{tot.pl}</b><small>{tot.plS} corretor-dias na semana (C2S)</small></div>
-              <div className="tr2-kpi"><span>Leads no período</span><b>{tot.leads}</b><small>{tot.cart} na carteira viva</small></div>
-              <div className="tr2-kpi"><span>Em conversa</span><b>{tot.conv}</b><small>{tot.cart ? Math.round((tot.conv / tot.cart) * 100) : 0}% da carteira</small></div>
-              <div className="tr2-kpi"><span>Vendas (Junix)</span><b className="tr2-bom">{gerentes.reduce((a, g) => a + vendasDe(g.id), 0)}</b><small>{gerentes.reduce((a, g) => a + visitasDe(g.id), 0)} visitas no C2S</small></div>
+      {ger !== "geral" ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <button
+              type="button"
+              className="btn-queima-secundario"
+              onClick={() => setGer("geral")}
+            >
+              ← Voltar para Todas as Equipes
+            </button>
+            <span style={{ fontSize: 13, color: "var(--cv-text-muted)" }}>
+              Gerente: <b>{gerentes.find((g) => g.id === ger)?.nome}</b>
+            </span>
+          </div>
+          <TimeTab key={ger} managerId={ger} />
+        </div>
+      ) : carregando ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--cv-text-muted)" }}>
+          Somando as equipes da superintendência…
+        </div>
+      ) : (
+        <>
+          {/* ── PLACAR HERO CONSOLIDADO DA TROPA ── */}
+          <section className="hero-placar-v3">
+            <div className="kpi-card-v3">
+              <span className="kpi-title-v3">👥 Corretores na Tropa</span>
+              <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-text-main)" }}>
+                {tot.cor}
+              </div>
+              <span className="kpi-sub-v3">
+                <b style={{ color: "var(--cv-green)" }}>{tot.on} online agora</b> · {gerentes.length} equipes
+              </span>
             </div>
 
-            <section className="tr2-sec">
-              <h2>Equipes lado a lado</h2>
-              <div className="tr2-card tr2-tw">
-                <table>
-                  <thead><tr><th>Equipe</th><th>Corretores</th><th>Online</th><th>Plantão hoje</th><th>Plantão semana</th><th>Leads</th><th>Carteira</th><th>Em conversa</th><th>Visitas</th><th>Vendas</th><th /></tr></thead>
-                  <tbody>
-                    {gerentes.map((g) => (
-                      <tr key={g.id}>
-                        <td><b>{g.nome}</b></td><td>{g.corretores}</td><td>{g.online}</td><td>{g.plantao_hoje}</td><td>{g.plantao_semana}</td>
-                        <td>{g.leads_periodo}</td><td>{g.carteira}</td><td>{g.em_conversa}</td><td>{visitasDe(g.id)}</td>
-                        <td className={vendasDe(g.id) ? "tr2-bom" : ""}>{vendasDe(g.id)}</td>
-                        <td><button className="tr2-btn" onClick={() => setGer(g.id)}>Abrir equipe →</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="kpi-card-v3">
+              <span className="kpi-title-v3">📍 Plantão Presencial (C2S)</span>
+              <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-text-main)" }}>
+                {tot.pl}
               </div>
-            </section>
+              <span className="kpi-sub-v3">
+                corretores em plantão hoje · <b className="mono">{tot.plS}</b> na semana
+              </span>
+            </div>
 
-            <section className="tr2-sec">
-              <h2>Todos os corretores <small>{corretores.length} · clique no título para ordenar</small></h2>
-              <div className="tr2-card tr2-tw">
-                <table>
-                  <thead><tr><th>Corretor</th><th>Equipe</th><th className="tr2-ord">{th("plantao", "Plantão hoje")}</th><th className="tr2-ord">{th("leads", "Leads")}</th><th className="tr2-ord">{th("carteira", "Carteira")}</th><th className="tr2-ord">{th("conversa", "Em conversa")}</th><th>Último acesso</th></tr></thead>
-                  <tbody>
-                    {corretores.map((c) => (
-                      <tr key={c.id}>
-                        <td><span className="tr2-nome"><i className={c.online ? "on" : ""} />{c.nome}</span></td>
-                        <td>{c.gerente}</td>
-                        <td>{c.plantao_hoje ? <em className="grn">no plantão</em> : <span className="tr2-dim">—</span>}</td>
-                        <td>{c.leads_periodo}</td><td>{c.carteira}</td><td>{c.em_conversa}</td>
-                        <td className="tr2-dim">{c.ultimo_acesso ? new Date(c.ultimo_acesso).toLocaleDateString("pt-BR") : "nunca entrou"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="kpi-card-v3">
+              <span className="kpi-title-v3">📥 Leads Recebidos</span>
+              <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-text-main)" }}>
+                {tot.leads}
               </div>
-            </section>
-          </>
-        )}
+              <span className="kpi-sub-v3">
+                {tot.cart} em carteira · <b style={{ color: "var(--cv-brand)" }}>{pct(tot.conv, tot.cart)}%</b> em conversa
+              </span>
+            </div>
+
+            <div className="kpi-card-v3 destaque">
+              <span className="kpi-title-v3">🏆 Vendas Confirmadas (Junix)</span>
+              <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-brand)" }}>
+                {tot.vendas} un
+              </div>
+              <span className="kpi-sub-v3">
+                <b className="mono" style={{ color: "var(--cv-text-main)" }}>{tot.visitas}</b> visitas comparecidas C2S
+              </span>
+            </div>
+          </section>
+
+          {/* ── TABELA 1: RAIO-X COMPARATIVO DE EQUIPES ── */}
+          <section className="tropa-section-v3">
+            <div className="tropa-header-v3">
+              <div className="tropa-title-v3">
+                <h2>🏢 Raio-X Comparativo de Equipes</h2>
+                <span>Produtividade, presença e conversão de cada equipe da sua superintendência</span>
+              </div>
+            </div>
+
+            <div className="tropa-table-container-v3">
+              <table className="tropa-table-v3">
+                <thead>
+                  <tr>
+                    <th>Equipe (Gerente)</th>
+                    <th style={{ textAlign: "center" }}>Corretores</th>
+                    <th style={{ textAlign: "center" }}>Online</th>
+                    <th style={{ textAlign: "center" }}>Plantão Hoje</th>
+                    <th style={{ textAlign: "center" }}>Plantão Sem.</th>
+                    <th style={{ textAlign: "center" }}>Leads</th>
+                    <th style={{ textAlign: "center" }}>Carteira</th>
+                    <th style={{ textAlign: "center" }}>Em Conversa</th>
+                    <th style={{ textAlign: "center" }}>Visitas</th>
+                    <th style={{ textAlign: "center" }}>Vendas</th>
+                    <th style={{ textAlign: "right" }}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gerentes.map((g) => {
+                    const vd = vendasDe(g.id);
+                    const vs = visitasDe(g.id);
+                    return (
+                      <tr key={g.id}>
+                        <td>
+                          <b style={{ color: "var(--cv-text-main)", fontSize: 14 }}>{g.nome}</b>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className="mono">{g.corretores}</span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className="mini-badge-v3 online" style={{ padding: "2px 8px" }}>
+                            {g.online} on
+                          </span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <b className="mono" style={{ color: g.plantao_hoje ? "var(--cv-green)" : "inherit" }}>
+                            {g.plantao_hoje}
+                          </b>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className="mono" style={{ color: "var(--cv-text-muted)" }}>
+                            {g.plantao_semana}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <b className="mono">{g.leads_periodo}</b>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className="mono">{g.carteira}</span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className="mono" style={{ color: "var(--cv-brand)", fontWeight: 700 }}>
+                            {g.em_conversa} ({pct(g.em_conversa, g.carteira)}%)
+                          </span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className="mono">{vs}</span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <b className="mono" style={{ color: vd > 0 ? "var(--cv-green)" : "inherit", fontSize: 14 }}>
+                            {vd} un
+                          </b>
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <div style={{ display: "inline-flex", gap: 6 }}>
+                            <button
+                              type="button"
+                              className="btn-queima-primario"
+                              style={{ padding: "4px 8px", fontSize: 11.5, background: "var(--cv-brand)", boxShadow: "none" }}
+                              onClick={() => setGer(g.id)}
+                            >
+                              Abrir Equipe
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-queima-secundario"
+                              style={{ padding: "4px 8px", fontSize: 11.5 }}
+                              onClick={() => cobrarGerente(g.id, g.nome)}
+                            >
+                              💬 Cobrar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* ── TABELA 2: RANKING GERAL DE CORRETORES ── */}
+          <section className="tropa-section-v3">
+            <div className="tropa-header-v3">
+              <div className="tropa-title-v3">
+                <h2>🏆 Todos os Corretores da Tropa</h2>
+                <span>{corretores.length} corretores · Compare o ritmo e engajamento da equipe inteira</span>
+              </div>
+
+              {/* Barra de Busca de Corretor */}
+              <div className="search-box-v3" style={{ width: 300 }}>
+                <span>🔍</span>
+                <input
+                  type="text"
+                  placeholder="Buscar por corretor ou gerente..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="tropa-table-container-v3">
+              <table className="tropa-table-v3">
+                <thead>
+                  <tr>
+                    <th>Corretor</th>
+                    <th>Equipe</th>
+                    <th style={{ textAlign: "center", cursor: "pointer" }} onClick={() => setOrdem("plantao")}>
+                      Plantão Hoje {ordem === "plantao" ? "▾" : ""}
+                    </th>
+                    <th style={{ textAlign: "center", cursor: "pointer" }} onClick={() => setOrdem("leads")}>
+                      Leads {ordem === "leads" ? "▾" : ""}
+                    </th>
+                    <th style={{ textAlign: "center", cursor: "pointer" }} onClick={() => setOrdem("carteira")}>
+                      Carteira {ordem === "carteira" ? "▾" : ""}
+                    </th>
+                    <th style={{ textAlign: "center", cursor: "pointer" }} onClick={() => setOrdem("conversa")}>
+                      Em Conversa {ordem === "conversa" ? "▾" : ""}
+                    </th>
+                    <th style={{ textAlign: "right" }}>Último Acesso</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {corretoresFiltrados.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: "center", padding: 30, color: "var(--cv-text-muted)" }}>
+                        Nenhum corretor encontrado com o filtro aplicado.
+                      </td>
+                    </tr>
+                  ) : (
+                    corretoresFiltrados.map((c) => (
+                      <tr key={c.id}>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: "50%",
+                                background: c.online ? "var(--cv-green)" : "var(--cv-border)",
+                              }}
+                            />
+                            <b style={{ color: "var(--cv-text-main)" }}>{c.nome}</b>
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: 12.5, color: "var(--cv-text-muted)" }}>{c.gerente}</span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          {c.plantao_hoje ? (
+                            <span className="mini-badge-v3 online" style={{ padding: "2px 8px" }}>
+                              No Plantão
+                            </span>
+                          ) : (
+                            <span style={{ color: "var(--cv-text-dim)" }}>—</span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <b className="mono">{c.leads_periodo}</b>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className="mono">{c.carteira}</span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <b className="mono" style={{ color: c.em_conversa > 0 ? "var(--cv-brand)" : "inherit" }}>
+                            {c.em_conversa}
+                          </b>
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <span style={{ fontSize: 12, color: "var(--cv-text-muted)" }}>
+                            {c.ultimo_acesso
+                              ? new Date(c.ultimo_acesso).toLocaleDateString("pt-BR")
+                              : "nunca entrou"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
+
+      {/* Modais de Cadastro de Gerente e Corretor */}
+      {modalGerenteAberto && (
+        <CadastrarGerente
+          superId={superId}
+          superNome={supers.find((s) => s.id === superId)?.nome ?? "Superintendente"}
+          onFechar={() => setModalGerenteAberto(false)}
+          onPronto={() => {
+            setModalGerenteAberto(false);
+            qc.invalidateQueries({ queryKey: ["diretoria"] });
+          }}
+        />
+      )}
+      {modalCorretorAberto && (
+        <CadastrarCorretor
+          managerId={gerentes[0]?.id || superId}
+          gerentes={gerentes.map((g) => ({ id: g.id, nome: g.nome }))}
+          onFechar={() => setModalCorretorAberto(false)}
+          onPronto={() => {
+            setModalCorretorAberto(false);
+            qc.invalidateQueries({ queryKey: ["diretoria"] });
+          }}
+        />
+      )}
     </div>
   );
 }
-
-const CSS = `
-.mgr10 .tr2{display:grid;gap:var(--s3);padding-block:var(--s3) var(--s5);min-width:0}
-.mgr10 .tr2-time{min-width:0;overflow-x:auto}
-.mgr10 .tr2-top{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between}
-.mgr10 .tr2-top h1{font-size:28px}
-.mgr10 .tr2-top p{color:var(--ink-2);margin-top:4px;font-size:14px}
-.mgr10 .tr2-chips{display:flex;gap:6px;flex-wrap:wrap}
-.mgr10 .tr2-chips button{display:grid;text-align:left;gap:1px;padding:9px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-size:14px;font-weight:600}
-.mgr10 .tr2-chips button small{font-size:12px;color:var(--ink-3);font-weight:500}
-.mgr10 .tr2-chips button.on{border-color:var(--blue);background:var(--blue-air);color:var(--blue)}
-.mgr10 .tr2-vazio{color:var(--ink-3)}
-.mgr10 .tr2-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
-.mgr10 .tr2-kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:6px}
-.mgr10 .tr2-kpi span{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
-.mgr10 .tr2-kpi b{font-size:30px;font-weight:800;font-family:"JetBrains Mono",monospace}
-.mgr10 .tr2-kpi small{font-size:12.5px;color:var(--ink-3)}
-.mgr10 .tr2-bom{color:var(--good);font-weight:700}
-.mgr10 .tr2-sec{display:grid;gap:10px}
-.mgr10 .tr2-sec h2{font-size:17px}
-.mgr10 .tr2-sec h2 small{font-size:12.5px;color:var(--ink-3);font-weight:500;margin-left:8px}
-.mgr10 .tr2-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);min-width:0}
-.mgr10 .tr2-tw{overflow-x:auto}
-.mgr10 .tr2-tw table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
-.mgr10 .tr2-tw th,.mgr10 .tr2-tw td{padding:10px 12px;text-align:left;border-top:1px solid var(--hair);white-space:nowrap}
-.mgr10 .tr2-tw thead th{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);background:var(--sunk);border-top:0}
-.mgr10 .tr2-ord button{font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit}
-.mgr10 .tr2-ord button.on{color:var(--blue)}
-.mgr10 .tr2-btn{font-size:12.5px;font-weight:600;padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card)}
-.mgr10 .tr2-nome{display:flex;align-items:center;gap:8px}
-.mgr10 .tr2-nome i{width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
-.mgr10 .tr2-nome i.on{background:var(--good)}
-.mgr10 .tr2-dim{color:var(--ink-3)}
-.mgr10 .tr2 em{font-style:normal;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px}
-.mgr10 .tr2 em.grn{color:var(--good);background:var(--good-air)}
-`;

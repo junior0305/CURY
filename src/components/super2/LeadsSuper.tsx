@@ -1,15 +1,32 @@
-// Leads do superintendente com a Mídia dentro (como no painel do gerente): abas internas Leads | Mídia.
+// Leads do superintendente com a Mídia dentro — 100% no Design System do Cockpit do Gerente
 import { useState } from "react";
-import TelaSuper, { AbasInternas } from "./Tela";
+import { AbasInternas } from "./Tela";
 import Leads from "./Leads";
 import Midia from "./Midia";
+import "@/styles/cockpit-gerente.css";
 
 export default function LeadsSuper({ superId, inicial }: { superId: string; inicial?: "leads" | "midia" }) {
   const [sub, setSub] = useState<"leads" | "midia">(inicial ?? "leads");
+
   return (
-    <TelaSuper>
-      <AbasInternas<"leads" | "midia"> abas={[["leads", "Leads"], ["midia", "Mídia"]]} atual={sub} onTroca={(k) => setSub(k)} />
+    <div className="cockpit-v3">
+      <header className="cockpit-v3-header" style={{ marginBottom: 0 }}>
+        <div className="cockpit-v3-title">
+          <h1>📥 Central de Leads & Mídia da Superintendência</h1>
+          <p>Superintendência · Gestão de tráfego, canais de aquisição e saúde dos anúncios das equipes</p>
+        </div>
+      </header>
+
+      <AbasInternas<"leads" | "midia">
+        abas={[
+          ["leads", "📊 Esteira de Leads por Canal"],
+          ["midia", "📢 Saúde dos Anúncios Meta Ads"],
+        ]}
+        atual={sub}
+        onTroca={(k) => setSub(k)}
+      />
+
       {sub === "leads" ? <Leads superId={superId} /> : <Midia superId={superId} />}
-    </TelaSuper>
+    </div>
   );
 }

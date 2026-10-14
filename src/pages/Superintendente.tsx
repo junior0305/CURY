@@ -138,11 +138,13 @@ export default function Superintendente() {
       <main className="shell2">
         {!ehDiretoria && aba === "consolidado" ? <MinhasTarefas donoId={superId ?? undefined} /> : null}
         {aba === "estrategia" && superId ? (
-          <TelaSuper><SalaDeGuerra superId={superId}
+          <SalaDeGuerra
+            superId={superId}
             superNome={superPerfil || session?.user?.user_metadata?.name || session?.user?.email?.split("@")[0] || "Superintendente"}
-            abaInicial={subGuerra} /></TelaSuper>
+            abaInicial={subGuerra}
+          />
         ) : aba === "pastas" && superId ? (
-          <TelaSuper><PastasDoSuper superId={superId} /></TelaSuper>
+          <PastasDoSuper superId={superId} />
         ) : aba === "leads" && superId ? (
           <LeadsSuper key="leads" superId={superId} inicial="leads" />
         ) : aba === "midia" && superId ? (
@@ -150,23 +152,29 @@ export default function Superintendente() {
         ) : aba === "config" ? (
           <Configuracoes nivel={ehDiretoria ? "diretor" : "super"} donoId={ehDiretoria ? null : (session?.user?.id ?? null)} />
         ) : aba === "time" && superId ? (
-          <TelaSuper><Tropa superId={superId} /></TelaSuper>
+          <Tropa superId={superId} />
         ) : aba === "bi" ? (
-          <>
-            <div className="sup-top">
-              <div>
-                <h1>{ehDiretoria ? "Diretoria" : "Superintendência"}</h1>
-                <p>{ehDiretoria ? "A empresa inteira — todas as superintendências e equipes, num lugar só"
-                  : "A operação inteira das suas equipes, num lugar só"}</p>
+          <div className="cockpit-v3">
+            <header className="cockpit-v3-header" style={{ marginBottom: 0 }}>
+              <div className="cockpit-v3-title">
+                <h1>📈 B.I. & Fechamento da {ehDiretoria ? "Diretoria" : "Superintendência"}</h1>
+                <p>
+                  {ehDiretoria
+                    ? "A empresa inteira — todas as superintendências e equipes, num lugar só"
+                    : "A operação inteira das suas equipes — vendas, visitas e documentos"}
+                </p>
               </div>
-            </div>
+            </header>
             <BiTab scope="super" managerId={superId} />
-          </>
+          </div>
         ) : (
           superId ? (
-            <PainelGeral superId={superId}
+            <PainelGeral
+              superId={superId}
               superNome={superPerfil || session?.user?.user_metadata?.name || "Superintendente"}
-              onAbrir={abrir} irPara={(a) => setAba(a === "midia" ? "midia" : a === "pastas" ? "pastas" : "leads")} />
+              onAbrir={abrir}
+              irPara={(a) => setAba(a === "midia" ? "midia" : a === "pastas" ? "pastas" : "leads")}
+            />
           ) : <p className="sup-vazio">Carregando…</p>
         )}
       </main>
