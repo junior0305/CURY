@@ -1,7 +1,7 @@
-// LEADS — o que chegou, com quem está, e no que deu.
+// CENTRAL DE LEADS v3 — Gestão de Esteira, Filas de Problema e Redistribuição
 //
-// Organizada por FILA DE PROBLEMA com ação em lote, porque o gerente de 40
-// pessoas não trabalha lead a lead: ele redistribui, cobra e descarta.
+// O gerente atua por FILAS DE PROBLEMA com ação em lote:
+// Redistribuição instantânea, cobrança em massa no WhatsApp e higienização de base.
 
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
@@ -9,19 +9,52 @@ import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useLeads, redistribuir, descartar, cobrarFila, useCobrancasHoje, type LeadLinha, type JaCobrado, type Cobranca } from "@/hooks/useLeads";
+import {
+  useLeads,
+  redistribuir,
+  descartar,
+  cobrarFila,
+  useCobrancasHoje,
+  type LeadLinha,
+  type JaCobrado,
+  type Cobranca,
+} from "@/hooks/useLeads";
 import OrigemDrawer from "@/components/manager-v10/OrigemDrawer";
 import { usePeriodo } from "@/hooks/usePeriodo";
-import { Sec, Blank } from "@/components/manager-v10/ui";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import { Link, useNavigate } from "react-router-dom";
-import "@/styles/manager-v10.css";
+import {
+  Inbox,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  Users,
+  Send,
+  MessageCircle,
+  RefreshCw,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Megaphone,
+  Building,
+  Target,
+  BarChart3,
+  History,
+  Check,
+  X,
+  ExternalLink,
+} from "lucide-react";
+import "@/styles/cockpit-gerente.css";
+import "@/styles/leads-gerente.css";
 
 const brl = (n: number) => "R$ " + n.toFixed(2).replace(".", ",");
 const ini = (n: string) => n.trim().slice(0, 2).toUpperCase();
+const hhmm = (iso: string) =>
+  new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-type Modo = "online" | "plantao" | "escolher";
+type ModoRedistribuicao = "online" | "plantao" | "escolher";
+type SubAbaLeads = "filas" | "origens" | "funil" | "historico";
 
 export default function Leads() {
   const { session } = useAuth();
@@ -31,14 +64,24 @@ export default function Leads() {
   const qc = useQueryClient();
   const { data, isLoading } = useLeads(userId, periodo);
   const navigate = useNavigate();
+
+  const [subAba, setSubAba] = useState<SubAbaLeads>("filas");
   const [cobrando, setCobrando] = useState<string | null>(null);
   const { data: cobrancas = [] } = useCobrancasHoje();
-  // "Você já cobrou isso" — aguardando o gerente decidir se cobra de novo
   const [jaCobrou, setJaCobrou] = useState<{ chave: string; ids: string[]; ja: JaCobrado[] } | null>(null);
 
-  // Cobrar = WhatsApp para cada corretor com os leads parados dele (uma mensagem
-  // por corretor). Quem cobra é quem está logado — o super cobrando no painel do gerente.
-  // Quem já foi cobrado do mesmo assunto em 12h não recebe de novo sem confirmação.
+  // Filas abertas e seleções em lote
+  const [abertas, setAbertas] = useState<Set<string>>(new Set(["respondeu", "nunca"]));
+  const [sel, setSel] = useState<Record<string, Set<string>>>({});
+  const [red, setRed] = useState<{ ids: string[] } | null>(null);
+  const [modo, setModo] = useState<ModoRedistribuicao>("online");
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
+  const [salvando, setSalvando] = useState(false);
+  const [origAberta, setOrigAberta] = useState<null | "anuncio" | "app" | "disparo" | "proprio">(null);
+
+  loadFonts();
+
+  // Cobrança no WhatsApp para os corretores da fila
   async function cobrar(chave: string, ids: string[], forcar = false) {
     if (!ids.length || !session?.user?.id) return;
     setCobrando(chave);
@@ -47,498 +90,885 @@ export default function Leads() {
       const ok = r.corretores.filter((c) => c.avisado_no_whats);
       const falhou = r.corretores.filter((c) => !c.avisado_no_whats);
       if (r.corretores.length) {
-        toast.success(`${ok.length} corretor${ok.length === 1 ? "" : "es"} cobrado${ok.length === 1 ? "" : "s"} no WhatsApp`
-          + (falhou.length ? ` · sem WhatsApp: ${falhou.map((c) => c.corretor).join(", ")} (avisados só no painel)` : ""));
+        toast.success(
+          `${ok.length} corretor${ok.length === 1 ? "" : "es"} cobrado${ok.length === 1 ? "" : "s"} no WhatsApp` +
+            (falhou.length ? ` · sem WhatsApp: ${falhou.map((c) => c.corretor).join(", ")}` : "")
+        );
       }
       if (r.ja_cobrados?.length) setJaCobrou({ chave, ids, ja: r.ja_cobrados });
       qc.invalidateQueries({ queryKey: ["cobrancas-hoje"] });
-    } catch (e: any) { toast.error(e?.message ?? "Não consegui cobrar."); }
-    finally { setCobrando(null); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Não consegui disparar a cobrança.");
+    } finally {
+      setCobrando(null);
+    }
   }
-  const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  // última cobrança (24h) de cada corretor por motivo, e o resumo de cada fila
+
   const ultimaCobranca = (brokerId: string | null, motivo: string): Cobranca | undefined =>
     brokerId ? cobrancas.find((c) => c.para_id === brokerId && c.motivo === motivo) : undefined;
-  const resumoFila = (motivo: string) => {
-    const doMotivo = cobrancas.filter((c) => c.motivo === motivo);
-    const pessoas = new Map<string, Cobranca>();
-    for (const c of doMotivo) if (!pessoas.has(c.para_id)) pessoas.set(c.para_id, c);
-    const lista = [...pessoas.values()];
-    return lista.length ? { quando: hhmm(lista[lista.length - 1].enviada_em), total: lista.length,
-      responderam: lista.filter((c) => c.respondida_em).length } : null;
+
+  const toggleFila = (chave: string) => {
+    setAbertas((prev) => {
+      const next = new Set(prev);
+      if (next.has(chave)) next.delete(chave);
+      else next.add(chave);
+      return next;
+    });
   };
 
-  const [abertas, setAbertas] = useState<Set<string>>(new Set());
-  const [sel, setSel] = useState<Record<string, Set<string>>>({});
-  const [res, setRes] = useState<string | null>(null);
-  const [red, setRed] = useState<{ ids: string[] } | null>(null);
-  const [modo, setModo] = useState<Modo>("online");
-  const [marcados, setMarcados] = useState<Set<string>>(new Set());
-  const [salvando, setSalvando] = useState(false);
-  const [origAberta, setOrigAberta] = useState<null | "anuncio" | "app" | "disparo" | "proprio">(null);
-
-  loadFonts();
-
-  const marcar = (fila: string, id: string) => setSel((s) => {
-    const atual = new Set(s[fila] ?? []);
-    atual.has(id) ? atual.delete(id) : atual.add(id);
-    return { ...s, [fila]: atual };
-  });
+  const marcarLead = (fila: string, id: string) => {
+    setSel((s) => {
+      const atual = new Set(s[fila] ?? []);
+      if (atual.has(id)) atual.delete(id);
+      else atual.add(id);
+      return { ...s, [fila]: atual };
+    });
+  };
 
   async function confirmarRedistribuicao() {
     if (!red || !data) return;
-    const alvo = modo === "online" ? data.corretores.filter((c) => c.online).map((c) => c.id)
-               : modo === "plantao" ? data.corretores.filter((c) => c.plantao).map((c) => c.id)
-               : [...marcados];
-    if (!alvo.length) { toast.error("Escolha pelo menos um corretor."); return; }
+    const alvo =
+      modo === "online"
+        ? data.corretores.filter((c) => c.online).map((c) => c.id)
+        : modo === "plantao"
+        ? data.corretores.filter((c) => c.plantao).map((c) => c.id)
+        : [...marcados];
+
+    if (!alvo.length) {
+      toast.error("Escolha pelo menos um corretor de destino.");
+      return;
+    }
     setSalvando(true);
     try {
       await redistribuir(red.ids, alvo, userId!);
-      toast.success(`${red.ids.length} leads redistribuídos entre ${alvo.length} corretores.`);
-      setRed(null); setSel({});
+      toast.success(`${red.ids.length} leads redistribuídos entre ${alvo.length} corretores com sucesso!`);
+      setRed(null);
+      setSel({});
       qc.invalidateQueries({ queryKey: ["aba-leads"] });
     } catch (e: any) {
-      toast.error(`Não consegui: ${e?.message ?? e}`);
-    } finally { setSalvando(false); }
+      toast.error(`Erro ao redistribuir: ${e?.message ?? e}`);
+    } finally {
+      setSalvando(false);
+    }
   }
 
   async function descartarLote(fila: string) {
     const ids = [...(sel[fila] ?? [])];
-    if (!ids.length) { toast.error("Marque os leads primeiro."); return; }
+    if (!ids.length) {
+      toast.error("Selecione os leads que deseja descartar.");
+      return;
+    }
     try {
       await descartar(ids);
       toast.success(`${ids.length} leads descartados.`);
       setSel((s) => ({ ...s, [fila]: new Set() }));
       qc.invalidateQueries({ queryKey: ["aba-leads"] });
-    } catch (e: any) { toast.error(`Não consegui: ${e?.message ?? e}`); }
+    } catch (e: any) {
+      toast.error(`Erro ao descartar: ${e?.message ?? e}`);
+    }
   }
 
-  const corpo = () => {
-    if (isLoading) return <Blank title="Carregando os leads…" />;
-    if (!data) return null;
-    const d = data;
-
-    const alvoRed = modo === "online" ? d.corretores.filter((c) => c.online)
-                  : modo === "plantao" ? d.corretores.filter((c) => c.plantao)
-                  : d.corretores.filter((c) => marcados.has(c.id));
-
-    const listaRes: LeadLinha[] | { nome: string; n: number }[] =
-      res === "neg" ? d.negociando : res === "doc" ? d.documentos
-      : res === "vis" ? d.porCorretorVisita : res === "ven" ? d.porCorretorVenda : [];
-
+  if (isLoading) {
     return (
-      <>
-        {/* 0 · de onde vem o lead — o card do topo */}
-        <Sec title="De onde vem o lead"
-             tag={<span className="dim">{periodo.rotulo} · {d.chegaram} no total</span>}>
-          <div className="orig">
-            {([
-              ["anuncio", "Anúncio", "pago no Meta / Google", d.origem.anuncio, d.origem.hoje.anuncio],
-              ["app", "Plantão (C2S)", "atendido no estande", d.origem.app, d.origem.hoje.app],
-              ["disparo", "Disparo", "WhatsApp oficial", d.origem.disparo, d.origem.hoje.disparo],
-              ["proprio", "Próprio", "repescagem e manual", d.origem.proprio, d.origem.hoje.proprio],
-            ] as [string, string, string, number, number][]).map(([k, titulo, sub, n, hoje]) => (
-              <button className={`or-c or-${k}`} key={k} type="button"
-                onClick={() => n > 0 && k !== "app" && setOrigAberta(k as any)}
-                title={n > 0 ? "Abrir e ver os leads um a um" : "Nenhum lead nesta origem"}>
-                <span className="or-t">{titulo}</span>
-                <b className="mono">{n}</b>
-                <i>{sub}</i>
-                {hoje ? <em className="or-h">+{hoje} hoje</em> : null}
-                {/* Dentro de anúncio, a rede — só aparece quando há mais de
-                    uma, senão "100% Facebook" é ruído. Hoje só o Facebook
-                    chega; Google e TikTok já têm lugar para quando entrarem. */}
-                {k === "anuncio" && (d.origem.redes.google + d.origem.redes.tiktok) > 0 ? (
-                  <div className="or-rede">
-                    {d.origem.redes.facebook ? <span>Facebook {d.origem.redes.facebook}</span> : null}
-                    {d.origem.redes.google ? <span>Google {d.origem.redes.google}</span> : null}
-                    {d.origem.redes.tiktok ? <span>TikTok {d.origem.redes.tiktok}</span> : null}
-                  </div>
-                ) : k === "anuncio" && d.origem.anuncio > 0 ? (
-                  <div className="or-rede"><span>tudo Facebook</span></div>
-                ) : null}
-              </button>
-            ))}
+      <div className="mgr10 app2">
+        <RailV10 atual={"leads" as any} mode={mode} toggle={toggle} />
+        <main className="shell2">
+          <div style={{ padding: "40px", textAlign: "center", color: "var(--cv-text-muted)" }}>
+            Carregando a central de leads...
           </div>
-          {d.origem.app > 0 ? (
-            <p className="ld-say">
-              O cliente do <b>plantão</b> é atendido no estande e registrado no C2S —
-              aqui ele aparece contado por corretor, sem ficha no Comandra.
-            </p>
-          ) : null}
-        </Sec>
+        </main>
+      </div>
+    );
+  }
 
-        {/* 1 · o caminho do lead */}
-        <Sec title="O caminho do lead"
-             tag={<span className="dim">{periodo.rotulo} · {d.chegaramHoje} chegou hoje</span>}>
-          <div className="ld-box">
-            <div className="ld-cam">
-              <div className="ld-cm"><b className="mono">{d.chegaram}</b>
-                <span>chegaram<br />de anúncio e disparo</span><i className="seta">→</i></div>
-              <div className="ld-cm"><b className="mono">{d.encaminhados}</b>
-                <span>foram para um corretor<br />distribuídos no rodízio</span><i className="seta">→</i></div>
-              <div className={`ld-cm${d.perdidos ? " perdeu" : ""}`}><b className="mono">{d.perdidos}</b>
-                <span>se perderam antes<br />{d.perdidos ? "DDD de outro estado" : "nenhum barrado"}</span></div>
-            </div>
-            <p className="ld-say">
-              {d.perdidos
-                ? <>Os {d.perdidos} que se perderam foram barrados por telefone de fora de São Paulo,
-                    antes de chegar ao rodízio — <b>e o anúncio deles já estava pago</b>.</>
-                : <>Todos os que passaram pela triagem foram para alguém — <b>nenhum lead ficou órfão</b>.</>}
-            </p>
-          </div>
-        </Sec>
+  if (!data) return null;
+  const d = data;
 
-        {/* 2 · onde a conversa está */}
-        <Sec title="Onde a conversa está"
-             tag={<span className="dim">{d.conversa.perguntouSemResposta + d.conversa.nuncaFalaram
-               + d.conversa.falouSemResposta + d.conversa.emAndamento} leads ativos</span>}>
-          <div className="ld-box">
-            <div className="ld-conv">
-              <div className="ld-cv hot"><b className="mono">{d.conversa.perguntouSemResposta}</b>
-                <span>o cliente perguntou<br />e o corretor não voltou</span></div>
-              <div className="ld-cv warn"><b className="mono">{d.conversa.nuncaFalaram}</b>
-                <span>ninguém nunca falou<br />com esse cliente</span></div>
-              <div className="ld-cv"><b className="mono">{d.conversa.falouSemResposta}</b>
-                <span>o corretor falou<br />e o cliente não respondeu</span></div>
-              <div className="ld-cv ok"><b className="mono">{d.conversa.emAndamento}</b>
-                <span>conversa em andamento<br />os dois se falando</span></div>
-            </div>
-          </div>
-        </Sec>
+  const alvoRed =
+    modo === "online"
+      ? d.corretores.filter((c) => c.online)
+      : modo === "plantao"
+      ? d.corretores.filter((c) => c.plantao)
+      : d.corretores.filter((c) => marcados.has(c.id));
 
-        {/* 3 · as filas */}
-        <Sec title="O que precisa de ação" tag={<span className="dim">{d.filas.length} filas</span>}>
-          <div className="ld-filas">
-            {d.filas.map((f) => {
-              const on = abertas.has(f.chave);
-              const marcadosFila = sel[f.chave] ?? new Set<string>();
-              return (
-                <div key={f.chave} className={`ld-fi t-${f.tom}${on ? " on" : ""}`}>
-                  <div className="ld-fh" role="button" tabIndex={0}
-                    onClick={() => setAbertas((s) => {
-                      const n = new Set(s); n.has(f.chave) ? n.delete(f.chave) : n.add(f.chave); return n; })}
-                    onKeyDown={(e) => { if (e.key === "Enter") setAbertas((s) => {
-                      const n = new Set(s); n.has(f.chave) ? n.delete(f.chave) : n.add(f.chave); return n; }); }}>
-                    <span className="ld-fc mono">{f.total}</span>
-                    <span className="ld-ft"><b>{f.total} {f.titulo.toLowerCase()}</b><p>{f.porque}</p></span>
-                    <span>{f.total > 0 && f.acoes[0] ? (
-                      <button className="mini solid" onClick={(e) => {
-                        e.stopPropagation();
-                        if (f.acoes[0].startsWith("Redistribuir") || f.acoes[0] === "Distribuir")
-                          setRed({ ids: f.ids });
-                        else if (f.acoes[0] === "Cobrar os corretores") cobrar(f.chave, f.ids);
-                        else if (f.acoes[0] === "Disparar reativação") navigate(`/manager/whatsapp?publico=${f.chave}`);
-                      }} disabled={cobrando === f.chave}>
-                        {cobrando === f.chave ? "Cobrando…"
-                          : f.acoes[0] === "Cobrar os corretores" && resumoFila(f.chave) ? "Cobrar de novo" : f.acoes[0]}</button>) : null}
-                      {f.acoes[0] === "Cobrar os corretores" && resumoFila(f.chave) ? (() => { const r = resumoFila(f.chave)!; return (
-                        <small style={{ display: "block", marginTop: 4, fontSize: 11.5, color: r.responderam === r.total ? "var(--good)" : "var(--ink-3)", fontWeight: 600 }}>
-                          cobrado às {r.quando} · {r.responderam} de {r.total} responderam</small>); })() : null}</span>
-                    <svg className="ld-car" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M6 9l6 6 6-6" /></svg>
-                  </div>
+  return (
+    <div className="mgr10 app2">
+      <RailV10 atual={"leads" as any} mode={mode} toggle={toggle} />
 
-                  {on && (
-                    <div className="ld-fd">
-                      {f.disparo && (
-                        <div className="ld-lote ld-disp">
-                          <span><b>{f.disparo.qtd} pessoas</b> · pela API oficial, cerca de{" "}
-                            <b>{brl(f.disparo.custo)}</b> o disparo inteiro</span>
-                          <button className="mini solid" onClick={() =>
-                            navigate(`/manager/whatsapp?publico=${f.chave}`)}>Montar o disparo</button>
-                        </div>
-                      )}
-                      {f.leads.length === 0 ? (
-                        <p className="ld-mais">Nada nesta fila.</p>
-                      ) : (
-                        <>
-                          <div className="ld-lote">
-                            <label>
-                              <input type="checkbox"
-                                checked={marcadosFila.size === f.leads.length && f.leads.length > 0}
-                                onChange={(e) => setSel((s) => ({ ...s,
-                                  [f.chave]: e.target.checked ? new Set(f.leads.map((l) => l.id)) : new Set() }))} />
-                              selecionar todos
-                            </label>
-                            <button className="mini solid" disabled={!marcadosFila.size}
-                              onClick={() => setRed({ ids: [...marcadosFila] })}>Redistribuir</button>
-                            <button className="mini" disabled={!marcadosFila.size}
-                              onClick={() => cobrar(f.chave, [...marcadosFila])}>Cobrar o corretor</button>
-                            <button className="mini danger" disabled={!marcadosFila.size}
-                              onClick={() => descartarLote(f.chave)}>Descartar</button>
-                            <small>{marcadosFila.size
-                              ? `${marcadosFila.size} selecionado${marcadosFila.size > 1 ? "s" : ""}`
-                              : "as ações valem para os selecionados"}</small>
-                          </div>
-                          {f.leads.map((l) => (
-                            <div key={l.id} className="ld-lr">
-                              <input type="checkbox" checked={marcadosFila.has(l.id)}
-                                onChange={() => marcar(f.chave, l.id)} />
-                              <span><b>{l.nome ?? "sem nome"}</b>
-                                <span className="tel">{l.telefone ?? "—"}</span></span>
-                              <span className="cor">{l.corretor ? `com ${l.corretor}` : "sem corretor"}
-                                {(() => { const c = ultimaCobranca(l.brokerId, f.chave); return c ? (
-                                  <em style={{ display: "block", fontStyle: "normal", fontSize: 11.5, fontWeight: 600,
-                                    color: c.respondida_em ? "var(--good)" : "var(--amber, #b7791f)" }}
-                                    title={c.resposta ?? undefined}>
-                                    {c.respondida_em ? `✓ respondeu às ${hhmm(c.respondida_em)}` : `cobrado às ${hhmm(c.enviada_em)} · sem resposta`}
-                                  </em>) : null; })()}</span>
-                              <span className={`qd${l.dias > 30 ? " hot" : ""}`}>{l.dias} dias</span>
-                            </div>
-                          ))}
-                          {f.total > f.leads.length && (
-                            <p className="ld-mais">mostrando {f.leads.length} de {f.total} — os mais antigos primeiro</p>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Sec>
-
-        {/* 4 · no que deu */}
-        <Sec title="No que os leads deram">
-          <div className="ld-box">
-            <div className="ld-res">
-              {[["neg", d.resultado.negociacao, "em negociação", "sub"],
-                ["doc", d.resultado.documentos, "com documentos em análise", "sub"],
-                ["vis", d.resultado.visitas, "visitas no período", "cury"],
-                ["ven", d.resultado.vendas, "vendas no período", "cury"]].map(([k, n, rot, f]) => (
-                <button key={k as string} className="ld-rs" aria-pressed={res === k}
-                  onClick={() => setRes((v) => (v === k ? null : (k as string)))}>
-                  <b className="mono">{n as number}</b><span>{rot as string}</span>
-                  <span className={`fonte ${f}`}>{f === "cury" ? "medido no C2S/Junix" : "subnotificado"}</span>
-                </button>
-              ))}
-            </div>
-
-            {res && (
-              <div className="ld-reslista">
-                <h4>{res === "neg" ? "Leads em negociação" : res === "doc" ? "Leads com documentos"
-                  : res === "vis" ? "Visitas por corretor" : "Vendas por corretor"}</h4>
-                {(listaRes as any[]).length === 0 ? <p className="ld-mais">Nada neste estágio.</p>
-                  : (listaRes as any[]).slice(0, 10).map((x, i) => (
-                    <div key={i} className="ld-lr sem-check">
-                      <span><b>{x.nome ?? "—"}</b></span>
-                      <span className="cor">{x.corretor ? `com ${x.corretor}` : ""}</span>
-                      <span className="qd">{x.dias != null ? `${x.dias} dias neste estágio` : `${x.n}`}</span>
-                    </div>
-                  ))}
-                <p className="ld-mais">
-                  {res === "vis" || res === "ven"
-                    ? "Vem do C2S/Junix com o nome do corretor, não com o do cliente — não dá para dizer qual lead virou qual."
-                    : "O estágio depende do corretor mexer no status. Quem está há muito tempo aqui pode já ter comprado em outro lugar."}
-                </p>
-              </div>
-            )}
-
-            <p className="ld-say">
-              <b>Visita vem do C2S e venda do Junix</b>, contadas sozinhas — são o número confiável.
-              <b> Negociação e documentos dependem do corretor mexer no status</b>, e por isso
-              vêm por baixo do que realmente aconteceu.
-            </p>
-          </div>
-        </Sec>
-
-        {/* 5 · disparador */}
-        {d.disparo.alvos > 0 && (
-          <Sec title="Quem respondeu ao disparo" tag={<span className="dim">API oficial</span>}>
-            <div className="ld-box">
-              <div className="ld-dp">
-                <div className="ld-dpc"><b className="mono">{d.disparo.enviadas}</b>
-                  <span>mensagens enviadas<br />de {d.disparo.alvos} alvos</span></div>
-                <div className="ld-dpc ok"><b className="mono">{d.disparo.responderam}</b>
-                  <span>pessoas responderam<br />levantaram a mão</span></div>
-                <div className={`ld-dpc${d.disparo.semRetorno ? " hot" : ""}`}>
-                  <b className="mono">{d.disparo.semRetorno}</b>
-                  <span>responderam e ninguém<br />voltou a falar</span></div>
-                <div className={`ld-dpc${d.disparo.pendentes ? " hot" : ""}`}>
-                  <b className="mono">{d.disparo.pendentes}</b>
-                  <span>alvos nunca enviados<br />{d.disparo.pendentes ? "campanha parada" : "tudo enviado"}</span></div>
-              </div>
-              <div className="ld-cmp">
-                {d.disparo.campanhas.map((c) => (
-                  <div key={c.nome} className="ld-cmr">
-                    <b>{c.nome}</b>
-                    <span className={`st ${c.status}`}>{
-                      c.status === "sending" ? "enviando" : c.status === "done" ? "terminada"
-                      : c.status === "canceled" ? "cancelada" : c.status}</span>
-                    <span className="q">{c.env} enviadas</span>
-                    <span className="q">{c.resp} responderam</span>
-                  </div>
-                ))}
-              </div>
-              {d.disparo.semRetorno > 0 && (
-                <p className="ld-say">
-                  <b>{d.disparo.semRetorno} pessoas responderam e estão sem retorno.</b> São o
-                  melhor lead que existe nesta tela — foram elas que procuraram você.
-                </p>
-              )}
-            </div>
-          </Sec>
-        )}
-
-        {/* 6 · repescagem */}
-        {d.pool.length > 0 && (
-          <Sec title="Repescagem" tag={<span className="dim">leads antigos devolvidos ao pool</span>}>
-            <div className="ld-box">
-              <div className="ld-pool">
-                <div className="ld-pr cab">
-                  <span /><span>corretor</span><span>na fila</span>
-                  <span>contatou</span><span>trouxe de volta</span>
-                </div>
-                {d.pool.map((p) => {
-                  const pc = p.fila ? Math.round((p.trouxe / p.fila) * 100) : 0;
-                  return (
-                    <div key={p.nome} className="ld-pr">
-                      <span className="av">{ini(p.nome)}</span>
-                      <b>{p.nome}</b>
-                      <span className="n mono">{p.fila}</span>
-                      <span className={`n mono${p.contatou ? "" : " zero"}`}>{p.contatou}</span>
-                      <span className={`pc mono${pc >= 15 ? " bom" : pc === 0 ? " ruim" : ""}`}>
-                        {p.trouxe} · {pc}%</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="ld-say">
-                A coluna que importa é a última: <b>quantos ele conseguiu trazer de volta</b>.
-                Quem pega e não contata está bloqueando lead que outro trabalharia.
+      <main className="shell2">
+        <div className="leads-v3">
+          {/* ── CABEÇALHO ── */}
+          <div className="leads-v3-header">
+            <div className="leads-v3-title">
+              <h1>Central de Leads & Carteira</h1>
+              <p>
+                Gestão de esteira, filas de atendimento, redistribuição e higienização de base · {d.chegaram} no período
               </p>
             </div>
-          </Sec>
-        )}
+            <div className="leads-v3-actions">
+              <SeletorPeriodo />
+              <Link
+                to="/manager/anuncios"
+                className="time-btn-action"
+                style={{ textDecoration: "none", fontWeight: 700 }}
+              >
+                <Megaphone size={14} /> Ver Anúncios
+              </Link>
+            </div>
+          </div>
 
-        {/* 7 · descartados */}
-        {d.descartes.length > 0 && (
-          <Sec title="Por que os leads foram descartados"
-               tag={<span className="dim">{d.descartes.reduce((a, x) => a + x.n, 0)} no total</span>}>
-            <div className="ld-box">
-              <div className="ld-dsc">
-                {d.descartes.map((x) => (
-                  <div key={x.motivo} className={`ld-dr${x.auto ? " auto" : ""}`}>
-                    <b>{x.motivo}</b>
-                    <span className="n mono">{x.n}</span>
-                    <span className="bar"><i style={{
-                      width: `${(x.n / (d.descartes[0]?.n || 1)) * 100}%` }} /></span>
-                    <span>{x.auto ? <span className="tag">automático</span> : null}</span>
-                  </div>
-                ))}
+          {/* ── SCORE ROW / KPI CARDS ── */}
+          <div className="leads-kpis-grid">
+            {/* KPI 1: Chegaram no Período */}
+            <div className="leads-kpi-card" onClick={() => setSubAba("origens")}>
+              <div className="leads-kpi-top">
+                <span className="leads-kpi-label">Leads Recebidos</span>
+                <span className="leads-kpi-badge brand">
+                  <Inbox size={12} /> {periodo.rotulo}
+                </span>
               </div>
-              {d.descartes[0]?.auto && (
-                <p className="ld-say">
-                  <b>{d.descartes[0].n} foram descartados automaticamente por prazo</b>, não por
-                  desinteresse. Vale olhar: se o corretor só tocou uma vez e o sistema descartou em
-                  seguida, morreu lead bom por relógio.
+              <div className="leads-kpi-num">{d.chegaram}</div>
+              <div className="leads-kpi-sub">
+                {d.chegaramHoje > 0 ? (
+                  <b style={{ color: "var(--cv-brand)" }}>+{d.chegaramHoje} chegaram hoje</b>
+                ) : (
+                  "Nenhum novo lead hoje"
+                )}
+              </div>
+            </div>
+
+            {/* KPI 2: Clientes sem Retorno (Quentes Parados) */}
+            <div className="leads-kpi-card" onClick={() => setSubAba("filas")}>
+              <div className="leads-kpi-top">
+                <span className="leads-kpi-label">Esperando Resposta</span>
+                <span className={`leads-kpi-badge ${d.conversa.perguntouSemResposta > 0 ? "rose" : "green"}`}>
+                  <AlertTriangle size={12} /> {d.conversa.perguntouSemResposta > 0 ? "Urgente" : "Em dia"}
+                </span>
+              </div>
+              <div className="leads-kpi-num" style={{ color: d.conversa.perguntouSemResposta > 0 ? "var(--cv-rose)" : "inherit" }}>
+                {d.conversa.perguntouSemResposta}
+              </div>
+              <div className="leads-kpi-sub">responderam e o corretor não voltou</div>
+            </div>
+
+            {/* KPI 3: Nunca Abordados */}
+            <div className="leads-kpi-card" onClick={() => setSubAba("filas")}>
+              <div className="leads-kpi-top">
+                <span className="leads-kpi-label">Nunca Abordados</span>
+                <span className={`leads-kpi-badge ${d.conversa.nuncaFalaram > 0 ? "amber" : "green"}`}>
+                  <Clock size={12} /> Sem contato
+                </span>
+              </div>
+              <div className="leads-kpi-num" style={{ color: d.conversa.nuncaFalaram > 0 ? "var(--cv-amber)" : "inherit" }}>
+                {d.conversa.nuncaFalaram}
+              </div>
+              <div className="leads-kpi-sub">distribuídos e ninguém falou ainda</div>
+            </div>
+
+            {/* KPI 4: Em Andamento / Negociação */}
+            <div className="leads-kpi-card" onClick={() => setSubAba("funil")}>
+              <div className="leads-kpi-top">
+                <span className="leads-kpi-label">Em Conversa Ativa</span>
+                <span className="leads-kpi-badge green">
+                  <CheckCircle2 size={12} /> Conversando
+                </span>
+              </div>
+              <div className="leads-kpi-num" style={{ color: "var(--cv-green)" }}>
+                {d.conversa.emAndamento}
+              </div>
+              <div className="leads-kpi-sub">{d.resultado.negociacao} em negociação formal</div>
+            </div>
+          </div>
+
+          {/* ── BARRA DE SUB-NAVEGAÇÃO ── */}
+          <div className="leads-tabs-bar">
+            <button
+              className={`leads-tab-btn ${subAba === "filas" ? "active" : ""}`}
+              onClick={() => setSubAba("filas")}
+            >
+              <AlertTriangle size={15} />
+              Filas de Ação Imediata
+              <span className={`leads-tab-pill ${d.conversa.perguntouSemResposta > 0 ? "hot" : ""}`}>
+                {d.filas.reduce((a, f) => a + f.total, 0)}
+              </span>
+            </button>
+
+            <button
+              className={`leads-tab-btn ${subAba === "origens" ? "active" : ""}`}
+              onClick={() => setSubAba("origens")}
+            >
+              <Inbox size={15} />
+              Origens & Canais
+              <span className="leads-tab-pill">{d.chegaram}</span>
+            </button>
+
+            <button
+              className={`leads-tab-btn ${subAba === "funil" ? "active" : ""}`}
+              onClick={() => setSubAba("funil")}
+            >
+              <BarChart3 size={15} />
+              Esteira & Resultados
+            </button>
+
+            <button
+              className={`leads-tab-btn ${subAba === "historico" ? "active" : ""}`}
+              onClick={() => setSubAba("historico")}
+            >
+              <History size={15} />
+              Cobranças & Repescagem
+              {cobrancas.length > 0 && <span className="leads-tab-pill">{cobrancas.length}</span>}
+            </button>
+          </div>
+
+          {/* ══════════════════════════════════════════════════════════════════════
+              ABA 1: FILAS DE AÇÃO IMEDIATA (PROBLEMAS)
+              ══════════════════════════════════════════════════════════════════════ */}
+          {subAba === "filas" && (
+            <div className="leads-filas-list">
+              {d.filas.map((f) => {
+                const aberta = abertas.has(f.chave);
+                const marcadosFila = sel[f.chave] ?? new Set<string>();
+
+                return (
+                  <div key={f.chave} className={`leads-fila-card ${f.tom}`}>
+                    <div className="leads-fila-header" onClick={() => toggleFila(f.chave)}>
+                      <div className="leads-fila-left">
+                        <div className="leads-fila-badge-count">{f.total}</div>
+                        <div className="leads-fila-title">
+                          <b>
+                            {f.total} {f.titulo}
+                          </b>
+                          <p>{f.porque}</p>
+                        </div>
+                      </div>
+
+                      <div className="leads-fila-actions" onClick={(e) => e.stopPropagation()}>
+                        {f.total > 0 && f.acoes[0] && (
+                          <button
+                            className="time-btn-primary"
+                            style={{ fontSize: "12.5px", padding: "6px 12px" }}
+                            disabled={cobrando === f.chave}
+                            onClick={() => {
+                              if (f.acoes[0].startsWith("Redistribuir") || f.acoes[0] === "Distribuir") {
+                                setRed({ ids: f.ids });
+                              } else if (f.acoes[0] === "Cobrar os corretores") {
+                                cobrar(f.chave, f.ids);
+                              } else if (f.acoes[0] === "Disparar reativação") {
+                                navigate(`/manager/whatsapp?publico=${f.chave}`);
+                              }
+                            }}
+                          >
+                            {cobrando === f.chave ? "Cobrando..." : f.acoes[0]}
+                          </button>
+                        )}
+
+                        <button
+                          style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--cv-text-muted)" }}
+                          onClick={() => toggleFila(f.chave)}
+                        >
+                          {aberta ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {aberta && (
+                      <div className="leads-fila-body">
+                        {f.leads.length === 0 ? (
+                          <div style={{ padding: "16px", textAlign: "center", color: "var(--cv-text-muted)", fontSize: "13px" }}>
+                            Nenhum lead nesta fila no momento.
+                          </div>
+                        ) : (
+                          <>
+                            {/* Barra de ação em lote */}
+                            <div className="leads-lote-bar">
+                              <div className="leads-lote-left">
+                                <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 700, cursor: "pointer" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={marcadosFila.size === f.leads.length && f.leads.length > 0}
+                                    onChange={(e) =>
+                                      setSel((s) => ({
+                                        ...s,
+                                        [f.chave]: e.target.checked ? new Set(f.leads.map((l) => l.id)) : new Set(),
+                                      }))
+                                    }
+                                  />
+                                  Selecionar todos da amostra
+                                </label>
+                                <span style={{ fontSize: "12px", color: "var(--cv-text-muted)" }}>
+                                  ({marcadosFila.size} de {f.leads.length} selecionados)
+                                </span>
+                              </div>
+
+                              <div className="leads-lote-buttons">
+                                <button
+                                  className="time-btn-action"
+                                  disabled={!marcadosFila.size}
+                                  onClick={() => setRed({ ids: [...marcadosFila] })}
+                                >
+                                  <RefreshCw size={13} /> Redistribuir ({marcadosFila.size})
+                                </button>
+                                <button
+                                  className="time-btn-action"
+                                  disabled={!marcadosFila.size}
+                                  onClick={() => cobrar(f.chave, [...marcadosFila])}
+                                >
+                                  <MessageCircle size={13} /> Cobrar Corretores
+                                </button>
+                                <button
+                                  className="time-btn-action danger"
+                                  disabled={!marcadosFila.size}
+                                  onClick={() => descartarLote(f.chave)}
+                                >
+                                  <Trash2 size={13} /> Descartar
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Tabela dos Leads */}
+                            <div className="time-table-card">
+                              <div className="time-table-responsive">
+                                <table className="time-table">
+                                  <thead>
+                                    <tr>
+                                      <th style={{ width: "40px" }}></th>
+                                      <th>Cliente</th>
+                                      <th>Telefone</th>
+                                      <th>Corretor Atual</th>
+                                      <th style={{ textAlign: "center" }}>Tempo Parado</th>
+                                      <th style={{ textAlign: "right" }}>Ação</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {f.leads.map((l) => {
+                                      const cobr = ultimaCobranca(l.brokerId, f.chave);
+
+                                      return (
+                                        <tr key={l.id}>
+                                          <td>
+                                            <input
+                                              type="checkbox"
+                                              checked={marcadosFila.has(l.id)}
+                                              onChange={() => marcarLead(f.chave, l.id)}
+                                            />
+                                          </td>
+                                          <td>
+                                            <b>{l.nome || "Cliente sem nome"}</b>
+                                            {l.campanha && (
+                                              <span style={{ display: "block", fontSize: "11px", color: "var(--cv-text-muted)" }}>
+                                                {l.campanha}
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td className="mono">{l.telefone || "—"}</td>
+                                          <td>
+                                            <span>{l.corretor ? `com ${l.corretor}` : "sem corretor"}</span>
+                                            {cobr && (
+                                              <span
+                                                style={{
+                                                  display: "block",
+                                                  fontSize: "11px",
+                                                  fontWeight: 600,
+                                                  color: cobr.respondida_em ? "var(--cv-green)" : "var(--cv-amber)",
+                                                }}
+                                              >
+                                                {cobr.respondida_em
+                                                  ? `✓ Corretor respondeu às ${hhmm(cobr.respondida_em)}`
+                                                  : `Cobrado às ${hhmm(cobr.enviada_em)}`}
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td style={{ textAlign: "center" }}>
+                                            <span
+                                              className={`time-kpi-badge ${l.dias > 15 ? "rose" : l.dias > 5 ? "amber" : "brand"}`}
+                                            >
+                                              {l.dias} dias
+                                            </span>
+                                          </td>
+                                          <td style={{ textAlign: "right" }}>
+                                            <button
+                                              className="time-btn-action"
+                                              onClick={() => setRed({ ids: [l.id] })}
+                                            >
+                                              <RefreshCw size={12} /> Mudar Corretor
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                            {f.total > f.leads.length && (
+                              <p style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--cv-text-muted)", textAlign: "center" }}>
+                                Mostrando {f.leads.length} de {f.total} leads da fila (os mais antigos primeiro).
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════════
+              ABA 2: ORIGENS & CANAIS (DE ONDE VIERAM)
+              ══════════════════════════════════════════════════════════════════════ */}
+          {subAba === "origens" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div className="leads-origens-grid">
+                {/* Origem: Anúncio */}
+                <div
+                  className="leads-origem-card"
+                  onClick={() => d.origem.anuncio > 0 && setOrigAberta("anuncio")}
+                >
+                  <div className="leads-origem-card-top">
+                    <span className="leads-origem-title">Anúncios Pagos</span>
+                    <span className="leads-kpi-badge brand">Meta / Google</span>
+                  </div>
+                  <div className="leads-origem-num">{d.origem.anuncio}</div>
+                  <div className="leads-origem-desc">leads gerados pelas campanhas de mídia</div>
+                  <div className="leads-origem-footer">
+                    <span>{d.origem.hoje.anuncio > 0 ? `+${d.origem.hoje.anuncio} hoje` : "0 hoje"}</span>
+                    <span style={{ color: "var(--cv-brand)", fontWeight: 700 }}>Ver lista →</span>
+                  </div>
+                </div>
+
+                {/* Origem: Plantão C2S */}
+                <div className="leads-origem-card" onClick={() => d.origem.app > 0 && setOrigAberta("app")}>
+                  <div className="leads-origem-card-top">
+                    <span className="leads-origem-title">Plantão C2S</span>
+                    <span className="leads-kpi-badge blue">Estande Cury</span>
+                  </div>
+                  <div className="leads-origem-num">{d.origem.app}</div>
+                  <div className="leads-origem-desc">atendidos presencialmente no estande</div>
+                  <div className="leads-origem-footer">
+                    <span>{d.origem.hoje.app > 0 ? `+${d.origem.hoje.app} hoje` : "0 hoje"}</span>
+                    <span style={{ color: "var(--cv-blue)", fontWeight: 700 }}>Ver lista →</span>
+                  </div>
+                </div>
+
+                {/* Origem: Disparos */}
+                <div
+                  className="leads-origem-card"
+                  onClick={() => d.origem.disparo > 0 && setOrigAberta("disparo")}
+                >
+                  <div className="leads-origem-card-top">
+                    <span className="leads-origem-title">Disparos WhatsApp</span>
+                    <span className="leads-kpi-badge green">API Oficial</span>
+                  </div>
+                  <div className="leads-origem-num">{d.origem.disparo}</div>
+                  <div className="leads-origem-desc">responderam aos envios em massa</div>
+                  <div className="leads-origem-footer">
+                    <span>{d.origem.hoje.disparo > 0 ? `+${d.origem.hoje.disparo} hoje` : "0 hoje"}</span>
+                    <span style={{ color: "var(--cv-green)", fontWeight: 700 }}>Ver lista →</span>
+                  </div>
+                </div>
+
+                {/* Origem: Próprios / Repescagem */}
+                <div
+                  className="leads-origem-card"
+                  onClick={() => d.origem.proprio > 0 && setOrigAberta("proprio")}
+                >
+                  <div className="leads-origem-card-top">
+                    <span className="leads-origem-title">Próprios & Repescagem</span>
+                    <span className="leads-kpi-badge amber">Carteira</span>
+                  </div>
+                  <div className="leads-origem-num">{d.origem.proprio}</div>
+                  <div className="leads-origem-desc">cadastros manuais e pesca do pool</div>
+                  <div className="leads-origem-footer">
+                    <span>{d.origem.hoje.proprio > 0 ? `+${d.origem.hoje.proprio} hoje` : "0 hoje"}</span>
+                    <span style={{ color: "var(--cv-amber)", fontWeight: 700 }}>Ver lista →</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: "var(--cv-surface)", border: "1px solid var(--cv-border)", borderRadius: "12px", padding: "18px 20px" }}>
+                <h3 style={{ fontSize: "15px", fontWeight: 800, margin: "0 0 8px" }}>
+                  💡 Como funciona a triagem de entrada
+                </h3>
+                <p style={{ margin: 0, fontSize: "13px", color: "var(--cv-text-muted)", lineHeight: 1.5 }}>
+                  Todos os leads que entram no Comandra são validados por DDD e número real antes de entrar no rodízio de distribuição da equipe. Clientes com DDD de fora do estado são filtrados para evitar desperdício de tempo da tropa.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════════
+              ABA 3: ESTEIRA & RESULTADOS (NO QUE DEU)
+              ══════════════════════════════════════════════════════════════════════ */}
+          {subAba === "funil" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Caminho do Lead */}
+              <div style={{ background: "var(--cv-surface)", border: "1px solid var(--cv-border)", borderRadius: "12px", padding: "20px" }}>
+                <h3 style={{ fontSize: "16px", fontWeight: 800, margin: "0 0 14px" }}>
+                  O Caminho do Lead no Período
+                </h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px" }}>
+                  <div style={{ background: "var(--cv-surface-subtle)", padding: "14px", borderRadius: "10px" }}>
+                    <span style={{ fontSize: "12px", color: "var(--cv-text-muted)" }}>Chegaram ao Sistema</span>
+                    <b className="mono" style={{ display: "block", fontSize: "24px", fontWeight: 900, marginTop: "4px" }}>
+                      {d.chegaram}
+                    </b>
+                  </div>
+                  <div style={{ background: "var(--cv-surface-subtle)", padding: "14px", borderRadius: "10px" }}>
+                    <span style={{ fontSize: "12px", color: "var(--cv-text-muted)" }}>Encaminhados para a Roleta</span>
+                    <b className="mono" style={{ display: "block", fontSize: "24px", fontWeight: 900, color: "var(--cv-green)", marginTop: "4px" }}>
+                      {d.encaminhados}
+                    </b>
+                  </div>
+                  <div style={{ background: "var(--cv-surface-subtle)", padding: "14px", borderRadius: "10px" }}>
+                    <span style={{ fontSize: "12px", color: "var(--cv-text-muted)" }}>Barrados na Triagem (DDD)</span>
+                    <b className="mono" style={{ display: "block", fontSize: "24px", fontWeight: 900, color: d.perdidos > 0 ? "var(--cv-rose)" : "inherit", marginTop: "4px" }}>
+                      {d.perdidos}
+                    </b>
+                  </div>
+                </div>
+              </div>
+
+              {/* Conversões Oficiais (C2S e Junix) */}
+              <div style={{ background: "var(--cv-surface)", border: "1px solid var(--cv-border)", borderRadius: "12px", padding: "20px" }}>
+                <h3 style={{ fontSize: "16px", fontWeight: 800, margin: "0 0 14px" }}>
+                  Resultados Oficiais do Período
+                </h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px" }}>
+                  <div style={{ background: "var(--cv-surface-subtle)", padding: "12px 14px", borderRadius: "8px" }}>
+                    <span style={{ fontSize: "11.5px", color: "var(--cv-text-muted)" }}>Em Negociação</span>
+                    <b className="mono" style={{ display: "block", fontSize: "20px", fontWeight: 800, marginTop: "2px" }}>
+                      {d.resultado.negociacao}
+                    </b>
+                  </div>
+                  <div style={{ background: "var(--cv-surface-subtle)", padding: "12px 14px", borderRadius: "8px" }}>
+                    <span style={{ fontSize: "11.5px", color: "var(--cv-text-muted)" }}>Documentação / Pastas</span>
+                    <b className="mono" style={{ display: "block", fontSize: "20px", fontWeight: 800, marginTop: "2px" }}>
+                      {d.resultado.documentos}
+                    </b>
+                  </div>
+                  <div style={{ background: "var(--cv-surface-subtle)", padding: "12px 14px", borderRadius: "8px" }}>
+                    <span style={{ fontSize: "11.5px", color: "var(--cv-text-muted)" }}>Visitas Registradas (C2S)</span>
+                    <b className="mono" style={{ display: "block", fontSize: "20px", fontWeight: 800, color: "var(--cv-blue)", marginTop: "2px" }}>
+                      {d.resultado.visitas}
+                    </b>
+                  </div>
+                  <div style={{ background: "var(--cv-surface-subtle)", padding: "12px 14px", borderRadius: "8px" }}>
+                    <span style={{ fontSize: "11.5px", color: "var(--cv-text-muted)" }}>Vendas Confirmadas (Junix)</span>
+                    <b className="mono" style={{ display: "block", fontSize: "20px", fontWeight: 800, color: "var(--cv-green)", marginTop: "2px" }}>
+                      {d.resultado.vendas}
+                    </b>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════════
+              ABA 4: COBRANÇAS & REPESCAGEM
+              ══════════════════════════════════════════════════════════════════════ */}
+          {subAba === "historico" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Cobranças do Dia */}
+              <div style={{ background: "var(--cv-surface)", border: "1px solid var(--cv-border)", borderRadius: "12px", padding: "20px" }}>
+                <h3 style={{ fontSize: "16px", fontWeight: 800, margin: "0 0 14px" }}>
+                  Cobranças Realizadas Hoje ({cobrancas.length})
+                </h3>
+                {cobrancas.length === 0 ? (
+                  <div style={{ padding: "20px", textAlign: "center", color: "var(--cv-text-muted)", fontSize: "13.5px" }}>
+                    Nenhuma cobrança disparada hoje. Use o botão "Cobrar Corretores" nas filas de problemas para cobrar via WhatsApp.
+                  </div>
+                ) : (
+                  <div className="time-table-card">
+                    <div className="time-table-responsive">
+                      <table className="time-table">
+                        <thead>
+                          <tr>
+                            <th>Corretor</th>
+                            <th>Motivo</th>
+                            <th>Canal & Horário</th>
+                            <th style={{ textAlign: "right" }}>Resposta do Corretor</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cobrancas.map((c) => (
+                            <tr key={c.id}>
+                              <td>
+                                <b>{c.para_nome}</b>
+                              </td>
+                              <td>
+                                <span className="time-kpi-badge brand">
+                                  {c.motivo === "respondeu"
+                                    ? "Cliente esperando resposta"
+                                    : c.motivo === "nunca"
+                                    ? "Nunca abordou o lead"
+                                    : c.motivo}
+                                </span>
+                              </td>
+                              <td style={{ fontSize: "12.5px" }}>
+                                WhatsApp às {hhmm(c.enviada_em)}
+                              </td>
+                              <td style={{ textAlign: "right" }}>
+                                {c.respondida_em ? (
+                                  <span style={{ color: "var(--cv-green)", fontWeight: 700, fontSize: "12.5px" }}>
+                                    ✓ Respondeu às {hhmm(c.respondida_em)}
+                                    {c.resposta ? `: "${c.resposta.slice(0, 30)}..."` : ""}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: "var(--cv-amber)", fontSize: "12.5px" }}>
+                                    Aguardando retorno
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Pool de Repescagem */}
+              {d.pool.length > 0 && (
+                <div style={{ background: "var(--cv-surface)", border: "1px solid var(--cv-border)", borderRadius: "12px", padding: "20px" }}>
+                  <h3 style={{ fontSize: "16px", fontWeight: 800, margin: "0 0 14px" }}>
+                    Desempenho no Pool de Repescagem
+                  </h3>
+                  <div className="time-table-card">
+                    <div className="time-table-responsive">
+                      <table className="time-table">
+                        <thead>
+                          <tr>
+                            <th>Corretor</th>
+                            <th style={{ textAlign: "center" }}>Pegou da Fila</th>
+                            <th style={{ textAlign: "center" }}>Contatou</th>
+                            <th style={{ textAlign: "right" }}>Trouxe de Volta</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {d.pool.map((p) => {
+                            const pct = p.fila ? Math.round((p.trouxe / p.fila) * 100) : 0;
+                            return (
+                              <tr key={p.nome}>
+                                <td>
+                                  <b>{p.nome}</b>
+                                </td>
+                                <td style={{ textAlign: "center" }} className="mono">
+                                  {p.fila}
+                                </td>
+                                <td style={{ textAlign: "center" }} className="mono">
+                                  {p.contatou}
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  <span className={`time-kpi-badge ${pct >= 15 ? "green" : "brand"}`}>
+                                    {p.trouxe} recuperados ({pct}%)
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
-          </Sec>
-        )}
+          )}
+        </div>
 
-        {/* redistribuir */}
+        {/* ── MODAL DE REDISTRIBUIÇÃO ── */}
         {red && (
-          <>
-            <div className="tm-scrim on" onClick={() => setRed(null)} />
-            <div className="tm-modal on" role="dialog" aria-modal="true">
-              <h3>Redistribuir {red.ids.length} lead{red.ids.length === 1 ? "" : "s"}</h3>
-              <p>Eles saem de quem está hoje e entram na carteira de quem você marcar.</p>
-              <div className="ld-modos">
-                {([["online", "Quem está online agora", `${d.corretores.filter((c) => c.online).length} com o Comandra aberto`],
-                   ["plantao", "Quem está no plantão", `${d.corretores.filter((c) => c.plantao).length} bateram ponto hoje`],
-                   ["escolher", "Escolher na mão", "um ou mais corretores"]] as const).map(([k, t, s]) => (
-                  <button key={k} className={`ld-modo${modo === k ? " on" : ""}`} onClick={() => setModo(k)}>
-                    <b>{t}</b><span>{s}</span>
+          <div className="leads-modal-backdrop" onClick={() => setRed(null)}>
+            <div className="leads-modal-box" onClick={(e) => e.stopPropagation()}>
+              <div className="leads-modal-header">
+                <h3 style={{ fontSize: "17px", fontWeight: 800, margin: 0 }}>
+                  Redistribuir {red.ids.length} Lead{red.ids.length === 1 ? "" : "s"}
+                </h3>
+                <p style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--cv-text-muted)" }}>
+                  Os leads sairão do corretor atual e serão atribuídos aos selecionados abaixo.
+                </p>
+              </div>
+
+              <div className="leads-modal-body">
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                  <button
+                    className={`estrategia-chip-btn ${modo === "online" ? "active" : ""}`}
+                    onClick={() => setModo("online")}
+                  >
+                    🟢 Online Agora ({d.corretores.filter((c) => c.online).length})
                   </button>
-                ))}
+                  <button
+                    className={`estrategia-chip-btn ${modo === "plantao" ? "active" : ""}`}
+                    onClick={() => setModo("plantao")}
+                  >
+                    📍 No Plantão ({d.corretores.filter((c) => c.plantao).length})
+                  </button>
+                  <button
+                    className={`estrategia-chip-btn ${modo === "escolher" ? "active" : ""}`}
+                    onClick={() => setModo("escolher")}
+                  >
+                    ✍️ Escolher na Mão
+                  </button>
+                </div>
+
+                <div style={{ maxHeight: "260px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {d.corretores.map((c) => {
+                    const dentro =
+                      modo === "escolher"
+                        ? marcados.has(c.id)
+                        : modo === "online"
+                        ? c.online
+                        : c.plantao;
+
+                    return (
+                      <label
+                        key={c.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          padding: "8px 12px",
+                          borderRadius: "8px",
+                          background: dentro ? "var(--cv-brand-light)" : "var(--cv-surface-subtle)",
+                          border: `1px solid ${dentro ? "var(--cv-brand)" : "transparent"}`,
+                          cursor: modo === "escolher" ? "pointer" : "default",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={dentro}
+                          disabled={modo !== "escolher"}
+                          onChange={() =>
+                            setMarcados((s) => {
+                              const n = new Set(s);
+                              if (n.has(c.id)) n.delete(c.id);
+                              else n.add(c.id);
+                              return n;
+                            })
+                          }
+                        />
+                        <div className="time-broker-avatar">{ini(c.nome)}</div>
+                        <div style={{ flex: 1 }}>
+                          <b style={{ fontSize: "13.5px", display: "block" }}>{c.nome}</b>
+                          <span style={{ fontSize: "11.5px", color: "var(--cv-text-muted)" }}>
+                            {c.carteira} leads na carteira
+                          </span>
+                        </div>
+                        <span
+                          className={`time-status-dot ${c.online ? "online" : ""}`}
+                          title={c.online ? "Online agora" : "Offline"}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+
+                <div style={{ background: "var(--cv-surface-subtle)", padding: "12px", borderRadius: "8px", fontSize: "13px" }}>
+                  {alvoRed.length ? (
+                    <span>
+                      <b>{red.ids.length} leads</b> divididos entre <b>{alvoRed.length} corretores</b> (~
+                      <b>{Math.ceil(red.ids.length / alvoRed.length)} por corretor</b>).
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--cv-rose)", fontWeight: 600 }}>
+                      Escolha pelo menos um corretor para receber os leads.
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="ld-escolha">
-                {d.corretores.map((c) => {
-                  const dentro = modo === "escolher" ? marcados.has(c.id)
-                    : modo === "online" ? c.online : c.plantao;
-                  return (
-                    <label key={c.id} className="ld-eb">
-                      <input type="checkbox" checked={dentro} disabled={modo !== "escolher"}
-                        onChange={() => setMarcados((s) => {
-                          const n = new Set(s); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n; })} />
-                      <span className="av">{ini(c.nome)}</span>
-                      <span><b>{c.nome}</b><i>{c.carteira} leads na carteira</i></span>
-                      <span className={c.online ? "on" : "off"} title={c.online ? "online" : "offline"} />
-                    </label>
-                  );
-                })}
-              </div>
-              <div className="ld-resumo">
-                {alvoRed.length
-                  ? <><b>{red.ids.length} leads</b> divididos entre <b>{alvoRed.length} corretores</b> — cerca
-                      de <b>{Math.ceil(red.ids.length / alvoRed.length)} para cada um</b>.</>
-                  : <>Escolha pelo menos um corretor.</>}
-              </div>
-              <div className="tm-modala">
-                <button className="mini" onClick={() => setRed(null)}>Cancelar</button>
-                <button className="mini solid" disabled={salvando || !alvoRed.length}
-                  onClick={confirmarRedistribuicao}>
-                  {salvando ? "redistribuindo…" : "Redistribuir"}
+
+              <div className="leads-modal-footer">
+                <button className="time-btn-action" onClick={() => setRed(null)}>
+                  Cancelar
+                </button>
+                <button
+                  className="time-btn-primary"
+                  disabled={salvando || !alvoRed.length}
+                  onClick={confirmarRedistribuicao}
+                >
+                  {salvando ? "Redistribuindo..." : "Confirmar Redistribuição"}
                 </button>
               </div>
             </div>
-          </>
+          </div>
         )}
 
-        {/* cobranças das últimas 24h: quem foi cobrado e se respondeu */}
-        {cobrancas.length ? (
-          <Sec title="Cobranças de hoje" tag={<span className="dim">
-            {cobrancas.filter((c) => c.respondida_em).length} de {cobrancas.length} responderam</span>}
-            sub="A resposta aparece quando a pessoa responde no WhatsApp do chip que cobrou.">
-            <div className="ld-box">
-              {cobrancas.map((c) => (
-                <div key={c.id} className="ld-lr sem-check">
-                  <span><b>{c.para_nome}</b>
-                    <span className="tel">{({ respondeu: "cliente esperando", nunca: "nunca falou", sem7: "7 dias parado", sem15: "15 dias parado" } as Record<string, string>)[c.motivo] ?? c.motivo} · {c.qtd} lead{c.qtd === 1 ? "" : "s"}</span></span>
-                  <span className="cor">{c.canal === "whatsapp" ? `WhatsApp às ${hhmm(c.enviada_em)}` : `só no painel às ${hhmm(c.enviada_em)}`}</span>
-                  <span className="qd" style={{ color: c.respondida_em ? "var(--good)" : undefined, fontWeight: 600 }}
-                    title={c.resposta ?? undefined}>
-                    {c.respondida_em ? `✓ "${(c.resposta ?? "").slice(0, 40)}"` : c.canal === "whatsapp" ? "sem resposta" : "—"}</span>
-                </div>
-              ))}
-            </div>
-          </Sec>
-        ) : null}
-
-        {/* já cobrou: confirma antes de mandar de novo */}
+        {/* ── MODAL JÁ COBROU HOJE ── */}
         {jaCobrou && (
-          <>
-            <div className="tm-scrim on" onClick={() => setJaCobrou(null)} />
-            <div className="tm-modal on" role="dialog" aria-modal="true" aria-labelledby="jc-t">
-              <h3 id="jc-t">Você já cobrou {jaCobrou.ja.length === 1 ? "esse corretor" : "esses corretores"}</h3>
-              <p>Mesmo assunto, nas últimas 12 horas:</p>
-              <div style={{ display: "grid", gap: 8, margin: "10px 0" }}>
-                {jaCobrou.ja.map((j, i) => (
-                  <div key={i} style={{ display: "flex", gap: 8, fontSize: 14 }}>
-                    <b>{j.corretor}</b>
-                    <span style={{ color: "var(--ink-3)" }}>às {hhmm(j.quando)}</span>
-                    <span style={{ marginLeft: "auto", fontWeight: 600, color: j.respondeu ? "var(--good)" : "var(--ink-3)" }}>
-                      {j.respondeu ? `✓ respondeu${j.resposta ? `: "${j.resposta.slice(0, 30)}"` : ""}` : "ainda sem resposta"}</span>
-                  </div>
-                ))}
+          <div className="leads-modal-backdrop" onClick={() => setJaCobrou(null)}>
+            <div className="leads-modal-box" onClick={(e) => e.stopPropagation()}>
+              <div className="leads-modal-header">
+                <h3 style={{ fontSize: "17px", fontWeight: 800, margin: 0 }}>
+                  Cobrança Recente Detectada
+                </h3>
+                <p style={{ margin: "4px 0 0", fontSize: "13px", color: "var(--cv-text-muted)" }}>
+                  Você já cobrou este mesmo assunto nas últimas 12 horas para:
+                </p>
               </div>
-              <div className="tm-modala">
-                <button className="mini" onClick={() => setJaCobrou(null)}>Não, deixa</button>
-                <button className="mini solid" onClick={() => { const j = jaCobrou; setJaCobrou(null); cobrar(j.chave, j.ids, true); }}>
-                  Cobrar de novo</button>
+
+              <div className="leads-modal-body">
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {jaCobrou.ja.map((j, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "8px 12px",
+                        background: "var(--cv-surface-subtle)",
+                        borderRadius: "8px",
+                        fontSize: "13px",
+                      }}
+                    >
+                      <b>{j.corretor}</b>
+                      <span style={{ color: "var(--cv-text-muted)" }}>às {hhmm(j.quando)}</span>
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          color: j.respondeu ? "var(--cv-green)" : "var(--cv-amber)",
+                        }}
+                      >
+                        {j.respondeu ? "✓ Respondeu" : "Sem resposta"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="leads-modal-footer">
+                <button className="time-btn-action" onClick={() => setJaCobrou(null)}>
+                  Cancelar
+                </button>
+                <button
+                  className="time-btn-primary"
+                  onClick={() => {
+                    const j = jaCobrou;
+                    setJaCobrou(null);
+                    cobrar(j.chave, j.ids, true);
+                  }}
+                >
+                  Cobrar Novamente
+                </button>
               </div>
             </div>
-          </>
+          </div>
         )}
 
+        {/* ── GAVETA LATERAL DE ORIGEM ── */}
         {origAberta && userId ? (
           <OrigemDrawer
-            titulo={{ anuncio: "Leads de anúncio", app: "Atendidos no plantão (C2S)",
-                      disparo: "Leads de disparo", proprio: "Leads próprios" }[origAberta]}
+            titulo={
+              {
+                anuncio: "Leads de Anúncio Pago",
+                app: "Atendidos no Plantão (C2S)",
+                disparo: "Leads de Disparos WhatsApp",
+                proprio: "Leads Próprios e Repescagem",
+              }[origAberta]
+            }
             leads={d.origem.leads[origAberta]}
             verConversa={d.verConversa}
             quem={userId}
@@ -546,23 +976,6 @@ export default function Leads() {
             onFechar={() => setOrigAberta(null)}
           />
         ) : null}
-      </>
-    );
-  };
-
-  return (
-    <div className="mgr10 app2">
-      <RailV10 atual={"leads" as any} mode={mode} toggle={toggle} />
-      <main className="shell2">
-        <header className="top2">
-          <div><h1>Leads</h1><p>O que chegou, com quem está, e no que deu</p>
-            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-              <Link to="/manager/leads" className="mini solid">Leads</Link>
-              <Link to="/manager/anuncios" className="mini">Anúncios</Link>
-            </div></div>
-          <div className="top2-r"><SeletorPeriodo /></div>
-        </header>
-        <section className="view ld">{corpo()}</section>
       </main>
     </div>
   );
