@@ -281,7 +281,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // nos gerentes via /manager?manager=<id>). NÃO caem mais no /admin cru.
           // Mantêm acesso às telas de admin (cadastro, filas...) quando precisarem.
           const SUP_ALLOWED_PREFIXES = ['/super', '/manager', '/admin', ...(role === 'DIRECTOR' ? ['/diretor'] : [])];
-          const SUP_ALLOWED_EXACT = ['/command-center', '/user-management', '/atribuir-chips', '/cold-pool'];
+          const SUP_ALLOWED_EXACT = ['/command-center', '/user-management', '/atribuir-chips', '/cold-pool', '/integracoes'];
           const isAllowed =
             SUP_ALLOWED_PREFIXES.some((p) => path === p || path.startsWith(p + '/')) ||
             SUP_ALLOWED_EXACT.includes(path);
@@ -298,6 +298,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             '/user-management',
             '/atribuir-chips',
             '/cold-pool',
+            '/integracoes',
           ];
           const isAllowed =
             ADMIN_ALLOWED_PREFIXES.some((p) => path === p || path.startsWith(p + '/')) ||
@@ -307,7 +308,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }
         } else if (role === 'MANAGER') {
           // Whitelist: /manager (v1) + tudo dentro de /manager (v2 + subtelas)
-          if (path !== '/manager' && !path.startsWith('/manager')) {
+          // /integracoes: o gerente conecta a Página do Facebook (a Meta testa o app por aqui)
+          if (path !== '/manager' && !path.startsWith('/manager') && path !== '/integracoes') {
             navigate('/manager', { replace: true });
           }
         } else {
