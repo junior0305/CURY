@@ -83,7 +83,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // força de volta para a empresa correta e recarrega
           const supabaseUrl = (supabase as any).supabaseUrl as string ?? '';
           const detectedId = Object.keys(COMPANIES).find(id =>
-            supabaseUrl.includes((COMPANIES as any)[id].url.replace('https://', ''))
+            supabaseUrl.replace(/\/$/, '') === (COMPANIES as any)[id].url
           );
           if (detectedId && detectedId !== currentCompany) {
             console.log(`[AuthProvider] arena_company incorreto (${currentCompany}), corrigindo para ${detectedId}`);

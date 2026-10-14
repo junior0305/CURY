@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { DOMINIO_LOGIN } from "@/integrations/supabase/companies";
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
@@ -31,13 +32,13 @@ export default function CadastrarLider({ papel, chefes, chefeInicial, onFechar, 
   const partes = nome.trim().split(/\s+/).filter(Boolean);
   const primeiro = semAcento(partes[0] ?? "");
   const ultimo = semAcento(partes[partes.length - 1] ?? "");
-  const login = primeiro ? `${primeiro}@comandra` : "nome@comandra";
-  const alternativo = primeiro && ultimo && primeiro !== ultimo ? `${primeiro}.${ultimo}@comandra` : `${primeiro}.${rot}@comandra`;
+  const login = primeiro ? `${primeiro}@${DOMINIO_LOGIN}` : `nome@${DOMINIO_LOGIN}`;
+  const alternativo = primeiro && ultimo && primeiro !== ultimo ? `${primeiro}.${ultimo}@${DOMINIO_LOGIN}` : `${primeiro}.${rot}@${DOMINIO_LOGIN}`;
 
   useEffect(() => {
     if (!primeiro) { setConflito(false); return; }
     const t = setTimeout(async () => {
-      const { data } = await supabase.from("profiles").select("id").eq("email", `${primeiro}@comandra`).maybeSingle();
+      const { data } = await supabase.from("profiles").select("id").eq("email", `${primeiro}@${DOMINIO_LOGIN}`).maybeSingle();
       setConflito(!!data);
     }, 350);
     return () => clearTimeout(t);

@@ -1,48 +1,55 @@
-// Um ambiente só: São Paulo.
+// Cada empresa tem o seu Comandra: site e banco separados, mesmo código.
+// Quem decide a empresa é o ENDEREÇO do site (comandra.com.br = Econ, planoego.comandra.com.br = Plano e
+// Plano Go), não uma escolha de quem usa. A porta de entrada por domínio do login está em ./instancias.ts.
 //
-// São José dos Campos saiu de operação. Ficava aqui como segunda opção e era o
-// PADRÃO de quem nunca escolheu — navegador novo, cache limpo, usuário novo
-// caíam num banco morto e achavam que o Comandra não funcionava.
-//
-// A forma de dicionário continua porque o resto do código consulta por id, e
-// porque um dia pode haver outra praça. O que mudou é que a lista tem um item
-// e o padrão não depende de escolha de ninguém.
+// A anonKey é pública por natureza (vai no navegador de todo mundo); o que protege os dados é o RLS.
 
 export const COMPANIES = {
   sp: {
     id: 'sp',
-    name: 'São Paulo',
+    name: 'Econ',
     shortName: 'SP',
     color: 'emerald',
+    host: 'comandra.com.br',
+    /** final do login de quem é desta empresa: nome@comandra */
+    dominio: 'comandra',
     // Migrado da Supabase paga para a stack self-hosted no VPS (13/09/2026).
     // Fica num CAMINHO do domínio, não em subdomínio: o Traefik roteia
     // /supabase por PathPrefix e remove o prefixo antes do gateway.
     url: 'https://comandra.com.br/supabase',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg5MjYzNDE2LCJleHAiOjIxMDQ2MjM0MTZ9.Ohs3PVk283wk0ozzjiaZkzxGiqyECdY4i02nxInmvao',
   },
+  planoego: {
+    id: 'planoego',
+    name: 'Plano e Plano Go',
+    shortName: 'PPG',
+    color: 'emerald',
+    host: 'planoego.comandra.com.br',
+    dominio: 'planoeplanogo',
+    // Stack própria no Portainer (planoego), banco separado do Econ (14/10/2026).
+    url: 'https://planoego.comandra.com.br/supabase',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkxOTgwMDUyLCJleHAiOjIxMDczNDAwNTJ9.VaccLx0XwssRWR2feQGheFcF1473Syqhl0-7SIT3MLI',
+  },
 } as const;
 
 export type CompanyId = keyof typeof COMPANIES;
 
-const STORAGE_KEY = 'arena_company';
-
+/** A empresa deste site, pelo endereço. Fora dos endereços conhecidos (localhost, preview) = Econ. */
 export function getSelectedCompanyId(): CompanyId {
-  // Quem tem 'sjc' guardado do tempo em que havia duas praças cai aqui e é
-  // devolvido para 'sp' sem precisar limpar nada no navegador.
-  const stored = localStorage.getItem(STORAGE_KEY) as CompanyId | null;
-  return stored && COMPANIES[stored] ? stored : 'sp';
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  const achada = (Object.keys(COMPANIES) as CompanyId[]).find((id) => COMPANIES[id].host === host);
+  return achada ?? 'sp';
 }
 
-export function setSelectedCompany(id: CompanyId) {
-  const locked = localStorage.getItem('arena_company_locked') as CompanyId | null;
-  if (locked && COMPANIES[locked]) return;
-  localStorage.setItem(STORAGE_KEY, id);
-  window.location.reload();
-}
+/** Sem efeito: a empresa vem do endereço do site. Fica para quem ainda chama. */
+export function setSelectedCompany(_id: CompanyId) {}
 
 export function getSelectedCompany() {
   return COMPANIES[getSelectedCompanyId()];
 }
 
-/** Há mais de uma praça para escolher? Hoje não — o seletor some sozinho. */
-export const TEM_ESCOLHA = Object.keys(COMPANIES).length > 1;
+/** Final do login desta empresa (nome@<dominio>). */
+export const DOMINIO_LOGIN: string = getSelectedCompany().dominio;
+
+/** Seletor de empresa na tela: nunca (cada empresa tem o seu site). */
+export const TEM_ESCOLHA = false;

@@ -15,6 +15,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { DOMINIO_LOGIN } from "@/integrations/supabase/companies";
 
 const semAcento = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -62,7 +63,7 @@ export default function CadastrarCorretor({
 
   // o primeiro nome vira login e instância; se já existir, entra o sufixo
   const primeiro = semAcento(nome).split(/\s+/)[0] ?? "";
-  const login = primeiro ? `${primeiro}@comandra` : "nome@comandra";
+  const login = primeiro ? `${primeiro}@${DOMINIO_LOGIN}` : `nome@${DOMINIO_LOGIN}`;
   const sufixo = semAcento(gerente.nome).slice(0, 2);
   const base = primeiro ? primeiro.charAt(0).toUpperCase() + primeiro.slice(1) : "Nome";
   const instancia = conflito && primeiro
@@ -72,7 +73,7 @@ export default function CadastrarCorretor({
     if (!primeiro) { setConflito(false); return; }
     const t = setTimeout(async () => {
       const [{ data: perfil }, { data: inst }] = await Promise.all([
-        supabase.from("profiles").select("id").eq("email", `${primeiro}@comandra`).maybeSingle(),
+        supabase.from("profiles").select("id").eq("email", `${primeiro}@${DOMINIO_LOGIN}`).maybeSingle(),
         supabase.from("bot_instances").select("id").eq("instance_name", base).maybeSingle(),
       ]);
       setConflito(!!perfil || !!inst);
@@ -86,7 +87,7 @@ export default function CadastrarCorretor({
     try {
       const { data, error } = await supabase.functions.invoke("create-user", {
         body: {
-          email: conflito ? `${primeiro}.${sufixo}@comandra` : login,
+          email: conflito ? `${primeiro}.${sufixo}@${DOMINIO_LOGIN}` : login,
           password: "mudar@123",
           firstName: nome.trim().split(/\s+/)[0],
           lastName: nome.trim().split(/\s+/).slice(1).join(" ") || null,
@@ -153,7 +154,7 @@ export default function CadastrarCorretor({
 
         <div className="tm-auto">
           <div className="tm-autol">O sistema já preenche</div>
-          <div>Login <b>{conflito ? `${primeiro}.${sufixo}@comandra` : login}</b></div>
+          <div>Login <b>{conflito ? `${primeiro}.${sufixo}@${DOMINIO_LOGIN}` : login}</b></div>
           <div>Senha <b>mudar@123</b></div>
           <div>WhatsApp <b>{instancia}</b></div>
           <div>Equipe <b>{gerente.equipe ?? "—"}</b></div>
