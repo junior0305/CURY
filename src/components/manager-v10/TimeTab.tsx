@@ -82,6 +82,11 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
   const [cadastrar, setCadastrar] = useState<string | false>(false);
   const [desligar, setDesligar] = useState<string | null>(null);
   const [seletorDesligarAberto, setSeletorDesligarAberto] = useState(false);
+  const [buscaDesligar, setBuscaDesligar] = useState("");
+  const [modalRoletaAberto, setModalRoletaAberto] = useState(false);
+  const [buscaModalRoleta, setBuscaModalRoleta] = useState("");
+  const [modalOnlineAberto, setModalOnlineAberto] = useState(false);
+  const [filtroModalOnline, setFiltroModalOnline] = useState<"todos" | "online" | "offline">("todos");
   const [ocupadoReset, setOcupadoReset] = useState<string | null>(null);
   const [ocupadoRoleta, setOcupadoRoleta] = useState<string | null>(null);
   const [corretorRaioX, setCorretorRaioX] = useState<string | null>(null);
@@ -162,6 +167,20 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       toast.error(`Erro ao alterar roleta: ${e?.message ?? e}`);
     } finally {
       setOcupadoRoleta(null);
+    }
+  }
+
+  // Alternar todos na roleta
+  async function alternarTodosRoleta(ativar: boolean) {
+    if (!confirm(ativar ? "Deseja ativar TODOS os corretores na roleta de novos leads?" : "Deseja pausar TODOS os corretores da roleta?")) return;
+    try {
+      await Promise.all(equipeProfiles.map((p) => definirRecebimento(p.id, ativar)));
+      toast.success(ativar ? "Todos os corretores ativados na roleta!" : "Todos os corretores pausados da roleta.");
+      qc.invalidateQueries({ queryKey: ["equipe-rh-lista", managerId] });
+      qc.invalidateQueries({ queryKey: ["aba-time", managerId] });
+      qc.invalidateQueries({ queryKey: ["v10", managerId] });
+    } catch (e: any) {
+      toast.error(`Erro ao alterar roleta: ${e?.message ?? e}`);
     }
   }
 
@@ -265,30 +284,53 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       {/* ── FUNIL DA EQUIPE (CONVERSÃO POR CANAL & GARGALO) ── */}
       <FunilEquipeV3 managerId={managerId!} onSelecionarCorretor={(id) => setCorretorRaioX(id)} />
 
-      {/* ── BARRA RESUMO COMPACTA (ZERO POLUIÇÃO VISUAL) ── */}
+      {/* ── BARRA RESUMO COMPACTA (ZERO POLUIÇÃO VISUAL & 100% INTERATIVA) ── */}
       <div className="time-resumo-compacto-bar">
-        <div className="time-resumo-item">
+        <div
+          className="time-resumo-item clickable"
+          onClick={() => {
+            setSubAba("tropa");
+            setFiltroTropa("todos");
+            document.getElementById("secao-conteudo-time")?.scrollIntoView({ behavior: "smooth" });
+          }}
+          title="Ver todos os corretores na tropa"
+        >
           <Users size={16} style={{ color: "var(--cv-brand)" }} />
           <span><b>{gente.length}</b> corretores na tropa</span>
         </div>
 
         <div className="time-resumo-divider" />
 
-        <div className="time-resumo-item">
+        <div
+          className="time-resumo-item clickable"
+          onClick={() => setModalOnlineAberto(true)}
+          title="Ver quem está online agora e histórico de acessos"
+        >
           <span className="dot-online" />
           <span><b>{onlineCount}</b> online agora</span>
         </div>
 
         <div className="time-resumo-divider" />
 
-        <div className="time-resumo-item">
+        <div
+          className="time-resumo-item clickable"
+          onClick={() => setModalRoletaAberto(true)}
+          title="Gerenciar roleta de novos leads (ativar e desativar corretores)"
+        >
           <RefreshCw size={14} style={{ color: "var(--cv-blue)" }} />
           <span><b>{roletaCount}</b> na roleta de novos leads</span>
         </div>
 
         <div className="time-resumo-divider" />
 
-        <div className="time-resumo-item">
+        <div
+          className="time-resumo-item clickable"
+          onClick={() => {
+            setSubAba("novos");
+            document.getElementById("secao-conteudo-time")?.scrollIntoView({ behavior: "smooth" });
+          }}
+          title="Ver contratações recentes e rampa de aceleração de 90 dias"
+        >
           <Sparkles size={15} style={{ color: "var(--cv-purple)" }} />
           <span><b>{novatos.length}</b> contratações recentes (&lt;90d)</span>
         </div>
@@ -296,7 +338,16 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
         {criticosCount > 0 && (
           <>
             <div className="time-resumo-divider" />
-            <div className="time-resumo-item" style={{ color: "var(--cv-rose)", fontWeight: 700 }}>
+            <div
+              className="time-resumo-item clickable"
+              style={{ color: "var(--cv-rose)", fontWeight: 700 }}
+              onClick={() => {
+                setSubAba("urgencias");
+                setFiltroRadar("crit");
+                document.getElementById("secao-conteudo-time")?.scrollIntoView({ behavior: "smooth" });
+              }}
+              title="Ver pendências críticas que exigem cobrança imediata"
+            >
               <AlertTriangle size={15} />
               <span><b>{criticosCount}</b> pendências urgentes</span>
             </div>
@@ -305,7 +356,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       </div>
 
       {/* ── BARRA DE NAVEGAÇÃO: 3 VISÕES CLARAS ── */}
-      <div className="time-tabs-bar">
+      <div id="secao-conteudo-time" className="time-tabs-bar">
         <button
           className={`time-tab-btn ${subAba === "urgencias" ? "active" : ""}`}
           onClick={() => setSubAba("urgencias")}
@@ -862,10 +913,10 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
         </div>
       )}
 
-      {/* ── MODAL SELETOR DE DESLIGAR CORRETOR (ACIONADO PELO CABEÇALHO) ── */}
+      {/* ── MODAL SELETOR DE DESLIGAR / INATIVAR CORRETOR (ACIONADO PELO CABEÇALHO OU RAMPA) ── */}
       {seletorDesligarAberto && (
         <div className="modal-backdrop-v3" onClick={() => setSeletorDesligarAberto(false)}>
-          <div className="modal-content-v3" style={{ maxWidth: "520px" }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content-v3" style={{ maxWidth: "540px" }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-v3">
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <div className="alerta-queima-icone small" style={{ background: "var(--cv-rose-light)", color: "var(--cv-rose)" }}>
@@ -876,7 +927,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                     Inativar / Desligar Corretor
                   </h3>
                   <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "var(--cv-text-muted)" }}>
-                    Escolha o corretor que saiu para bloquear acesso e redistribuir a carteira
+                    Selecione o corretor que saiu para bloquear acesso e redistribuir sua carteira
                   </p>
                 </div>
               </div>
@@ -886,49 +937,358 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
             </div>
 
             <div className="modal-body-v3">
-              <div style={{ maxHeight: "350px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
-                {equipeProfiles.map((p) => {
-                  const nome = [p.first_name, p.last_name].filter(Boolean).join(" ") || "Corretor";
-                  return (
-                    <div
-                      key={p.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "10px 14px",
-                        border: "1px solid var(--cv-border)",
-                        borderRadius: "8px",
-                        background: "var(--cv-surface)",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <div className="time-broker-avatar">{ini(nome)}</div>
-                        <div>
-                          <b style={{ fontSize: "13.5px", color: "var(--cv-text-main)" }}>{nome}</b>
-                          <div style={{ fontSize: "12px", color: "var(--cv-text-muted)" }}>{p.phone || p.email}</div>
-                        </div>
-                      </div>
+              <div style={{ marginBottom: "12px", position: "relative" }}>
+                <Search size={14} style={{ position: "absolute", left: "10px", top: "11px", color: "var(--cv-text-muted)" }} />
+                <input
+                  type="text"
+                  placeholder="Buscar corretor por nome, email ou telefone..."
+                  value={buscaDesligar}
+                  onChange={(e) => setBuscaDesligar(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px 8px 32px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--cv-border)",
+                    fontSize: "13px",
+                    background: "var(--cv-surface-subtle)",
+                    color: "var(--cv-text-main)",
+                    outline: "none",
+                  }}
+                  autoFocus
+                />
+              </div>
 
-                      <button
-                        type="button"
-                        className="time-btn-action danger"
-                        style={{ padding: "6px 12px", fontSize: "12px", fontWeight: 700 }}
-                        onClick={() => {
-                          setSeletorDesligarAberto(false);
-                          setDesligar(p.id);
+              <div style={{ maxHeight: "350px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
+                {equipeProfiles
+                  .filter((p) => {
+                    const termo = buscaDesligar.toLowerCase().trim();
+                    if (!termo) return true;
+                    const n = `${p.first_name || ""} ${p.last_name || ""}`.toLowerCase();
+                    return n.includes(termo) || (p.email || "").toLowerCase().includes(termo) || (p.phone || "").includes(termo);
+                  })
+                  .map((p) => {
+                    const nome = [p.first_name, p.last_name].filter(Boolean).join(" ") || "Corretor";
+                    const dadosPessoa = gente.find((g) => g.profileId === p.id);
+                    const totalLeads = dadosPessoa?.carteira ?? dadosPessoa?.leads ?? 0;
+
+                    return (
+                      <div
+                        key={p.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "10px 14px",
+                          border: "1px solid var(--cv-border)",
+                          borderRadius: "8px",
+                          background: "var(--cv-surface)",
                         }}
                       >
-                        <UserX size={13} /> Desligar
-                      </button>
-                    </div>
-                  );
-                })}
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <div className="time-broker-avatar">{ini(nome)}</div>
+                          <div>
+                            <b style={{ fontSize: "13.5px", color: "var(--cv-text-main)" }}>{nome}</b>
+                            <div style={{ fontSize: "12px", color: "var(--cv-text-muted)" }}>
+                              {p.phone || p.email} · {totalLeads} lead{totalLeads === 1 ? "" : "s"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="time-btn-action danger"
+                          style={{ padding: "6px 12px", fontSize: "12px", fontWeight: 700 }}
+                          onClick={() => {
+                            setSeletorDesligarAberto(false);
+                            setDesligar(p.id);
+                          }}
+                        >
+                          <UserX size={13} /> Inativar
+                        </button>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
 
             <div className="modal-footer-v3">
               <button type="button" className="time-btn-action" onClick={() => setSeletorDesligarAberto(false)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL DE GESTÃO DA ROLETA DE NOVOS LEADS ── */}
+      {modalRoletaAberto && (
+        <div className="modal-backdrop-v3" onClick={() => setModalRoletaAberto(false)}>
+          <div className="modal-content-v3" style={{ maxWidth: "560px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-v3">
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div className="alerta-queima-icone small" style={{ background: "var(--cv-blue-light, #EFF6FF)", color: "var(--cv-blue, #2563EB)" }}>
+                  <RefreshCw size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "17px", fontWeight: "800", color: "var(--cv-text-main)" }}>
+                    Roleta de Novos Leads
+                  </h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "var(--cv-text-muted)" }}>
+                    Ative ou pause corretores para receberem os novos leads que chegam
+                  </p>
+                </div>
+              </div>
+              <button type="button" className="modal-close-btn-v3" onClick={() => setModalRoletaAberto(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body-v3">
+              {/* Resumo e Ações Rápidas */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px", flexWrap: "wrap", gap: "10px" }}>
+                <div style={{ fontSize: "13px", color: "var(--cv-text-muted)" }}>
+                  <b style={{ color: "var(--cv-green)" }}>{roletaCount}</b> recebendo leads · <b style={{ color: "var(--cv-text-main)" }}>{equipeProfiles.length - roletaCount}</b> pausados
+                </div>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button
+                    type="button"
+                    className="time-btn-action"
+                    style={{ fontSize: "11.5px", padding: "4px 8px" }}
+                    onClick={() => alternarTodosRoleta(true)}
+                  >
+                    Ativar Todos
+                  </button>
+                  <button
+                    type="button"
+                    className="time-btn-action"
+                    style={{ fontSize: "11.5px", padding: "4px 8px" }}
+                    onClick={() => alternarTodosRoleta(false)}
+                  >
+                    Pausar Todos
+                  </button>
+                </div>
+              </div>
+
+              {/* Busca */}
+              <div style={{ marginBottom: "12px", position: "relative" }}>
+                <Search size={14} style={{ position: "absolute", left: "10px", top: "11px", color: "var(--cv-text-muted)" }} />
+                <input
+                  type="text"
+                  placeholder="Buscar corretor por nome, email ou telefone..."
+                  value={buscaModalRoleta}
+                  onChange={(e) => setBuscaModalRoleta(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px 8px 32px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--cv-border)",
+                    fontSize: "13px",
+                    background: "var(--cv-surface-subtle)",
+                    color: "var(--cv-text-main)",
+                    outline: "none",
+                  }}
+                  autoFocus
+                />
+              </div>
+
+              {/* Lista de Corretores */}
+              <div style={{ maxHeight: "360px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+                {equipeProfiles
+                  .filter((p) => {
+                    const termo = buscaModalRoleta.toLowerCase().trim();
+                    if (!termo) return true;
+                    const n = `${p.first_name || ""} ${p.last_name || ""}`.toLowerCase();
+                    return n.includes(termo) || (p.email || "").toLowerCase().includes(termo) || (p.phone || "").includes(termo);
+                  })
+                  .map((p) => {
+                    const nome = [p.first_name, p.last_name].filter(Boolean).join(" ") || "Corretor";
+                    const ativo = p.lead_assignment_enabled !== false;
+                    const estaOcupado = ocupadoRoleta === p.id;
+
+                    return (
+                      <div
+                        key={p.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "10px 14px",
+                          borderRadius: "10px",
+                          border: `1px solid ${ativo ? "var(--cv-green-border, #A7F3D0)" : "var(--cv-border)"}`,
+                          background: ativo ? "var(--cv-green-light, #F0FDF4)" : "var(--cv-surface)",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <div className="time-broker-avatar">{ini(nome)}</div>
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <b style={{ fontSize: "13.5px", color: "var(--cv-text-main)" }}>{nome}</b>
+                              {ativo ? (
+                                <span className="roleta-status-badge ativa">
+                                  <CheckCircle2 size={11} /> Recebendo
+                                </span>
+                              ) : (
+                                <span className="roleta-status-badge pausada">
+                                  <Clock size={11} /> Pausado
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: "12px", color: "var(--cv-text-muted)" }}>
+                              {p.phone || p.email}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className={ativo ? "time-btn-action" : "time-btn-primary"}
+                          style={{
+                            padding: "6px 14px",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            background: ativo ? "var(--cv-surface)" : "var(--cv-green, #10B981)",
+                            borderColor: ativo ? "var(--cv-border)" : "transparent",
+                            color: ativo ? "var(--cv-text-main)" : "#FFFFFF",
+                          }}
+                          disabled={estaOcupado}
+                          onClick={() => alternarRoleta(p.id, ativo, nome)}
+                        >
+                          {estaOcupado ? "..." : ativo ? "Pausar" : "Ativar na Roleta"}
+                        </button>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            <div className="modal-footer-v3">
+              <button type="button" className="time-btn-primary" onClick={() => setModalRoletaAberto(false)}>
+                Concluído
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL DE QUEM ESTÁ ONLINE AGORA (PRESENÇA DA TROPA) ── */}
+      {modalOnlineAberto && (
+        <div className="modal-backdrop-v3" onClick={() => setModalOnlineAberto(false)}>
+          <div className="modal-content-v3" style={{ maxWidth: "560px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-v3">
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div className="alerta-queima-icone small" style={{ background: "var(--cv-green-light, #ECFDF5)", color: "var(--cv-green, #10B981)" }}>
+                  <Users size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "17px", fontWeight: "800", color: "var(--cv-text-main)" }}>
+                    Presença da Tropa
+                  </h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "var(--cv-text-muted)" }}>
+                    Acompanhe quem está conectado no Comandra e o último acesso de cada corretor
+                  </p>
+                </div>
+              </div>
+              <button type="button" className="modal-close-btn-v3" onClick={() => setModalOnlineAberto(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body-v3">
+              {/* Filtros em chips */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
+                <button
+                  type="button"
+                  className={`funil-canal-chip ${filtroModalOnline === "todos" ? "active" : ""}`}
+                  onClick={() => setFiltroModalOnline("todos")}
+                >
+                  Todos ({equipeProfiles.length})
+                </button>
+                <button
+                  type="button"
+                  className={`funil-canal-chip ${filtroModalOnline === "online" ? "active" : ""}`}
+                  onClick={() => setFiltroModalOnline("online")}
+                >
+                  🟢 Online Agora ({onlineCount})
+                </button>
+                <button
+                  type="button"
+                  className={`funil-canal-chip ${filtroModalOnline === "offline" ? "active" : ""}`}
+                  onClick={() => setFiltroModalOnline("offline")}
+                >
+                  ⚪ Offline ({equipeProfiles.length - onlineCount})
+                </button>
+              </div>
+
+              {/* Lista de Corretores */}
+              <div style={{ maxHeight: "360px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+                {equipeProfiles
+                  .filter((p) => {
+                    const isOnline = p.last_seen_at && Date.now() - new Date(p.last_seen_at).getTime() < 15 * 60_000;
+                    if (filtroModalOnline === "online") return isOnline;
+                    if (filtroModalOnline === "offline") return !isOnline;
+                    return true;
+                  })
+                  .map((p) => {
+                    const nome = [p.first_name, p.last_name].filter(Boolean).join(" ") || "Corretor";
+                    const isOnline = p.last_seen_at && Date.now() - new Date(p.last_seen_at).getTime() < 15 * 60_000;
+                    const tel = limparTel(p.phone);
+
+                    return (
+                      <div
+                        key={p.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "10px 14px",
+                          borderRadius: "10px",
+                          border: "1px solid var(--cv-border)",
+                          background: isOnline ? "var(--cv-green-light, #F0FDF4)" : "var(--cv-surface)",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <div className="time-broker-avatar">
+                            {ini(nome)}
+                            {isOnline && <span className="time-broker-online-badge" />}
+                          </div>
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <b style={{ fontSize: "13.5px", color: "var(--cv-text-main)" }}>{nome}</b>
+                              {isOnline ? (
+                                <span className="roleta-status-badge ativa">Online agora</span>
+                              ) : (
+                                <span style={{ fontSize: "11.5px", color: "var(--cv-text-muted)" }}>
+                                  {quandoAcesso(p.last_seen_at)}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: "12px", color: "var(--cv-text-muted)" }}>
+                              {p.phone || p.email}
+                            </div>
+                          </div>
+                        </div>
+
+                        {tel && (
+                          <a
+                            href={`https://wa.me/${tel}?text=${encodeURIComponent(`Olá ${p.first_name || nome}! Tudo bem?`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="time-btn-action"
+                            style={{ textDecoration: "none", fontSize: "12px", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                          >
+                            <MessageCircle size={13} style={{ color: "var(--cv-green)" }} /> WhatsApp
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            <div className="modal-footer-v3">
+              <button type="button" className="time-btn-action" onClick={() => setModalOnlineAberto(false)}>
                 Fechar
               </button>
             </div>
