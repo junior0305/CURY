@@ -40,8 +40,8 @@ import Configuracoes from "@/components/config/Configuracoes";
 import PainelGeralSuper from "@/components/superintendente/PainelGeralSuper";
 import SalaDeGuerra from "@/components/super2/SalaDeGuerra";
 import PastasDoSuper from "@/components/super2/Pastas";
-import Leads from "@/components/super2/Leads";
-import Midia from "@/components/super2/Midia";
+import LeadsSuper from "@/components/super2/LeadsSuper";
+import TelaSuper from "@/components/super2/Tela";
 import Tropa from "@/components/super2/Tropa";
 import PainelGeral from "@/components/super2/PainelGeral";
 import { useDiretorId, useDiretoria } from "@/hooks/useDiretoria";
@@ -123,7 +123,7 @@ export default function Superintendente() {
             : aba === "config"
             ? "config"
             : aba === "midia"
-            ? "anuncios"
+            ? "leads"
             : "tempo"
         }
         mode={mode}
@@ -154,19 +154,19 @@ export default function Superintendente() {
 
           {!ehDiretoria && aba === "consolidado" ? <MinhasTarefas donoId={superId ?? undefined} /> : null}
           {aba === "estrategia" && superId ? (
-            <SalaDeGuerra superId={superId}
+            <TelaSuper><SalaDeGuerra superId={superId}
               superNome={superPerfil || session?.user?.user_metadata?.name || session?.user?.email?.split("@")[0] || "Superintendente"}
-              abaInicial={subGuerra} />
+              abaInicial={subGuerra} /></TelaSuper>
           ) : aba === "pastas" && superId ? (
-            <PastasDoSuper superId={superId} />
+            <TelaSuper><PastasDoSuper superId={superId} /></TelaSuper>
           ) : aba === "leads" && superId ? (
-            <Leads superId={superId} />
+            <LeadsSuper key="leads" superId={superId} inicial="leads" />
           ) : aba === "midia" && superId ? (
-            <Midia superId={superId} />
+            <LeadsSuper key="midia" superId={superId} inicial="midia" />
           ) : aba === "config" ? (
             <Configuracoes nivel={ehDiretoria ? "diretor" : "super"} donoId={ehDiretoria ? null : (session?.user?.id ?? null)} />
           ) : aba === "time" && superId ? (
-            <Tropa superId={superId} />
+            <TelaSuper><Tropa superId={superId} /></TelaSuper>
           ) : aba === "bi" ? (
             <BiTab scope="super" managerId={superId} />
           ) : (

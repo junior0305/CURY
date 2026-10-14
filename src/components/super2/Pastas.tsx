@@ -41,7 +41,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
           <p>Pastas do Junix dos corretores das suas equipes · {todoPeriodo ? "todas, desde o início" : `cadastradas ${p.texto}`}</p>
         </div>
         <div className="ps2-per">
-          {!todoPeriodo ? <SeletorPeriodoSuper p={p} /> : null}
+          {!todoPeriodo ? <SeletorPeriodoSuper p={p} estilo="dir" /> : null}
           <label className="ps2-chk"><input type="checkbox" checked={todoPeriodo} onChange={(e) => setTodoPeriodo(e.target.checked)} /> Ver todas, sem filtro de data</label>
         </div>
       </header>

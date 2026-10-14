@@ -68,7 +68,7 @@ export default function Midia({ superId }: { superId: string }) {
       <style>{CSS}</style>
       <header className="md-top">
         <div><h1>Mídia</h1><p>As contas de anúncio das suas equipes, lidas direto no Facebook · {p.texto}</p></div>
-        <SeletorPeriodoSuper p={p} />
+        <SeletorPeriodoSuper p={p} estilo="dir" />
       </header>
 
       <div className="md-kpis">

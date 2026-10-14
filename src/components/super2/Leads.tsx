@@ -98,7 +98,7 @@ export default function Leads({ superId }: { superId: string }) {
       <style>{CSS}</style>
       <header className="lm-top">
         <div><h1>Leads</h1><p>De onde vem o lead de cada equipe e o que acontece com ele · {p.texto}</p></div>
-        <SeletorPeriodoSuper p={p} />
+        <SeletorPeriodoSuper p={p} estilo="dir" />
       </header>
 
       <section className="lm-sec">

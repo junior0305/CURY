@@ -54,7 +54,6 @@ export const ABAS_SUPER: { k: Aba; label: string; to: string }[] = [
   { k: "estrategia", label: "Sala de Guerra", to: "/super?aba=estrategia" },
   { k: "pastas", label: "Pastas", to: "/super?aba=pastas" },
   { k: "leads", label: "Leads", to: "/super?aba=leads" },
-  { k: "anuncios", label: "Mídia", to: "/super?aba=midia" },
   { k: "time", label: "Minha Tropa", to: "/super?aba=time" },
   { k: "bi", label: "B.I.", to: "/super?aba=bi" },
   { k: "config", label: "Configurar", to: "/super?aba=config" },

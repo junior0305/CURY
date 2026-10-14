@@ -37,12 +37,12 @@ export default function SalaDeGuerra({ superId, superNome, abaInicial }: { super
           <h1>Sala de Guerra</h1>
           <p>O plano do mês, a verba de cada equipe e os gastos · {superNome}</p>
         </div>
-        <div className="sg-pills">
+        <div className="dir-per">
           <button className={desloc === 0 ? "on" : ""} onClick={() => setDesloc(0)}>{nomeMes(0)}</button>
           <button className={desloc === 1 ? "on" : ""} onClick={() => setDesloc(1)}>{nomeMes(1)}</button>
         </div>
       </header>
-      <nav className="sg-abas" aria-label="Seções da Sala de Guerra">
+      <nav className="dir-per" style={{ alignSelf: "flex-start" }} aria-label="Seções da Sala de Guerra">
         <button className={aba === "plano" ? "on" : ""} onClick={() => setAba("plano")}>Plano</button>
         <button className={aba === "verba" ? "on" : ""} onClick={() => setAba("verba")}>Verba</button>
         <button className={aba === "gastos" ? "on" : ""} onClick={() => setAba("gastos")}>Gastos</button>

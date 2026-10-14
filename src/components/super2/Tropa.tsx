@@ -28,7 +28,7 @@ export default function Tropa({ superId }: { superId: string }) {
       <style>{CSS}</style>
       <header className="tr2-top">
         <div><h1>Minha Tropa</h1><p>{ger === "geral" ? `Todas as equipes · ${p.texto}` : "A mesma tela que o gerente usa no Time dele"}</p></div>
-        {ger === "geral" ? <SeletorPeriodoSuper p={p} opcoes={["hoje", "7d", "30d"]} /> : null}
+        {ger === "geral" ? <SeletorPeriodoSuper p={p} opcoes={["hoje", "7d", "30d"]} estilo="dir" /> : null}
       </header>
       <nav className="tr2-chips" aria-label="Equipes">
         <button className={ger === "geral" ? "on" : ""} onClick={() => setGer("geral")}>Geral<small>{tot.cor} corretores · {gerentes.length} equipes</small></button>
