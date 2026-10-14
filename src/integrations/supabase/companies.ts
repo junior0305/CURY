@@ -27,7 +27,7 @@ export const COMPANIES = {
     shortName: 'PPG',
     color: 'emerald',
     host: 'planoego.comandra.com.br',
-    dominio: 'planoeplanogo',
+    dominio: 'planoego',
     adminSoAdmin: true,
     // Stack própria no Portainer (planoego), banco separado do Econ (14/10/2026).
     url: 'https://planoego.comandra.com.br/supabase',

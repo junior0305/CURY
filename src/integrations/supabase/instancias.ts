@@ -4,7 +4,7 @@
 // Domínio do login → endereço do site daquela empresa. Domínio que não está aqui fica neste site.
 export const INSTANCIAS: Record<string, string> = {
   comandra: "https://comandra.com.br",
-  planoeplanogo: "https://planoego.comandra.com.br",
+  planoego: "https://planoego.comandra.com.br",
 };
 
 /** Endereço do site da empresa deste e-mail, se for OUTRO site; senão null. */
