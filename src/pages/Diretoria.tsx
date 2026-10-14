@@ -19,9 +19,10 @@ import PastasPainel from "@/components/diretoria/PastasPainel";
 import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
 import { usePlanos, atrasada } from "@/hooks/usePlano";
 import "@/styles/diretoria.css";
+import Configuracoes from "@/components/config/Configuracoes";
 
-type Aba = "hoje" | "equipes" | "leads" | "pastas" | "bi" | "estrategia";
-const ABAS: [Aba, string][] = [["hoje", "Hoje"], ["equipes", "Equipes"], ["leads", "Leads e investimento"], ["pastas", "Pastas"], ["bi", "B.I."], ["estrategia", "Estratégia"]];
+type Aba = "hoje" | "equipes" | "leads" | "pastas" | "bi" | "estrategia" | "config";
+const ABAS: [Aba, string][] = [["hoje", "Hoje"], ["equipes", "Equipes"], ["leads", "Leads e investimento"], ["pastas", "Pastas"], ["bi", "B.I."], ["estrategia", "Estratégia"], ["config", "Configurar"]];
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "7 dias"], [30, "30 dias"]];
 
 const nf = (n: number) => n.toLocaleString("pt-BR");
@@ -97,7 +98,7 @@ export default function Diretoria() {
       </header>
 
       <main className="dir-wrap">
-        {aba !== "hoje" && aba !== "estrategia" && aba !== "pastas" && aba !== "bi" ? (
+        {aba !== "hoje" && aba !== "estrategia" && aba !== "pastas" && aba !== "bi" && aba !== "config" ? (
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <span className="dir-lbl">Período</span>
             <div className="dir-per">{PERIODOS.map(([n, t]) => <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{t}</button>)}</div>
@@ -106,7 +107,7 @@ export default function Diretoria() {
           </div>
         ) : null}
 
-        {isLoading || !dir ? <div className="dir-card dir-vazio">Juntando C2S, Junix, Facebook e Comandra…</div> : (
+        {aba === "config" ? null : isLoading || !dir ? <div className="dir-card dir-vazio">Juntando C2S, Junix, Facebook e Comandra…</div> : (
           <>
             {aba === "hoje" && <Hoje diretorId={diretorId!} supers={supers} total={totalEmpresa} cons={cons?.linhas ?? []}
               carregandoCons={carregandoCons} plantaoHojeTotal={dir.plantaoHojeTotal} cobrancas={dir.cobrancas} pastas={dir.pastas}
@@ -129,6 +130,8 @@ export default function Diretoria() {
             {aba === "estrategia" && diretorId && <Estrategia diretorId={diretorId} supers={supers} pastas={dir.pastas} />}
           </>
         )}
+        {/* Configurar: a mesma tela do gerente e do super, no nível do diretor (contas de anúncio, fontes de dados, dados da empresa) */}
+        {aba === "config" ? <div className="mgr10 dir-cfg" style={{ background: "transparent", paddingBottom: 0 }}><Configuracoes nivel="diretor" donoId={null} /></div> : null}
         <p className="dir-nota">Fontes: Junix (venda, VGV, pastas) · C2S (plantão, visita) · Facebook (anúncio) · Comandra (leads, login).</p>
       </main>
     </div>
