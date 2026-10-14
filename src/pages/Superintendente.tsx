@@ -38,7 +38,7 @@ import PastasSuper from "@/components/superintendente/PastasSuper";
 import LeadsAnunciosSuper from "@/components/superintendente/LeadsAnunciosSuper";
 import Configuracoes from "@/components/config/Configuracoes";
 import PainelGeralSuper from "@/components/superintendente/PainelGeralSuper";
-import SalaDeGuerra from "@/components/super2/SalaDeGuerra";
+import EstrategiaSuper from "@/components/super2/EstrategiaSuper";
 import PastasDoSuper from "@/components/super2/Pastas";
 import LeadsSuper from "@/components/super2/LeadsSuper";
 import TelaSuper from "@/components/super2/Tela";
@@ -135,7 +135,7 @@ export default function Superintendente() {
       <main className="shell2">
         {!ehDiretoria && aba === "consolidado" ? <MinhasTarefas donoId={superId ?? undefined} /> : null}
         {aba === "estrategia" && superId ? (
-          <SalaDeGuerra
+          <EstrategiaSuper
             superId={superId}
             superNome={superPerfil || session?.user?.user_metadata?.name || session?.user?.email?.split("@")[0] || "Superintendente"}
             abaInicial={subGuerra}

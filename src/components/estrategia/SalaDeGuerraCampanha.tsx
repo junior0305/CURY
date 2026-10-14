@@ -267,37 +267,29 @@ export default function SalaDeGuerraCampanha({
     return [...estoque].sort((a, b) => b.disponiveis - a.disponiveis);
   }, [estoque]);
 
-  // Aportes Próprios da Tropa de cada Super (Recursos Próprios dos Gerentes/Corretores)
+  // Aportes Próprios da Tropa de cada Super (Recursos Próprios dos Gerentes/Corretores) e a superação
+  // da meta que o super assumiu: o super preenche na Estratégia dele (aportes_tropa, metas.superacao).
   const { data: aportesTropa = [] } = useQuery({
     queryKey: ["aportes-tropa-supers", mes],
     staleTime: 60_000,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("gastos" as any)
-        .select("dono_id, planejado, nota")
-        .eq("mes", mes)
-        .like("descricao", "%Aporte Tropa%");
-      return (data ?? []) as any[];
+      const [ap, mt] = await Promise.all([
+        supabase.from("aportes_tropa" as any).select("super_id, total_proprio").eq("mes", mes),
+        supabase.from("metas" as any).select("dono_id, vendas, superacao").eq("mes", mes).gt("superacao", 0),
+      ]);
+      const out = new Map<string, { aporteTotal: number; metaOusada?: number }>();
+      for (const r of ((ap.data ?? []) as any[])) out.set(r.super_id, { aporteTotal: Number(r.total_proprio) || 0 });
+      for (const r of ((mt.data ?? []) as any[])) {
+        const atual = out.get(r.dono_id) ?? { aporteTotal: 0 };
+        out.set(r.dono_id, { ...atual, metaOusada: (Number(r.vendas) || 0) + (Number(r.superacao) || 0) });
+      }
+      return [...out.entries()];
     },
   });
 
   const aporteMap = useMemo(() => {
     const map = new Map<string, { aporteTotal: number; poderDeFogo: number; metaOusada?: number }>();
-    for (const r of aportesTropa) {
-      try {
-        const parsed = JSON.parse(r.nota || "{}");
-        map.set(r.dono_id, {
-          aporteTotal: Number(r.planejado) || 0,
-          poderDeFogo: parsed.poderDeFogoTotal || Number(r.planejado) || 0,
-          metaOusada: parsed.metaOusada,
-        });
-      } catch {
-        map.set(r.dono_id, {
-          aporteTotal: Number(r.planejado) || 0,
-          poderDeFogo: Number(r.planejado) || 0,
-        });
-      }
-    }
+    for (const [id, v] of aportesTropa) map.set(id, { aporteTotal: v.aporteTotal, poderDeFogo: v.aporteTotal, metaOusada: v.metaOusada });
     return map;
   }, [aportesTropa]);
 

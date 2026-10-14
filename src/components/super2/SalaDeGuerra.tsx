@@ -105,6 +105,7 @@ export default function SalaDeGuerra({
 
 function Verba({ superId, superNome, mes }: { superId: string; superNome: string; mes: string }) {
   const qc = useQueryClient();
+  const { session } = useAuth();
   const { supers } = useEscopoSuper(superId);
   const { data: cons } = useConsolidadoSuper(superId, 30);
   const gerentes = useMemo(
@@ -115,32 +116,27 @@ function Verba({ superId, superNome, mes }: { superId: string; superNome: string
     [supers]
   );
   const [verbaDiretoria, setVerbaDiretoria] = useState(0);
-  const [aportes, setAportes] = useState<Record<string, number>>({});
+  // recursos próprios de cada equipe no mês: o que o gerente e os corretores põem do bolso (tabela aportes_tropa)
+  const [aportes, setAportes] = useState<Record<string, { gerente: number; corretores: number }>>({});
   const [marcados, setMarcados] = useState<Record<string, boolean>>({});
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     (async () => {
-      const { data } = await sb
-        .from("gastos")
-        .select("valor,detalhes")
-        .eq("dono_id", superId)
-        .eq("mes", mes)
-        .eq("categoria", `Aporte Tropa & Verba de Guerra · ${superNome}`)
-        .maybeSingle();
+      setVerbaDiretoria(0); setAportes({}); setMarcados({});
+      const { data } = await sb.from("aportes_tropa").select("verba_diretoria,aportes").eq("super_id", superId).eq("mes", mes).maybeSingle();
       if (!data) return;
-      const d = (data.detalhes || {}) as any;
-      setVerbaDiretoria(Number(d.verba_diretoria) || 0);
-      const ap = (d.aportes || {}) as Record<string, number>;
+      setVerbaDiretoria(Number(data.verba_diretoria) || 0);
+      const ap = (data.aportes || {}) as Record<string, { gerente: number; corretores: number }>;
       setAportes(ap);
       setMarcados(Object.fromEntries(Object.keys(ap).map((k) => [k, true])));
     })();
-  }, [superId, superNome, mes]);
+  }, [superId, mes]);
 
-  const totalAportes = Object.entries(aportes).reduce(
-    (a, [id, v]) => a + (marcados[id] ? Number(v) || 0 : 0),
-    0
-  );
+  const valorDe = (id: string) => (Number(aportes[id]?.gerente) || 0) + (Number(aportes[id]?.corretores) || 0);
+  const totalAportes = Object.keys(aportes).reduce((a, id) => a + (marcados[id] ? valorDe(id) : 0), 0);
+  const muda = (id: string, k: "gerente" | "corretores", v: number) =>
+    setAportes((a) => ({ ...a, [id]: { gerente: a[id]?.gerente ?? 0, corretores: a[id]?.corretores ?? 0, [k]: v } }));
   const total = (Number(verbaDiretoria) || 0) + totalAportes;
 
   const gasto30 = (cons?.linhas ?? []).reduce((a, l) => a + (l.gasto ?? 0), 0);
@@ -154,27 +150,25 @@ function Verba({ superId, superNome, mes }: { superId: string; superNome: string
     const aportesFiltrados = Object.fromEntries(
       Object.entries(aportes).filter(([id]) => marcados[id])
     );
-    const { error } = await sb.from("gastos").upsert(
+    const { error } = await sb.from("aportes_tropa").upsert(
       {
-        dono_id: superId,
+        super_id: superId,
         mes,
-        categoria: `Aporte Tropa & Verba de Guerra · ${superNome}`,
-        valor: total,
-        detalhes: {
-          verba_diretoria: verbaDiretoria,
-          aportes: aportesFiltrados,
-          total_aportes: totalAportes,
-        },
+        verba_diretoria: Number(verbaDiretoria) || 0,
+        aportes: aportesFiltrados,
+        total_proprio: totalAportes,
+        atualizado_por: session?.user?.id ?? null,
+        atualizado_em: new Date().toISOString(),
       },
-      { onConflict: "dono_id,mes,categoria" }
+      { onConflict: "mes,super_id" }
     );
     setSalvando(false);
     if (error) {
       toast.error(error.message);
       return;
     }
-    toast.success("Verba e aportes salvos!");
-    qc.invalidateQueries({ queryKey: ["gastos-plano"] });
+    toast.success("Verba e recursos próprios salvos! A diretoria já vê na Sala de Guerra dela.");
+    qc.invalidateQueries({ queryKey: ["aportes-tropa-supers"] });
   }
 
   return (
@@ -227,51 +221,57 @@ function Verba({ superId, superNome, mes }: { superId: string; superNome: string
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <b style={{ fontSize: 13, color: "var(--cv-text-muted)", textTransform: "uppercase" }}>
-            Aportes das Equipes
+            Recursos próprios das equipes
           </b>
+          <span style={{ fontSize: 12, color: "var(--cv-text-muted)" }}>
+            Marque a equipe que vai investir do próprio bolso e diga quanto põe o gerente e quanto os corretores.
+          </span>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px", gap: 8, fontSize: 11, fontWeight: 700, color: "var(--cv-text-muted)", textTransform: "uppercase", paddingTop: 6 }}>
+            <span>Equipe</span><span style={{ textAlign: "right" }}>Gerente</span><span style={{ textAlign: "right" }}>Corretores</span>
+          </div>
           {gerentes.map((g) => (
             <div
               key={g.id}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "8px 0",
-                borderTop: "1px solid var(--cv-border-subtle)",
-              }}
+              style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px", gap: 8, alignItems: "center", padding: "8px 0", borderTop: "1px solid var(--cv-border-subtle)" }}
             >
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, cursor: "pointer" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, cursor: "pointer", minWidth: 0 }}>
                 <input
                   type="checkbox"
                   checked={!!marcados[g.id]}
                   onChange={(e) => setMarcados((m) => ({ ...m, [g.id]: e.target.checked }))}
                 />
-                <span style={{ color: "var(--cv-text-main)", fontWeight: 500 }}>{g.nome}</span>
+                <span style={{ color: "var(--cv-text-main)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.nome}</span>
               </label>
-
-              <input
-                type="number"
-                min={0}
-                step={100}
-                disabled={!marcados[g.id]}
-                value={aportes[g.id] || ""}
-                placeholder="0"
-                style={{
-                  width: 130,
-                  padding: "5px 10px",
-                  textAlign: "right",
-                  border: "1px solid var(--cv-border)",
-                  borderRadius: 8,
-                  background: marcados[g.id] ? "var(--cv-surface-subtle)" : "transparent",
-                  color: "var(--cv-text-main)",
-                  opacity: marcados[g.id] ? 1 : 0.4,
-                  fontFamily: "var(--cv-font-mono, monospace)",
-                  fontSize: 13,
-                }}
-                onChange={(e) => setAportes((a) => ({ ...a, [g.id]: Number(e.target.value) || 0 }))}
-              />
+              {(["gerente", "corretores"] as const).map((k) => (
+                <input
+                  key={k}
+                  type="number"
+                  min={0}
+                  step={100}
+                  disabled={!marcados[g.id]}
+                  value={aportes[g.id]?.[k] || ""}
+                  placeholder="0"
+                  aria-label={`${k === "gerente" ? "Valor do gerente" : "Valor dos corretores"} da equipe ${g.nome}`}
+                  style={{
+                    width: "100%",
+                    padding: "5px 10px",
+                    textAlign: "right",
+                    border: "1px solid var(--cv-border)",
+                    borderRadius: 8,
+                    background: marcados[g.id] ? "var(--cv-surface-subtle)" : "transparent",
+                    color: "var(--cv-text-main)",
+                    opacity: marcados[g.id] ? 1 : 0.4,
+                    fontFamily: "var(--cv-font-mono, monospace)",
+                    fontSize: 13,
+                  }}
+                  onChange={(e) => muda(g.id, k, Number(e.target.value) || 0)}
+                />
+              ))}
             </div>
           ))}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--cv-text-muted)", paddingTop: 4 }}>
+            <span>Recursos próprios no mês</span><b className="mono" style={{ color: "var(--cv-text-main)" }}>{brl(totalAportes)}</b>
+          </div>
         </div>
 
         <div
