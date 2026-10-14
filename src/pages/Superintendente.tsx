@@ -93,9 +93,6 @@ export default function Superintendente() {
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
   const toggleGer = (id: string) => setAberto((v) => ({ ...v, [id]: !v[id] }));
   const { data, isLoading, error } = useSuperintendenteRollup(superId, dias);
-  // Pastas precisa da lista de superintendências (dono de cada pasta do Junix); só busca quando a aba abre
-  const { data: dirIdPastas } = useDiretorId(aba === "pastas" ? role : null, session?.user?.id);
-  const { data: diretoriaPastas } = useDiretoria(aba === "pastas" ? dirIdPastas : null, 30);
   loadFonts();
 
   const abrir = (id: string) => nav(`/manager?manager=${id}`);

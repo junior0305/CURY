@@ -22,9 +22,10 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
   const { session } = useAuth();
   const { diretorId, supers, pastas, carregando } = useEscopoSuper(superId);
   const p = usePeriodoSuper("30d");
-  const [todoPeriodo, setTodoPeriodo] = useState(false);
+  const [todoPeriodo, setTodoPeriodo] = useState(true);
   const [sit, setSit] = useState<Situacao>("todas");
   const [ger, setGer] = useState("todos");
+  const [supFiltro, setSupFiltro] = useState("todas");
 
   const doPeriodo = useMemo(() => {
     if (todoPeriodo) return pastas;
@@ -35,6 +36,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
   }, [pastas, todoPeriodo, p.janela.de, p.janela.ate]);
 
   const lidas = useMemo(() => lerPastas(doPeriodo), [doPeriodo]);
+  const supersUnicos = useMemo(() => [...new Set(lidas.map((x) => x.superintendente || "—"))].filter((s) => s !== "—").sort(), [lidas]);
   const gerentes = useMemo(() => [...new Set(lidas.map((x) => x.gerente || "—"))].sort(), [lidas]);
 
   const situacao = (x: any): Exclude<Situacao, "todas"> =>
@@ -43,7 +45,11 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
   const conta = (s: Exclude<Situacao, "todas">) => lidas.filter((x) => situacao(x) === s).length;
 
   const lista = lidas
-    .filter((x) => (sit === "todas" || situacao(x) === sit) && (ger === "todos" || (x.gerente || "—") === ger))
+    .filter((x) =>
+      (sit === "todas" || situacao(x) === sit) &&
+      (ger === "todos" || (x.gerente || "—") === ger) &&
+      (supFiltro === "todas" || (x.superintendente || "—") === supFiltro)
+    )
     .sort((a, b) => (a.viva === b.viva ? (b.dias ?? 0) - (a.dias ?? 0) : a.viva ? -1 : 1));
 
   const paradasCriticas = useMemo(() => lidas.filter((x) => situacao(x) === "paradas"), [lidas]);
@@ -76,7 +82,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
           <h1>📁 Pastas & Aprovação de Crédito (Junix)</h1>
           <p>
             Superintendência · Pastas dos corretores das suas equipes ·{" "}
-            {todoPeriodo ? "Todas desde o início" : `Cadastradas ${p.texto}`}
+            {todoPeriodo ? "Esteira contínua (todas as pastas em andamento)" : `Cadastradas ${p.texto}`}
           </p>
         </div>
 
@@ -94,10 +100,10 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
           >
             <input
               type="checkbox"
-              checked={todoPeriodo}
-              onChange={(e) => setTodoPeriodo(e.target.checked)}
+              checked={!todoPeriodo}
+              onChange={(e) => setTodoPeriodo(!e.target.checked)}
             />
-            Ver todas sem filtro de data
+            Filtrar por data de cadastro
           </label>
 
           {!todoPeriodo && (
@@ -117,7 +123,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
         </div>
       </header>
 
-      {carregando || !diretorId ? (
+      {carregando ? (
         <div style={{ padding: 40, textAlign: "center", color: "var(--cv-text-muted)" }}>
           Lendo as pastas do Junix das suas equipes…
         </div>
@@ -137,7 +143,12 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
         <>
           {/* ── PLACAR HERO DE PASTAS ── */}
           <section className="hero-placar-v3">
-            <div className="kpi-card-v3 destaque">
+            <div
+              className={`kpi-card-v3 destaque ${sit === "vivas" ? "active" : ""}`}
+              style={{ cursor: "pointer" }}
+              onClick={() => setSit(sit === "vivas" ? "todas" : "vivas")}
+              title="Clique para filtrar apenas pastas vivas"
+            >
               <span className="kpi-title-v3">📁 Pastas Vivas no Funil</span>
               <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-brand)" }}>
                 {conta("vivas")} un
@@ -147,7 +158,12 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
               </span>
             </div>
 
-            <div className="kpi-card-v3">
+            <div
+              className={`kpi-card-v3 ${sit === "paradas" ? "active" : ""}`}
+              style={{ cursor: "pointer" }}
+              onClick={() => setSit(sit === "paradas" ? "todas" : "paradas")}
+              title="Clique para filtrar apenas pastas paradas há 7d+"
+            >
               <span className="kpi-title-v3">⚠️ Paradas há 7d+ (Gargalo)</span>
               <div
                 className="kpi-val-v3 mono"
@@ -160,7 +176,12 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
               </span>
             </div>
 
-            <div className="kpi-card-v3">
+            <div
+              className={`kpi-card-v3 ${sit === "reprovadas" ? "active" : ""}`}
+              style={{ cursor: "pointer" }}
+              onClick={() => setSit(sit === "reprovadas" ? "todas" : "reprovadas")}
+              title="Clique para filtrar apenas reprovadas"
+            >
               <span className="kpi-title-v3">❌ Reprovadas Caixa</span>
               <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-rose)" }}>
                 {conta("reprovadas")} un
@@ -170,13 +191,18 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
               </span>
             </div>
 
-            <div className="kpi-card-v3">
+            <div
+              className={`kpi-card-v3 ${sit === "todas" ? "active" : ""}`}
+              style={{ cursor: "pointer" }}
+              onClick={() => setSit("todas")}
+              title="Clique para ver todas as pastas"
+            >
               <span className="kpi-title-v3">📋 Total de Pastas Cadastradas</span>
               <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-text-main)" }}>
                 {lidas.length} un
               </div>
               <span className="kpi-sub-v3">
-                {todoPeriodo ? "histórico completo" : `cadastradas ${p.texto}`}
+                {todoPeriodo ? "esteira completa" : `cadastradas ${p.texto}`}
               </span>
             </div>
           </section>
@@ -248,26 +274,51 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
                 ))}
               </div>
 
-              <select
-                value={ger}
-                onChange={(e) => setGer(e.target.value)}
-                style={{
-                  background: "var(--cv-surface)",
-                  border: "1px solid var(--cv-border)",
-                  borderRadius: "var(--cv-radius-sm)",
-                  padding: "6px 12px",
-                  fontSize: 13,
-                  color: "var(--cv-text-main)",
-                  outline: "none",
-                }}
-              >
-                <option value="todos">Todos os gerentes</option>
-                {gerentes.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                {supersUnicos.length > 1 && (
+                  <select
+                    value={supFiltro}
+                    onChange={(e) => setSupFiltro(e.target.value)}
+                    style={{
+                      background: "var(--cv-surface)",
+                      border: "1px solid var(--cv-border)",
+                      borderRadius: "var(--cv-radius-sm)",
+                      padding: "6px 12px",
+                      fontSize: 13,
+                      color: "var(--cv-text-main)",
+                      outline: "none",
+                    }}
+                  >
+                    <option value="todas">Todas as superintendências</option>
+                    {supersUnicos.map((s) => (
+                      <option key={s} value={s}>
+                        Super: {s}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <select
+                  value={ger}
+                  onChange={(e) => setGer(e.target.value)}
+                  style={{
+                    background: "var(--cv-surface)",
+                    border: "1px solid var(--cv-border)",
+                    borderRadius: "var(--cv-radius-sm)",
+                    padding: "6px 12px",
+                    fontSize: 13,
+                    color: "var(--cv-text-main)",
+                    outline: "none",
+                  }}
+                >
+                  <option value="todos">Todos os gerentes</option>
+                  {gerentes.map((g) => (
+                    <option key={g} value={g}>
+                      Gerente: {g}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="tropa-table-container-v3">

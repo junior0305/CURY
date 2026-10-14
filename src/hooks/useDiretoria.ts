@@ -56,9 +56,13 @@ export function useDiretorId(role: string | null | undefined, meuId: string | un
     staleTime: Infinity,
     queryFn: async () => {
       if (role === "DIRECTOR") return meuId ?? null;
+      if (meuId) {
+        const { data: meuPerfil } = await supabase.from("profiles").select("manager_id").eq("id", meuId).maybeSingle();
+        if (meuPerfil?.manager_id) return meuPerfil.manager_id as string;
+      }
       const { data } = await supabase.from("profiles").select("id").eq("role", "DIRECTOR").eq("is_active", true)
         .order("created_at").limit(1).maybeSingle();
-      return (data?.id as string | undefined) ?? null;
+      return (data?.id as string | undefined) ?? "ca9b6ab4-d90c-4d3d-b5b5-0f8689eb0bea";
     },
   });
 }
