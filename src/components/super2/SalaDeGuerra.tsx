@@ -160,6 +160,9 @@ const CSS = `
 .mgr10 .sg-abas button{padding:9px 16px;border-radius:9px;font-size:14px;font-weight:600;color:var(--ink-2)}
 .mgr10 .sg-abas button.on{background:var(--blue-air);color:var(--blue)}
 .mgr10 .sg-dir{min-height:0;background:transparent;display:flex;flex-direction:column;gap:20px;padding:0}
+.mgr10 .sg-verba .dir-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;display:grid;gap:4px}
+.mgr10 .sg-verba .dir-h{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;margin-bottom:8px}
+.mgr10 .sg-verba .dir-h span{font-size:12.5px;color:var(--ink-3)}
 .mgr10 .sg-verba{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;align-items:start}
 .mgr10 .sg-linha{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--hair);font-size:14px}
 .mgr10 .sg-linha span{display:flex;align-items:center;gap:8px}

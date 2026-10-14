@@ -12,7 +12,8 @@ export default function Tropa({ superId }: { superId: string }) {
   return (
     <div className="tr2">
       <style>{`
-.mgr10 .tr2{display:grid;gap:var(--s2);padding-top:var(--s3)}
+.mgr10 .tr2{display:grid;gap:var(--s2);padding-top:var(--s3);min-width:0}
+.mgr10 .tr2-time{min-width:0;overflow-x:auto}
 .mgr10 .tr2-top h1{font-size:28px}
 .mgr10 .tr2-top p{color:var(--ink-2);margin-top:4px;font-size:14px}
 .mgr10 .tr2-chips{display:flex;gap:6px;flex-wrap:wrap}
@@ -33,7 +34,7 @@ export default function Tropa({ superId }: { superId: string }) {
           ))}
         </nav>
       )}
-      {ger ? <TimeTab key={ger} managerId={ger} /> : null}
+      {ger ? <div className="tr2-time"><TimeTab key={ger} managerId={ger} /></div> : null}
     </div>
   );
 }
