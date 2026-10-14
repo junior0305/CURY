@@ -75,7 +75,10 @@ export default function AnunciosGerente() {
     const form = Number(d.form_7d ?? 0), conv = Number(d.conversas_7d ?? 0);
     const gasto = Number(d.gasto_7d ?? 0), gastoAnt = Number(d.gasto_7d_ant ?? 0);
     const cpl = leadsFb > 0 ? gasto / leadsFb : null;
-    const casaCpl = Number(d.casa?.cpl ?? 0) || null;
+    // média das contas = mesmo cálculo da aba Comparar (gasto ÷ leads do Facebook, todas as contas da diretoria)
+    const somaG = (ranking ?? []).reduce((a: number, r: any) => a + Number(r.gasto || 0), 0);
+    const somaL = (ranking ?? []).reduce((a: number, r: any) => a + Number(r.leads_fb || 0), 0);
+    const casaCpl = somaL ? somaG / somaL : (Number(d.casa?.cpl ?? 0) || null);
     const chegaram = Number(cm.leads ?? 0);
     const naoChegaram = Math.max(0, form - chegaram);
     const alertas: any[] = d.alertas ?? [];
@@ -108,9 +111,9 @@ export default function AnunciosGerente() {
             <small>{ativas} campanha(s) ativa(s) · {brl((d.gasto_por_dia && Object.values(d.gasto_por_dia).slice(-1)[0]) as number)} ontem</small>
           </div>
           <div className="an-kpi">
-            <div className="an-kpi-h"><span>Custo por lead</span>{cpl != null && casaCpl ? <em className={cpl > casaCpl * 1.3 ? "red" : cpl < casaCpl * 0.8 ? "grn" : "neu"}>{cpl > casaCpl ? "acima" : "abaixo"} da casa</em> : null}</div>
+            <div className="an-kpi-h"><span>Custo por lead</span>{cpl != null && casaCpl ? <em className={cpl > casaCpl * 1.2 ? "red" : cpl < casaCpl * 0.85 ? "grn" : "neu"}>{cpl > casaCpl ? "acima" : "abaixo"} da média</em> : null}</div>
             <b>{brl2(cpl)}</b>
-            <small>média da casa {brl2(casaCpl)} · {(() => {
+            <small>média das contas {brl2(casaCpl)} · {(() => {
               const comCpl = (ranking ?? []).filter((r: any) => r.cpl != null).sort((a: any, b: any) => Number(a.cpl) - Number(b.cpl));
               const pos = comCpl.findIndex((r: any) => r.dono_id === eu);
               return pos >= 0 ? <button className="an-link" onClick={() => setAba("comparar")}>{pos + 1}º de {comCpl.length} contas</button> : `${form} formulário + ${conv} conversa`;
@@ -370,14 +373,14 @@ function Comparativo({ eu }: { eu: string }) {
               <span className="mono">{i + 1}º</span>
               <span className="an-nome">{r.dono}{minha ? <em className="neu">você</em> : null}<small className="an-raio">{r.papel === "SUPERINTENDENT" ? "super" : r.super ? `equipe ${r.super}` : ""}</small></span>
               <span className="mono an-gbar"><i style={{ width: `${(Number(r.gasto) / maxGasto) * 100}%` }} />{brl(Number(r.gasto))}</span>
-              <span className="mono">{r.leads_fb}<small> → {r.chegaram} aqui</small></span>
+              <span className="mono">{r.leads_fb}<small> ({r.form} form · {r.conversas} conv.) → {r.chegaram} aqui</small></span>
               <span className={`mono ${cplRuim ? "an-falta" : cplBom ? "an-bom" : ""}`}>{brl2(r.cpl)}</span>
               <span className="mono">{Math.round(r.resp * 100)}%<small> ({r.responderam})</small></span>
               <span className="mono">{r.alertas || "—"}</span>
             </div>
           );
         })}
-        <small className="an-nota">Por lead em vermelho = 20% acima da média da casa; em verde = 15% abaixo. Responderam = leads que responderam a primeira mensagem ÷ leads que chegaram. Os números vêm do robô que lê cada conta de hora em hora.</small>
+        <small className="an-nota">Por lead em vermelho = 20% acima da média da casa; em verde = 15% abaixo. Responderam = leads que responderam a primeira mensagem ÷ leads que chegaram. Conversa de anúncio abre direto no WhatsApp da equipe e não passa pelo Comandra; só formulário chega aqui. Os números vêm do robô que lê cada conta de hora em hora.</small>
       </div>
     </div>
   );
@@ -514,7 +517,7 @@ const CSS = `
 .mgr10 .an-datas{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink-2)}
 .mgr10 .an-datas input{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
 .mgr10 .an-tr.an-tr6{grid-template-columns:minmax(0,3fr) repeat(4,minmax(70px,1fr)) 28px}
-.mgr10 .an-tr.an-tr7{grid-template-columns:40px minmax(0,2fr) minmax(110px,1.4fr) repeat(4,minmax(70px,1fr))}
+.mgr10 .an-tr.an-tr7{grid-template-columns:40px minmax(0,1.6fr) minmax(110px,1.2fr) minmax(150px,1.8fr) repeat(3,minmax(70px,1fr))}
 .mgr10 .an-tr small{color:var(--ink-3);font-size:11.5px;font-family:inherit}
 .mgr10 .an-falta{color:var(--red);font-weight:700}
 .mgr10 .an-bom{color:var(--good);font-weight:700}
