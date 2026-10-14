@@ -42,7 +42,7 @@ export const ABAS: { k: Aba; label: string; to: string }[] = [
   { k: "pastas", label: "Pastas", to: "/manager/pastas" },
   { k: "disparar", label: "Disparar", to: "/manager/whatsapp" },
   { k: "estrategia", label: "Onde atacar", to: "/manager/estrategia" },
-  { k: "config", label: "Configurações", to: "/manager/config" },
+  { k: "config", label: "Configurar", to: "/manager/config" },
 ];
 
 /** 6 Módulos Mestres do Superintendente (Cockpit Executivo sem sobreposição) */
@@ -53,7 +53,7 @@ export const ABAS_SUPER: { k: Aba; label: string; to: string }[] = [
   { k: "leads", label: "Leads & Mídia", to: "/super?aba=leads" },
   { k: "time", label: "Minha Tropa", to: "/super?aba=time" },
   { k: "bi", label: "B.I.", to: "/super?aba=bi" },
-  { k: "config", label: "Configurações", to: "/super?aba=config" },
+  { k: "config", label: "Configurar", to: "/super?aba=config" },
 ];
 
 export function RailV10({

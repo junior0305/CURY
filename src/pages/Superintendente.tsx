@@ -142,7 +142,7 @@ export default function Superintendente() {
               <button className={aba === "campanhas" ? "on" : ""} onClick={() => setAba("campanhas")}>Campanhas</button>
               <button className={aba === "plano" ? "on" : ""} onClick={() => setAba("plano")}>Plano</button>
               <button className={aba === "gastos" ? "on" : ""} onClick={() => setAba("gastos")}>Gastos</button>
-              <button className={aba === "config" ? "on" : ""} onClick={() => setAba("config")}>⚙ Configurações</button>
+              <button className={aba === "config" ? "on" : ""} onClick={() => setAba("config")}>⚙ Configurar</button>
               {aba === "consolidado" ? PERIODOS.map(([n, r]) => (
                 <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{r}</button>
               )) : null}
