@@ -102,7 +102,7 @@ export default function Superintendente() {
   const t = data?.total;
 
   return (
-    <div className="mgr10 app2 sup">
+    <div className="mgr10 app2">
       <Boundary>
       <RailV10
         atual={
@@ -136,8 +136,23 @@ export default function Superintendente() {
         }}
       />
       <main className="shell2">
-        <div className="sup-wrap">
-          {aba === "bi" ? (
+        {!ehDiretoria && aba === "consolidado" ? <MinhasTarefas donoId={superId ?? undefined} /> : null}
+        {aba === "estrategia" && superId ? (
+          <TelaSuper><SalaDeGuerra superId={superId}
+            superNome={superPerfil || session?.user?.user_metadata?.name || session?.user?.email?.split("@")[0] || "Superintendente"}
+            abaInicial={subGuerra} /></TelaSuper>
+        ) : aba === "pastas" && superId ? (
+          <TelaSuper><PastasDoSuper superId={superId} /></TelaSuper>
+        ) : aba === "leads" && superId ? (
+          <LeadsSuper key="leads" superId={superId} inicial="leads" />
+        ) : aba === "midia" && superId ? (
+          <LeadsSuper key="midia" superId={superId} inicial="midia" />
+        ) : aba === "config" ? (
+          <Configuracoes nivel={ehDiretoria ? "diretor" : "super"} donoId={ehDiretoria ? null : (session?.user?.id ?? null)} />
+        ) : aba === "time" && superId ? (
+          <TelaSuper><Tropa superId={superId} /></TelaSuper>
+        ) : aba === "bi" ? (
+          <>
             <div className="sup-top">
               <div>
                 <h1>{ehDiretoria ? "Diretoria" : "Superintendência"}</h1>
@@ -145,33 +160,15 @@ export default function Superintendente() {
                   : "A operação inteira das suas equipes, num lugar só"}</p>
               </div>
             </div>
-          ) : null}
-
-          {!ehDiretoria && aba === "consolidado" ? <MinhasTarefas donoId={superId ?? undefined} /> : null}
-          {aba === "estrategia" && superId ? (
-            <TelaSuper><SalaDeGuerra superId={superId}
-              superNome={superPerfil || session?.user?.user_metadata?.name || session?.user?.email?.split("@")[0] || "Superintendente"}
-              abaInicial={subGuerra} /></TelaSuper>
-          ) : aba === "pastas" && superId ? (
-            <TelaSuper><PastasDoSuper superId={superId} /></TelaSuper>
-          ) : aba === "leads" && superId ? (
-            <LeadsSuper key="leads" superId={superId} inicial="leads" />
-          ) : aba === "midia" && superId ? (
-            <LeadsSuper key="midia" superId={superId} inicial="midia" />
-          ) : aba === "config" ? (
-            <Configuracoes nivel={ehDiretoria ? "diretor" : "super"} donoId={ehDiretoria ? null : (session?.user?.id ?? null)} />
-          ) : aba === "time" && superId ? (
-            <TelaSuper><Tropa superId={superId} /></TelaSuper>
-          ) : aba === "bi" ? (
             <BiTab scope="super" managerId={superId} />
-          ) : (
-            superId ? (
-              <PainelGeral superId={superId}
-                superNome={superPerfil || session?.user?.user_metadata?.name || "Superintendente"}
-                onAbrir={abrir} irPara={(a) => setAba(a === "midia" ? "midia" : a === "pastas" ? "pastas" : "leads")} />
-            ) : <p className="sup-vazio">Carregando…</p>
-          )}
-        </div>
+          </>
+        ) : (
+          superId ? (
+            <PainelGeral superId={superId}
+              superNome={superPerfil || session?.user?.user_metadata?.name || "Superintendente"}
+              onAbrir={abrir} irPara={(a) => setAba(a === "midia" ? "midia" : a === "pastas" ? "pastas" : "leads")} />
+          ) : <p className="sup-vazio">Carregando…</p>
+        )}
       </main>
       </Boundary>
     </div>
