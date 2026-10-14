@@ -732,7 +732,7 @@ export default function Disparar() {
               </span>
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--cv-green, #059669)", fontFamily: "JetBrains Mono" }}>
-              {d.campanhas.reduce((a, c) => a + c.responderam, 0)}
+              {d.campanhas.reduce((a, c) => a + c.respostas, 0)}
             </div>
             <div style={{ fontSize: 12, color: "var(--cv-text-muted, #64748b)", marginTop: 2 }}>
               {d.conversas.filter((c) => c.esperando).length > 0 ? (
