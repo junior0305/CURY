@@ -32,19 +32,19 @@ const brl = (n: number) =>
 function classificarOrigem(lead: { source?: string | null; fb_campaign?: string | null }): OrigemFiltro {
   const camp = (lead.fb_campaign || "").toLowerCase();
   const src = (lead.source || "").toLowerCase();
-  if (camp.includes("disparo") || src.includes("disparo") || src.includes("whatsapp")) return "disparo";
-  if (camp.includes("pescado") || camp.includes("repescagem") || src.includes("repescagem") || src.includes("carteira")) return "pescado";
-  if (src.includes("rua") || src.includes("stand") || src.includes("tenda") || src.includes("acao")) return "acao";
-  if (src.includes("facebook") || src.includes("meta") || src.includes("instagram") || camp.includes("face") || camp.includes("meta")) return "anuncio";
-  return "anuncio"; // default principal de tráfego
+  if (camp.includes("disparo") || src.includes("disparo") || src.includes("whatsapp") || src.includes("wa_")) return "disparo";
+  if (camp.includes("pescado") || camp.includes("repescagem") || src.includes("repescagem") || src.includes("carteira") || src.includes("cold_pool") || src.includes("pool")) return "pescado";
+  if (src.includes("rua") || src.includes("stand") || src.includes("tenda") || src.includes("acao") || src.includes("manual") || src.includes("secretaria") || src.includes("recrutamento")) return "acao";
+  if (src.includes("facebook") || src.includes("meta") || src.includes("instagram") || camp.includes("face") || camp.includes("meta") || src.includes("make")) return "anuncio";
+  return "anuncio";
 }
 
 function rotuloOrigem(lead: { source?: string | null; fb_campaign?: string | null }) {
   const cat = classificarOrigem(lead);
-  if (cat === "disparo") return { cat, label: "💬 Disparo WhatsApp · " + (lead.fb_campaign || "Base") };
-  if (cat === "pescado") return { cat, label: "🎣 Pescado · " + (lead.fb_campaign || "Carteira Cury") };
-  if (cat === "acao") return { cat, label: "🏃 Ação de Rua / Stand" };
-  return { cat, label: "📢 Meta Ads · " + (lead.fb_campaign || "Campanha") };
+  if (cat === "disparo") return { cat, label: "💬 Disparo WhatsApp · " + (lead.fb_campaign || "Base Oficial") };
+  if (cat === "pescado") return { cat, label: "🎣 Pescado · " + (lead.source === "cold_pool" ? "Cold Pool Cury" : lead.fb_campaign || "Carteira Cury") };
+  if (cat === "acao") return { cat, label: "🏃 Ação / Stand · " + (lead.source?.replace(/_/g, " ") || "Presencial") };
+  return { cat, label: "📢 Meta Ads · " + (lead.fb_campaign || "Facebook/Instagram") };
 }
 
 export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Props) {
@@ -88,10 +88,38 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
   // Query de Conversa para o Modal "Espiar"
   const { data: mensagensConversa } = useConversaLead(espiarLead?.id ?? null);
 
+  // Query direta de Leads da Equipe no Supabase (por manager_id e por brokers)
+  const { data: leadsEquipe } = useQuery<V10Lead[]>({
+    queryKey: ["cockpit-leads-v3", managerId],
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const { data: bs } = await supabase.from("profiles")
+        .select("id").eq("manager_id", managerId).eq("role", "BROKER");
+      const brokerIds = (bs ?? []).map((b) => b.id);
+
+      let q = supabase.from("leads")
+        .select("id, name, phone, status, broker_id, created_at, last_interaction_at, last_lead_response_at, last_broker_whatsapp_at, contact_attempts, tag, source, fb_campaign, lead_temperature")
+        .neq("status", "EXCLUDED");
+
+      if (brokerIds.length > 0) {
+        q = q.or(`manager_id.eq.${managerId},broker_id.in.(${brokerIds.join(",")})`);
+      } else {
+        q = q.eq("manager_id", managerId);
+      }
+
+      const { data, error } = await q.order("created_at", { ascending: false }).limit(2000);
+      if (error) throw error;
+      return (data || []) as V10Lead[];
+    },
+  });
+
+  const listaLeadsBase = leadsEquipe || v10?.leads || [];
+
   // Mapeamento e lista de corretores
   const corretores = useMemo(() => {
     if (!v10) return [];
-    const { brokers, leads } = v10;
+    const { brokers } = v10;
+    const leads = listaLeadsBase;
     const plantaoSet = plantaoHoje || new Set();
 
     return brokers.map((b) => {
@@ -132,13 +160,12 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
 
   // Filtragem de Leads por Período
   const leadsFiltradosPorData = useMemo(() => {
-    if (!v10) return [];
     const hojeStr = diaSP(0);
     const ontemStr = diaSP(1);
     const inicioSemana = new Date(Date.now() - 7 * 864e5).toISOString();
     const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
-    return v10.leads.filter((l) => {
+    return listaLeadsBase.filter((l) => {
       const criada = l.created_at;
       if (!criada) return false;
       const criadaDia = criada.slice(0, 10);
@@ -150,7 +177,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
       if (periodo === "data") return criadaDia === dataCustom;
       return true;
     });
-  }, [v10, periodo, dataCustom]);
+  }, [listaLeadsBase, periodo, dataCustom]);
 
   // Contadores por Origem
   const contagemOrigem = useMemo(() => {
@@ -260,6 +287,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
       setTransferenciaLote(false);
       setLeadsSelecionados(new Set());
       qc.invalidateQueries({ queryKey: ["v10", managerId] });
+      qc.invalidateQueries({ queryKey: ["cockpit-leads-v3", managerId] });
       qc.invalidateQueries({ queryKey: ["roleta-hoje", managerId] });
     } catch (e: any) {
       toast.error(`Erro ao transferir: ${e?.message ?? e}`);
@@ -417,12 +445,12 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
 
         {/* Poder de Fogo da Equipe */}
         <div className="kpi-card-v3">
-          <span className="kpi-title-v3">💥 Poder de Fogo (Verba)</span>
+          <span className="kpi-title-v3">💥 Poder de Fogo (Mídia)</span>
           <div className="kpi-val-v3 mono" style={{ fontSize: 24, color: "var(--cv-text-main)" }}>
-            R$ 7.500
+            {brl(heroPlacar.leadsPeriodo * (v10?.dinheiro?.custoLead ?? 25))}
           </div>
           <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
-            R$ 5k Super + <b style={{ color: "var(--cv-green)" }}>R$ 2,5k Tropa</b>
+            CPL estimado: <b className="mono">R$ {Math.round(v10?.dinheiro?.custoLead ?? 25)}/lead</b> · {heroPlacar.leadsPeriodo} leads
           </span>
         </div>
       </section>
