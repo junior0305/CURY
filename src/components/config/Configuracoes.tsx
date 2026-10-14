@@ -16,18 +16,20 @@ import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import { toast } from "sonner";
 import { salvarGestor } from "@/hooks/useAnuncios";
 import ContasAnuncio from "@/components/config/ContasAnuncio";
+import FontesDados from "@/components/config/FontesDados";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
 import IntegracaoFacebook from "@/pages/admin/IntegracaoFacebook";
 import "@/styles/manager-v10.css";
 
 type Nivel = "diretor" | "super" | "gerente";
-type Secao = "avisos" | "equipe" | "whatsapp" | "facebook";
+type Secao = "avisos" | "equipe" | "whatsapp" | "facebook" | "fontes";
 const SECOES: { k: Secao; label: string; sub: string }[] = [
   { k: "avisos", label: "Avisos e cobranças", sub: "O que o sistema cobra e quando" },
   { k: "equipe", label: "Equipe", sub: "Cadastrar, desabilitar e desligar corretor" },
   { k: "whatsapp", label: "Meu WhatsApp", sub: "O chip que envia as suas mensagens" },
   { k: "facebook", label: "Facebook e leads", sub: "Páginas, formulários e quem recebe" },
+  { k: "fontes", label: "Fontes de dados", sub: "C2S, Junix, Salesforce" },
 ];
 
 const sb = supabase as any;
@@ -40,7 +42,8 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
     setSecao(k);
     const p = new URLSearchParams(params); p.set("secao", k); setParams(p, { replace: true });
   };
-  const secoes = SECOES;
+  // fontes de dados: só o diretor escolhe
+  const secoes = SECOES.filter((s) => s.k !== "fontes" || nivel === "diretor");
 
   return (
     <div className="cfg">
@@ -60,6 +63,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
         {secao === "avisos" ? <ReguaEquipe nivel={nivel} donoId={donoId} />
           : secao === "equipe" ? <Equipe nivel={nivel} donoId={donoId} />
           : secao === "whatsapp" ? <MeuWhatsApp />
+          : secao === "fontes" ? <FontesDados />
           : <><ContasAnuncio /><GestorTrafego donoId={donoId} /><div className="integ-shell"><IntegracaoFacebook /></div></>}
       </section>
     </div>
