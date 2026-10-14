@@ -123,9 +123,9 @@ export default function IntegracaoFacebook() {
         )}
       </div>
 
-      {temConexao ? <MapaFormularios /> : null}
-
       <LeadsTeste />
+
+      {temConexao ? <MapaFormularios /> : null}
 
       <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
         <b>Em breve:</b> ligar o <b>CAPI</b> (otimização de anúncios) reaproveitando esta conexão.
@@ -137,6 +137,8 @@ export default function IntegracaoFacebook() {
 // Mapa formulário → corretores. Cada formulário vira uma "fila" (distribution_queue)
 // com os corretores marcados. Sem corretor = cai na distribuição padrão.
 function MapaFormularios() {
+  // Fechado por padrão: a lista é longa e empurrava "Leads recebidos" para fora da tela.
+  const [aberto, setAberto] = useState(false);
   const [paginas, setPaginas] = useState<any[]>([]);
   const [brokers, setBrokers] = useState<any[]>([]);
   const [mapa, setMapa] = useState<Record<string, string[]>>({});
@@ -173,13 +175,18 @@ function MapaFormularios() {
   const nomeBroker = (b: any) => [b.first_name, b.last_name].filter(Boolean).join(" ") || "—";
   if (loading) return <div className="text-sm text-muted-foreground">carregando formulários…</div>;
 
+  const totalForms = paginas.reduce((n, p) => n + (p.forms?.length ?? 0), 0);
   return (
     <div className="space-y-4">
-      <div>
-        <div className="text-sm font-semibold">Formulários → quem recebe</div>
-        <div className="text-xs text-muted-foreground">Marque os corretores de cada formulário. Sem corretor marcado, o lead cai na distribuição padrão.</div>
-      </div>
-      {!paginas.length ? (
+      <button type="button" onClick={() => setAberto((a) => !a)}
+        className="w-full flex items-center justify-between rounded-lg border p-3 text-left hover:bg-muted/50">
+        <div>
+          <div className="text-sm font-semibold">Formulários → quem recebe{totalForms ? ` (${totalForms})` : ""}</div>
+          <div className="text-xs text-muted-foreground">Marque os corretores de cada formulário. Sem corretor marcado, o lead cai na distribuição padrão.</div>
+        </div>
+        <span className="text-sm text-muted-foreground shrink-0 ml-3">{aberto ? "Recolher ▲" : "Expandir ▼"}</span>
+      </button>
+      {!aberto ? null : !paginas.length ? (
         <div className="text-sm text-muted-foreground">Conecte uma página primeiro.</div>
       ) : paginas.map((p) => (
         <div key={p.page_id}>
