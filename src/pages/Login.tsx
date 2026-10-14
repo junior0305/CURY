@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { outraInstancia } from "@/integrations/supabase/instancias";
+import { DOMINIO_LOGIN } from "@/integrations/supabase/companies";
 import { useAuth } from "@/components/AuthProvider";
 import { loadFonts } from "@/components/manager-v10/RailV10";
 import "@/styles/login.css";
@@ -123,7 +124,7 @@ export default function Login() {
           <div className="lg-campo">
             <label htmlFor="lg-email">E-mail</label>
             <input id="lg-email" type="email" autoComplete="username" autoFocus
-              placeholder="voce@curyvendas.com.br" disabled={entrando}
+              placeholder={`seunome@${DOMINIO_LOGIN}`} disabled={entrando}
               value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => irParaEmpresa()} />
           </div>
 
