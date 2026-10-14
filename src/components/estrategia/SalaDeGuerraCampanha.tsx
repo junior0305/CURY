@@ -100,7 +100,10 @@ export default function SalaDeGuerraCampanha({
   diasMes = 30,
   abrir,
   onSalvo,
+  metaPropria,
 }: {
+  /** meta já fechada de quem está vendo (super: herdada da diretoria + superação); sem ela, soma dos de baixo */
+  metaPropria?: number;
   diretorId: string;
   supers: SuperDiretoria[];
   metaDir?: MetaPainel;
@@ -131,8 +134,9 @@ export default function SalaDeGuerraCampanha({
 
   // Meta Oficial da Diretoria (Meta Principal do Sistema: Soma das metas de todos os Supers)
   const metaOficialDiretoria = useMemo(() => {
+    if (metaPropria != null) return metaPropria;
     return somaMetasSupers > 0 ? somaMetasSupers : (metaDir?.dono.meta || 65);
-  }, [somaMetasSupers, metaDir]);
+  }, [somaMetasSupers, metaDir, metaPropria]);
 
   const [metaVendasManual, setMetaVendasManual] = useState<number | null>(null);
   const metaVendas = metaVendasManual ?? metaOficialDiretoria;

@@ -52,7 +52,7 @@ export default function EstrategiaSuper({ superId, superNome, abaInicial }: { su
           <MetaSuperacao superId={superId} />
           {gerentesComoSupers.length ? (
             <Vocabulario>
-              <Estrategia diretorId={superId} supers={gerentesComoSupers} pastas={pastas} />
+              <Estrategia diretorId={superId} supers={gerentesComoSupers} pastas={pastas} metaComSuperacao />
             </Vocabulario>
           ) : <div className="dir-card dir-vazio" style={{ padding: 24 }}>Carregando as equipes da superintendência…</div>}
         </>

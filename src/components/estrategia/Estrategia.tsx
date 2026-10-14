@@ -29,7 +29,9 @@ const FECHA_NO_MES = new Set(["Proposta", "Parecer", "Emissão", "Venda Confirma
 export interface Combinar { sobre: string; pergunta: number; titulo: string; responsavelId?: string | null; prazoDias?: number }
 type MetaPainel = { dono: PessoaMeta; filhos: PessoaMeta[] };
 
-export default function Estrategia({ diretorId, supers, pastas }: { diretorId: string; supers: SuperDiretoria[]; pastas: PastaJunix[] }) {
+export default function Estrategia({ diretorId, supers, pastas, metaComSuperacao }: { diretorId: string; supers: SuperDiretoria[]; pastas: PastaJunix[];
+  /** super vendo: a meta é a herdada da diretoria + a superação dele, não a soma das metas dos gerentes */
+  metaComSuperacao?: boolean }) {
   const [visao, setVisao] = useState<"sala_de_guerra" | "diagnostico" | "minhas_estrategias">("sala_de_guerra");
   const [conselhoAberto, setConselhoAberto] = useState(false);
   const [combinar, setCombinar] = useState<Combinar | null>(null);
@@ -54,6 +56,7 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
   });
   const metaDir = metasQ[0]?.data;
   const metaSuper = new Map(supers.map((s, i) => [s.id, metasQ[i + 1]?.data]));
+  const metaPropria = metaComSuperacao && metaDir?.dono.meta != null ? metaDir.dono.meta + (Number((metaDir.dono as any).superacao) || 0) : undefined;
 
   const abrir = (c: Combinar) => setCombinar(c);
 
@@ -80,7 +83,7 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
         chance_no_mes: "emissão 85%, proposta 50%, aprovada 60%, em análise 30%, documentos 20%, unidade 12%, cadastro 6%" },
       meta: {
         diretoria: {
-          meta: (() => {
+          meta: metaPropria ?? (() => {
             const filhos = metaDir.filhos.filter((f) => f.papel === "SUPERINTENDENT");
             const soma = filhos.reduce((a, f) => a + (f.meta ?? 0), 0);
             return soma > 0 ? soma : (metaDir.dono.meta ?? 65);
@@ -174,6 +177,7 @@ export default function Estrategia({ diretorId, supers, pastas }: { diretorId: s
           diaHoje={diaHoje}
           diasMes={diasMes}
           abrir={abrir}
+          metaPropria={metaPropria}
         />
       ) : visao === "diagnostico" ? (
         <>
