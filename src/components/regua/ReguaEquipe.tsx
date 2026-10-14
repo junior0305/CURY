@@ -19,12 +19,12 @@ type Cat = {
   chave: string; ordem: number; titulo: string; descricao: string; tom: "cuidado" | "lembrete" | "cobranca";
   unidade: "horas" | "dias"; prazo_sugerido: number; prazo_min: number; prazo_max: number;
   hora_sugerida: string | null; assina: string; texto_sugerido: string;
-  etapas_sugeridas: Etapa[]; max_etapas: number; para_opcoes: string[];
+  etapas_sugeridas: Etapa[]; max_etapas: number; para_opcoes: string[]; opcoes_sugeridas: { tipos?: string[] } | null;
 };
-type Etapa = { prazo: number; para: "corretor" | "gerente" | "super"; assina: "comandra" | "gerente" | "super" | "diretor"; texto: string };
+type Etapa = { prazo: number; para: "corretor" | "gerente" | "super" | "trafego"; assina: "comandra" | "gerente" | "super" | "diretor"; texto: string };
 type Regra = {
   id: string; chave: string; nivel: Nivel; dono_id: string | null; ligada: boolean | null; prazo: number | null;
-  texto: string | null; hora: string | null; obrigatoria: boolean; prazo_min: number | null; prazo_max: number | null; atualizado_em?: string; etapas: Etapa[] | null;
+  texto: string | null; hora: string | null; obrigatoria: boolean; prazo_min: number | null; prazo_max: number | null; atualizado_em?: string; etapas: Etapa[] | null; opcoes: { tipos?: string[] } | null;
 };
 
 const sb = supabase as any;
@@ -33,10 +33,17 @@ const NOME_NIVEL: Record<Nivel, string> = { diretor: "diretor", super: "superint
 const VARS: Record<string, string> = {
   "{nome}": "primeiro nome de quem recebe", "{corretor}": "o corretor", "{qtd}": "quantos", "{lista}": "a lista (leads ou corretores)",
   "{dias}": "dias sem plantão", "{prazo}": "o prazo do toque", "{assinatura}": "nome de quem assina",
+  "{conta}": "conta de anúncio", "{equipe}": "a equipe",
 };
-const PARA: Record<string, string> = { corretor: "corretor", gerente: "gerente", super: "superintendente" };
+const PARA: Record<string, string> = { corretor: "corretor", gerente: "gerente", super: "superintendente", trafego: "gestor de tráfego" };
+const TIPOS_ALERTA: Record<string, string> = {
+  sem_acesso: "Sem acesso à conta", sem_entrega: "Conta ou campanha sem gastar", conciliacao: "Facebook contou mais leads do que chegaram",
+  anuncio_sem_lead: "Anúncio gastando sem lead", campanha_cara: "Campanha cara", pulverizada: "Verba espalhada em conjuntos demais",
+  duplicada: "Campanhas repetidas", fora_regiao: "Leads de fora de SP", pixel: "Pixel sem sinal de qualidade",
+  sem_resposta: "Nenhum lead respondeu", nao_atendido: "Leads pagos sem atendimento", sobreposicao: "Disputa de região com outra equipe",
+};
 const ASSINA: Record<string, string> = { comandra: "Comandra", gerente: "gerente", super: "superintendente", diretor: "diretor" };
-const ORDEM: Record<string, number> = { corretor: 0, gerente: 1, super: 2, diretor: 3 };
+const ORDEM: Record<string, number> = { trafego: -1, corretor: 0, gerente: 1, super: 2, diretor: 3 };
 
 export default function ReguaEquipe({ nivel, donoId }: { nivel: Nivel; donoId: string | null }) {
   const qc = useQueryClient();
@@ -132,6 +139,7 @@ function CartaoRegra({ cat, nivel, donoId, meuId, regras, chefeId, stats, onSalv
     ligada: minha?.ligada ?? (herd("ligada")?.v as boolean | undefined) ?? false,
     etapas: (minha?.etapas ?? (herd("etapas")?.v as Etapa[] | undefined) ?? cat.etapas_sugeridas) as Etapa[],
     hora: minha?.hora ?? (herd("hora")?.v as string | undefined) ?? cat.hora_sugerida ?? "",
+    opcoes: (minha?.opcoes ?? (herd("opcoes")?.v as { tipos?: string[] } | undefined) ?? cat.opcoes_sugeridas ?? null) as { tipos?: string[] } | null,
     obrigatoria: dir?.obrigatoria ?? false,
     prazo_min: dir?.prazo_min ?? cat.prazo_min, prazo_max: dir?.prazo_max ?? cat.prazo_max,
   };
@@ -179,6 +187,7 @@ function CartaoRegra({ cat, nivel, donoId, meuId, regras, chefeId, stats, onSalv
     const linha: any = {
       chave: cat.chave, nivel, dono_id: nivel === "diretor" ? null : donoId,
       ligada: v.ligada, etapas: igualAoSugerido && !minha?.etapas ? null : v.etapas,
+      opcoes: JSON.stringify(v.opcoes) === JSON.stringify(cat.opcoes_sugeridas) && !minha?.opcoes ? null : v.opcoes,
       hora: cat.hora_sugerida ? (v.hora || null) : null,
       atualizado_por: meuId, atualizado_em: new Date().toISOString(),
     };
@@ -204,7 +213,7 @@ function CartaoRegra({ cat, nivel, donoId, meuId, regras, chefeId, stats, onSalv
   const verPrevia = async () => {
     if (problema) { toast.error(problema); return; }
     setCarregandoPrevia(true);
-    const { data, error } = await supabase.functions.invoke("regua-cobranca", { body: { modo: "previa", chave: cat.chave, etapas: d.etapas } });
+    const { data, error } = await supabase.functions.invoke("regua-cobranca", { body: { modo: "previa", chave: cat.chave, etapas: d.etapas, opcoes: d.opcoes } });
     setCarregandoPrevia(false);
     if (error || (data as any)?.error) { toast.error("Não consegui calcular: " + ((data as any)?.error || error?.message)); return; }
     setPrevia((data as any)?.itens ?? []);
@@ -264,6 +273,23 @@ function CartaoRegra({ cat, nivel, donoId, meuId, regras, chefeId, stats, onSalv
             </div>
           ))}
           {d.etapas.length < cat.max_etapas ? <button className="rg-btn" onClick={poeEtapa}>+ Mais um toque</button> : null}
+
+          {cat.opcoes_sugeridas?.tipos ? (
+            <fieldset className="rg-tipos">
+              <legend>Quais alertas mandam mensagem</legend>
+              {Object.entries(TIPOS_ALERTA).map(([k, rot]) => {
+                const marcados = d.opcoes?.tipos ?? [];
+                return (
+                  <label key={k} className="rg-check">
+                    <input type="checkbox" checked={marcados.includes(k)}
+                      onChange={(ev) => setD({ ...d, opcoes: { ...(d.opcoes ?? {}), tipos: ev.target.checked ? [...marcados, k] : marcados.filter((x) => x !== k) } })} />
+                    {rot}
+                  </label>
+                );
+              })}
+              <small>O gestor de tráfego precisa estar cadastrado em Configurar → Facebook e leads.</small>
+            </fieldset>
+          ) : null}
 
           <div className="rg-campos">
             {cat.hora_sugerida ? (
@@ -487,5 +513,9 @@ const CSS = `
 .mgr10 .rg-etapa-h .rg-link{margin-left:auto}
 .mgr10 .rg-etapa textarea{background:var(--card)}
 .mgr10 .rg-erro{color:var(--red);font-size:13px;font-weight:600}
+.mgr10 .rg-tipos{border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px 16px;margin:0}
+.mgr10 .rg-tipos legend{font-size:13px;font-weight:600;color:var(--ink-2);padding:0 6px}
+.mgr10 .rg-tipos .rg-check{font-weight:400;font-size:13.5px}
+.mgr10 .rg-tipos small{grid-column:1/-1}
 @media(max-width:620px){.mgr10 .rg-card-h{grid-template-columns:minmax(0,1fr) auto}.mgr10 .rg-tom{grid-column:1/-1;justify-self:start}}
 `;

@@ -14,6 +14,7 @@ import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import ReguaEquipe from "@/components/regua/ReguaEquipe";
 import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import { toast } from "sonner";
+import { salvarGestor } from "@/hooks/useAnuncios";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
 import IntegracaoFacebook from "@/pages/admin/IntegracaoFacebook";
@@ -58,7 +59,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
         {secao === "avisos" ? <ReguaEquipe nivel={nivel} donoId={donoId} />
           : secao === "equipe" ? <Equipe nivel={nivel} donoId={donoId} />
           : secao === "whatsapp" ? <MeuWhatsApp />
-          : <div className="integ-shell"><IntegracaoFacebook /></div>}
+          : <><GestorTrafego donoId={donoId} /><div className="integ-shell"><IntegracaoFacebook /></div></>}
       </section>
     </div>
   );
@@ -173,6 +174,59 @@ function ListaCorretores({ managerId }: { managerId: string }) {
       })}
       {desligar ? <DesligarCorretor brokerId={desligar} onFechar={() => setDesligar(null)}
         onPronto={() => { setDesligar(null); qc.invalidateQueries({ queryKey: chave }); }} /> : null}
+    </div>
+  );
+}
+
+function GestorTrafego({ donoId }: { donoId: string | null }) {
+  const { session } = useAuth();
+  const dono = donoId ?? session?.user?.id ?? null;
+  const qc = useQueryClient();
+  const chave = ["cfg-gestor-trafego", dono];
+  const { data: gestor, isLoading } = useQuery({
+    queryKey: chave, enabled: !!dono,
+    queryFn: async () => {
+      const { data } = await sb.from("system_settings").select("value").eq("key", `gestor_trafego_${dono}`).maybeSingle();
+      let v: any = data?.value ?? null;
+      if (typeof v === "string") { try { v = JSON.parse(v); } catch { v = null; } }
+      return v?.telefone ? { nome: String(v.nome || ""), telefone: String(v.telefone) } : null;
+    },
+  });
+  const [editando, setEditando] = useState(false);
+  const [nome, setNome] = useState(""); const [tel, setTel] = useState("");
+  const salvar = async () => {
+    const t = tel.replace(/\D/g, "");
+    if (!nome.trim() || t.length < 10) { toast.error("Preencha o nome e o WhatsApp com DDD."); return; }
+    try {
+      await salvarGestor(dono!, nome.trim(), t.length <= 11 ? "55" + t : t);
+      toast.success("Gestor de tráfego salvo. Os alertas dos anúncios vão para ele.");
+      setEditando(false); qc.invalidateQueries({ queryKey: chave });
+    } catch (e: any) { toast.error("Não consegui salvar: " + (e?.message ?? e)); }
+  };
+  if (!dono || isLoading) return null;
+  const formulario = editando || !gestor;
+  return (
+    <div className={`cfg-box cfg-gestor ${gestor ? "" : "falta"}`}>
+      <div>
+        <h3>Gestor de tráfego</h3>
+        <p>{gestor ? "Recebe os alertas da sua conta de anúncio (regra Alerta do tráfego, em Avisos e cobranças)."
+          : "Ninguém cadastrado: os alertas da sua conta de anúncio não têm para quem ir. Cadastre quem cuida das suas campanhas."}</p>
+      </div>
+      {formulario ? (
+        <div className="cfg-linha">
+          <label className="cfg-sel">Nome<input id="cfg-gestor-nome" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome do gestor" /></label>
+          <label className="cfg-sel">WhatsApp com DDD<input id="cfg-gestor-tel" value={tel} onChange={(e) => setTel(e.target.value)} placeholder="11 99999-9999" inputMode="tel" /></label>
+          <div className="cfg-pessoa-acoes">
+            <button className="cfg-btn prim" onClick={salvar}>Salvar</button>
+            {gestor ? <button className="cfg-btn" onClick={() => setEditando(false)}>Cancelar</button> : null}
+          </div>
+        </div>
+      ) : (
+        <div className="cfg-linha">
+          <div><b>{gestor!.nome}</b> <span className="mono">{gestor!.telefone}</span></div>
+          <button className="cfg-btn" onClick={() => { setNome(gestor!.nome); setTel(gestor!.telefone); setEditando(true); }}>Trocar</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -313,6 +367,9 @@ const CSS = `
 .mgr10 .cfg-tag.off{color:var(--amber);background:var(--amber-air)}
 .mgr10 .cfg-btn.perigo{color:var(--red);border-color:color-mix(in srgb,var(--red) 35%,var(--line))}
 @media(max-width:700px){.mgr10 .cfg-pessoa{grid-template-columns:minmax(0,1fr) auto}.mgr10 .cfg-pessoa-acoes{grid-column:1/-1}}
+.mgr10 .cfg-gestor{margin-bottom:var(--s3);max-width:none}
+.mgr10 .cfg-gestor.falta{border-color:color-mix(in srgb,var(--amber) 45%,var(--line));background:var(--amber-air)}
+.mgr10 .cfg-sel input{font:inherit;font-weight:400;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:7px 10px;min-width:200px}
 .mgr10 .cfg-erro{color:var(--red);font-size:13px;font-weight:600}
 .mgr10 .cfg .integ-shell button.border{border-width:1px;border-style:solid}
 .mgr10 .cfg .integ-shell button.bg-blue-600{background:#2563eb;color:#fff}
