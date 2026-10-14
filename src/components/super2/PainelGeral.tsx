@@ -15,6 +15,8 @@ import { lerPastas } from "@/components/diretoria/pastasAnalise";
 import { useEscopoSuper } from "./escopo";
 import { useNumerosSuper, type LinhaSuper } from "./numeros";
 import { usePeriodoSuper, SeletorPeriodoSuper } from "./Periodo";
+import CadastrarGerente from "@/components/superintendente/CadastrarGerente";
+import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import "@/styles/diretoria.css";
 
 const sb = supabase as any;
@@ -35,6 +37,10 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
   const { supers, pastas, carregando } = useEscopoSuper(superId, p.dias);
   const { data: num, isFetching } = useNumerosSuper(supers, pastas, p.janela.de, p.janela.ate);
   const [desloc, setDesloc] = useState(0);
+  const [modalGerenteAberto, setModalGerenteAberto] = useState(false);
+  const [modalCorretorAberto, setModalCorretorAberto] = useState(false);
+  const [canalFunil, setCanalFunil] = useState<"todos" | "anuncio" | "disparo" | "pescados">("todos");
+  const [modoTabelaEquipes, setModoTabelaEquipes] = useState<"tabela" | "cards">("tabela");
   const mes = inicioMes(desloc);
   const { data: metas } = useMetasDiretoria(superId, mes);
   const gerentes = useMemo(() => supers.flatMap((s) => s.gerentes).filter((g) => !/revisor/i.test(g.nome)), [supers]);
@@ -57,6 +63,15 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
         chip: new Map((ps ?? []).map((x: any) => [x.id, x.bot_instance_id ? estado.get(x.bot_instance_id) === "open" : false])),
         alertas: new Map(((comp ?? []) as any[]).map((r) => [r.dono_id, r.alertas as number])),
       };
+    },
+  });
+
+  const { data: fbSaude } = useQuery({
+    queryKey: ["s2-fb-saude"],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data } = await supabase.from("fb_saude" as any).select("account_id,dados,atualizado_em");
+      return (data ?? []) as any[];
     },
   });
 
@@ -106,7 +121,60 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
     if (extra && extra.chip.get(g.id) === false) decs.push({ id: `chip:${g.id}`, peso: 6, cls: "c-gray", tipo: "WhatsApp desligado", quem: g.nome,
       titulo: `WhatsApp do ${g.nome} desconectado do Comandra`, porque: "Cobranças e avisos assinados por ele não saem. Ele reconecta em Configurar → Meu WhatsApp.",
       acoes: [[`Avisar ${g.nome}`, () => cobrar(g.id, g.nome, "chip desligado", `${g.nome}, seu WhatsApp está desconectado do Comandra. Entra em Configurar → Meu WhatsApp e lê o QR, leva 1 minuto.`)]] });
+
+    // Detector de Corretor Fominha (Roleta Desbalanceada)
+    for (const c of g.corretores_lista ?? []) {
+      const taxaConversa = c.leads_periodo > 0 ? (c.em_conversa / c.leads_periodo) : 1;
+      if (c.leads_periodo >= 6 && (taxaConversa <= 0.4 || c.em_conversa === 0)) {
+        const semAtendimento = c.leads_periodo - c.em_conversa;
+        decs.push({
+          id: `fominha:${c.id}`,
+          peso: c.leads_periodo * 10,
+          cls: "c-red",
+          tipo: "roleta desbalanceada",
+          quem: `${c.nome} (Eq. ${g.nome})`,
+          titulo: `${c.nome} pegou ${c.leads_periodo} leads, mas ${semAtendimento} estão no vácuo`,
+          porque: "O corretor está acumulando leads novos da roleta e não está dando vazão, prejudicando o resto da equipe.",
+          acoes: [
+            [`Cobrar ${g.nome}`, () => cobrar(
+              g.id,
+              g.nome,
+              "roleta desbalanceada",
+              `${g.nome}, o corretor ${c.nome} da sua equipe puxou ${c.leads_periodo} leads ${p.texto} e ${semAtendimento} continuam sem conversa. Ele está travando a roleta da equipe. Consegue redistribuir a carteira dele ou pausar ele na roleta hoje?`
+            )],
+            [`Abrir equipe ${g.nome}`, () => onAbrir(g.id)]
+          ]
+        });
+      }
+    }
   }
+
+  // Desperdício de DDD Errado / Fora da Região (fb_saude)
+  for (const row of fbSaude ?? []) {
+    const dadosRow = row.dados;
+    const fora = dadosRow?.comandra?.fora_regiao ?? 0;
+    if (fora >= 4) {
+      decs.push({
+        id: `ddd:${dadosRow.dono_id || row.account_id}`,
+        peso: fora * 12,
+        cls: "c-red",
+        tipo: "desperdício de ddd",
+        quem: dadosRow.dono,
+        titulo: `${fora} leads com DDD fora da região nos anúncios do ${dadosRow.dono}`,
+        porque: "Verba gasta com cliques e leads de outros estados que não compram nessa praça. Alinhar com o gestor de tráfego.",
+        acoes: [
+          [`Cobrar ${dadosRow.dono}`, () => cobrar(
+            dadosRow.dono_id || superId,
+            dadosRow.dono,
+            "leads fora da região",
+            `${dadosRow.dono}, detectamos ${fora} leads nos seus anúncios com DDD de fora da nossa região nos últimos 7 dias. Vamos alinhar com o gestor de tráfego para negativar esses públicos e não queimar verba?`
+          )],
+          ["Ver Mídia", () => irPara("midia")]
+        ]
+      });
+    }
+  }
+
   const rp = lerPastas(pastas);
   const paradas = rp.filter((x) => x.viva && (x.dias ?? 0) >= 7).length;
   if (paradas >= 1) decs.push({ id: "pastas", peso: paradas * 3, cls: "c-red", tipo: "pasta parada", quem: "suas equipes", titulo: `${paradas} pasta(s) viva(s) parada(s) há 7 dias ou mais no Junix`,
@@ -115,14 +183,43 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
 
   // funil do período
   const t = num?.total;
+  const leadsFunil = canalFunil === "todos"
+    ? (t?.leadsTot ?? 0)
+    : canalFunil === "anuncio"
+    ? (t?.leads.anuncio ?? 0)
+    : canalFunil === "disparo"
+    ? (t?.leads.disparo ?? 0)
+    : (t?.leads.pescados ?? 0);
+
   const funil = t ? [
-    { nome: "Leads que entraram", n: t.leadsTot, obs: `${nf(t.leads.anuncio)} anúncio · ${nf(t.leads.disparo)} disparo · ${nf(t.leads.pescados)} pescados`, ruim: false },
-    { nome: "Atendidos pelo corretor", n: t.atendidos, obs: `${pct(t.atendidos, t.leadsTot)}% dos leads`, ruim: false },
+    {
+      nome: canalFunil === "todos" ? "Leads que entraram" : `Leads (${canalFunil})`,
+      n: leadsFunil,
+      obs: canalFunil === "todos"
+        ? `${nf(t.leads.anuncio)} anúncio · ${nf(t.leads.disparo)} disparo · ${nf(t.leads.pescados)} pescados`
+        : `${pct(leadsFunil, t.leadsTot)}% do tráfego total`,
+      ruim: false,
+    },
+    { nome: "Atendidos pelo corretor", n: t.atendidos, obs: `${pct(t.atendidos, Math.max(1, leadsFunil))}% dos leads`, ruim: false },
     { nome: "Visitas (C2S)", n: t.visitas, obs: `${nf(t.plantaoDias)} corretor-dias no plantão`, ruim: false },
     { nome: "Pastas novas (Junix)", n: t.pastasNovas, obs: "cadastradas no período", ruim: false },
     { nome: "Vendas (Junix)", n: t.vendas, obs: t.vgv ? `${curto(t.vgv)} em VGV` : "no período", ruim: false },
   ] : [];
   const maxF = Math.max(1, ...funil.map((f) => f.n));
+
+  const funilGargalo = useMemo(() => {
+    if (!t || t.leadsTot < 5) return null;
+    if (t.atendidos / Math.max(1, t.leadsTot) < 0.6) {
+      return "Gargalo no 1º Contato: Mais de 40% dos leads estão esperando o corretor chamar.";
+    }
+    if (t.atendidos >= 8 && (t.visitas / Math.max(1, t.atendidos)) < 0.08) {
+      return "Gargalo no Agendamento: Pouca conversão de conversa em visita presencial no C2S.";
+    }
+    if (t.visitas >= 5 && (t.pastasNovas / Math.max(1, t.visitas)) < 0.25) {
+      return "Gargalo no Crédito: Visitas comparecidas não estão avançando para montagem de pasta na Caixa.";
+    }
+    return null;
+  }, [t]);
 
   // pessoas (agora)
   const cors = gerentes.flatMap((g) => g.corretores_lista ?? []);
@@ -159,7 +256,26 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
           <small style={{ color: "var(--ink-3)" }}>{supers.length > 1 ? "Diretoria · todas as superintendências" : `Superintendência ${superNome}`} · {nomeMes(inicioMes())} · dia {hoje.getDate()} de {diasMes}</small>
           <b style={{ color: "var(--ink)" }}>{saudacao()}, {superNome.split(" ")[0]}</b>
         </div>
-        <SeletorPeriodoSuper p={p} estilo="dir" />
+        
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="dir-btn"
+            style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, padding: "7px 12px", background: "var(--cv-surface, #fff)" }}
+            onClick={() => setModalGerenteAberto(true)}
+          >
+            <span>👔</span> + Cadastrar Gerente
+          </button>
+          <button
+            type="button"
+            className="dir-btn"
+            style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, padding: "7px 12px", background: "var(--cv-surface, #fff)" }}
+            onClick={() => setModalCorretorAberto(true)}
+          >
+            <span>👤</span> + Cadastrar Corretor
+          </button>
+          <SeletorPeriodoSuper p={p} estilo="dir" />
+        </div>
       </div>
 
       <div className="dir-row2">
@@ -221,6 +337,22 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
 
           <div className="dir-card s2-pad" style={{ marginTop: 14 }}>
             <div className="dir-h"><b>Funil do período</b><span>{p.texto}{isFetching ? " · atualizando…" : ""}</span></div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {(["todos", "anuncio", "disparo", "pescados"] as const).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={`dir-btn ${canalFunil === c ? "solid" : ""}`}
+                  style={{ fontSize: 11, padding: "3px 8px" }}
+                  onClick={() => setCanalFunil(c)}
+                >
+                  {c === "todos" ? `Todos (${nf(t?.leadsTot ?? 0)})`
+                    : c === "anuncio" ? `📢 Anúncios (${nf(t?.leads.anuncio ?? 0)})`
+                    : c === "disparo" ? `⚡ Disparos (${nf(t?.leads.disparo ?? 0)})`
+                    : `🎣 Pescados (${nf(t?.leads.pescados ?? 0)})`}
+                </button>
+              ))}
+            </div>
             <div className="dir-barras">
               {funil.map((f) => (
                 <div key={f.nome} style={{ gridTemplateColumns: "180px 1fr 60px" }}>
@@ -231,6 +363,12 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
               ))}
               {!funil.length ? <p className="dir-nota">Calculando…</p> : null}
             </div>
+            {funilGargalo && (
+              <div style={{ marginTop: 12, padding: "8px 12px", borderRadius: 8, background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.2)", color: "var(--red)", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                <span>⚠️</span>
+                <span><b>Gargalo na esteira:</b> {funilGargalo}</span>
+              </div>
+            )}
           </div>
 
           <div className="dir-card s2-pad" style={{ marginTop: 14 }}>
@@ -248,41 +386,174 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
       </div>
 
       <div>
-        <div className="dir-h" style={{ marginBottom: 10 }}><b style={{ fontSize: 17 }}>Suas equipes</b><span>{p.texto} · clique em "Abrir painel" para entrar no gerente</span></div>
-        <div className="s2-ger">
-          {gerentes.map((g) => {
-            const l = linhaDe(g.id);
-            const meta = filhos.find((f: any) => f.id === g.id);
-            const gg = gargalo(l);
-            return (
-              <div key={g.id} className="dir-card s2-pad">
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                  <b style={{ fontSize: 16 }}>{g.nome}</b>
-                  <span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>{g.corretores} corretores · {g.online} online · {g.plantao_hoje} no plantão</span>
-                  {gg ? <span className="dir-chip c-red" style={{ marginLeft: "auto" }}>{gg[0]}</span> : <span className="dir-chip c-grn" style={{ marginLeft: "auto" }}>ok</span>}
-                </div>
-                <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 4 }}>Mês: vendeu <b style={{ color: "var(--ink)" }}>{meta?.realizado ?? 0}</b>{meta?.meta ? ` de ${meta.meta}` : " · sem meta"}</div>
-                <div className="s2-gk">
-                  <div><small>Leads</small><b className="mono">{l?.leadsTot ?? "…"}</b></div>
-                  <div><small>Atendidos</small><b className="mono">{l ? `${pct(l.atendidos, l.leadsTot)}%` : "…"}</b></div>
-                  <div><small>Sem toque</small><b className="mono" style={{ color: l?.carteiraSemToque ? "var(--red)" : undefined }}>{l?.carteiraSemToque ?? "…"}</b></div>
-                  <div><small>Plantão</small><b className="mono">{l?.plantaoDias ?? "…"}</b></div>
-                  <div><small>Visitas</small><b className="mono">{l?.visitas ?? "…"}</b></div>
-                  <div><small>Vendas</small><b className="mono" style={{ color: l?.vendas ? "var(--grn)" : undefined }}>{l?.vendas ?? "…"}</b></div>
-                </div>
-                <div style={{ fontSize: 12.5, color: "var(--ink-3)" }}>
-                  Anúncio: {l?.gasto != null ? `${brl(l.gasto)} · ${l.leadsFb ?? 0} leads${l.leadsFb ? ` · ${brl(l.gasto / l.leadsFb)} cada` : ""}` : "sem conta ligada"}
-                </div>
-                {gg ? <div className="dir-dec-p" style={{ marginTop: 6 }}>{gg[1]}</div> : null}
-                <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                  <button className="dir-btn solid" onClick={() => onAbrir(g.id)}>Abrir painel</button>
-                  {gg ? <button className="dir-btn" onClick={() => cobrar(g.id, g.nome, `gargalo: ${gg[0].toLowerCase()}`, `${g.nome}, olhando ${p.texto}: ${gg[1]} Como vamos resolver essa semana?`)}>Cobrar {g.nome}</button> : null}
-                </div>
-              </div>
-            );
-          })}
+        <div className="dir-h" style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <b style={{ fontSize: 17 }}>Raio-X Comparativo de Equipes</b>
+            <span>{p.texto} · origens de leads, eficiência de atendimento e fechamento</span>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              type="button"
+              className={`dir-btn ${modoTabelaEquipes === "tabela" ? "solid" : ""}`}
+              style={{ fontSize: 12, padding: "4px 10px" }}
+              onClick={() => setModoTabelaEquipes("tabela")}
+            >
+              📋 Visão em Tabela
+            </button>
+            <button
+              type="button"
+              className={`dir-btn ${modoTabelaEquipes === "cards" ? "solid" : ""}`}
+              style={{ fontSize: 12, padding: "4px 10px" }}
+              onClick={() => setModoTabelaEquipes("cards")}
+            >
+              🗂️ Visão em Cartões
+            </button>
+          </div>
         </div>
+
+        {modoTabelaEquipes === "tabela" ? (
+          <div className="dir-card" style={{ overflowX: "auto", padding: 0 }}>
+            <table className="dir-tab" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: "var(--sunk, rgba(0,0,0,0.02))", borderBottom: "1px solid var(--cv-border, #E2E8F0)" }}>
+                  <th style={{ padding: "12px 14px", textAlign: "left" }}>Gerente</th>
+                  <th style={{ padding: "12px 10px", textAlign: "center" }}>Corretores</th>
+                  <th style={{ padding: "12px 10px", textAlign: "right" }} title="Leads de formulários Facebook / Meta">📢 Anúncio</th>
+                  <th style={{ padding: "12px 10px", textAlign: "right" }} title="Disparos ativos de WhatsApp">⚡ Disparo</th>
+                  <th style={{ padding: "12px 10px", textAlign: "right" }} title="Presença no plantão C2S">🏢 Plantão</th>
+                  <th style={{ padding: "12px 10px", textAlign: "right" }} title="Pescados e outras fontes">🌐 Outros</th>
+                  <th style={{ padding: "12px 10px", textAlign: "right", fontWeight: 700 }}>Total Leads</th>
+                  <th style={{ padding: "12px 10px", textAlign: "center" }}>% Atendidos</th>
+                  <th style={{ padding: "12px 10px", textAlign: "center" }}>Sem Toque</th>
+                  <th style={{ padding: "12px 10px", textAlign: "right" }}>Visitas</th>
+                  <th style={{ padding: "12px 10px", textAlign: "right" }}>Pastas</th>
+                  <th style={{ padding: "12px 10px", textAlign: "right" }}>Vendas (VGV)</th>
+                  <th style={{ padding: "12px 14px", textAlign: "center" }}>Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gerentes.map((g) => {
+                  const l = linhaDe(g.id);
+                  const gg = gargalo(l);
+                  const atendPct = l ? pct(l.atendidos, l.leadsTot) : 0;
+                  return (
+                    <tr key={g.id} style={{ borderBottom: "1px solid var(--cv-border, #E2E8F0)" }}>
+                      <td style={{ padding: "12px 14px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <b>{g.nome}</b>
+                          {gg ? <span className="dir-chip c-red" style={{ fontSize: 10, padding: "2px 6px" }}>{gg[0]}</span> : null}
+                        </div>
+                      </td>
+                      <td style={{ padding: "12px 10px", textAlign: "center", color: "var(--ink-3)" }}>
+                        {g.corretores} <small>({g.online} on)</small>
+                      </td>
+                      <td className="mono" style={{ padding: "12px 10px", textAlign: "right" }}>{l?.leads.anuncio ?? "—"}</td>
+                      <td className="mono" style={{ padding: "12px 10px", textAlign: "right" }}>{l?.leads.disparo ?? "—"}</td>
+                      <td className="mono" style={{ padding: "12px 10px", textAlign: "right" }}>{l?.plantaoDias ? `${l.plantaoDias}d` : "—"}</td>
+                      <td className="mono" style={{ padding: "12px 10px", textAlign: "right" }}>{(l?.leads.pescados ?? 0) + (l?.leads.outros ?? 0)}</td>
+                      <td className="mono" style={{ padding: "12px 10px", textAlign: "right", fontWeight: 700 }}>{l?.leadsTot ?? "—"}</td>
+                      <td className="mono" style={{ padding: "12px 10px", textAlign: "center", fontWeight: 600, color: atendPct < 60 ? "var(--red)" : "inherit" }}>
+                        {l ? `${atendPct}%` : "—"}
+                      </td>
+                      <td className="mono" style={{ padding: "12px 10px", textAlign: "center", color: l?.carteiraSemToque ? "var(--red)" : "inherit", fontWeight: l?.carteiraSemToque ? 700 : 400 }}>
+                        {l?.carteiraSemToque ?? "0"}
+                      </td>
+                      <td className="mono" style={{ padding: "12px 10px", textAlign: "right" }}>{l?.visitas ?? "0"}</td>
+                      <td className="mono" style={{ padding: "12px 10px", textAlign: "right" }}>{l?.pastasNovas ?? "0"}</td>
+                      <td style={{ padding: "12px 10px", textAlign: "right" }}>
+                        <b className="mono" style={{ color: l?.vendas ? "var(--grn)" : "inherit" }}>{l?.vendas ?? "0"}</b>
+                        {l?.vgv ? <small style={{ display: "block", fontSize: 11, color: "var(--ink-3)" }}>{curto(l.vgv)}</small> : null}
+                      </td>
+                      <td style={{ padding: "12px 14px", textAlign: "center" }}>
+                        <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                          <button
+                            type="button"
+                            className="dir-btn solid"
+                            style={{ padding: "4px 8px", fontSize: 11 }}
+                            onClick={() => onAbrir(g.id)}
+                            title="Entrar no painel da equipe"
+                          >
+                            Abrir
+                          </button>
+                          {gg ? (
+                            <button
+                              type="button"
+                              className="dir-btn"
+                              style={{ padding: "4px 8px", fontSize: 11 }}
+                              onClick={() => cobrar(g.id, g.nome, `gargalo: ${gg[0].toLowerCase()}`, `${g.nome}, olhando ${p.texto}: ${gg[1]} Como vamos resolver essa semana?`)}
+                              title="Cobrar no WhatsApp"
+                            >
+                              💬 Cobrar
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="s2-ger">
+            {gerentes.map((g) => {
+              const l = linhaDe(g.id);
+              const meta = filhos.find((f: any) => f.id === g.id);
+              const gg = gargalo(l);
+              return (
+                <div key={g.id} className="dir-card s2-pad">
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                    <b style={{ fontSize: 16 }}>{g.nome}</b>
+                    <span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>{g.corretores} corretores · {g.online} online · {g.plantao_hoje} no plantão</span>
+                    {gg ? <span className="dir-chip c-red" style={{ marginLeft: "auto" }}>{gg[0]}</span> : <span className="dir-chip c-grn" style={{ marginLeft: "auto" }}>ok</span>}
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 4 }}>Mês: vendeu <b style={{ color: "var(--ink)" }}>{meta?.realizado ?? 0}</b>{meta?.meta ? ` de ${meta.meta}` : " · sem meta"}</div>
+                  <div className="s2-gk">
+                    <div><small>Leads</small><b className="mono">{l?.leadsTot ?? "…"}</b></div>
+                    <div><small>Atendidos</small><b className="mono">{l ? `${pct(l.atendidos, l.leadsTot)}%` : "…"}</b></div>
+                    <div><small>Sem toque</small><b className="mono" style={{ color: l?.carteiraSemToque ? "var(--red)" : undefined }}>{l?.carteiraSemToque ?? "…"}</b></div>
+                    <div><small>Plantão</small><b className="mono">{l?.plantaoDias ?? "…"}</b></div>
+                    <div><small>Visitas</small><b className="mono">{l?.visitas ?? "…"}</b></div>
+                    <div><small>Vendas</small><b className="mono" style={{ color: l?.vendas ? "var(--grn)" : undefined }}>{l?.vendas ?? "…"}</b></div>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "var(--ink-3)" }}>
+                    Anúncio: {l?.gasto != null ? `${brl(l.gasto)} · ${l.leadsFb ?? 0} leads${l.leadsFb ? ` · ${brl(l.gasto / l.leadsFb)} cada` : ""}` : "sem conta ligada"}
+                  </div>
+                  {gg ? <div className="dir-dec-p" style={{ marginTop: 6 }}>{gg[1]}</div> : null}
+                  <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                    <button className="dir-btn solid" onClick={() => onAbrir(g.id)}>Abrir painel</button>
+                    {gg ? <button className="dir-btn" onClick={() => cobrar(g.id, g.nome, `gargalo: ${gg[0].toLowerCase()}`, `${g.nome}, olhando ${p.texto}: ${gg[1]} Como vamos resolver essa semana?`)}>Cobrar {g.nome}</button> : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      {modalGerenteAberto && (
+        <CadastrarGerente
+          superId={superId}
+          superNome={superNome}
+          onFechar={() => setModalGerenteAberto(false)}
+          onPronto={() => {
+            setModalGerenteAberto(false);
+            qc.invalidateQueries();
+          }}
+        />
+      )}
+
+      {modalCorretorAberto && (
+        <CadastrarCorretor
+          managerId={gerentes[0]?.id || superId}
+          gerentes={gerentes.map((g) => ({ id: g.id, nome: g.nome }))}
+          onFechar={() => setModalCorretorAberto(false)}
+          onPronto={() => {
+            setModalCorretorAberto(false);
+            qc.invalidateQueries();
+          }}
+        />
+      )}
     </div>
   );
 }

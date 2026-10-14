@@ -13,7 +13,17 @@ const sb = supabase as any;
 const brl = (n: number | null | undefined) => (n == null || !isFinite(n) ? "—" : "R$ " + Math.round(n).toLocaleString("pt-BR"));
 const brl2 = (n: number | null | undefined) => (n == null || !isFinite(n) ? "—" : "R$ " + n.toFixed(2).replace(".", ","));
 
-type Conta = { dono: string; donoId: string; conta: string; gasto: number; saldo: string | null; campanhas: any[] };
+type Conta = {
+  dono: string;
+  donoId: string;
+  conta: string;
+  gasto: number;
+  saldo: string | null;
+  campanhas: any[];
+  fora_regiao?: number;
+  sem_toque?: number;
+  alertas?: any[];
+};
 
 export default function Midia({ superId }: { superId: string }) {
   const { supers } = useEscopoSuper(superId);
@@ -26,13 +36,32 @@ export default function Midia({ superId }: { superId: string }) {
     queryKey: ["s2-midia", superId, p.janela.de, p.janela.ate, donos.length],
     enabled: donos.length > 0, staleTime: 10 * 60_000,
     queryFn: async () => {
+      const { data: saudeRows } = await supabase.from("fb_saude" as any).select("account_id,dados");
+      const saudeMap = new Map((saudeRows ?? []).map((r: any) => [r.account_id, r.dados]));
+
       const r = await Promise.all(donos.map(async (d) => {
         const { data } = await supabase.functions.invoke("fb-conta-gerente", { body: { owner_id: d.id, de: p.janela.de, ate: p.janela.ate } });
         const x = data as any;
         if (!x || x.semConta || x.error) return null;
         const campanhas = (x.campanhas ?? []).map((c: any) => ({ ...c, resultado: Number(c.leads || 0) + Number(c.conversas || 0) }))
           .filter((c: any) => Number(c.gasto) > 0 || c.ativa).sort((a: any, b: any) => Number(b.gasto) - Number(a.gasto));
-        return { dono: d.nome, donoId: d.id, conta: x.conta, gasto: Number(x.gasto || 0), saldo: x.saldo ?? null, campanhas } as Conta;
+
+        const saudeDados = saudeMap.get(x.conta);
+        const fora_regiao = saudeDados?.comandra?.fora_regiao ?? 0;
+        const sem_toque = saudeDados?.comandra?.sem_toque ?? 0;
+        const alertas = saudeDados?.alertas ?? [];
+
+        return {
+          dono: d.nome,
+          donoId: d.id,
+          conta: x.conta,
+          gasto: Number(x.gasto || 0),
+          saldo: x.saldo ?? null,
+          campanhas,
+          fora_regiao,
+          sem_toque,
+          alertas,
+        } as Conta;
       }));
       return (r.filter(Boolean) as Conta[]).sort((a, b) => b.gasto - a.gasto);
     },
@@ -43,6 +72,8 @@ export default function Midia({ superId }: { superId: string }) {
   const res = todas.reduce((a, c) => a + c.resultado, 0);
   const form = todas.reduce((a, c) => a + Number(c.leads || 0), 0);
   const conv = todas.reduce((a, c) => a + Number(c.conversas || 0), 0);
+  const totalForaRegiao = (contas ?? []).reduce((a, c) => a + (c.fora_regiao ?? 0), 0);
+  const totalSemToque = (contas ?? []).reduce((a, c) => a + (c.sem_toque ?? 0), 0);
   const media = res ? gasto / res : null;
   const ativas = todas.filter((c) => c.ativa).length;
   const selo = (gastoC: number, n: number) => !media || gastoC < 30 ? null : !n ? <em className="red">sem lead</em>
@@ -55,6 +86,21 @@ export default function Midia({ superId }: { superId: string }) {
       const n = c.campanhas.reduce((a: number, x: any) => a + x.resultado, 0);
       if (c.gasto >= 100 && !n) out.push({ g: "red", t: `${c.dono}: ${brl(c.gasto)} sem nenhum lead`, d: "Conferir formulário, público e se as campanhas estão entregando." });
       else if (c.gasto >= 100 && c.gasto / n >= 1.5 * media) out.push({ g: "org", t: `${c.dono} paga ${(c.gasto / n / media).toFixed(1).replace(".", ",")}× a média por lead`, d: `${brl2(c.gasto / n)} por lead contra ${brl2(media)} das suas equipes.` });
+
+      if ((c.fora_regiao ?? 0) >= 3) {
+        out.push({
+          g: "red",
+          t: `${c.dono}: ${c.fora_regiao} leads com DDD fora da região`,
+          d: "Cliques e cadastros de fora da praça consumindo o orçamento diário. Peça ao gestor de tráfego para negativar esses públicos.",
+        });
+      }
+      if ((c.sem_toque ?? 0) >= 5) {
+        out.push({
+          g: "org",
+          t: `${c.dono}: ${c.sem_toque} leads de anúncio sem nenhum toque (+24h)`,
+          d: "Lead de formulário pago esfria rapidamente. Cobrar os corretores da equipe.",
+        });
+      }
     }
     const semLead = todas.filter((c) => Number(c.gasto) >= 50 && !c.resultado);
     if (semLead.length) out.push({ g: "red", t: `${semLead.length} campanha(s) gastando sem lead · ${brl(semLead.reduce((a, c) => a + Number(c.gasto), 0))}`, d: semLead.slice(0, 4).map((c) => `${c.nome} (${c.dono})`).join("; ") + "." });
@@ -63,11 +109,32 @@ export default function Midia({ superId }: { superId: string }) {
     return out;
   }, [contas, todas, media]);
 
+  const copiarPedidoGestor = (c: Conta) => {
+    const txt = `Olá! Preciso de um ajuste na conta ${c.conta} (${c.dono}):\n${(c.fora_regiao ?? 0) > 0 ? `• Tivemos ${c.fora_regiao} leads com DDD de fora da região. Favor revisar a geolocalização e negativar estados distantes.\n` : ""}• Gasto no período: ${brl(c.gasto)} para ${c.campanhas.reduce((a, x) => a + x.resultado, 0)} leads. Favor analisar as campanhas com CPL elevado.`;
+    navigator.clipboard?.writeText(txt).then(
+      () => toast.success("Pedido copiado! Cole no WhatsApp do gestor de tráfego."),
+      () => toast.error("Não consegui copiar.")
+    );
+  };
+
+  const cobrarGerenteMidia = async (c: Conta) => {
+    const { data: pData } = await sb.from("profiles").select("phone").eq("id", c.donoId).maybeSingle();
+    const fone = String(pData?.phone ?? "").replace(/\D/g, "");
+    const msg = `Fala ${c.dono.split(" ")[0]}, olhando a conta de anúncios da sua equipe:\n• Gasto no período: ${brl(c.gasto)}\n• Leads que entraram: ${c.campanhas.reduce((a, x) => a + x.resultado, 0)}\n${(c.fora_regiao ?? 0) > 0 ? `• ⚠️ ${c.fora_regiao} leads vieram com DDD de fora da região (desperdício de verba)\n` : ""}${(c.sem_toque ?? 0) > 0 ? `• ⚠️ ${c.sem_toque} leads estão sem toque há +24h na equipe!\n` : ""}Vamos alinhar isso hoje com a equipe e com o gestor de tráfego?`;
+    
+    if (fone) {
+      window.open(`https://wa.me/${fone.startsWith("55") ? fone : "55" + fone}?text=${encodeURIComponent(msg)}`, "_blank");
+      toast.success(`Mensagem aberta para ${c.dono}!`);
+    } else {
+      toast.info(`${c.dono} não tem telefone cadastrado.`);
+    }
+  };
+
   return (
     <div className="md">
       <style>{CSS}</style>
       <header className="md-top">
-        <div><h1>Mídia</h1><p>As contas de anúncio das suas equipes, lidas direto no Facebook · {p.texto}</p></div>
+        <div><h1>Mídia & Tráfego</h1><p>As contas de anúncio das suas equipes, lidas direto no Facebook · {p.texto}</p></div>
         <SeletorPeriodoSuper p={p} estilo="dir" />
       </header>
 
@@ -75,7 +142,8 @@ export default function Midia({ superId }: { superId: string }) {
         <div className="md-kpi"><span>Gasto</span><b>{isLoading ? "…" : brl(gasto)}</b><small>{(contas ?? []).length} conta(s) · {ativas} campanha(s) ativa(s)</small></div>
         <div className="md-kpi"><span>Leads do Facebook</span><b>{isLoading ? "…" : res}</b><small>{form} formulário · {conv} conversa</small></div>
         <div className="md-kpi"><span>Custo por lead</span><b>{isLoading ? "…" : brl2(media)}</b><small>média das suas equipes no período</small></div>
-        <div className="md-kpi"><span>Sem lead</span><b className={todas.some((c) => Number(c.gasto) >= 50 && !c.resultado) ? "md-ruim" : ""}>{isLoading ? "…" : brl(todas.filter((c) => !c.resultado).reduce((a, c) => a + Number(c.gasto), 0))}</b><small>gasto em campanha que não trouxe nenhum lead</small></div>
+        <div className="md-kpi"><span>Sem lead</span><b className={todas.some((c) => Number(c.gasto) >= 50 && !c.resultado) ? "md-ruim" : ""}>{isLoading ? "…" : brl(todas.filter((c) => !c.resultado).reduce((a, c) => a + Number(c.gasto), 0))}</b><small>gasto em campanha sem nenhum lead</small></div>
+        <div className="md-kpi"><span>Leads DDD Errado</span><b className={totalForaRegiao > 0 ? "md-ruim" : ""}>{isLoading ? "…" : totalForaRegiao}</b><small>{totalForaRegiao > 0 ? `${totalForaRegiao} leads fora da praça` : "geolocalização limpa"}</small></div>
       </div>
 
       <Assistente fatos={{
@@ -96,26 +164,75 @@ export default function Midia({ superId }: { superId: string }) {
         <h2>Contas e campanhas <small>clique na conta para abrir as campanhas</small></h2>
         {isLoading ? <div className="md-card md-vazio">Lendo as contas no Facebook…</div> : !(contas ?? []).length ? <div className="md-card md-vazio">Nenhuma conta de anúncio ligada às suas equipes.</div> : (
           <div className="md-card md-tab">
-            <div className="md-tr md-th"><span>Conta</span><span>Gasto</span><span>Leads</span><span>Por lead</span><span>Campanhas</span></div>
+            <div className="md-tr md-th" style={{ gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1fr 1.2fr" }}>
+              <span>Conta</span><span>Gasto</span><span>Leads</span><span>Por lead</span><span>Alertas</span><span>Ações</span>
+            </div>
             {(contas ?? []).map((c) => {
               const n = c.campanhas.reduce((a: number, x: any) => a + x.resultado, 0);
               const ab = !!aberta[c.donoId];
               const caras = c.campanhas.filter((x: any) => Number(x.gasto) >= 30 && (!x.resultado || (media && Number(x.gasto) / x.resultado >= 2 * media))).length;
               return (
                 <div key={c.donoId}>
-                  <button className="md-tr md-conta" onClick={() => setAberta((v) => ({ ...v, [c.donoId]: !v[c.donoId] }))} aria-expanded={ab}>
-                    <span className="md-nome">{ab ? "▾" : "▸"} <b>{c.dono}</b><small>{c.conta}</small></span>
+                  <div className="md-tr md-conta" style={{ gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1fr 1.2fr", alignItems: "center" }}>
+                    <button
+                      type="button"
+                      style={{ background: "none", border: "none", textAlign: "left", cursor: "pointer", padding: 0 }}
+                      onClick={() => setAberta((v) => ({ ...v, [c.donoId]: !v[c.donoId] }))}
+                      aria-expanded={ab}
+                    >
+                      <span className="md-nome">{ab ? "▾" : "▸"} <b>{c.dono}</b><small>{c.conta}</small></span>
+                    </button>
                     <span className="mono">{brl(c.gasto)}</span>
                     <span className="mono">{n}</span>
                     <span className="mono">{n ? brl2(c.gasto / n) : "—"}{n ? selo(c.gasto, n) : null}</span>
-                    <span className="mono">{c.campanhas.length}{caras ? <em className="red">{caras} com problema</em> : null}</span>
-                  </button>
+                    <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {(c.fora_regiao ?? 0) > 0 && (
+                        <span style={{ fontSize: 10, padding: "2px 5px", borderRadius: 4, background: "rgba(239, 68, 68, 0.12)", color: "var(--red)", fontWeight: 700 }}>
+                          {c.fora_regiao} DDD fora
+                        </span>
+                      )}
+                      {(c.sem_toque ?? 0) > 0 && (
+                        <span style={{ fontSize: 10, padding: "2px 5px", borderRadius: 4, background: "rgba(245, 158, 11, 0.12)", color: "var(--org)", fontWeight: 700 }}>
+                          {c.sem_toque} s/ toque
+                        </span>
+                      )}
+                      {caras > 0 && (
+                        <span style={{ fontSize: 10, padding: "2px 5px", borderRadius: 4, background: "rgba(239, 68, 68, 0.12)", color: "var(--red)" }}>
+                          {caras} cara(s)
+                        </span>
+                      )}
+                      {!(c.fora_regiao ?? 0) && !(c.sem_toque ?? 0) && !caras && (
+                        <span style={{ fontSize: 11, color: "var(--grn)" }}>✓ ok</span>
+                      )}
+                    </span>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        type="button"
+                        className="dir-btn"
+                        style={{ padding: "3px 7px", fontSize: 10.5 }}
+                        onClick={() => copiarPedidoGestor(c)}
+                        title="Copiar texto para o gestor de tráfego"
+                      >
+                        📋 Gestor
+                      </button>
+                      <button
+                        type="button"
+                        className="dir-btn"
+                        style={{ padding: "3px 7px", fontSize: 10.5 }}
+                        onClick={() => cobrarGerenteMidia(c)}
+                        title="Cobrar gerente no WhatsApp"
+                      >
+                        💬 Gerente
+                      </button>
+                    </div>
+                  </div>
                   {ab ? c.campanhas.map((x: any) => (
                     <div key={x.id} className="md-tr md-camp">
                       <span className="md-nome"><i className={x.ativa ? "on" : ""} />{x.nome}</span>
                       <span className="mono">{brl(Number(x.gasto))}</span>
                       <span className="mono">{x.resultado}{x.conversas ? <small> ({x.leads} form · {x.conversas} conv.)</small> : null}</span>
                       <span className="mono">{x.resultado ? brl2(Number(x.gasto) / x.resultado) : "—"}{selo(Number(x.gasto), x.resultado)}</span>
+                      <span />
                       <span />
                     </div>
                   )) : null}
