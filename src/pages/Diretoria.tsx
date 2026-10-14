@@ -55,7 +55,7 @@ const totLeads = (l: LinhaConsolidado) => l.leads.anuncio + l.leads.disparo + l.
 function Seta({ on }: { on: boolean }) { return <span className={`dir-seta${on ? " on" : ""}`} aria-hidden>▸</span>; }
 
 export default function Diretoria() {
-  const { session, role } = useAuth();
+  const { session, role, signOut } = useAuth();
   const nav = useNavigate();
   const [aba, setAba] = useState<Aba>("hoje");
   const [dias, setDias] = useState(30);
@@ -95,6 +95,7 @@ export default function Diretoria() {
         </nav>
         {role === "ADMIN" ? <Link to="/admin" className="dir-ghost">Admin</Link> : null}
         <Link to="/super?aba=time" className="dir-ghost" title="Tela anterior, com cadastro e desligamento">Gestão do time</Link>
+        <button type="button" className="dir-ghost" onClick={signOut} title="Sair da conta">Sair</button>
       </header>
 
       <main className="dir-wrap">
