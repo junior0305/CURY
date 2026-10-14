@@ -1,194 +1,397 @@
-// PASTAS — onde estão as propostas da equipe e quais travaram.
-//
-// A tela responde três perguntas, nesta ordem:
-//
-//   1. onde estão?        → as pastas da equipe por etapa do kanban
-//   2. de quem são?       → quantas cada corretor carrega, e quantas travaram
-//   3. o que ficou fora?  → pastas de outras equipes da diretoria
-//
-// Vem do Junix (espelho de hora em hora), então mede o processo de crédito de
-// fato — não depende de ninguém registrar nada no Comandra.
+// PASTAS — onde estão as propostas da equipe e quais travaram no Junix / Caixa.
+// Kanban de Crédito com cobrança direta no WhatsApp e visão por fases.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { useTheme } from "@/contexts/ThemeContext";
 import { usePastas, DIAS_TRAVADA, type Pasta } from "@/hooks/usePastas";
-import { Sec, Blank, Cell, ScoreRow, Bars, Tbl, Tr } from "@/components/manager-v10/ui";
+import { Blank, Tbl, Tr } from "@/components/manager-v10/ui";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
+import { toast } from "sonner";
 import "@/styles/manager-v10.css";
-import "@/styles/pastas.css";
+import "@/styles/cockpit-gerente.css";
+import "@/styles/pastas-kanban.css";
 
 const ini = (s: string) => s.trim().slice(0, 2).toUpperCase();
-const hhmm = (iso: string) => new Intl.DateTimeFormat("pt-BR", {
-  timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit",
-}).format(new Date(iso));
 
-/** Uma linha de pasta. Travada (DIAS_TRAVADA+) ganha a faixa âmbar. */
-function Linha({ p, mostraEtapa }: { p: Pasta; mostraEtapa?: boolean }) {
-  const travada = p.dias >= DIAS_TRAVADA;
-  return (
-    <div className={`pa-li${travada ? " vencido" : ""}`}>
-      <span className="pa-av">{ini(p.cliente)}</span>
-      <div className="pa-b">
-        <b>{p.cliente}</b>
-        <span>
-          {mostraEtapa ? <>{p.etapa}<em className="sep">·</em></> : null}
-          {p.daEquipe
-            ? (p.corretor ?? <em className="ruim">sem corretor no Comandra</em>)
-            : <em className="ruim">de outras equipes</em>}
-          {p.status ? <><em className="sep">·</em>{p.status}</> : null}
-        </span>
-      </div>
-      <span className="pa-dias mono" title="dias nesta etapa">{p.dias}d</span>
-      <span className="pa-tel">{p.fluxo ?? ""}</span>
-      <span />
-    </div>
-  );
+type ViewModo = "kanban" | "corretor";
+type FiltroTipo = "todas" | "travadas" | "sem_corretor" | "outras";
+
+interface ColunaFase {
+  id: string;
+  titulo: string;
+  icone: string;
+  etapasJunix: string[];
+}
+
+const FASES_CREDITO: ColunaFase[] = [
+  {
+    id: "montagem",
+    titulo: "Montagem de Pasta",
+    icone: "📝",
+    etapasJunix: ["cadastro", "anexar documento", "selecionar unidade", "simular", "proposta"],
+  },
+  {
+    id: "analise",
+    titulo: "Em Análise Caixa",
+    icone: "🏦",
+    etapasJunix: ["laudo / pré-análise", "laudo", "pré-análise", "sem análise", "análise"],
+  },
+  {
+    id: "pendencia",
+    titulo: "Pendências Caixa",
+    icone: "⚠️",
+    etapasJunix: ["pendência", "pendencia", "exigência", "documentação pendente"],
+  },
+  {
+    id: "aprovado",
+    titulo: "Aprovado & Assinatura",
+    icone: "✍️",
+    etapasJunix: ["emissão", "venda confirmada", "aprovado", "conformidade"],
+  },
+];
+
+function classificarFase(etapa: string): string {
+  const norm = (etapa || "").toLowerCase().trim();
+  for (const fase of FASES_CREDITO) {
+    if (fase.etapasJunix.some((e) => norm.includes(e))) return fase.id;
+  }
+  return "montagem"; // fallback
 }
 
 export default function Pastas() {
   const { session } = useAuth();
-  // super/admin abrem as pastas de um gerente via ?manager=<id>, como no resto do painel
   const userId = useEffectiveManagerId() ?? session?.user?.id;
   const { mode, toggle } = useTheme();
   const { data, isLoading, error } = usePastas(userId);
-  const [etapa, setEtapa] = useState<string | null>(null);
-  const [soTravadas, setSoTravadas] = useState(false);
-  const [verSemDono, setVerSemDono] = useState(false);
+
+  const [busca, setBusca] = useState("");
+  const [filtroAtivo, setFiltroAtivo] = useState<FiltroTipo>("todas");
+  const [viewModo, setViewModo] = useState<ViewModo>("kanban");
+
   loadFonts();
 
-  const corpo = () => {
-    if (isLoading) return <Blank title="Carregando as pastas…" />;
-    if (error) {
-      return <Blank title="Não consegui ler as pastas">{String((error as any)?.message ?? error)}</Blank>;
-    }
-    if (!data) return null;
-
-    const d = data;
-    const travadas = d.minhas.filter((p) => p.dias >= DIAS_TRAVADA).length;
-    const semCorretor = d.minhas.filter((p) => !p.corretorId).length;
-    const maiorEtapa = Math.max(1, ...d.etapas.map((e) => e.n));
-
-    // Filtro por etapa (clique na barra/célula) e por travadas.
-    const lista = d.minhas
-      .filter((p) => (etapa ? p.etapa === etapa : true))
-      .filter((p) => (soTravadas ? p.dias >= DIAS_TRAVADA : true));
-    // Agrupada na ordem do kanban; dentro do grupo, a mais parada primeiro.
-    const grupos = d.etapas
-      .map((e) => ({ ...e, pastas: lista.filter((p) => p.etapa === e.etapa) }))
-      .filter((g) => g.pastas.length);
-
-    const cols = "minmax(0,1.1fr) 64px 84px minmax(0,2.4fr)";
-
-    return (
-      <>
-        <Sec title="Onde estão" tag={`${d.minhas.length} da equipe`}
-          sub="As pastas da sua equipe em cada etapa do kanban, agora. O dono (corretor e gerente) vem do próprio Junix.">
-          <ScoreRow>
-            <Cell label="pastas da equipe" value={d.minhas.length} />
-            <Cell label={`travadas (${DIAS_TRAVADA}+ dias)`} value={travadas}
-              tone={travadas ? "alert" : undefined}
-              onClick={() => setSoTravadas((v) => !v)} active={soTravadas} />
-            <Cell label="sem corretor" value={semCorretor}
-              sub="corretor sem login no Comandra" tone={semCorretor ? "alert" : undefined} />
-            <Cell label="de outras equipes" value={d.semDono.length}
-              sub="da diretoria inteira"
-              onClick={() => setVerSemDono((v) => !v)} active={verSemDono} />
-          </ScoreRow>
-
-          {d.etapas.length ? (
-            <Bars rows={d.etapas.map((e) => ({
-              label: e.etapa, pct: e.n / maiorEtapa,
-              value: e.travadas ? `${e.n} · ${e.travadas} travadas` : e.n,
-              tone: etapa && etapa !== e.etapa ? "weak" : undefined,
-            }))} />
-          ) : <Blank title="Nenhuma pasta da equipe no Junix" />}
-        </Sec>
-
-        <Sec title="Pastas" tag={`${lista.length}${etapa || soTravadas ? " no filtro" : ""}`}
-          sub={`Agrupadas por etapa. Faixa âmbar = ${DIAS_TRAVADA} dias ou mais na mesma etapa — é por ela que a conversa com o corretor começa.`}>
-          <div className="pa-filtros">
-            <div className="seg">
-              <button className={!etapa ? "on" : undefined} onClick={() => setEtapa(null)}>todas</button>
-              {d.etapas.map((e) => (
-                <button key={e.etapa} className={etapa === e.etapa ? "on" : undefined}
-                  onClick={() => setEtapa(etapa === e.etapa ? null : e.etapa)}>
-                  {e.etapa} ({e.n})
-                </button>
-              ))}
-            </div>
-            <button className={`mini${soTravadas ? " key" : ""}`} onClick={() => setSoTravadas((v) => !v)}>
-              {soTravadas ? "mostrando só as travadas" : `só as travadas (${travadas})`}
-            </button>
-          </div>
-
-          {grupos.length ? grupos.map((g) => (
-            <div key={g.etapa} style={{ marginBottom: 18 }}>
-              <p className="sec-sub" style={{ margin: "0 0 8px" }}>
-                <b>{g.etapa}</b> · {g.pastas.length}
-                {g.travadas ? ` · ${g.travadas} travadas` : ""}
-              </p>
-              <div className="pa-lista">
-                {g.pastas.map((p) => <Linha key={p.id} p={p} />)}
-              </div>
-            </div>
-          )) : (
-            <Blank title="Nenhuma pasta neste filtro">
-              {soTravadas ? `Nada parado há ${DIAS_TRAVADA} dias ou mais.` : "Sem pastas da equipe no momento."}
-            </Blank>
-          )}
-        </Sec>
-
-        <Sec title="Por corretor" tag={`${d.porCorretor.filter((c) => c.id).length} com pasta`}
-          sub="Quantas pastas cada corretor carrega e em que etapa. Travadas é quem pede cobrança hoje.">
-          {d.porCorretor.length ? (
-            <Tbl cols={cols} head={["Corretor", "Pastas", "Travadas", "Por etapa"]}>
-              {d.porCorretor.map((c) => (
-                <Tr key={c.id ?? "sem"} cols={cols}>
-                  <span>{c.id ? c.nome : <span style={{ color: "var(--red)", fontWeight: 600 }}>{c.nome}</span>}</span>
-                  <span className="mono">{c.total}</span>
-                  <span className="mono">{c.travadas || "—"}</span>
-                  <span>{c.porEtapa.map((e) => `${e.n} ${e.etapa}`).join(" · ")}</span>
-                </Tr>
-              ))}
-            </Tbl>
-          ) : <Blank title="Nenhum corretor com pasta" />}
-        </Sec>
-
-        <Sec title="Pastas de outras equipes" tag={`${d.semDono.length}`}
-          sub="Pastas de outras equipes da diretoria, com o corretor e o gerente que o Junix registra.">
-          <div className="pa-filtros">
-            <button className={`mini${verSemDono ? " key" : ""}`} onClick={() => setVerSemDono((v) => !v)}>
-              {verSemDono ? "esconder" : `mostrar as ${d.semDono.length}`}
-            </button>
-          </div>
-          {verSemDono ? (
-            d.semDono.length ? (
-              <div className="pa-lista">
-                {d.semDono.map((p) => <Linha key={p.id} p={p} mostraEtapa />)}
-              </div>
-            ) : <Blank title="Todas as pastas têm dono" />
-          ) : null}
-        </Sec>
-      </>
-    );
+  const cobrancasWhatsApp = (p: Pasta) => {
+    const corretorNome = p.corretor || "Corretor";
+    const msg = `Fala ${corretorNome}, a pasta do cliente ${p.cliente} (Proposta #${p.id}) está na etapa "${p.etapa}" há ${p.dias} dias no Junix. Você consegue verificar o destravamento hoje para não perdermos o prazo da Caixa?`;
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+    toast.success(`Cobrança aberta no WhatsApp para ${corretorNome}!`);
   };
+
+  const listaFiltrada = useMemo(() => {
+    if (!data) return [];
+    let base = filtroAtivo === "outras" ? data.semDono : data.minhas;
+
+    if (filtroAtivo === "travadas") {
+      base = base.filter((p) => p.dias >= DIAS_TRAVADA);
+    } else if (filtroAtivo === "sem_corretor") {
+      base = base.filter((p) => !p.corretorId);
+    }
+
+    if (busca.trim()) {
+      const q = busca.toLowerCase();
+      base = base.filter(
+        (p) =>
+          p.cliente.toLowerCase().includes(q) ||
+          (p.corretor || "").toLowerCase().includes(q) ||
+          p.id.toLowerCase().includes(q) ||
+          p.etapa.toLowerCase().includes(q)
+      );
+    }
+
+    return base;
+  }, [data, filtroAtivo, busca]);
+
+  const pastasPorFase = useMemo(() => {
+    const mapa: Record<string, Pasta[]> = {
+      montagem: [],
+      analise: [],
+      pendencia: [],
+      aprovado: [],
+    };
+
+    listaFiltrada.forEach((p) => {
+      const fase = classificarFase(p.etapa);
+      if (mapa[fase]) mapa[fase].push(p);
+      else mapa.montagem.push(p);
+    });
+
+    // Ordenar: mais dias travadas primeiro dentro de cada fase
+    Object.keys(mapa).forEach((k) => {
+      mapa[k].sort((a, b) => b.dias - a.dias);
+    });
+
+    return mapa;
+  }, [listaFiltrada]);
+
+  if (isLoading) {
+    return (
+      <div className="mgr10 app2 pastas">
+        <RailV10 atual={"pastas" as any} mode={mode} toggle={toggle} />
+        <main className="shell2">
+          <div className="blank">Carregando as pastas do Junix...</div>
+        </main>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="mgr10 app2 pastas">
+        <RailV10 atual={"pastas" as any} mode={mode} toggle={toggle} />
+        <main className="shell2">
+          <Blank title="Não consegui ler as pastas do Junix">
+            {String((error as any)?.message ?? "Verifique sua conexão ou tente recarregar a página.")}
+          </Blank>
+        </main>
+      </div>
+    );
+  }
+
+  const d = data;
+  const totalMinhas = d.minhas.length;
+  const totalTravadas = d.minhas.filter((p) => p.dias >= DIAS_TRAVADA).length;
+  const totalSemCorretor = d.minhas.filter((p) => !p.corretorId).length;
+  const totalOutras = d.semDono.length;
+
+  const colsTabela = "minmax(0,1.2fr) 90px 90px minmax(0,2fr) 130px";
 
   return (
     <div className="mgr10 app2 pastas">
       <RailV10 atual={"pastas" as any} mode={mode} toggle={toggle} />
-      <main className="shell2">
-        <header className="top2">
-          <div>
-            <h1>Pastas</h1>
+
+      <main className="shell2 pastas-v3">
+        {/* ── CABEÇALHO ── */}
+        <header className="pastas-v3-header">
+          <div className="pastas-v3-title">
+            <h1>Controle de Pastas & Crédito Caixa</h1>
             <p>
-              Onde estão as propostas da equipe, e quais travaram
-              {data?.atualizadoEm ? <> · Fonte: Junix · atualizado {hhmm(data.atualizadoEm)}</> : null}
+              Fluxo em tempo real do Junix · Propostas da equipe, etapas de aprovação e destravamentos
+              {d.atualizadoEm ? (
+                <> · Atualizado às {new Date(d.atualizadoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</>
+              ) : null}
             </p>
           </div>
+
+          <div className="pastas-view-toggle">
+            <button
+              type="button"
+              className={`pastas-view-btn ${viewModo === "kanban" ? "active" : ""}`}
+              onClick={() => setViewModo("kanban")}
+            >
+              📋 Kanban das 4 Fases
+            </button>
+            <button
+              type="button"
+              className={`pastas-view-btn ${viewModo === "corretor" ? "active" : ""}`}
+              onClick={() => setViewModo("corretor")}
+            >
+              📊 Resumo por Corretor
+            </button>
+          </div>
         </header>
-        <section className="view">{corpo()}</section>
+
+        {/* ── SCORE ROW / KPIS RÁPIDOS (CLICÁVEIS) ── */}
+        <section className="pastas-kpis-grid">
+          {/* Todas as Pastas da Equipe */}
+          <div
+            className={`pasta-kpi-card ${filtroAtivo === "todas" ? "active" : ""}`}
+            onClick={() => setFiltroAtivo("todas")}
+          >
+            <span className="pasta-kpi-label">📁 Pastas da Equipe</span>
+            <div className="pasta-kpi-val mono">
+              <span style={{ color: "var(--cv-brand)" }}>{totalMinhas}</span>
+              <span style={{ fontSize: 13, color: "var(--cv-text-muted)", fontWeight: 500 }}>no Junix</span>
+            </div>
+            <span className="pasta-kpi-sub">Total de propostas ativas</span>
+          </div>
+
+          {/* Pastas Travadas */}
+          <div
+            className={`pasta-kpi-card alert ${filtroAtivo === "travadas" ? "active" : ""}`}
+            onClick={() => setFiltroAtivo((v) => (v === "travadas" ? "todas" : "travadas"))}
+          >
+            <span className="pasta-kpi-label">🔥 Travadas (+{DIAS_TRAVADA} dias)</span>
+            <div className="pasta-kpi-val mono" style={{ color: "var(--cv-rose)" }}>
+              {totalTravadas}
+            </div>
+            <span className="pasta-kpi-sub">Paradas na mesma etapa</span>
+          </div>
+
+          {/* Sem Corretor no Comandra */}
+          <div
+            className={`pasta-kpi-card ${filtroAtivo === "sem_corretor" ? "active" : ""}`}
+            onClick={() => setFiltroAtivo((v) => (v === "sem_corretor" ? "todas" : "sem_corretor"))}
+          >
+            <span className="pasta-kpi-label">⚠️ Sem Corretor</span>
+            <div className="pasta-kpi-val mono" style={{ color: totalSemCorretor > 0 ? "var(--cv-amber)" : "inherit" }}>
+              {totalSemCorretor}
+            </div>
+            <span className="pasta-kpi-sub">Corretor sem login Comandra</span>
+          </div>
+
+          {/* Outras Equipes (Diretoria) */}
+          <div
+            className={`pasta-kpi-card ${filtroAtivo === "outras" ? "active" : ""}`}
+            onClick={() => setFiltroAtivo((v) => (v === "outras" ? "todas" : "outras"))}
+          >
+            <span className="pasta-kpi-label">🏢 Outras Equipes</span>
+            <div className="pasta-kpi-val mono">
+              {totalOutras}
+            </div>
+            <span className="pasta-kpi-sub">Propostas da diretoria</span>
+          </div>
+        </section>
+
+        {/* ── BARRA DE BUSCA E CONTROLE ── */}
+        <section className="pastas-toolbar">
+          <div className="pastas-search-box">
+            <span>🔍</span>
+            <input
+              type="text"
+              placeholder="Buscar por cliente, corretor, proposta # ou etapa..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 12.5, color: "var(--cv-text-muted)" }}>
+              Exibindo <b>{listaFiltrada.length} pastas</b> {filtroAtivo !== "todas" ? "(filtradas)" : ""}
+            </span>
+            {filtroAtivo !== "todas" && (
+              <button
+                type="button"
+                className="btn-action-v3"
+                style={{ background: "var(--cv-surface-subtle)", padding: "4px 8px" }}
+                onClick={() => setFiltroAtivo("todas")}
+              >
+                Limpar filtro ✕
+              </button>
+            )}
+          </div>
+        </section>
+
+        {/* ── CONTEÚDO PRINCIPAL: KANBAN OU RESUMO POR CORRETOR ── */}
+        {viewModo === "kanban" ? (
+          <div className="kanban-board">
+            {FASES_CREDITO.map((fase) => {
+              const pastasDaFase = pastasPorFase[fase.id] || [];
+              const travadasFase = pastasDaFase.filter((p) => p.dias >= DIAS_TRAVADA).length;
+
+              return (
+                <div key={fase.id} className="kanban-col">
+                  {/* Cabeçalho da Coluna */}
+                  <div className="kanban-col-hd">
+                    <div className="kanban-col-title">
+                      <span>{fase.icone}</span>
+                      <span>{fase.titulo}</span>
+                    </div>
+                    <span className={`kanban-col-count ${travadasFase > 0 ? "has-alert" : ""}`}>
+                      {pastasDaFase.length}
+                      {travadasFase > 0 ? ` (${travadasFase} trav.)` : ""}
+                    </span>
+                  </div>
+
+                  {/* Lista de Cards da Fase */}
+                  <div className="kanban-col-body">
+                    {pastasDaFase.length === 0 ? (
+                      <div style={{ textAlign: "center", padding: 24, color: "var(--cv-text-muted)", fontSize: 12.5 }}>
+                        Nenhuma pasta nesta etapa.
+                      </div>
+                    ) : (
+                      pastasDaFase.map((p) => {
+                        const isTravada = p.dias >= DIAS_TRAVADA;
+                        const corretorNome = p.corretor || (p.daEquipe ? "Sem corretor" : "Outra equipe");
+
+                        return (
+                          <div key={p.id} className={`pasta-card ${isTravada ? "vencido" : ""}`}>
+                            <div className="pasta-card-top">
+                              <span className="pasta-cliente-nome">{p.cliente}</span>
+                              <span className="pasta-id-tag mono">#{p.id}</span>
+                            </div>
+
+                            <div className="pasta-sub-info">
+                              <div className="pasta-corretor-box">
+                                <div className="pasta-corretor-avatar">
+                                  {ini(corretorNome)}
+                                </div>
+                                <span>{corretorNome}</span>
+                              </div>
+
+                              <span className={`dias-badge mono ${p.dias >= DIAS_TRAVADA ? "crit" : p.dias >= 3 ? "warn" : "ok"}`}>
+                                {p.dias === 0 ? "Hoje" : `${p.dias}d parado`}
+                              </span>
+                            </div>
+
+                            {p.fluxo && (
+                              <div style={{ fontSize: 11, color: "var(--cv-text-dim)" }}>
+                                Etapa Junix: <b>{p.etapa}</b> · Fluxo: {p.fluxo}
+                              </div>
+                            )}
+
+                            <div className="pasta-card-actions">
+                              <button
+                                type="button"
+                                className="btn-cobrar-whats"
+                                onClick={() => cobrancasWhatsApp(p)}
+                              >
+                                💬 Cobrar Corretor no WhatsApp
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Visão em Tabela Resumo por Corretor */
+          <div style={{ background: "var(--cv-surface)", borderRadius: "var(--cv-radius-md)", border: "1px solid var(--cv-border)", overflow: "hidden", padding: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 12 }}>
+              Carga de Pastas por Corretor
+            </h3>
+            {d.porCorretor.length === 0 ? (
+              <Blank title="Nenhum corretor com pasta ativa" />
+            ) : (
+              <Tbl cols={colsTabela} head={["Corretor", "Total de Pastas", "Travadas (+7d)", "Fases no Junix", "Ação"]}>
+                {d.porCorretor.map((c) => (
+                  <Tr key={c.id ?? c.nome} cols={colsTabela}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div className="pasta-corretor-avatar" style={{ width: 24, height: 24, fontSize: 10 }}>
+                        {ini(c.nome)}
+                      </div>
+                      <b>{c.nome}</b>
+                    </div>
+                    <span className="mono" style={{ fontWeight: 700 }}>{c.total}</span>
+                    <span className="mono" style={{ fontWeight: 800, color: c.travadas > 0 ? "var(--cv-rose)" : "inherit" }}>
+                      {c.travadas || "0"}
+                    </span>
+                    <span style={{ fontSize: 12, color: "var(--cv-text-muted)" }}>
+                      {c.porEtapa.map((e) => `${e.n} ${e.etapa}`).join(" · ")}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-action-v3 whatsapp"
+                      style={{ padding: "4px 8px", fontSize: 11 }}
+                      onClick={() => {
+                        const msg = `Fala ${c.nome.split(" ")[0]}, você está com ${c.total} pastas ativas no Junix (${c.travadas} paradas há mais de 7 dias). Vamos alinhar as pendências com a Caixa hoje?`;
+                        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "_blank");
+                      }}
+                    >
+                      💬 Cobrar Geral
+                    </button>
+                  </Tr>
+                ))}
+              </Tbl>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );
