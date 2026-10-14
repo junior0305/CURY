@@ -285,6 +285,11 @@ export function IntegracaoGerente() {
   return (
     <div className="mgr10 app2">
       <RailV10 atual="integracoes" mode={mode} toggle={toggle} />
+      {/* o painel zera fundo e borda de todo <button>; aqui os botões são do shadcn/Tailwind */}
+      <style>{`.mgr10 .integ-shell button.border{border-width:1px;border-style:solid}
+.mgr10 .integ-shell button.bg-blue-600{background:#2563eb;color:#fff}
+.mgr10 .integ-shell button.bg-blue-600:hover{background:#1d4ed8}
+.mgr10 .integ-shell button:disabled{opacity:.5;cursor:default}`}</style>
       <main className="shell2 integ-shell"><IntegracaoFacebook /></main>
     </div>
   );
