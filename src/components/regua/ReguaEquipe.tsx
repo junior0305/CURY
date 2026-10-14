@@ -19,19 +19,24 @@ type Cat = {
   chave: string; ordem: number; titulo: string; descricao: string; tom: "cuidado" | "lembrete" | "cobranca";
   unidade: "horas" | "dias"; prazo_sugerido: number; prazo_min: number; prazo_max: number;
   hora_sugerida: string | null; assina: string; texto_sugerido: string;
+  etapas_sugeridas: Etapa[]; max_etapas: number; para_opcoes: string[];
 };
+type Etapa = { prazo: number; para: "corretor" | "gerente" | "super"; assina: "comandra" | "gerente" | "super" | "diretor"; texto: string };
 type Regra = {
   id: string; chave: string; nivel: Nivel; dono_id: string | null; ligada: boolean | null; prazo: number | null;
-  texto: string | null; hora: string | null; obrigatoria: boolean; prazo_min: number | null; prazo_max: number | null; atualizado_em?: string;
+  texto: string | null; hora: string | null; obrigatoria: boolean; prazo_min: number | null; prazo_max: number | null; atualizado_em?: string; etapas: Etapa[] | null;
 };
 
 const sb = supabase as any;
 const TOM: Record<string, string> = { cuidado: "Cuidado", lembrete: "Lembrete", cobranca: "Cobrança" };
 const NOME_NIVEL: Record<Nivel, string> = { diretor: "diretor", super: "superintendente", gerente: "gerente" };
 const VARS: Record<string, string> = {
-  "{nome}": "primeiro nome do corretor", "{qtd}": "quantos leads", "{lista}": "os leads, com link do WhatsApp",
-  "{dias}": "dias sem plantão", "{assinatura}": "nome de quem assina",
+  "{nome}": "primeiro nome de quem recebe", "{corretor}": "o corretor", "{qtd}": "quantos", "{lista}": "a lista (leads ou corretores)",
+  "{dias}": "dias sem plantão", "{prazo}": "o prazo do toque", "{assinatura}": "nome de quem assina",
 };
+const PARA: Record<string, string> = { corretor: "corretor", gerente: "gerente", super: "superintendente" };
+const ASSINA: Record<string, string> = { comandra: "Comandra", gerente: "gerente", super: "superintendente", diretor: "diretor" };
+const ORDEM: Record<string, number> = { corretor: 0, gerente: 1, super: 2, diretor: 3 };
 
 export default function ReguaEquipe({ nivel, donoId }: { nivel: Nivel; donoId: string | null }) {
   const qc = useQueryClient();
@@ -115,9 +120,9 @@ function CartaoRegra({ cat, nivel, donoId, meuId, regras, chefeId, stats, onSalv
   const minha = regras.find((r) => r.chave === cat.chave && r.nivel === nivel && (r.dono_id ?? null) === (nivel === "diretor" ? null : donoId));
   // o que vem de cima (para mostrar "herdado de")
   const sup = nivel === "gerente" && chefeId ? regras.find((r) => r.chave === cat.chave && r.nivel === "super" && r.dono_id === chefeId) : undefined;
-  const acima = nivel === "diretor" ? [] : nivel === "super" ? [dir] : [sup, dir];
+  const acima = (nivel === "diretor" ? [] : nivel === "super" ? [dir] : [sup, dir]).filter(Boolean) as Regra[];
   const herd = <K extends keyof Regra>(k: K) => {
-    for (const r of acima) if (r && r[k] !== null && r[k] !== undefined) return { v: r[k], de: r.nivel as Nivel };
+    for (const r of acima) if (r[k] !== null && r[k] !== undefined) return { v: r[k], de: r.nivel as Nivel };
     return null;
   };
   const min = dir?.prazo_min ?? cat.prazo_min, max = dir?.prazo_max ?? cat.prazo_max;
@@ -125,8 +130,7 @@ function CartaoRegra({ cat, nivel, donoId, meuId, regras, chefeId, stats, onSalv
 
   const base = {
     ligada: minha?.ligada ?? (herd("ligada")?.v as boolean | undefined) ?? false,
-    prazo: minha?.prazo ?? (herd("prazo")?.v as number | undefined) ?? cat.prazo_sugerido,
-    texto: minha?.texto ?? (herd("texto")?.v as string | undefined) ?? cat.texto_sugerido,
+    etapas: (minha?.etapas ?? (herd("etapas")?.v as Etapa[] | undefined) ?? cat.etapas_sugeridas) as Etapa[],
     hora: minha?.hora ?? (herd("hora")?.v as string | undefined) ?? cat.hora_sugerida ?? "",
     obrigatoria: dir?.obrigatoria ?? false,
     prazo_min: dir?.prazo_min ?? cat.prazo_min, prazo_max: dir?.prazo_max ?? cat.prazo_max,
@@ -140,45 +144,67 @@ function CartaoRegra({ cat, nivel, donoId, meuId, regras, chefeId, stats, onSalv
 
   const mudou = JSON.stringify(d) !== JSON.stringify(base);
   const ligadaEfetiva = obrig ? true : d.ligada;
-  const origem = minha ? "ajustado por você" : herd("prazo") || herd("ligada") || herd("texto")
-    ? `herdado do ${NOME_NIVEL[(herd("ligada") ?? herd("prazo") ?? herd("texto"))!.de]}` : "sugerido pelo sistema";
-  const un = cat.unidade === "horas" ? "h" : " dias";
+  const deOnde = herd("etapas") ?? herd("ligada");
+  const origem = minha ? "ajustado por você" : deOnde ? `herdado do ${NOME_NIVEL[deOnde.de]}` : "sugerido pelo sistema";
+  const un = cat.unidade === "horas" ? "h" : cat.unidade === "dias" ? " dias" : "";
+  const unLonga = cat.unidade === "horas" ? "horas" : "dias";
+
+  // prazos em ordem crescente e dentro da faixa
+  const problema = (() => {
+    if (!d.etapas.length) return "Tenha pelo menos um toque.";
+    for (let i = 0; i < d.etapas.length; i++) {
+      const e = d.etapas[i];
+      if (e.prazo < min || e.prazo > max) return `O toque ${i + 1} precisa ficar entre ${min} e ${max} ${unLonga}.`;
+      if (i && e.prazo <= d.etapas[i - 1].prazo) return `O toque ${i + 1} precisa vir depois do toque ${i}.`;
+      if (!e.texto.trim()) return `Escreva a mensagem do toque ${i + 1}.`;
+      if (e.assina !== "comandra" && ORDEM[e.assina] <= ORDEM[e.para]) return `No toque ${i + 1}, quem assina precisa estar acima de quem recebe.`;
+    }
+    return null;
+  })();
+
+  const mudaEtapa = (i: number, patch: Partial<Etapa>) => setD({ ...d, etapas: d.etapas.map((e, j) => (j === i ? { ...e, ...patch } : e)) });
+  const tiraEtapa = (i: number) => setD({ ...d, etapas: d.etapas.filter((_, j) => j !== i) });
+  const poeEtapa = () => {
+    const ult = d.etapas[d.etapas.length - 1];
+    const sug = cat.etapas_sugeridas[d.etapas.length] ?? ult ?? cat.etapas_sugeridas[0];
+    const prazo = Math.min(max, Math.max((ult?.prazo ?? 0) + 1, sug?.prazo ?? min));
+    setD({ ...d, etapas: [...d.etapas, { ...sug, prazo }] });
+  };
 
   const salvar = async (extra?: Partial<typeof d>) => {
     const v = { ...d, ...extra };
+    if (!extra && problema) { toast.error(problema); return; }
     setSalvando(true);
+    const igualAoSugerido = JSON.stringify(v.etapas) === JSON.stringify(cat.etapas_sugeridas);
     const linha: any = {
       chave: cat.chave, nivel, dono_id: nivel === "diretor" ? null : donoId,
-      ligada: v.ligada, prazo: Math.min(max, Math.max(min, Number(v.prazo) || cat.prazo_sugerido)),
-      texto: v.texto.trim() === cat.texto_sugerido.trim() && !minha?.texto ? null : v.texto,
+      ligada: v.ligada, etapas: igualAoSugerido && !minha?.etapas ? null : v.etapas,
       hora: cat.hora_sugerida ? (v.hora || null) : null,
       atualizado_por: meuId, atualizado_em: new Date().toISOString(),
     };
     if (nivel === "diretor") {
       linha.obrigatoria = v.obrigatoria;
       linha.prazo_min = Number(v.prazo_min) || null; linha.prazo_max = Number(v.prazo_max) || null;
-      linha.prazo = Math.min(linha.prazo_max ?? cat.prazo_max, Math.max(linha.prazo_min ?? cat.prazo_min, linha.prazo));
     }
     const { error } = minha
       ? await sb.from("regua_regras").update(linha).eq("id", minha.id)
       : await sb.from("regua_regras").insert(linha);
     setSalvando(false);
     if (error) { toast.error("Não consegui salvar: " + error.message); return; }
-    toast.success(v.ligada ? "Regra ligada. Ela roda na próxima meia hora." : "Regra salva.");
+    toast.success(v.ligada || obrig ? "Salvo. A régua roda de meia em meia hora, das 8h às 20h." : "Salvo. A regra continua desligada.");
     onSalvo();
   };
   const voltarSugerido = async () => {
     if (!minha) return;
     const { error } = await sb.from("regua_regras").delete().eq("id", minha.id);
     if (error) { toast.error("Não consegui voltar: " + error.message); return; }
-    toast.success("Voltou ao " + (acima.some(Boolean) ? "padrão de cima." : "sugerido pelo sistema."));
+    toast.success("Voltou ao " + (acima.length ? "padrão de cima." : "sugerido pelo sistema."));
     onSalvo();
   };
   const verPrevia = async () => {
+    if (problema) { toast.error(problema); return; }
     setCarregandoPrevia(true);
-    const { data, error } = await supabase.functions.invoke("regua-cobranca", {
-      body: { modo: "previa", chave: cat.chave, prazo: Number(d.prazo), texto: d.texto },
-    });
+    const { data, error } = await supabase.functions.invoke("regua-cobranca", { body: { modo: "previa", chave: cat.chave, etapas: d.etapas } });
     setCarregandoPrevia(false);
     if (error || (data as any)?.error) { toast.error("Não consegui calcular: " + ((data as any)?.error || error?.message)); return; }
     setPrevia((data as any)?.itens ?? []);
@@ -199,9 +225,14 @@ function CartaoRegra({ cat, nivel, donoId, meuId, regras, chefeId, stats, onSalv
         </label>
       </div>
 
+      <ol className="rg-escada">
+        {base.etapas.map((e, i) => (
+          <li key={i}><b className="mono">{e.prazo}{un}</b> → {PARA[e.para]} · assina {ASSINA[e.assina]}</li>
+        ))}
+      </ol>
+
       <div className="rg-resumo">
-        <span>Dispara depois de <b className="mono">{d.prazo}{un}</b>{cat.hora_sugerida ? <> · às <b className="mono">{d.hora || cat.hora_sugerida}</b></> : null}</span>
-        <span>Assina: <b>{cat.assina === "comandra" ? "Comandra (chip do gerente)" : NOME_NIVEL[cat.assina as Nivel]}</b></span>
+        {cat.hora_sugerida ? <span>Envia a partir das <b className="mono">{base.hora || cat.hora_sugerida}</b></span> : null}
         <span className="rg-origem">{origem}</span>
         {stats ? <span className="rg-stat mono">30 dias: {stats.enviadas} enviadas · {stats.respondidas} respondidas{stats.prontas ? ` · ${stats.prontas} prontas` : ""}</span> : null}
         <button className="rg-link" onClick={() => setAberto(!aberto)}>{aberto ? "Fechar ▲" : "Ajustar ▼"}</button>
@@ -209,58 +240,75 @@ function CartaoRegra({ cat, nivel, donoId, meuId, regras, chefeId, stats, onSalv
 
       {aberto ? (
         <div className="rg-edit">
+          {d.etapas.map((e, i) => (
+            <div key={i} className="rg-etapa">
+              <div className="rg-etapa-h">
+                <b>Toque {i + 1}</b>
+                <span className="rg-inline wrap">
+                  <span>depois de</span>
+                  <input type="number" min={min} max={max} value={e.prazo} aria-label={`Prazo do toque ${i + 1}`}
+                    onChange={(ev) => mudaEtapa(i, { prazo: Number(ev.target.value) })} />
+                  <span>{unLonga} →</span>
+                  <select value={e.para} aria-label={`Quem recebe o toque ${i + 1}`} onChange={(ev) => mudaEtapa(i, { para: ev.target.value as Etapa["para"] })}>
+                    {cat.para_opcoes.map((p) => <option key={p} value={p}>{PARA[p]}</option>)}
+                  </select>
+                  <span>assina</span>
+                  <select value={e.assina} aria-label={`Quem assina o toque ${i + 1}`} onChange={(ev) => mudaEtapa(i, { assina: ev.target.value as Etapa["assina"] })}>
+                    {Object.keys(ASSINA).map((a) => <option key={a} value={a}>{ASSINA[a]}</option>)}
+                  </select>
+                </span>
+                {d.etapas.length > 1 ? <button className="rg-link" onClick={() => tiraEtapa(i)}>Tirar</button> : null}
+              </div>
+              <textarea rows={4} value={e.texto} aria-label={`Mensagem do toque ${i + 1}`} onChange={(ev) => mudaEtapa(i, { texto: ev.target.value })} />
+              {e.assina !== "comandra" ? <small>Sai do WhatsApp de quem assina. Se o chip dele estiver desligado, a mensagem fica pronta no painel dele para enviar.</small> : null}
+            </div>
+          ))}
+          {d.etapas.length < cat.max_etapas ? <button className="rg-btn" onClick={poeEtapa}>+ Mais um toque</button> : null}
+
           <div className="rg-campos">
-            <label>Prazo
-              <span className="rg-inline">
-                <input type="range" min={min} max={max} value={d.prazo} onChange={(e) => setD({ ...d, prazo: Number(e.target.value) })} />
-                <b className="mono">{d.prazo}{un}</b>
-              </span>
-              <small>Sugerido: {cat.prazo_sugerido}{un}. Faixa permitida: {min} a {max}{un}.</small>
-            </label>
             {cat.hora_sugerida ? (
-              <label>Horário de envio
-                <input type="time" min="08:00" max="19:30" value={d.hora || cat.hora_sugerida} onChange={(e) => setD({ ...d, hora: e.target.value })} />
-                <small>Entre 8h e 20h. Sugerido: {cat.hora_sugerida}.</small>
+              <label>Enviar a partir de
+                <input type="time" min="08:00" max="19:30" value={d.hora || cat.hora_sugerida} onChange={(ev) => setD({ ...d, hora: ev.target.value })} />
+                <small>Entre 8h e 20h, de segunda a sábado.</small>
               </label>
             ) : null}
             {nivel === "diretor" ? (
               <>
-                <label>Faixa que os líderes podem usar
+                <label>Prazo que os líderes podem usar
                   <span className="rg-inline">
-                    <input type="number" min={1} value={d.prazo_min} onChange={(e) => setD({ ...d, prazo_min: Number(e.target.value) })} />
+                    <input type="number" min={1} value={d.prazo_min} onChange={(ev) => setD({ ...d, prazo_min: Number(ev.target.value) })} />
                     <span>a</span>
-                    <input type="number" min={1} value={d.prazo_max} onChange={(e) => setD({ ...d, prazo_max: Number(e.target.value) })} />
-                    <span>{cat.unidade}</span>
+                    <input type="number" min={1} value={d.prazo_max} onChange={(ev) => setD({ ...d, prazo_max: Number(ev.target.value) })} />
+                    <span>{unLonga}</span>
                   </span>
                 </label>
                 <label className="rg-check">
-                  <input type="checkbox" checked={d.obrigatoria} onChange={(e) => setD({ ...d, obrigatoria: e.target.checked })} />
+                  <input type="checkbox" checked={d.obrigatoria} onChange={(ev) => setD({ ...d, obrigatoria: ev.target.checked })} />
                   Obrigatória: nenhum super ou gerente pode desligar
                 </label>
               </>
             ) : null}
           </div>
-          <label className="rg-texto">Mensagem
-            <textarea rows={5} value={d.texto} onChange={(e) => setD({ ...d, texto: e.target.value })} />
-            <small>{Object.entries(VARS).filter(([k]) => cat.texto_sugerido.includes(k)).map(([k, v]) => <span key={k}><code>{k}</code> {v}</span>)}</small>
-          </label>
+          <small>{Object.entries(VARS).map(([k, v]) => <span key={k}><code>{k}</code> {v}</span>)}</small>
+          {problema ? <p className="rg-erro">{problema}</p> : null}
           <div className="rg-acoes">
-            <button className="rg-btn prim" disabled={!mudou || salvando} onClick={() => salvar()}>{salvando ? "Salvando…" : "Salvar"}</button>
+            <button className="rg-btn prim" disabled={!mudou || salvando || !!problema} onClick={() => salvar()}>{salvando ? "Salvando…" : "Salvar"}</button>
             <button className="rg-btn" disabled={carregandoPrevia} onClick={verPrevia}>{carregandoPrevia ? "Calculando…" : "Ver quem receberia agora"}</button>
-            {minha ? <button className="rg-btn" onClick={voltarSugerido}>Voltar ao {acima.some(Boolean) ? "padrão de cima" : "sugerido"}</button> : null}
-            {d.texto !== cat.texto_sugerido ? <button className="rg-link" onClick={() => setD({ ...d, texto: cat.texto_sugerido })}>Usar o texto sugerido</button> : null}
+            {minha ? <button className="rg-btn" onClick={voltarSugerido}>Voltar ao {acima.length ? "padrão de cima" : "sugerido"}</button> : null}
+            {JSON.stringify(d.etapas) !== JSON.stringify(cat.etapas_sugeridas)
+              ? <button className="rg-link" onClick={() => setD({ ...d, etapas: cat.etapas_sugeridas })}>Usar a escada sugerida</button> : null}
           </div>
           {previa ? (
             <div className="rg-previa">
-              <b>{previa.length === 0 ? "Ninguém receberia agora." : `${previa.length} pessoa(s) receberiam agora:`}</b>
-              {previa.slice(0, 8).map((it, i) => (
+              <b>{previa.length === 0 ? "Ninguém receberia agora." : `${previa.length} mensagem(ns) sairiam agora:`}</b>
+              {previa.slice(0, 10).map((it, i) => (
                 <div key={i} className="rg-previa-it">
-                  <div><b>{it.corretor}</b> · {it.resumo} <span className="rg-origem">{it.canal}</span></div>
-                  {i === 0 ? <pre>{it.mensagem}</pre> : null}
+                  <div>Toque {it.toque} · <b>{it.destinatario}</b> ({PARA[it.para]}) · {it.resumo} <span className="rg-origem">{it.canal}</span></div>
+                  {i === 0 || previa[i - 1].toque !== it.toque ? <pre>{it.mensagem}</pre> : null}
                 </div>
               ))}
-              {previa.length > 8 ? <small>… e mais {previa.length - 8}.</small> : null}
-              <small>Prévia não envia nada. Os limites do dia (2 por pessoa, horário) entram na hora do envio.</small>
+              {previa.length > 10 ? <small>… e mais {previa.length - 10}.</small> : null}
+              <small>A prévia não envia nada. Os limites do dia (2 por corretor, horário) entram na hora do envio.</small>
             </div>
           ) : null}
         </div>
@@ -326,7 +374,7 @@ function Pausas() {
     queryFn: async () => ((await sb.from("regua_pausas").select("broker_id, ate, motivo").gte("ate", new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10))).data ?? []),
   });
   const [quem, setQuem] = useState(""); const [ate, setAte] = useState(""); const [motivo, setMotivo] = useState("");
-  const nomeDe = useMemo(() => new Map((corretores ?? []).map((c: any) => [c.id, [c.first_name, c.last_name].filter(Boolean).join(" ")])), [corretores]);
+  const nomeDe = useMemo(() => new Map<string, string>((corretores ?? []).map((c: any) => [c.id, [c.first_name, c.last_name].filter(Boolean).join(" ")])), [corretores]);
   const pausar = async () => {
     if (!quem || !ate) { toast.error("Escolha o corretor e até quando."); return; }
     const { error } = await sb.from("regua_pausas").upsert({ broker_id: quem, ate, motivo: motivo || null });
@@ -432,5 +480,12 @@ const CSS = `
 .mgr10 .rg-regras-fixas{color:var(--ink-2);font-size:13.5px}
 .mgr10 .rg-regras-fixas ul{margin:8px 0 0;padding-left:18px;display:grid;gap:4px}
 .mgr10 .rg-vazio{color:var(--ink-3)}
+.mgr10 .rg-escada{margin:0;padding-left:20px;display:grid;gap:3px;font-size:13.5px;color:var(--ink-2)}
+.mgr10 .rg-escada b{color:var(--ink)}
+.mgr10 .rg-etapa{display:grid;gap:8px;background:var(--sunk);border-radius:10px;padding:12px}
+.mgr10 .rg-etapa-h{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;font-size:13.5px}
+.mgr10 .rg-etapa-h .rg-link{margin-left:auto}
+.mgr10 .rg-etapa textarea{background:var(--card)}
+.mgr10 .rg-erro{color:var(--red);font-size:13px;font-weight:600}
 @media(max-width:620px){.mgr10 .rg-card-h{grid-template-columns:minmax(0,1fr) auto}.mgr10 .rg-tom{grid-column:1/-1;justify-self:start}}
 `;
