@@ -188,8 +188,11 @@ export function donoJunix(supers: SuperDiretoria[], superintendente: string | nu
     const g = s.gerentes.find((x) => chaveGerente(x.nome) === kg);
     if (g) return { superId: s.id, gerenteId: g.id };
   }
+  // o gerente no Junix pode ser o próprio super (Adajes, quando era gerente direto do diretor): comparação exata
+  const kgc = colado(gerente);
   const ks = colado(superJunix(superintendente));
-  const s = supers.find((x) => x.tokens.some((t) => ks.includes(t)));
+  const s = (kgc.length >= 4 ? supers.find((x) => x.tokens.includes(kgc)) : undefined)
+    ?? supers.find((x) => x.tokens.some((t) => ks.includes(t)));
   return { superId: s?.id ?? "fora", gerenteId: null as string | null };
 }
 

@@ -85,9 +85,13 @@ export function useConsolidadoSuper(superId: string | undefined, dias: number) {
       // diretor: o que o Junix tem sem gerente no Comandra vai para o super certo pelo nome
       const tokensSub = ((subs ?? []) as any[]).map((x) => ({ id: x.id as string,
         t: [chave(x.first_name), chave(x.last_name), ...String(x.first_name ?? "").split(/\s+/).slice(1).map(chave)].filter((t) => t.length >= 4) }));
-      const outrosDe = (sup: string | null) => {
+      // gerente no Junix que é o próprio super (ex.: Adajes, quando era gerente direto do diretor) também é dele;
+      // aqui a comparação é exata ("SILVA" não pode pegar "PAMELA SILVA DE ALMEIDA")
+      const outrosDe = (sup: string | null, ger?: string | null) => {
         const k = superJunix(sup).normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z]/g, "");
-        const s2 = ehDiretor ? tokensSub.find((x) => x.t.some((t) => k.includes(t))) : undefined;
+        const kg = chave(ger);
+        const s2 = !ehDiretor ? undefined
+          : tokensSub.find((x) => kg.length >= 4 && x.t.includes(kg)) ?? tokensSub.find((x) => x.t.some((t) => k.includes(t)));
         return s2 ? linha(`outros:${s2.id}`, "Sem gerente no Comandra") : linha("outros", "Outros no Junix");
       };
       const { data: gers } = await supabase.from("profiles").select("id,first_name")
@@ -133,13 +137,13 @@ export function useConsolidadoSuper(superId: string | undefined, dias: number) {
         if (ehDiretor && v.fora_do_placar) continue;
         const gid = porChave.get(chaveGer(v.gerente));
         if (!gid && !daMinhaSuper(v.superintendente)) continue;
-        const l = gid ? linhas.get(gid)! : outrosDe(v.superintendente);
+        const l = gid ? linhas.get(gid)! : outrosDe(v.superintendente, v.gerente);
         l.vendas += Number(v.qtd ?? 1); l.vgv += Number(v.vgv ?? 0);
       }
       for (const p of ((pastas as any).data ?? []) as any[]) {
         const gid = porChave.get(chaveGer(p.gerente));
         if (!gid && !daMinhaSuper(p.superintendente)) continue;
-        const l = gid ? linhas.get(gid)! : outrosDe(p.superintendente);
+        const l = gid ? linhas.get(gid)! : outrosDe(p.superintendente, p.gerente);
         l.pastas += 1; if ((p.dias ?? 0) >= 7) l.pastasTravadas += 1;
       }
       for (const ld of leads as any[]) {

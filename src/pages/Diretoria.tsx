@@ -312,7 +312,8 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
   const online = corretores.filter((x) => x.c.online).length;
   const logados = corretores.filter((x) => x.s.logadosHoje[x.c.id]).length;
   const plantaoComLogin = corretores.filter((x) => x.c.plantao_hoje).length;
-  const semLogin = gerentes.reduce((a, { s, g }) => a + (s.plantaoSemLogin[g.id]?.length ?? 0), 0);
+  // super sem gerente no Comandra (plantão lido do C2S): todo mundo dele no plantão está sem login
+  const semLogin = gerentes.reduce((a, { s, g }) => a + (s.plantaoSemLogin[g.id]?.length ?? 0), 0) + supers.reduce((a, s) => a + (s.c2s?.hoje ?? 0), 0);
   const nuncaEntraram = corretores.filter((x) => !x.c.ultimo_acesso).length;
 
   // decida hoje: as 3 coisas mais caras agora, do dado
@@ -989,7 +990,7 @@ function Equipes({ supers, linhasDoSuper, aberto, tog, abrirPainel, carregandoCo
               return [
                 <tr key={kS} className="n0" onClick={() => tog(kS)}>
                   <td><Seta on={!!aberto[kS]} />{s.nome} <span style={{ fontWeight: 500, color: "var(--ink-3)", fontSize: 12 }}>· {s.c2s ? `${s.c2s.gerentes.length} gerentes no C2S` : `${s.gerentes.length} gerentes`}</span></td>
-                  {s.c2s ? cel({ corretores: 0, plantaoHoje: s.c2s.hoje, semLogin: 0, logados: 0, online: 0 },
+                  {s.c2s ? cel({ corretores: s.c2s.gerentes.reduce((a, g) => a + g.corretores30, 0), plantaoHoje: s.c2s.hoje, semLogin: s.c2s.hoje, logados: 0, online: 0 },
                     carregandoCons ? null : { ...somar(s.nome, ls), plantaoDias: s.c2s.dias })
                     : cel(somaN(s.gerentes.map((g) => numsGer(s, g))), carregandoCons ? null : somar(s.nome, ls))}
                 </tr>,
@@ -999,7 +1000,7 @@ function Equipes({ supers, linhasDoSuper, aberto, tog, abrirPainel, carregandoCo
                   ...s.c2s.gerentes.map((g) => (
                     <tr key={`c2s:${s.id}:${g.nome}`} className="n1">
                       <td>{g.nome} <span style={{ color: "var(--ink-3)", fontSize: 11.5 }}>· {g.corretores} no plantão · sem conta no Comandra</span></td>
-                      <td /><td><Z n={g.hoje} /></td><td /><td /><td /><td><Z n={g.dias} /></td><td /><td /><td />
+                      <td><Z n={g.corretores30} /></td><td><Z n={g.hoje} /></td><td><Z n={g.hoje} /></td><td /><td /><td><Z n={g.dias} /></td><td /><td /><td />
                     </tr>)),
                 ] : []),
                 ...(aberto[kS] ? s.gerentes.flatMap((g) => {
@@ -1035,7 +1036,8 @@ function Equipes({ supers, linhasDoSuper, aberto, tog, abrirPainel, carregandoCo
             <tr className="tot"><td>Empresa</td>{(() => {
               const c2sDias = supers.reduce((a, s) => a + (s.c2s?.dias ?? 0), 0), c2sHoje = supers.reduce((a, s) => a + (s.c2s?.hoje ?? 0), 0);
               const n = somaN(todos); const t = carregandoCons ? null : somar("Empresa", supers.flatMap(linhasDoSuper));
-              return cel({ ...n, plantaoHoje: n.plantaoHoje + c2sHoje }, t ? { ...t, plantaoDias: t.plantaoDias + c2sDias } : null);
+              const c2sCor = supers.reduce((a, s) => a + (s.c2s?.gerentes.reduce((b, g) => b + g.corretores30, 0) ?? 0), 0);
+              return cel({ ...n, corretores: n.corretores + c2sCor, plantaoHoje: n.plantaoHoje + c2sHoje, semLogin: n.semLogin + c2sHoje }, t ? { ...t, plantaoDias: t.plantaoDias + c2sDias } : null);
             })()}</tr>
           </tbody>
         </table>
