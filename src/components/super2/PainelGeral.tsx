@@ -145,7 +145,10 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
 .mgr10 .s2-pg .s2-gk div{background:var(--sunk);border-radius:8px;padding:8px 10px}
 .mgr10 .s2-pg .s2-gk small{display:block;font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
 .mgr10 .s2-pg .s2-gk b{font-size:18px}
-.mgr10 .s2-pg .s2-pes{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}`}</style>
+.mgr10 .s2-pg .s2-pes{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.mgr10 .s2-pg .s2-pad{padding:16px 18px}
+.mgr10 .s2-pg .dir-kpi .mono{font-size:20px;white-space:nowrap}
+.mgr10 .s2-pg .dir-h{margin-bottom:10px}`}</style>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end", justifyContent: "space-between" }}>
         <div className="dir-ola" style={{ color: "var(--ink)" }}>
@@ -187,7 +190,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
             <div className="dir-card dir-kpi"><div className="dir-lbl">Vendas no período</div><span className="mono">{t ? nf(t.vendas) : "…"}</span><small>{t?.vgv ? `${curto(t.vgv)} em VGV` : "Junix"}</small></div>
             <div className="dir-card dir-kpi"><div className="dir-lbl">Anúncio no período</div><span className="mono">{t ? curto(t.gasto) : "…"}</span>
               <small>{t?.leadsFb ? `${nf(t.leadsFb)} leads · ${brl(t.gasto / t.leadsFb)} cada` : "Facebook"}</small></div>
-            <div className="dir-card dir-kpi"><div className="dir-lbl">Custo por venda</div><span className="mono">{t?.vendas ? brl(t.gasto / t.vendas) : "—"}</span><small>anúncio ÷ vendas</small></div>
+            <div className="dir-card dir-kpi"><div className="dir-lbl">Custo por venda</div><span className="mono">{t?.vendas ? curto(t.gasto / t.vendas) : "—"}</span><small>anúncio ÷ vendas</small></div>
             <div className="dir-card dir-kpi"><div className="dir-lbl">Sem nenhum toque</div><span className="mono" style={{ color: "var(--red)" }}>{t ? nf(t.carteiraSemToque) : "…"}</span><small>leads novos, agora</small></div>
           </div>
         </div>
@@ -212,13 +215,13 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
             </div>
           ))}
 
-          <div className="dir-card" style={{ marginTop: 14 }}>
+          <div className="dir-card s2-pad" style={{ marginTop: 14 }}>
             <div className="dir-h"><b>Funil do período</b><span>{p.texto}{isFetching ? " · atualizando…" : ""}</span></div>
             <div className="dir-barras">
               {funil.map((f) => (
-                <div key={f.nome} className="tr" style={{ display: "grid", gridTemplateColumns: "170px 1fr 60px", gap: 10, alignItems: "center", padding: "6px 0" }}>
-                  <span style={{ fontSize: 13.5 }}><b>{f.nome}</b><br /><small style={{ color: "var(--ink-3)" }}>{f.obs}</small></span>
-                  <span style={{ background: "var(--sunk)", borderRadius: 6, height: 12, overflow: "hidden" }}><i style={{ display: "block", height: "100%", width: `${(f.n / maxF) * 100}%`, background: "var(--teal)" }} /></span>
+                <div key={f.nome} style={{ gridTemplateColumns: "180px 1fr 60px" }}>
+                  <span><b>{f.nome}</b><br /><small style={{ color: "var(--ink-3)" }}>{f.obs}</small></span>
+                  <div className="tr"><i style={{ width: `${(f.n / maxF) * 100}%` }} /></div>
                   <b className="mono" style={{ textAlign: "right" }}>{nf(f.n)}</b>
                 </div>
               ))}
@@ -226,7 +229,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
             </div>
           </div>
 
-          <div className="dir-card" style={{ marginTop: 14 }}>
+          <div className="dir-card s2-pad" style={{ marginTop: 14 }}>
             <div className="dir-h"><b>Pessoas agora</b><span>login no Comandra e ponto no C2S</span></div>
             <div className="s2-pes">
               <div><div className="dir-lbl">Corretores</div><b className="mono" style={{ fontSize: 22 }}>{cors.length}</b></div>
@@ -248,7 +251,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
             const meta = filhos.find((f: any) => f.id === g.id);
             const gg = gargalo(l);
             return (
-              <div key={g.id} className="dir-card">
+              <div key={g.id} className="dir-card s2-pad">
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                   <b style={{ fontSize: 16 }}>{g.nome}</b>
                   <span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>{g.corretores} corretores · {g.online} online · {g.plantao_hoje} no plantão</span>
