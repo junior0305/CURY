@@ -136,7 +136,7 @@ function Assistente({ fatos, pronto }: { fatos: any; pronto: boolean }) {
   const [enviando, setEnviando] = useState(false);
   const { data: lin } = useQuery({
     queryKey: ["s2-ia", id], enabled: !!id,
-    refetchInterval: (a: any) => ((a?.state ? a.state.data : a)?.status === "pendente" ? 3000 : false), // v4 passa o dado, v5 a query
+    refetchInterval: (q: any) => (q.state.data?.status === "pendente" ? 3000 : false), refetchIntervalInBackground: true,
     queryFn: async () => (await sb.from("estrategia_ia").select("status,modo,resposta").eq("id", id).maybeSingle()).data,
   });
   const pedir = async (modo: "midia" | "pergunta") => {
