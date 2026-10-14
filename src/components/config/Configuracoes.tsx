@@ -15,6 +15,7 @@ import ReguaEquipe from "@/components/regua/ReguaEquipe";
 import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import { toast } from "sonner";
 import { salvarGestor } from "@/hooks/useAnuncios";
+import ContasAnuncio from "@/components/config/ContasAnuncio";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
 import IntegracaoFacebook from "@/pages/admin/IntegracaoFacebook";
@@ -39,7 +40,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
     setSecao(k);
     const p = new URLSearchParams(params); p.set("secao", k); setParams(p, { replace: true });
   };
-  const secoes = SECOES.filter((s) => !(s.k === "facebook" && nivel === "diretor"));
+  const secoes = SECOES;
 
   return (
     <div className="cfg">
@@ -59,7 +60,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
         {secao === "avisos" ? <ReguaEquipe nivel={nivel} donoId={donoId} />
           : secao === "equipe" ? <Equipe nivel={nivel} donoId={donoId} />
           : secao === "whatsapp" ? <MeuWhatsApp />
-          : <><GestorTrafego donoId={donoId} /><div className="integ-shell"><IntegracaoFacebook /></div></>}
+          : <><ContasAnuncio /><GestorTrafego donoId={donoId} /><div className="integ-shell"><IntegracaoFacebook /></div></>}
       </section>
     </div>
   );
