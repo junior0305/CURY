@@ -40,13 +40,14 @@ import Configuracoes from "@/components/config/Configuracoes";
 import PainelGeralSuper from "@/components/superintendente/PainelGeralSuper";
 import SalaDeGuerra from "@/components/super2/SalaDeGuerra";
 import PastasDoSuper from "@/components/super2/Pastas";
-import LeadsMidia from "@/components/super2/LeadsMidia";
+import Leads from "@/components/super2/Leads";
+import Midia from "@/components/super2/Midia";
 import Tropa from "@/components/super2/Tropa";
 import { useDiretorId, useDiretoria } from "@/hooks/useDiretoria";
 
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "Semana"], [30, "Mês"]];
 
-type AbaSuper = "consolidado" | "estrategia" | "pastas" | "leads" | "time" | "bi" | "campanhas" | "plano" | "gastos" | "config";
+type AbaSuper = "consolidado" | "estrategia" | "pastas" | "leads" | "time" | "bi" | "campanhas" | "plano" | "gastos" | "config" | "midia";
 
 export default function Superintendente() {
   const { session, role } = useAuth();
@@ -83,7 +84,7 @@ export default function Superintendente() {
   const abaUrl = params.get("aba");
   const subGuerra = abaUrl === "plano" || abaUrl === "gastos" ? abaUrl : undefined;
   const [aba, setAba] = useState<AbaSuper>(
-    abaUrl === "estrategia" || abaUrl === "pastas" || abaUrl === "leads" || abaUrl === "time" || abaUrl === "bi" || abaUrl === "campanhas" || abaUrl === "plano" || abaUrl === "gastos" || abaUrl === "config" || abaUrl === "regua"
+    abaUrl === "estrategia" || abaUrl === "pastas" || abaUrl === "leads" || abaUrl === "time" || abaUrl === "bi" || abaUrl === "campanhas" || abaUrl === "plano" || abaUrl === "gastos" || abaUrl === "config" || abaUrl === "regua" || abaUrl === "midia"
       ? ((abaUrl === "regua" ? "config" : abaUrl === "plano" || abaUrl === "gastos" ? "estrategia" : abaUrl === "campanhas" ? "consolidado" : abaUrl) as AbaSuper)
       : "consolidado"
   );
@@ -120,6 +121,8 @@ export default function Superintendente() {
             ? "bi"
             : aba === "config"
             ? "config"
+            : aba === "midia"
+            ? "anuncios"
             : "tempo"
         }
         mode={mode}
@@ -131,6 +134,7 @@ export default function Superintendente() {
           else if (k === "time") setAba("time");
           else if (k === "bi") setAba("bi");
           else if (k === "config") setAba("config");
+          else if (k === "anuncios") setAba("midia");
           else if (ehDiretoria) nav("/diretor");
           else setAba("consolidado");
         }}
@@ -155,7 +159,9 @@ export default function Superintendente() {
           ) : aba === "pastas" && superId ? (
             <PastasDoSuper superId={superId} />
           ) : aba === "leads" && superId ? (
-            <LeadsMidia superId={superId} />
+            <Leads superId={superId} />
+          ) : aba === "midia" && superId ? (
+            <Midia superId={superId} />
           ) : aba === "config" ? (
             <Configuracoes nivel={ehDiretoria ? "diretor" : "super"} donoId={ehDiretoria ? null : (session?.user?.id ?? null)} />
           ) : aba === "time" && superId ? (

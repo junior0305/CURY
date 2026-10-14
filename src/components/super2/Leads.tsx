@@ -1,20 +1,18 @@
-// Leads & Mídia do superintendente: de onde vem o lead de cada equipe (anúncio, disparo, pescados) e o
-// que acontece com ele, as campanhas de todas as contas das equipes juntas (lidas ao vivo no Facebook
-// pela edge fb-conta-gerente, no período escolhido) e os pontos de melhoria que saem desses números.
+// Leads do superintendente: de onde vem o lead de cada equipe (anúncio, disparo, pescados) e o que acontece
+// com ele (atendido, virou visita), no período do seletor único. As campanhas ficam na aba Mídia.
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEscopoSuper } from "./escopo";
+import { usePeriodoSuper, SeletorPeriodoSuper } from "./Periodo";
 
 const sb = supabase as any;
 const nf = (n: number) => (n ?? 0).toLocaleString("pt-BR");
 const brl = (n: number | null | undefined) => (n == null || !isFinite(n) ? "—" : "R$ " + Math.round(n).toLocaleString("pt-BR"));
 const brl2 = (n: number | null | undefined) => (n == null || !isFinite(n) ? "—" : "R$ " + n.toFixed(2).replace(".", ","));
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
-const diaSP = (desloc = 0) => new Date(Date.now() - 3 * 3600e3 - desloc * 86400e3).toISOString().slice(0, 10);
 type Canal = "anuncio" | "disparo" | "pescados" | "outros";
 const CANAIS: [Canal, string][] = [["anuncio", "Anúncio"], ["disparo", "Disparo"], ["pescados", "Pescados"], ["outros", "Outros"]];
-type Periodo = "hoje" | "ontem" | "7d" | "30d" | "datas";
 
 function canalDe(l: any): Canal {
   const src = String(l.source ?? "").toLowerCase();
@@ -30,14 +28,10 @@ const atendido = (l: any) => {
 };
 const avancou = (l: any) => ["VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED", "CONCLUDED"].includes(l.status);
 
-export default function LeadsMidia({ superId }: { superId: string }) {
+export default function Leads({ superId }: { superId: string }) {
   const { supers } = useEscopoSuper(superId);
-  const [periodo, setPeriodo] = useState<Periodo>("7d");
-  const [de, setDe] = useState(diaSP(6)); const [ate, setAte] = useState(diaSP(0));
-  const janela = periodo === "hoje" ? { de: diaSP(0), ate: diaSP(0) } : periodo === "ontem" ? { de: diaSP(1), ate: diaSP(1) }
-    : periodo === "7d" ? { de: diaSP(6), ate: diaSP(0) } : periodo === "30d" ? { de: diaSP(29), ate: diaSP(0) } : { de, ate };
-  const iniUTC = `${janela.de}T03:00:00Z`;
-  const fimUTC = new Date(new Date(`${janela.ate}T03:00:00Z`).getTime() + 86400e3).toISOString();
+  const p = usePeriodoSuper("7d");
+  const janela = p.janela, iniUTC = p.iniUTC, fimUTC = p.fimUTC;
 
   const gerentes = useMemo(() => supers.flatMap((s) => s.gerentes).filter((g) => !/revisor/i.test(g.nome)), [supers]);
   const brokerGer = useMemo(() => {
@@ -67,26 +61,6 @@ export default function LeadsMidia({ superId }: { superId: string }) {
     },
   });
 
-  // mídia: cada conta das equipes (gerentes + o próprio super), ao vivo no período
-  const donosConta = useMemo(() => [...supers.map((s) => ({ id: s.id, nome: s.nome })), ...gerentes.map((g) => ({ id: g.id, nome: g.nome }))], [supers, gerentes]);
-  const { data: midia, isLoading: carregandoMidia } = useQuery({
-    queryKey: ["s2-midia", superId, janela.de, janela.ate, donosConta.length],
-    enabled: donosConta.length > 0, staleTime: 10 * 60_000,
-    queryFn: async () => {
-      const r = await Promise.all(donosConta.map(async (d) => {
-        const { data } = await supabase.functions.invoke("fb-conta-gerente", { body: { owner_id: d.id, de: janela.de, ate: janela.ate } });
-        const x = data as any;
-        if (!x || x.semConta || x.error) return null;
-        return { dono: d.nome, donoId: d.id, conta: x.conta, gasto: Number(x.gasto || 0), campanhas: (x.campanhas ?? []) as any[] };
-      }));
-      return r.filter(Boolean) as { dono: string; donoId: string; conta: string; gasto: number; campanhas: any[] }[];
-    },
-  });
-  const { data: comp } = useQuery({
-    queryKey: ["anuncios-comparativo"], staleTime: 5 * 60_000,
-    queryFn: async () => ((await sb.rpc("anuncios_comparativo")).data ?? []) as any[],
-  });
-
   // números por equipe × canal
   const tabela = useMemo(() => {
     type C = { n: number; atend: number; resp: number; avanc: number };
@@ -103,12 +77,6 @@ export default function LeadsMidia({ superId }: { superId: string }) {
     return { porGer, tot };
   }, [leads, brokerGer]);
 
-  const campanhas = useMemo(() => (midia ?? []).flatMap((m) => m.campanhas.map((c: any) => ({ ...c, dono: m.dono, resultado: Number(c.leads || 0) + Number(c.conversas || 0) })))
-    .filter((c) => Number(c.gasto) > 0 || c.ativa).sort((a, b) => Number(b.gasto) - Number(a.gasto)), [midia]);
-  const gastoTotal = (midia ?? []).reduce((a, m) => a + m.gasto, 0);
-  const resTotal = campanhas.reduce((a, c) => a + c.resultado, 0);
-  const cplMedio = resTotal ? gastoTotal / resTotal : null;
-
   // pontos de melhoria (regras fixas, sem IA)
   const melhorias = useMemo(() => {
     const out: { g: "red" | "org" | "grn"; t: string; d: string }[] = [];
@@ -120,40 +88,22 @@ export default function LeadsMidia({ superId }: { superId: string }) {
       const a = row.anuncio, dsp = row.disparo;
       if (a.n >= 5 && dsp.n >= 5 && pct(dsp.atend, dsp.n) + 20 < pct(a.atend, a.n)) out.push({ g: "org", t: `${g.nome}: disparo é menos atendido que anúncio`, d: `${pct(dsp.atend, dsp.n)}% dos leads de disparo atendidos contra ${pct(a.atend, a.n)}% de anúncio. Resposta de disparo esfria rápido.` });
     }
-    if (cplMedio) {
-      const porDono = new Map<string, { g: number; r: number }>();
-      for (const c of campanhas) { const x = porDono.get(c.dono) ?? { g: 0, r: 0 }; x.g += Number(c.gasto); x.r += c.resultado; porDono.set(c.dono, x); }
-      for (const [dono, x] of porDono) {
-        if (x.g >= 100 && x.r && x.g / x.r >= 1.5 * cplMedio) out.push({ g: "org", t: `${dono} paga ${(x.g / x.r / cplMedio).toFixed(1).replace(".", ",")}× a média por lead`, d: `${brl2(x.g / x.r)} por lead contra ${brl2(cplMedio)} das suas equipes no período. Rever público e criativo com o gestor de tráfego.` });
-        if (x.g >= 100 && !x.r) out.push({ g: "red", t: `${dono}: ${brl(x.g)} gastos sem nenhum lead`, d: "Conferir formulário, público e se a campanha está entregando." });
-      }
-      const semLead = campanhas.filter((c) => Number(c.gasto) >= 50 && !c.resultado);
-      if (semLead.length) out.push({ g: "red", t: `${semLead.length} campanha(s) gastando sem lead`, d: semLead.slice(0, 3).map((c) => `${c.nome} (${c.dono}): ${brl(Number(c.gasto))}`).join("; ") + "." });
-      const campeas = campanhas.filter((c) => c.resultado >= 3 && Number(c.gasto) / c.resultado <= 0.6 * cplMedio);
-      if (campeas.length) out.push({ g: "grn", t: `${campeas.length} campanha(s) bem abaixo da média: vale pôr mais verba`, d: campeas.slice(0, 3).map((c) => `${c.nome} (${c.dono}): ${brl2(Number(c.gasto) / c.resultado)} por lead`).join("; ") + "." });
-    }
-    const idsEscopo = new Set(donosConta.map((d) => d.id));
-    for (const r of comp ?? []) if (idsEscopo.has(r.dono_id) && r.alertas >= 5) out.push({ g: "org", t: `Conta de ${r.dono} com ${r.alertas} alertas do robô`, d: "Abra Anúncios no painel do gerente para ver cada alerta e avisar o gestor de tráfego." });
     return out.sort((a, b) => ({ red: 0, org: 1, grn: 2 }[a.g] - { red: 0, org: 1, grn: 2 }[b.g]));
-  }, [gerentes, tabela, campanhas, cplMedio, comp, donosConta]);
+  }, [gerentes, tabela]);
 
-  const pills: [Periodo, string][] = [["hoje", "Hoje"], ["ontem", "Ontem"], ["7d", "7 dias"], ["30d", "30 dias"], ["datas", "Escolher datas"]];
   const totN = CANAIS.reduce((a, [k]) => a + tabela.tot[k].n, 0);
 
   return (
     <div className="lm">
       <style>{CSS}</style>
       <header className="lm-top">
-        <div><h1>Leads & Mídia</h1><p>De onde vem o lead de cada equipe, o que acontece com ele e quanto custa</p></div>
-        <div className="lm-per">
-          <div className="lm-pills">{pills.map(([k, r]) => <button key={k} className={periodo === k ? "on" : ""} onClick={() => setPeriodo(k)}>{r}</button>)}</div>
-          {periodo === "datas" ? <span className="lm-datas"><input type="date" value={de} max={ate} onChange={(e) => setDe(e.target.value)} aria-label="De" /> até <input type="date" value={ate} min={de} max={diaSP(0)} onChange={(e) => setAte(e.target.value)} aria-label="Até" /></span> : null}
-        </div>
+        <div><h1>Leads</h1><p>De onde vem o lead de cada equipe e o que acontece com ele · {p.texto}</p></div>
+        <SeletorPeriodoSuper p={p} />
       </header>
 
       <section className="lm-sec">
-        <h2>O que melhorar</h2>
-        {!melhorias.length ? <div className="lm-card lm-vazio">{isLoading || carregandoMidia ? "Calculando…" : "Nenhum ponto de atenção no período."}</div> : null}
+        <h2>O que melhorar no atendimento</h2>
+        {!melhorias.length ? <div className="lm-card lm-vazio">{isLoading ? "Calculando…" : "Nenhum ponto de atenção no período."}</div> : null}
         {melhorias.map((m, i) => <div key={i} className={`lm-mel ${m.g}`}><span className="lm-dot" /><div><b>{m.t}</b><p>{m.d}</p></div></div>)}
       </section>
 
@@ -195,34 +145,6 @@ export default function LeadsMidia({ superId }: { superId: string }) {
         )}
       </section>
 
-      <section className="lm-sec">
-        <h2>Campanhas de todas as equipes <small>{carregandoMidia ? "lendo o Facebook…" : `${brl(gastoTotal)} no período · ${brl2(cplMedio)} por lead`}</small></h2>
-        {carregandoMidia ? <div className="lm-card lm-vazio">Lendo as contas no Facebook…</div> : !campanhas.length ? <div className="lm-card lm-vazio">Nenhuma campanha com gasto no período.</div> : (
-          <div className="lm-card lm-tw">
-            <table>
-              <thead><tr><th>Campanha</th><th>Conta</th><th>Gasto</th><th>Leads</th><th>Por lead</th><th /></tr></thead>
-              <tbody>
-                {campanhas.map((c) => {
-                  const custo = c.resultado ? Number(c.gasto) / c.resultado : null;
-                  const selo = !cplMedio || Number(c.gasto) < 30 ? null : !c.resultado ? <em className="red">sem lead</em>
-                    : custo! >= 2 * cplMedio ? <em className="red">cara</em> : custo! <= 0.6 * cplMedio && c.resultado >= 3 ? <em className="grn">campeã</em> : null;
-                  return (
-                    <tr key={`${c.dono}-${c.id}`}>
-                      <td><span className="lm-nome"><i className={c.ativa ? "on" : ""} />{c.nome}</span></td>
-                      <td>{c.dono}</td>
-                      <td>{brl(Number(c.gasto))}</td>
-                      <td>{c.resultado}{c.conversas ? <small> ({c.leads} form · {c.conversas} conv.)</small> : null}</td>
-                      <td>{brl2(custo)}</td>
-                      <td>{selo}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            <small className="lm-nota">"Cara" = o dobro da média das suas equipes no período; "campeã" = 40% abaixo, com 3 leads ou mais. Conversa de anúncio abre direto no WhatsApp da equipe.</small>
-          </div>
-        )}
-      </section>
     </div>
   );
 }
