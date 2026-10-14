@@ -73,7 +73,7 @@ Mais de uma sessão de IA trabalha neste repositório e publica no mesmo site (c
 ### Commit e publicação
 1. Antes de mexer: `git pull` e `git status`.
 2. `git add` **só dos seus arquivos** (nunca `git add src` inteiro). Faça o commit **antes** de buildar: o `dist` leva tudo o que está no disco, inclusive trabalho pela metade de outra sessão.
-3. Publicar: `npx vite build` → `git add <seus arquivos> dist` → commit → `git push origin main` → `ssh root@187.127.44.223 'docker service update --force --detach cury_agente-app'` → conferir o hash do `index-*.js` em comandra.com.br.
+3. Publicar: `npx vite build` → `git add <seus arquivos> dist` → commit → `git push origin main` → `ssh root@187.127.44.223 'docker service update --force --detach cury_agente-app; docker service update --force --detach planoego_app'` (**os dois sites**: Econ e planoego servem o mesmo dist) → conferir o hash do `index-*.js` em comandra.com.br **e** planoego.comandra.com.br.
 4. Edge functions ficam no servidor (`/root/supabase/volumes/functions/<fn>/index.ts`), não neste repositório: editar lá e `docker service update --force --detach supabase_functions`. Tabela nova exige reiniciar `supabase_rest`.
 
 ### IA (OpenAI)
@@ -128,3 +128,4 @@ Mais de uma sessão de IA trabalha neste repositório e publica no mesmo site (c
 - 14/10 · Diretoria · Admin da planoego: `admin@planoego` (Junior), com a mesma senha do admin do Econ (hash copiado; trocar a senha num não troca no outro).
 - 14/10 · Diretoria · **Conserto Pastas na Superintendência** (`super2/Pastas.tsx`, `super2/escopo.ts`, `useDiretoria.ts`): removida trava restritiva de data que zerava a esteira ativa (agora padrão esteira contínua viva com toggle opcional por data de cadastro), matching resiliente multi-nível em useEscopoSuper (corretor → gerente → tokens super → visão completa para diretor/admin) com query de fallback para junix_pastas, resolução robusta de useDiretorId e cards KPI interativos com filtro por superintendência e gerente.
 - 14/10 · Diretoria · Configurar na tela do diretor: `.dir .mgr10.dir-cfg` fixa a paleta clara da diretoria (o tema escuro, padrão de quem entra pela 1ª vez, deixava letra clara em fundo claro e o modal de cadastro escuro). Só afeta o Configurar do /diretor.
+- 14/10 · Diretoria · Por que o /super "voltava para a versão antiga": o commit 6257543 (12/10) mandava DIRECTOR **e ADMIN** que abriam /super sem aba (ou clicavam Painel Geral) para /diretor. O Junior é ADMIN → via a tela do diretor e não as mudanças do super (a Liliane via). Removido em a47f502 (14/10 08:38). Lembrete: ADMIN no /super enxerga pelo perfil DIRECTOR (a diretoria inteira), não por um super; para ver como super, usar o login de um super.
