@@ -180,7 +180,9 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
       const vendasB = cruz?.porProfile.get(b.id)?.vendas ??
         meusLeads.filter((l) => l.status === "CONCLUDED").length;
 
-      const custo = meusLeads.length * v10.dinheiro.custoLead;
+      // custo só do lead pago (anúncio), ao CPL real das contas do gerente; pescado/carteira não custa
+      const pagos = meusLeads.filter((l) => classificarOrigem(l) === "anuncio").length;
+      const custo = pagos * (midia?.cpl ?? v10.dinheiro.custoLead);
       const retorno = vendasB * v10.dinheiro.comissaoCorretor;
       const saldo = retorno - custo;
 
@@ -196,7 +198,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
         saldo,
       };
     }).sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0) || a.nome.localeCompare(b.nome));
-  }, [v10, cruz, plantaoHoje]);
+  }, [v10, cruz, plantaoHoje, midia, listaLeadsBase]);
 
   // Mapa de IDs para Corretor
   const brokerMap = useMemo(() => {
