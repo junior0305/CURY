@@ -227,7 +227,8 @@ function LeadsTeste() {
   async function carregar() {
     const { data } = await supabase.from("webhook_logs").select("id,created_at,payload")
       .eq("integration_key", "fb_teste").order("created_at", { ascending: false }).limit(10);
-    setItens(((data ?? []) as unknown as Teste[]).filter((t) => t.payload?.via !== "teste-claude"));
+    // só o que chega pela conexão direta (o Make tem o próprio caminho)
+    setItens(((data ?? []) as unknown as Teste[]).filter((t) => t.payload?.via === "direto"));
   }
   useEffect(() => { carregar(); const t = setInterval(carregar, 5000); return () => clearInterval(t); }, []);
   return (
