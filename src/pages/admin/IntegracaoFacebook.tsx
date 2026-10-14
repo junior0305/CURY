@@ -220,7 +220,7 @@ function MapaFormularios() {
 
 // Leads de teste da Meta (ferramenta de teste de Lead Ads): o Comandra recebe, mostra aqui
 // e NÃO manda para corretor. Serve para provar que a conexão funciona.
-type Teste = { id: string; created_at: string; payload: { via?: string; pagina?: string; page_id?: string;
+type Teste = { id: string; created_at: string; payload: { via?: string; bloqueado?: boolean; pagina?: string; page_id?: string;
   formulario?: string; form_id?: string; campanha?: string; campos?: Record<string, string> } };
 function LeadsTeste() {
   const [itens, setItens] = useState<Teste[]>([]);
@@ -232,7 +232,7 @@ function LeadsTeste() {
   useEffect(() => { carregar(); const t = setInterval(carregar, 5000); return () => clearInterval(t); }, []);
   return (
     <div>
-      <div className="text-sm font-semibold mb-1">Leads de teste recebidos</div>
+      <div className="text-sm font-semibold mb-1">Leads recebidos pela conexão</div>
       <div className="text-xs text-muted-foreground mb-2">
         Crie um lead na ferramenta de teste da Meta e ele aparece aqui em segundos. Lead de teste não vai para corretor.
       </div>
@@ -244,7 +244,10 @@ function LeadsTeste() {
             <div key={t.id} className="rounded-lg border p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="font-medium">{t.payload.formulario || t.payload.form_id || "formulário"}</div>
-                <Badge variant="outline">{t.payload.via === "direto" ? "direto do Facebook" : "via Make"}</Badge>
+                <div className="flex gap-1">
+                  <Badge variant="outline">{t.payload.via === "direto" ? "direto do Facebook" : "via Make"}</Badge>
+                  {t.payload.bloqueado ? <Badge variant="outline" className="text-amber-600 border-amber-300">dados liberados após aprovação da Meta</Badge> : null}
+                </div>
               </div>
               <div className="text-xs text-muted-foreground">
                 {new Date(t.created_at).toLocaleString("pt-BR")} · {t.payload.pagina || t.payload.page_id}
