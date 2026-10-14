@@ -707,18 +707,28 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
       </section>
 
       {/* Modais de Cadastro de Gerente e Corretor */}
-      <CadastrarGerente
-        aberto={modalGerenteAberto}
-        superId={superId}
-        onFechar={() => setModalGerenteAberto(false)}
-        onCriado={() => qc.invalidateQueries({ queryKey: ["diretoria"] })}
-      />
-      <CadastrarCorretor
-        aberto={modalCorretorAberto}
-        gerentes={gerentes}
-        onFechar={() => setModalCorretorAberto(false)}
-        onCriado={() => qc.invalidateQueries({ queryKey: ["diretoria"] })}
-      />
+      {modalGerenteAberto && (
+        <CadastrarGerente
+          superId={superId}
+          superNome={superNome}
+          onFechar={() => setModalGerenteAberto(false)}
+          onPronto={() => {
+            setModalGerenteAberto(false);
+            qc.invalidateQueries({ queryKey: ["diretoria"] });
+          }}
+        />
+      )}
+      {modalCorretorAberto && (
+        <CadastrarCorretor
+          managerId={gerentes[0]?.id || superId}
+          gerentes={gerentes.map((g) => ({ id: g.id, nome: g.nome }))}
+          onFechar={() => setModalCorretorAberto(false)}
+          onPronto={() => {
+            setModalCorretorAberto(false);
+            qc.invalidateQueries({ queryKey: ["diretoria"] });
+          }}
+        />
+      )}
     </div>
   );
 }
