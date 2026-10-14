@@ -240,7 +240,9 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
 
   return (
     <div className="dir s2-pg">
-      <style>{`.mgr10 .s2-pg{min-height:0;background:transparent;display:flex;flex-direction:column;gap:18px;padding:24px 0 48px}
+      <style>{`.mgr10 .s2-pg{min-height:0;background:transparent;display:flex;flex-direction:column;gap:20px;padding:0 0 48px;width:100%}
+.mgr10 .s2-pg .s2-top-header{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;padding-bottom:6px;border-bottom:1px solid var(--line,#E1E6EE)}
+.mgr10 .s2-pg .s2-top-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .mgr10 .s2-pg .s2-ger{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
 .mgr10 .s2-pg .s2-gk{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
 .mgr10 .s2-pg .s2-gk div{background:var(--sunk);border-radius:8px;padding:8px 10px}
@@ -248,20 +250,20 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
 .mgr10 .s2-pg .s2-gk b{font-size:18px}
 .mgr10 .s2-pg .s2-pes{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
 .mgr10 .s2-pg .s2-pad{padding:16px 18px}
-.mgr10 .s2-pg .dir-kpi .mono{font-size:20px;white-space:nowrap}
+.mgr10 .s2-pg .dir-kpi .mono{font-size:22px;white-space:nowrap}
 .mgr10 .s2-pg .dir-h{margin-bottom:10px}`}</style>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end", justifyContent: "space-between" }}>
-        <div className="dir-ola" style={{ color: "var(--ink)" }}>
-          <small style={{ color: "var(--ink-3)" }}>{supers.length > 1 ? "Diretoria · todas as superintendências" : `Superintendência ${superNome}`} · {nomeMes(inicioMes())} · dia {hoje.getDate()} de {diasMes}</small>
-          <b style={{ color: "var(--ink)" }}>{saudacao()}, {superNome.split(" ")[0]}</b>
+      <div className="s2-top-header">
+        <div className="dir-ola">
+          <small>{supers.length > 1 ? "Diretoria · Visão Superintendência" : `Superintendência · ${superNome}`} · {nomeMes(inicioMes())} · dia {hoje.getDate()} de {diasMes}</small>
+          <b>{saudacao()}, {superNome.split(" ")[0]}</b>
         </div>
         
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <div className="s2-top-actions">
           <button
             type="button"
-            className="dir-btn"
-            style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, padding: "7px 12px", background: "var(--cv-surface, #fff)" }}
+            className="dir-btn solid"
+            style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, padding: "8px 14px" }}
             onClick={() => setModalGerenteAberto(true)}
           >
             <span>👔</span> + Cadastrar Gerente
@@ -269,7 +271,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
           <button
             type="button"
             className="dir-btn"
-            style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, padding: "7px 12px", background: "var(--cv-surface, #fff)" }}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, padding: "8px 14px", background: "#fff" }}
             onClick={() => setModalCorretorAberto(true)}
           >
             <span>👤</span> + Cadastrar Corretor

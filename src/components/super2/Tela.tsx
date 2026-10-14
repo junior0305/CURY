@@ -8,7 +8,7 @@ export default function TelaSuper({ children }: { children: ReactNode }) {
   return (
     <div className="dir s2-tela">
       <style>{`
-.mgr10 .s2-tela{min-height:0;background:transparent;padding:0;
+.mgr10 .s2-tela{min-height:0;background:transparent;padding:0;width:100%;box-sizing:border-box;
   --good:var(--grn);--good-air:var(--grn-bg);--amber:var(--org);--amber-air:var(--org-bg);
   --red-air:var(--red-bg);--blue-air:var(--blue-bg);--hair:var(--line-2);--r:16px}
 .mgr10 .s2-tela h1{font-weight:800;letter-spacing:-.02em}

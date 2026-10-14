@@ -1,5 +1,5 @@
-.mgr10.sup{min-height:100vh;background:var(--paper);color:var(--ink)}
-.mgr10 .sup-wrap{max-width:1180px;margin:0 auto;padding:28px 24px 60px}
+.mgr10.sup{min-height:100vh;background:var(--paper, #F3F5F8);color:var(--ink, #0F1B2D)}
+.mgr10 .sup-wrap{width:100%;max-width:1440px;margin:0 auto;padding:24px 32px 64px;box-sizing:border-box}
 .mgr10 .sup-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px}
 .mgr10 .sup-top h1{font:800 26px/1.1 Archivo,sans-serif;letter-spacing:-.02em;margin:0}
 .mgr10 .sup-top p{margin:6px 0 0;font-size:14px;color:var(--ink-3)}

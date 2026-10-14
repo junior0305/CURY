@@ -48,13 +48,13 @@ export const ABAS: { k: Aba; label: string; to: string }[] = [
   { k: "config", label: "Configurar", to: "/manager/config" },
 ];
 
-/** 6 Módulos Mestres do Superintendente (Cockpit Executivo sem sobreposição) */
+/** 7 Módulos Executivos do Superintendente (Padrão Gerente & Diretor) */
 export const ABAS_SUPER: { k: Aba; label: string; to: string }[] = [
   { k: "tempo", label: "Painel Geral", to: "/super" },
-  { k: "estrategia", label: "Sala de Guerra", to: "/super?aba=estrategia" },
-  { k: "pastas", label: "Pastas", to: "/super?aba=pastas" },
+  { k: "time", label: "Equipes", to: "/super?aba=time" },
   { k: "leads", label: "Leads", to: "/super?aba=leads" },
-  { k: "time", label: "Minha Tropa", to: "/super?aba=time" },
+  { k: "pastas", label: "Pastas", to: "/super?aba=pastas" },
+  { k: "estrategia", label: "Estratégia", to: "/super?aba=estrategia" },
   { k: "bi", label: "B.I.", to: "/super?aba=bi" },
   { k: "config", label: "Configurar", to: "/super?aba=config" },
 ];

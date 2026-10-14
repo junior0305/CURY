@@ -101,10 +101,6 @@ export default function Superintendente() {
   const abrir = (id: string) => nav(`/manager?manager=${id}`);
   const t = data?.total;
 
-  // Diretor/admin: o consolidado é a tela /diretor (uma tela só, venha de onde vier).
-  // Aqui fica só a gestão do time (?aba=time), BI e campanhas.
-  if (ehDiretoria && (!abaUrl || abaUrl === "consolidado")) return <Navigate to="/diretor" replace />;
-
   return (
     <div className="mgr10 app2 sup">
       <Boundary>
@@ -136,7 +132,6 @@ export default function Superintendente() {
           else if (k === "bi") setAba("bi");
           else if (k === "config") setAba("config");
           else if (k === "anuncios") setAba("midia");
-          else if (ehDiretoria) nav("/diretor");
           else setAba("consolidado");
         }}
       />
