@@ -128,7 +128,7 @@ export default function AnunciosGerente() {
         </nav>
 
         {aba === "alertas" ? <Alertas problemas={problemas} dicas={dicas} gestor={gestor ?? null} conta={d.conta} automatico={!!reguaLigada} />
-          : aba === "campanhas" ? <Campanhas campanhas={d.campanhas ?? []} casaCpl={casaCpl} />
+          : aba === "campanhas" ? <Campanhas campanhas={d.campanhas ?? []} casa={d.casa ?? {}} />
           : aba === "entrega" ? <Entrega d={d} />
           : <Pixel d={d} />}
       </>
@@ -197,15 +197,27 @@ function Alertas({ problemas, dicas, gestor, conta, automatico }: {
   );
 }
 
-function Campanhas({ campanhas, casaCpl }: { campanhas: any[]; casaCpl: number | null }) {
+function Campanhas({ campanhas, casa }: { campanhas: any[]; casa: { cpl?: number; cpc?: number; cpm?: number } }) {
+  const casaCpl = casa.cpl ?? null;
   const [aberta, setAberta] = useState<string | null>(null);
   const lista = [...campanhas].sort((a, b) => (b.status === "ACTIVE" ? 1 : 0) - (a.status === "ACTIVE" ? 1 : 0) || Number(b.gasto) - Number(a.gasto));
-  const selo = (gasto: number, leads: number) => {
-    if (!casaCpl || gasto < 30) return null;
-    if (leads === 0) return <em className="red">gastando sem lead</em>;
-    const c = gasto / leads;
-    if (c > casaCpl * 1.5) return <em className="red">cara</em>;
-    if (c < casaCpl * 0.6 && leads >= 3) return <em className="grn">campeã</em>;
+  // mesmas regras do robô (/root/econ/fb_saude.py): campanha de conversa compara com o custo por conversa da casa
+  const ref = (c: any) => (c.tipo === "conversa" ? casa.cpc : casa.cpl) || 0;
+  const seloCampanha = (c: any) => {
+    const gasto = Number(c.gasto ?? 0), leads = Number(c.leads ?? 0), impr = Number(c.impr ?? 0), r = ref(c);
+    if (!r || gasto < 60) return null;
+    const cpl = leads ? gasto / leads : null, cpm = impr ? (gasto / impr) * 1000 : null;
+    if (!leads) return <em className="red">gastando sem lead</em>;
+    if (cpl! >= 2 * r) return <em className="red">cara</em>;
+    if (cpm && casa.cpm && cpm >= 2.5 * casa.cpm) return <em className="amb">impressão cara</em>;
+    if (cpl! <= 0.6 * r && leads >= 3) return <em className="grn">campeã</em>;
+    return null;
+  };
+  const seloAnuncio = (a: any, c: any) => {
+    const gasto = Number(a.gasto ?? 0), leads = Number(a.leads ?? 0), r = ref(c);
+    if (!r) return null;
+    if (!leads && gasto >= Math.max(1.5 * r, 40)) return <em className="red">gastando sem lead</em>;
+    if (leads >= 2 && gasto / leads <= 0.6 * r) return <em className="grn">campeão</em>;
     return null;
   };
   if (!lista.length) return <div className="an-card"><p className="an-vazio">Nenhuma campanha com gasto nos últimos 7 dias.</p></div>;
@@ -218,7 +230,7 @@ function Campanhas({ campanhas, casaCpl }: { campanhas: any[]; casaCpl: number |
         return (
           <div key={c.id}>
             <button className="an-tr" onClick={() => setAberta(aberta === c.id ? null : c.id)} aria-expanded={aberta === c.id}>
-              <span className="an-nome"><i className={c.status === "ACTIVE" ? "on" : ""} title={c.status === "ACTIVE" ? "ativa" : "pausada"} />{c.nome}{selo(gasto, leads)}</span>
+              <span className="an-nome"><i className={c.status === "ACTIVE" ? "on" : ""} title={c.status === "ACTIVE" ? "ativa" : "pausada"} />{c.nome}{c.tipo === "conversa" ? <em className="neu">conversa</em> : null}{seloCampanha(c)}</span>
               <span className="mono">{brl(gasto)}</span>
               <span className="mono">{leads}</span>
               <span className="mono">{leads ? brl2(gasto / leads) : "—"}</span>
@@ -237,7 +249,7 @@ function Campanhas({ campanhas, casaCpl }: { campanhas: any[]; casaCpl: number |
                       <div key={a.id} className="an-ad">
                         <span>{a.nome}</span>
                         <span className="mono">{brl2(Number(a.gasto))} · {a.leads} lead(s){a.leads ? ` · ${brl2(Number(a.gasto) / a.leads)}` : ""}</span>
-                        {selo(Number(a.gasto), Number(a.leads))}
+                        {seloAnuncio(a, c)}
                       </div>
                     ))}
                   </div>
@@ -248,7 +260,7 @@ function Campanhas({ campanhas, casaCpl }: { campanhas: any[]; casaCpl: number |
           </div>
         );
       })}
-      <small className="an-nota">Por lead = gasto ÷ leads do Facebook (formulário + conversa). Média da casa: {brl2(casaCpl)}. "Cara" = 50% acima da casa; "campeã" = 40% abaixo com 3 leads ou mais.</small>
+      <small className="an-nota">Por lead = gasto ÷ leads do Facebook. Casa: {brl2(casaCpl)} por lead de formulário, {brl2(casa.cpc)} por conversa, {brl2(casa.cpm)} por mil impressões. "Cara" = o dobro da casa; "impressão cara" = mil impressões 2,5× acima da casa; "campeã" = 40% abaixo da casa com 3 leads ou mais (as mesmas regras dos alertas).</small>
     </div>
   );
 }
