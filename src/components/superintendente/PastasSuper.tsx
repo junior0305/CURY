@@ -93,11 +93,11 @@ export default function PastasSuper({
       })
       .filter((p) => {
         // Trava estrita: só passa se pertencer a este Super
-        return (
-          p.superId === superId ||
-          p.superNome.toLowerCase().includes(superNome.toLowerCase()) ||
-          p.superintendente.toLowerCase().includes(superNome.toLowerCase())
-        );
+        // diretor/admin (superId = diretor) vê todas; super vê só as dele. Nome vazio não pode casar tudo.
+        if (!supers.some((x) => x.id === superId)) return true;
+        const nm = (superNome || "").trim().toLowerCase();
+        return p.superId === superId ||
+          (!!nm && (String(p.superNome || "").toLowerCase().includes(nm) || String(p.superintendente || "").toLowerCase().includes(nm)));
       });
   }, [pastasRaw, supers, superId, superNome]);
 
@@ -329,7 +329,7 @@ O que falta para destravar essa pasta na Caixa ainda hoje? Dá um toque no corre
                 const travada = (p.dias ?? 0) >= 7;
 
                 return (
-                  <tr key={p.id} style={{ borderBottom: "1px solid #E2E8F0", background: travada ? "#FFFDFD" : undefined }}>
+                  <tr key={p.proposta_id} style={{ borderBottom: "1px solid #E2E8F0", background: travada ? "#FFFDFD" : undefined }}>
                     <td style={{ padding: "10px 12px", fontWeight: 700, color: "#1E293B" }}>
                       {cliCurto(p.cliente)}
                     </td>
