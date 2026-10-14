@@ -17,7 +17,7 @@ export function loadFonts() {
   document.head.appendChild(l);
 }
 
-export type Aba = "tempo" | "time" | "leads" | "pastas" | "anuncios" | "disparar" | "estrategia" | "plantao" | "integracoes" | "bi";
+export type Aba = "tempo" | "time" | "leads" | "pastas" | "anuncios" | "disparar" | "estrategia" | "plantao" | "integracoes" | "bi" | "regua";
 
 export const ICONES: Record<Aba, string> = {
   tempo: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 7v5l3.5 2",
@@ -30,6 +30,7 @@ export const ICONES: Record<Aba, string> = {
   plantao: "M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zM9 9l2 2 4-4",
   integracoes: "M10 3v5M14 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4",
   bi: "M5 20V10M12 20V4M19 20v-7",
+  regua: "M3 7h18v10H3zM7 7v4M11 7v6M15 7v4M19 7v6",
 };
 
 /** Ordem do dia do gerente (Junior, 15/09). Leads e B.I. vêm depois. */
@@ -41,6 +42,7 @@ export const ABAS: { k: Aba; label: string; to: string }[] = [
   { k: "disparar", label: "Disparar", to: "/manager/whatsapp" },
   { k: "estrategia", label: "Onde atacar", to: "/manager/estrategia" },
   { k: "integracoes", label: "Integrações", to: "/integracoes" },
+  { k: "regua", label: "Régua", to: "/manager/regua" },
 ];
 
 /** 6 Módulos Mestres do Superintendente (Cockpit Executivo sem sobreposição) */
@@ -51,6 +53,7 @@ export const ABAS_SUPER: { k: Aba; label: string; to: string }[] = [
   { k: "leads", label: "Leads & Mídia", to: "/super?aba=leads" },
   { k: "time", label: "Minha Tropa", to: "/super?aba=time" },
   { k: "bi", label: "B.I.", to: "/super?aba=bi" },
+  { k: "regua", label: "Régua", to: "/super?aba=regua" },
 ];
 
 export function RailV10({

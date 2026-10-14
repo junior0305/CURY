@@ -36,10 +36,11 @@ import GastosPlano from "@/components/plano/GastosPlano";
 import SalaDeGuerraSuper from "@/components/superintendente/SalaDeGuerraSuper";
 import PastasSuper from "@/components/superintendente/PastasSuper";
 import LeadsAnunciosSuper from "@/components/superintendente/LeadsAnunciosSuper";
+import ReguaEquipe from "@/components/regua/ReguaEquipe";
 
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "Semana"], [30, "Mês"]];
 
-type AbaSuper = "consolidado" | "estrategia" | "pastas" | "leads" | "time" | "bi" | "campanhas" | "plano" | "gastos";
+type AbaSuper = "consolidado" | "estrategia" | "pastas" | "leads" | "time" | "bi" | "campanhas" | "plano" | "gastos" | "regua";
 
 export default function Superintendente() {
   const { session, role } = useAuth();
@@ -75,7 +76,7 @@ export default function Superintendente() {
   const [params] = useSearchParams();
   const abaUrl = params.get("aba");
   const [aba, setAba] = useState<AbaSuper>(
-    abaUrl === "estrategia" || abaUrl === "pastas" || abaUrl === "leads" || abaUrl === "time" || abaUrl === "bi" || abaUrl === "campanhas" || abaUrl === "plano" || abaUrl === "gastos"
+    abaUrl === "estrategia" || abaUrl === "pastas" || abaUrl === "leads" || abaUrl === "time" || abaUrl === "bi" || abaUrl === "campanhas" || abaUrl === "plano" || abaUrl === "gastos" || abaUrl === "regua"
       ? (abaUrl as AbaSuper)
       : "consolidado"
   );
@@ -107,6 +108,8 @@ export default function Superintendente() {
             ? "time"
             : aba === "bi"
             ? "bi"
+            : aba === "regua"
+            ? "regua"
             : "tempo"
         }
         mode={mode}
@@ -117,6 +120,7 @@ export default function Superintendente() {
           else if (k === "leads") setAba("leads");
           else if (k === "time") setAba("time");
           else if (k === "bi") setAba("bi");
+          else if (k === "regua") setAba("regua");
           else setAba("consolidado");
         }}
       />
@@ -138,6 +142,7 @@ export default function Superintendente() {
               <button className={aba === "campanhas" ? "on" : ""} onClick={() => setAba("campanhas")}>Campanhas</button>
               <button className={aba === "plano" ? "on" : ""} onClick={() => setAba("plano")}>Plano</button>
               <button className={aba === "gastos" ? "on" : ""} onClick={() => setAba("gastos")}>Gastos</button>
+              <button className={aba === "regua" ? "on" : ""} onClick={() => setAba("regua")}>Régua</button>
               {aba === "consolidado" ? PERIODOS.map(([n, r]) => (
                 <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{r}</button>
               )) : null}
@@ -162,6 +167,8 @@ export default function Superintendente() {
             />
           ) : (aba === "plano" || aba === "gastos") && superId && session?.user?.id ? (
             <PlanoSuper aba={aba} superId={superId} meuId={session.user.id} />
+          ) : aba === "regua" ? (
+            <ReguaEquipe nivel={ehDiretoria ? "diretor" : "super"} donoId={ehDiretoria ? null : (session?.user?.id ?? null)} />
           ) : aba === "campanhas" ? (
             <CampanhasNaoLead superId={superId} />
           ) : aba === "time" ? (
