@@ -16,7 +16,7 @@ import "@/styles/pastas-kanban.css";
 const ini = (s: string) => s.trim().slice(0, 2).toUpperCase();
 
 type ViewModo = "kanban" | "corretor";
-type FiltroTipo = "todas" | "travadas" | "sem_corretor" | "outras";
+type FiltroTipo = "todas" | "travadas" | "sem_corretor" | "analise";
 
 interface ColunaFase {
   id: string;
@@ -68,6 +68,7 @@ export default function Pastas() {
 
   const [busca, setBusca] = useState("");
   const [filtroAtivo, setFiltroAtivo] = useState<FiltroTipo>("todas");
+  const [gerenteSelecionado, setGerenteSelecionado] = useState<string>("todos");
   const [viewModo, setViewModo] = useState<ViewModo>("kanban");
 
   loadFonts();
@@ -82,12 +83,18 @@ export default function Pastas() {
 
   const listaFiltrada = useMemo(() => {
     if (!data) return [];
-    let base = filtroAtivo === "outras" ? data.semDono : data.minhas;
+    let base = data.minhas;
 
     if (filtroAtivo === "travadas") {
       base = base.filter((p) => p.dias >= DIAS_TRAVADA);
     } else if (filtroAtivo === "sem_corretor") {
       base = base.filter((p) => !p.corretorId);
+    } else if (filtroAtivo === "analise") {
+      base = base.filter((p) => classificarFase(p.etapa) === "analise");
+    }
+
+    if (gerenteSelecionado !== "todos") {
+      base = base.filter((p) => (p.gerenteNome || "").toLowerCase() === gerenteSelecionado.toLowerCase());
     }
 
     if (busca.trim()) {
@@ -97,12 +104,13 @@ export default function Pastas() {
           p.cliente.toLowerCase().includes(q) ||
           (p.corretor || "").toLowerCase().includes(q) ||
           p.id.toLowerCase().includes(q) ||
-          p.etapa.toLowerCase().includes(q)
+          p.etapa.toLowerCase().includes(q) ||
+          (p.gerenteNome || "").toLowerCase().includes(q)
       );
     }
 
     return base;
-  }, [data, filtroAtivo, busca]);
+  }, [data, filtroAtivo, gerenteSelecionado, busca]);
 
   const pastasPorFase = useMemo(() => {
     const mapa: Record<string, Pasta[]> = {
@@ -154,7 +162,7 @@ export default function Pastas() {
   const totalMinhas = d.minhas.length;
   const totalTravadas = d.minhas.filter((p) => p.dias >= DIAS_TRAVADA).length;
   const totalSemCorretor = d.minhas.filter((p) => !p.corretorId).length;
-  const totalOutras = d.semDono.length;
+  const totalAnalise = d.minhas.filter((p) => classificarFase(p.etapa) === "analise").length;
 
   const colsTabela = "minmax(0,1.2fr) 90px 90px minmax(0,2fr) 130px";
 
@@ -195,12 +203,15 @@ export default function Pastas() {
 
         {/* ── SCORE ROW / KPIS RÁPIDOS (CLICÁVEIS) ── */}
         <section className="pastas-kpis-grid">
-          {/* Todas as Pastas da Equipe */}
+          {/* Todas as Pastas do Escopo */}
           <div
             className={`pasta-kpi-card ${filtroAtivo === "todas" ? "active" : ""}`}
-            onClick={() => setFiltroAtivo("todas")}
+            onClick={() => {
+              setFiltroAtivo("todas");
+              setGerenteSelecionado("todos");
+            }}
           >
-            <span className="pasta-kpi-label">📁 Pastas da Equipe</span>
+            <span className="pasta-kpi-label">{d.escopoTitulo}</span>
             <div className="pasta-kpi-val mono">
               <span style={{ color: "var(--cv-brand)" }}>{totalMinhas}</span>
               <span style={{ fontSize: 13, color: "var(--cv-text-muted)", fontWeight: 500 }}>no Junix</span>
@@ -220,6 +231,18 @@ export default function Pastas() {
             <span className="pasta-kpi-sub">Paradas na mesma etapa</span>
           </div>
 
+          {/* Em Análise Caixa */}
+          <div
+            className={`pasta-kpi-card ${filtroAtivo === "analise" ? "active" : ""}`}
+            onClick={() => setFiltroAtivo((v) => (v === "analise" ? "todas" : "analise"))}
+          >
+            <span className="pasta-kpi-label">🏦 Em Análise Caixa</span>
+            <div className="pasta-kpi-val mono" style={{ color: "var(--cv-brand)" }}>
+              {totalAnalise}
+            </div>
+            <span className="pasta-kpi-sub">Laudo / Pré-análise na CEF</span>
+          </div>
+
           {/* Sem Corretor no Comandra */}
           <div
             className={`pasta-kpi-card ${filtroAtivo === "sem_corretor" ? "active" : ""}`}
@@ -229,19 +252,7 @@ export default function Pastas() {
             <div className="pasta-kpi-val mono" style={{ color: totalSemCorretor > 0 ? "var(--cv-amber)" : "inherit" }}>
               {totalSemCorretor}
             </div>
-            <span className="pasta-kpi-sub">Corretor sem login Comandra</span>
-          </div>
-
-          {/* Outras Equipes (Diretoria) */}
-          <div
-            className={`pasta-kpi-card ${filtroAtivo === "outras" ? "active" : ""}`}
-            onClick={() => setFiltroAtivo((v) => (v === "outras" ? "todas" : "outras"))}
-          >
-            <span className="pasta-kpi-label">🏢 Outras Equipes</span>
-            <div className="pasta-kpi-val mono">
-              {totalOutras}
-            </div>
-            <span className="pasta-kpi-sub">Propostas da diretoria</span>
+            <span className="pasta-kpi-sub">Sem cadastro no Comandra</span>
           </div>
         </section>
 
@@ -257,18 +268,50 @@ export default function Pastas() {
             />
           </div>
 
+          {/* Seletor de Equipes (apenas para Superintendente e Diretor quando houver mais de uma equipe) */}
+          {(d.papelUsuario === "SUPERINTENDENT" || d.papelUsuario === "DIRECTOR" || d.papelUsuario === "ADMIN") && d.gerentesLista.length > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--cv-text-muted)" }}>Equipe:</span>
+              <select
+                value={gerenteSelecionado}
+                onChange={(e) => setGerenteSelecionado(e.target.value)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "var(--cv-radius-sm)",
+                  border: "1px solid var(--cv-border)",
+                  background: "var(--cv-surface)",
+                  color: "var(--cv-text)",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  outline: "none",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="todos">Todas as Equipes ({d.minhas.length})</option>
+                {d.gerentesLista.map((g) => (
+                  <option key={g.nome} value={g.nome}>
+                    {g.nome} ({g.total})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <span style={{ fontSize: 12.5, color: "var(--cv-text-muted)" }}>
-              Exibindo <b>{listaFiltrada.length} pastas</b> {filtroAtivo !== "todas" ? "(filtradas)" : ""}
+              Exibindo <b>{listaFiltrada.length} pastas</b> {(filtroAtivo !== "todas" || gerenteSelecionado !== "todos") ? "(filtradas)" : ""}
             </span>
-            {filtroAtivo !== "todas" && (
+            {(filtroAtivo !== "todas" || gerenteSelecionado !== "todos") && (
               <button
                 type="button"
                 className="btn-action-v3"
                 style={{ background: "var(--cv-surface-subtle)", padding: "4px 8px" }}
-                onClick={() => setFiltroAtivo("todas")}
+                onClick={() => {
+                  setFiltroAtivo("todas");
+                  setGerenteSelecionado("todos");
+                }}
               >
-                Limpar filtro ✕
+                Limpar filtros ✕
               </button>
             )}
           </div>
@@ -304,7 +347,7 @@ export default function Pastas() {
                     ) : (
                       pastasDaFase.map((p) => {
                         const isTravada = p.dias >= DIAS_TRAVADA;
-                        const corretorNome = p.corretor || (p.daEquipe ? "Sem corretor" : "Outra equipe");
+                        const corretorNome = p.corretor || "Sem corretor no Comandra";
 
                         return (
                           <div key={p.id} className={`pasta-card ${isTravada ? "vencido" : ""}`}>
@@ -318,7 +361,7 @@ export default function Pastas() {
                                 <div className="pasta-corretor-avatar">
                                   {ini(corretorNome)}
                                 </div>
-                                <span>{corretorNome}</span>
+                                <span title={corretorNome}>{corretorNome}</span>
                               </div>
 
                               <span className={`dias-badge mono ${p.dias >= DIAS_TRAVADA ? "crit" : p.dias >= 3 ? "warn" : "ok"}`}>
@@ -326,11 +369,18 @@ export default function Pastas() {
                               </span>
                             </div>
 
-                            {p.fluxo && (
-                              <div style={{ fontSize: 11, color: "var(--cv-text-dim)" }}>
-                                Etapa Junix: <b>{p.etapa}</b> · Fluxo: {p.fluxo}
-                              </div>
-                            )}
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, flexWrap: "wrap", fontSize: 11, color: "var(--cv-text-dim)" }}>
+                              {p.fluxo ? (
+                                <span>Etapa: <b>{p.etapa}</b> · {p.fluxo}</span>
+                              ) : (
+                                <span>Etapa: <b>{p.etapa}</b></span>
+                              )}
+                              {p.gerenteNome && d.papelUsuario !== "MANAGER" && (
+                                <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--cv-surface-subtle)", color: "var(--cv-text-muted)", border: "1px solid var(--cv-border)", fontWeight: 600 }}>
+                                  Eq: {p.gerenteNome}
+                                </span>
+                              )}
+                            </div>
 
                             <div className="pasta-card-actions">
                               <button
