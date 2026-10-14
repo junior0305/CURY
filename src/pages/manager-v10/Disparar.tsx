@@ -37,6 +37,7 @@ import { Blank } from "@/components/manager-v10/ui";
 import { HabilitarDisparo } from "@/components/manager-v10/HabilitarDisparo";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import "@/styles/manager-v10.css";
+import "@/styles/cockpit-gerente.css";
 import "@/styles/disparar.css";
 
 type Etapa = "bm" | "tpl" | "disp" | "conv" | "corretores";
@@ -676,6 +677,75 @@ export default function Disparar() {
             </span>
           </div>
         ) : null}
+        {/* Scorecards Executivos para Disparo */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
+          <div style={{ background: "var(--cv-surface, #fff)", border: "1px solid var(--cv-border, #e2e8f0)", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", cursor: "pointer" }} onClick={() => setEtapa("bm")}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cv-text-muted, #64748b)", textTransform: "uppercase" }}>Número WhatsApp</span>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 9999, background: cfg ? "var(--cv-green-light, #d1fae5)" : "var(--cv-rose-light, #ffe4e6)", color: cfg ? "var(--cv-green, #059669)" : "var(--cv-rose, #e11d48)" }}>
+                {cfg ? "Conectado" : "Pendente"}
+              </span>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4, color: "var(--cv-text-main, #0f172a)", fontFamily: "JetBrains Mono" }}>
+              {cfg?.displayNumber ?? "Não configurado"}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--cv-text-muted, #64748b)", marginTop: 2 }}>
+              Limite: {cfg?.tetoHoje ?? 250} msgs/dia
+            </div>
+          </div>
+
+          <div style={{ background: "var(--cv-surface, #fff)", border: "1px solid var(--cv-border, #e2e8f0)", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", cursor: "pointer" }} onClick={() => setEtapa("tpl")}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cv-text-muted, #64748b)", textTransform: "uppercase" }}>Modelos Aprovados</span>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 9999, background: "var(--cv-brand-light, #ccfbf1)", color: "var(--cv-brand, #0d9488)" }}>
+                Meta Cloud
+              </span>
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--cv-text-main, #0f172a)", fontFamily: "JetBrains Mono" }}>
+              {d.templates.filter((t) => t.status === "APPROVED").length}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--cv-text-muted, #64748b)", marginTop: 2 }}>
+              {d.templates.filter((t) => t.status === "PENDING").length} em análise na Meta
+            </div>
+          </div>
+
+          <div style={{ background: "var(--cv-surface, #fff)", border: "1px solid var(--cv-border, #e2e8f0)", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", cursor: "pointer" }} onClick={() => setEtapa("disp")}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cv-text-muted, #64748b)", textTransform: "uppercase" }}>Disparos Realizados</span>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 9999, background: "var(--cv-blue-light, #eff6ff)", color: "var(--cv-blue, #2563eb)" }}>
+                Campanhas
+              </span>
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--cv-text-main, #0f172a)", fontFamily: "JetBrains Mono" }}>
+              {d.campanhas.reduce((a, c) => a + c.enviadas, 0)}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--cv-text-muted, #64748b)", marginTop: 2 }}>
+              {d.campanhas.length} campanhas criadas
+            </div>
+          </div>
+
+          <div style={{ background: "var(--cv-surface, #fff)", border: "1px solid var(--cv-border, #e2e8f0)", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", cursor: "pointer" }} onClick={() => setEtapa("conv")}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cv-text-muted, #64748b)", textTransform: "uppercase" }}>Respostas de Clientes</span>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 9999, background: "var(--cv-green-light, #d1fae5)", color: "var(--cv-green, #059669)" }}>
+                {d.conversas.filter((c) => c.esperando).length > 0 ? "Atenção" : "Em dia"}
+              </span>
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--cv-green, #059669)", fontFamily: "JetBrains Mono" }}>
+              {d.campanhas.reduce((a, c) => a + c.responderam, 0)}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--cv-text-muted, #64748b)", marginTop: 2 }}>
+              {d.conversas.filter((c) => c.esperando).length > 0 ? (
+                <span style={{ color: "var(--cv-rose, #e11d48)", fontWeight: 700 }}>
+                  ⚠️ {d.conversas.filter((c) => c.esperando).length} aguardando retorno
+                </span>
+              ) : (
+                "todas respondidas pelo time"
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="etapas" role="tablist">
           {([
             ["bm", "Seu número", !!cfg],
