@@ -26,8 +26,21 @@ export function usePeriodoSuper(padrao: ChavePeriodo = "7d") {
   };
 }
 
-export function SeletorPeriodoSuper({ p, opcoes }: { p: ReturnType<typeof usePeriodoSuper>; opcoes?: ChavePeriodo[] }) {
+export function SeletorPeriodoSuper({ p, opcoes, estilo }: { p: ReturnType<typeof usePeriodoSuper>; opcoes?: ChavePeriodo[]; estilo?: "dir" }) {
   const lista = ROTULO.filter(([k]) => !opcoes || opcoes.includes(k));
+  if (estilo === "dir") return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+      <span className="dir-lbl">Período</span>
+      <div className="dir-per">{lista.map(([k, r]) => <button key={k} className={p.per === k ? "on" : ""} onClick={() => p.setPer(k)}>{r}</button>)}</div>
+      {p.per === "datas" ? (
+        <span style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
+          <input type="date" value={p.janela.de} max={p.janela.ate} onChange={(e) => p.setDe(e.target.value)} aria-label="De" className="dir-meta-in" style={{ width: "auto" }} />
+          até
+          <input type="date" value={p.janela.ate} min={p.janela.de} max={diaSP(0)} onChange={(e) => p.setAte(e.target.value)} aria-label="Até" className="dir-meta-in" style={{ width: "auto" }} />
+        </span>
+      ) : null}
+    </div>
+  );
   return (
     <div className="sps">
       <style>{`

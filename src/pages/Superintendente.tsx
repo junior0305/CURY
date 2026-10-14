@@ -43,6 +43,7 @@ import PastasDoSuper from "@/components/super2/Pastas";
 import Leads from "@/components/super2/Leads";
 import Midia from "@/components/super2/Midia";
 import Tropa from "@/components/super2/Tropa";
+import PainelGeral from "@/components/super2/PainelGeral";
 import { useDiretorId, useDiretoria } from "@/hooks/useDiretoria";
 
 const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "Semana"], [30, "Mês"]];
@@ -169,7 +170,11 @@ export default function Superintendente() {
           ) : aba === "bi" ? (
             <BiTab scope="super" managerId={superId} />
           ) : (
-            <PainelGeralSuper superId={superId} ehDiretoria={ehDiretoria} dias={dias} setDias={setDias} onAbrir={abrir} />
+            superId && !ehDiretoria ? (
+              <PainelGeral superId={superId}
+                superNome={superPerfil || session?.user?.user_metadata?.name || "Superintendente"}
+                onAbrir={abrir} irPara={(a) => setAba(a === "midia" ? "midia" : a === "pastas" ? "pastas" : "leads")} />
+            ) : <PainelGeralSuper superId={superId} ehDiretoria={ehDiretoria} dias={dias} setDias={setDias} onAbrir={abrir} />
           )}
         </div>
       </main>
