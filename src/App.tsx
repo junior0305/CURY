@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/toaster";
+import { ADMIN_SO_ADMIN } from "@/integrations/supabase/companies";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -77,6 +78,9 @@ const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   if (loading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" />;
   if (role === "SECRETARY") return <Navigate to="/secretaria" />;
+  // empresa em que admin é só o ADMIN: diretor e super voltam para a tela deles
+  if (ADMIN_SO_ADMIN && role === "DIRECTOR") return <Navigate to="/diretor" />;
+  if (ADMIN_SO_ADMIN && role === "SUPERINTENDENT") return <Navigate to="/super" />;
   if (role !== "SUPERINTENDENT" && role !== "ADMIN" && role !== "DIRECTOR") {
     if (role === "MANAGER") return <Navigate to="/manager" />;
     return <Navigate to="/dashboard" />;
@@ -103,6 +107,9 @@ const ProtectedSuperRoute = ({ children }: { children: React.ReactNode }) => {
   if (loading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" />;
   if (role === "SECRETARY") return <Navigate to="/secretaria" />;
+  // empresa em que admin é só o ADMIN: diretor e super voltam para a tela deles
+  if (ADMIN_SO_ADMIN && role === "DIRECTOR") return <Navigate to="/diretor" />;
+  if (ADMIN_SO_ADMIN && role === "SUPERINTENDENT") return <Navigate to="/super" />;
   if (role !== "SUPERINTENDENT" && role !== "ADMIN" && role !== "DIRECTOR") {
     if (role === "MANAGER") return <Navigate to="/manager" />;
     return <Navigate to="/dashboard" />;

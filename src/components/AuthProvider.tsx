@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { COMPANIES, getSelectedCompanyId } from '@/integrations/supabase/companies';
+import { COMPANIES, getSelectedCompanyId, ADMIN_SO_ADMIN } from '@/integrations/supabase/companies';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -280,8 +280,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // Super/Diretor: painel de HIERARQUIA (/super, estilo gerente, com drill
           // nos gerentes via /manager?manager=<id>). NÃO caem mais no /admin cru.
           // Mantêm acesso às telas de admin (cadastro, filas...) quando precisarem.
-          const SUP_ALLOWED_PREFIXES = ['/super', '/manager', '/admin', ...(role === 'DIRECTOR' ? ['/diretor'] : [])];
-          const SUP_ALLOWED_EXACT = ['/command-center', '/user-management', '/atribuir-chips', '/cold-pool', '/integracoes'];
+          const SUP_ALLOWED_PREFIXES = ['/super', '/manager', ...(ADMIN_SO_ADMIN ? [] : ['/admin']), ...(role === 'DIRECTOR' ? ['/diretor'] : [])];
+          const SUP_ALLOWED_EXACT = ADMIN_SO_ADMIN ? ['/integracoes'] : ['/command-center', '/user-management', '/atribuir-chips', '/cold-pool', '/integracoes'];
           const isAllowed =
             SUP_ALLOWED_PREFIXES.some((p) => path === p || path.startsWith(p + '/')) ||
             SUP_ALLOWED_EXACT.includes(path);

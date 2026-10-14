@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { DOMINIO_LOGIN } from "@/integrations/supabase/companies";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -166,7 +167,7 @@ export default function Tropas() {
   }, []);
 
   const handleSaveUser = async () => {
-    const handle = formData.email.replace(/@comandra$/i, "").trim();
+    const handle = formData.email.replace(new RegExp(`@${DOMINIO_LOGIN}$`, "i"), "").trim();
     if (!handle) {
       toast({ title: "Digite o nome de usuário", variant: "destructive" });
       return;
@@ -951,12 +952,12 @@ export default function Tropas() {
                 <Label className="text-gray-400 text-xs uppercase">Usuário (login) *</Label>
                 <div className="flex items-center">
                   <Input
-                    value={(formData.email || "").replace(/@comandra$/i, "")}
-                    onChange={e => setFormData({ ...formData, email: e.target.value.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "") + "@comandra" })}
+                    value={(formData.email || "").replace(new RegExp(`@${DOMINIO_LOGIN}$`, "i"), "")}
+                    onChange={e => setFormData({ ...formData, email: e.target.value.trim().toLowerCase().replace(/[^a-z0-9._-]/g, "") + `@${DOMINIO_LOGIN}` })}
                     disabled={!!editUser}
                     placeholder="alba"
                     className="bg-slate-800 border-gray-600 text-white rounded-r-none" />
-                  <span className="px-3 h-10 flex items-center bg-slate-700 border border-l-0 border-gray-600 rounded-r text-gray-300 text-sm whitespace-nowrap">@comandra</span>
+                  <span className="px-3 h-10 flex items-center bg-slate-700 border border-l-0 border-gray-600 rounded-r text-gray-300 text-sm whitespace-nowrap">@{DOMINIO_LOGIN}</span>
                 </div>
                 <p className="text-[11px] text-gray-500 mt-1">Nome único. Senha inicial: <b className="text-gray-300">mudar@123</b> (troca no 1º login).</p>
               </div>

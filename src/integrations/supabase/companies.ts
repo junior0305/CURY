@@ -13,6 +13,8 @@ export const COMPANIES = {
     host: 'comandra.com.br',
     /** final do login de quem é desta empresa: nome@comandra */
     dominio: 'comandra',
+    /** telas de admin só para o ADMIN (diretor e super não entram)? */
+    adminSoAdmin: false,
     // Migrado da Supabase paga para a stack self-hosted no VPS (13/09/2026).
     // Fica num CAMINHO do domínio, não em subdomínio: o Traefik roteia
     // /supabase por PathPrefix e remove o prefixo antes do gateway.
@@ -26,6 +28,7 @@ export const COMPANIES = {
     color: 'emerald',
     host: 'planoego.comandra.com.br',
     dominio: 'planoeplanogo',
+    adminSoAdmin: true,
     // Stack própria no Portainer (planoego), banco separado do Econ (14/10/2026).
     url: 'https://planoego.comandra.com.br/supabase',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkxOTgwMDUyLCJleHAiOjIxMDczNDAwNTJ9.VaccLx0XwssRWR2feQGheFcF1473Syqhl0-7SIT3MLI',
@@ -50,6 +53,9 @@ export function getSelectedCompany() {
 
 /** Final do login desta empresa (nome@<dominio>). */
 export const DOMINIO_LOGIN: string = getSelectedCompany().dominio;
+
+/** Nesta empresa as telas de admin são só do ADMIN (um só, que não é o diretor). */
+export const ADMIN_SO_ADMIN: boolean = getSelectedCompany().adminSoAdmin;
 
 /** Seletor de empresa na tela: nunca (cada empresa tem o seu site). */
 export const TEM_ESCOLHA = false;
