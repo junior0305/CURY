@@ -1026,3 +1026,20 @@
   padding: 3px 8px;
 }
 
+
+/* Configurar dentro da tela do diretor: a tela do diretor é sempre clara, mas o Configurar usa as classes do
+   painel do gerente (.mgr10), que seguem o tema escuro do app (padrão de quem entra pela 1ª vez). Sem isto a
+   letra ficava clara em fundo claro. Aqui ele usa a paleta da diretoria, com tema claro ou escuro. */
+.dir .mgr10.dir-cfg {
+  --paper: var(--bg); --card: #fff; --sunk: #EEF1F5; --sunk-2: #E3E8EF;
+  --line: #E1E6EE; --hair: #F0F3F7;
+  --ink: #0F1B2D; --ink-2: #3C4B5F; --ink-3: #5B6B80;
+  --blue: #0E7C7B; --blue-air: rgba(14,124,123,.10);
+  --red: #A8322A; --red-air: #FDECEA;
+  --amber: #8A5200; --amber-air: #FFF1DE;
+  --good: #1D6B45; --good-air: #E7F4EE;
+  --lift: 0 1px 2px rgba(15,27,45,.05), 0 10px 28px -16px rgba(15,27,45,.22);
+  color: var(--ink);
+}
+.dir .mgr10.dir-cfg input, .dir .mgr10.dir-cfg select, .dir .mgr10.dir-cfg textarea { color: var(--ink); background: var(--card); }
+.dir .mgr10.dir-cfg input::placeholder { color: #8A97A8; }
