@@ -99,7 +99,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
 
   // Query de Plantão C2S ao vivo
   const { data: plantaoHoje } = useQuery({
-    queryKey: ["plantao-c2s-hoje", managerId],
+    queryKey: ["plantao-c2s-hoje-v2", managerId],
     refetchInterval: 60_000,
     queryFn: async () => {
       const hoje = diaSP(0);
@@ -108,11 +108,10 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
         buscarPlantao(`${hoje}T03:00:00Z`).catch(() => []),
       ]);
       const kg = chaveGerente((ger as any)?.first_name);
-      return new Set(
-        plantao
-          .filter((r) => r.created_at?.slice(0, 10) >= hoje && chaveGerente(gerenteC2S(r.gerente)) === kg)
-          .map((r) => chaveNome(r.corretor))
-      );
+      const daEquipe = plantao.filter((r) => r.created_at?.slice(0, 10) >= hoje && chaveGerente(gerenteC2S(r.gerente)) === kg);
+      // nomes (para marcar quem está no estande) + o horário do último check-in, para o cartão Plantão hoje
+      const ultimo = daEquipe.reduce<string | null>((m, r) => (!m || (r.created_at ?? "") > m ? r.created_at ?? m : m), null);
+      return { nomes: new Set(daEquipe.map((r) => chaveNome(r.corretor))), ultimo };
     },
   });
 
@@ -170,7 +169,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
     if (!v10) return [];
     const { brokers } = v10;
     const leads = listaLeadsBase;
-    const plantaoSet = plantaoHoje || new Set();
+    const plantaoSet = plantaoHoje?.nomes || new Set<string>();
 
     return brokers.map((b) => {
       const nomeCompleto = [b.first_name, b.last_name].filter(Boolean).join(" ").trim() || "—";
@@ -407,6 +406,31 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
             VGV Total: <b className="mono" style={{ color: "var(--cv-text-main)" }}>{brl(heroPlacar.vgv)}</b>
           </span>
         </div>
+
+        {/* Plantão de hoje (C2S): quantos bateram ponto, quantos têm conta no Comandra.
+            É sempre do dia, não segue o período escolhido: é o controle de quem está no estande agora. */}
+        {(() => {
+          const noPlantao = plantaoHoje?.nomes.size ?? 0;
+          const comConta = corretores.filter((c) => c.plantao).length;
+          const semConta = Math.max(0, noPlantao - comConta);
+          const ult = plantaoHoje?.ultimo ? new Date(plantaoHoje.ultimo).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }) : null;
+          return (
+            <div className="kpi-card-v3">
+              <span className="kpi-title-v3">Plantão hoje (C2S)</span>
+              <div className="kpi-val-v3 mono">
+                <span style={{ color: "var(--cv-text-main)" }}>{noPlantao}</span>
+                <span style={{ fontSize: 14, color: "var(--cv-text-muted)", fontWeight: 500 }}>
+                  {noPlantao === 1 ? "check-in" : "check-ins"} · {corretores.length} no time
+                </span>
+              </div>
+              <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
+                <b>{comConta} com conta no Comandra</b>
+                {semConta ? <> · <span style={{ color: "var(--cv-amber)", fontWeight: 700 }}>{semConta} sem conta</span></> : null}
+                {ult ? <> · último às {ult}</> : noPlantao === 0 ? <> · ninguém bateu ponto ainda</> : null}
+              </span>
+            </div>
+          );
+        })()}
 
         {/* Ritmo e Projeção */}
         <div className="kpi-card-v3">

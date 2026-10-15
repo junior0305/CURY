@@ -250,8 +250,14 @@ html[data-theme="dark"] .cockpit-v3 {
 /* ── BLOCO 1: PLACAR HERO DO MÊS ── */
 .hero-placar-v3 {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
+}
+
+@media (max-width: 1280px) {
+  .hero-placar-v3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 1024px) {
