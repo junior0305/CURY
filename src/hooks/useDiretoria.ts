@@ -67,9 +67,9 @@ export function useDiretorId(role: string | null | undefined, meuId: string | un
   });
 }
 
-export function useDiretoria(diretorId: string | null | undefined, dias: number) {
+export function useDiretoria(diretorId: string | null | undefined, dias: number, faixa?: { de: string; ate: string }) {
   return useQuery({
-    queryKey: ["diretoria", diretorId, dias],
+    queryKey: ["diretoria", diretorId, dias, faixa?.de ?? null, faixa?.ate ?? null],
     placeholderData: (ant: any, q: any) => (q?.queryKey?.[1] === diretorId ? ant : undefined),
     enabled: !!diretorId,
     staleTime: 2 * 60_000,
@@ -150,8 +150,10 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
       // Não basta "algum gerente já tem corretor": 1 cadastro derrubava a contagem de 61 para 7 (15/10).
       // Fica no C2S enquanto o Comandra tiver menos da metade dos corretores que o C2S viu em 30 dias.
       // (nome exato; "Silva" não pode pegar "Silvano")
-      const de = diaSP(Date.now() - (dias - 1) * 864e5);
-      const de30 = diaSP(Date.now() - (Math.max(dias, 30) - 1) * 864e5);
+      const de = faixa?.de ?? diaSP(Date.now() - (dias - 1) * 864e5);
+      const ateF = faixa?.ate ?? hoje;
+      const de30a = diaSP(Date.now() - (Math.max(dias, 30) - 1) * 864e5);
+      const de30 = de < de30a ? de : de30a;   // período escolhido mais antigo que 30 dias também entra
       for (const s of supers) {
         const noComandra = s.gerentes.reduce((a, g) => a + g.corretores, 0);
         const nomes = nomesSuperC2S(s.nome);
@@ -167,7 +169,7 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
           const k = chaveNome(r.corretor);
           const x = porG.get(g) ?? { dias: new Set<string>(), hoje: new Set<string>(), cor: new Set<string>(), cor30: new Set<string>() };
           x.cor30.add(k);
-          if (r.dia >= de) { x.dias.add(`${r.dia}|${k}`); x.cor.add(k); }
+          if (r.dia >= de && r.dia <= ateF) { x.dias.add(`${r.dia}|${k}`); x.cor.add(k); }
           if (r.dia === hoje) x.hoje.add(k);
           porG.set(g, x);
         }

@@ -63,17 +63,20 @@ async function todas<T>(q: (de: number, ate: number) => PromiseLike<{ data: unkn
   return out;
 }
 
-export function useConsolidadoSuper(superId: string | undefined, dias: number) {
+/** `faixa` (opcional): intervalo exato de datas, AAAA-MM-DD, fuso de SP — "ontem" ou "escolher período".
+ *  Sem ela, continua "os últimos `dias` dias até hoje". */
+export function useConsolidadoSuper(superId: string | undefined, dias: number, faixa?: { de: string; ate: string }) {
   return useQuery({
-    queryKey: ["super-consolidado", superId, dias],
+    queryKey: ["super-consolidado", superId, dias, faixa?.de ?? null, faixa?.ate ?? null],
     // trocar o período mantém os números anteriores na tela até os novos chegarem (a consulta leva ~8s)
     placeholderData: (ant: any, q: any) => (q?.queryKey?.[1] === superId ? ant : undefined),
     enabled: !!superId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const ate = diaSP(Date.now());
-      const de = diaSP(Date.now() - (dias - 1) * 864e5);
+      const ate = faixa?.ate ?? diaSP(Date.now());
+      const de = faixa?.de ?? diaSP(Date.now() - (dias - 1) * 864e5);
       const deIso = `${de}T03:00:00Z`;
+      const ateIso = new Date(new Date(`${ate}T03:00:00Z`).getTime() + 864e5).toISOString(); // fim do dia "ate" em SP
 
       // diretor: os supers abaixo dele também são "chefes" — a linha vira a empresa inteira
       const [{ data: eu }, { data: subs }] = await Promise.all([
@@ -122,7 +125,7 @@ export function useConsolidadoSuper(superId: string | undefined, dias: number) {
         supabase.from("junix_pastas" as any).select("gerente,superintendente,dias"),
         ids.length ? todas<any>((a, b) => supabase.from("leads")
           .select("manager_id,source,original_broker_id,fb_page_id,fb_campaign_id")
-          .in("manager_id", [superId!, ...subIds, ...ids]).gte("created_at", deIso).range(a, b)) : Promise.resolve([]),
+          .in("manager_id", [superId!, ...subIds, ...ids]).gte("created_at", deIso).lt("created_at", ateIso).range(a, b)) : Promise.resolve([]),
         supabase.rpc("fb_contas_gerentes" as any, { p_de: de }),
         supabase.from("profiles").select("id,manager_id").in("manager_id", [superId!, ...ids]).eq("role", "BROKER"),
       ]);

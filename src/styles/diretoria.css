@@ -1043,3 +1043,35 @@
 }
 .dir .mgr10.dir-cfg input, .dir .mgr10.dir-cfg select, .dir .mgr10.dir-cfg textarea { color: var(--ink); background: var(--card); }
 .dir .mgr10.dir-cfg input::placeholder { color: #8A97A8; }
+
+
+/* ── Menu na lateral (15/10): o mesmo desenho do gerente e do super — azul-marinho, lobo no topo, Sair no pé.
+   O topo fica só com a saudação e o período. No celular, o menu vira a barra de baixo. ── */
+.dir.dir-app { display: grid; grid-template-columns: 84px minmax(0, 1fr); min-height: 100vh; }
+.dir-rail { position: sticky; top: 0; height: 100vh; background: var(--navy); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 8px; z-index: 25; overflow-y: auto; }
+.dir-rail-lobo { width: 54px; height: 47px; object-fit: contain; margin-bottom: 10px; }
+.dir-rail a, .dir-rail button { position: relative; width: 66px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 9px 2px 7px; border-radius: 12px; border: 0; background: none; color: var(--muted-on-navy); font: 600 10.5px Archivo, system-ui, sans-serif; text-align: center; line-height: 1.15; text-decoration: none; cursor: pointer; }
+.dir-rail a:hover, .dir-rail button:hover { color: #fff; background: rgba(255,255,255,.06); }
+.dir-rail .on { color: #fff; background: var(--navy-3); font-weight: 700; }
+.dir-rail .on::before { content: ""; position: absolute; left: -8px; top: 12px; bottom: 12px; width: 4px; border-radius: 0 4px 4px 0; background: var(--teal); }
+.dir-rail svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.dir-rail-sep { height: 1px; width: 60%; background: rgba(255,255,255,.1); margin: 6px 0; }
+.dir-rail-flex { flex: 1; }
+.dir-rail a:focus-visible, .dir-rail button:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.dir-col { min-width: 0; display: flex; flex-direction: column; }
+.dir-top2 { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 14px 32px; background: var(--card); border-bottom: 1px solid var(--line); }
+.dir-ola2 small { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 700; }
+.dir-ola2 b { font-size: 20px; color: var(--ink); }
+.dir-periodo { position: relative; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.dir-datas { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.dir-datas label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.dir-datas input { font: 500 13px Archivo, system-ui, sans-serif; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+@media (max-width: 760px) {
+  .dir.dir-app { grid-template-columns: 1fr; padding-bottom: 72px; }
+  .dir-rail { position: fixed; top: auto; bottom: 0; left: 0; right: 0; height: auto; flex-direction: row; justify-content: flex-start; overflow-x: auto; padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px)); gap: 2px; }
+  .dir-rail-lobo, .dir-rail-sep, .dir-rail-flex { display: none; }
+  .dir-rail a, .dir-rail button { min-width: 64px; flex-shrink: 0; }
+  .dir-rail .on::before { display: none; }
+  .dir-top2 { padding: 12px 16px; }
+  .dir-periodo { align-items: flex-start; }
+}

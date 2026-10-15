@@ -20,11 +20,23 @@ import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
 import { usePlanos, atrasada } from "@/hooks/usePlano";
 import "@/styles/diretoria.css";
 import Configuracoes from "@/components/config/Configuracoes";
+import { usePeriodo, diaSP as diaHojeSP } from "@/hooks/usePeriodo";
 
 type Aba = "hoje" | "equipes" | "leads" | "pastas" | "bi" | "estrategia" | "config";
 const ABAS: [Aba, string][] = [["hoje", "Hoje"], ["equipes", "Equipes"], ["leads", "Leads e investimento"], ["pastas", "Pastas"], ["bi", "B.I."], ["estrategia", "Estratégia"], ["config", "Configurar"]];
-const PERIODOS: [number, string][] = [[1, "Hoje"], [7, "7 dias"], [30, "30 dias"]];
 
+const ICONE_ABA: Record<Aba, string> = {
+  hoje: "M3 11l9-7 9 7M5 10v10h14V10",
+  equipes: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  leads: "M4 5h16v11H8l-4 4z",
+  pastas: "M3 6h7l2 2h9v11H3z",
+  bi: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  estrategia: "M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zM12 2v2M12 20v2M2 12h2M20 12h2",
+  config: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M4.9 4.9L7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1",
+};
+const RAIL_ROTULO: Partial<Record<Aba, string>> = { leads: "Leads", config: "Configurar" };
+const dm = (iso: string) => iso.split("-").reverse().slice(0, 2).join("/");
+const fmtFaixa = (de: string, ate: string) => (de === ate ? dm(de) : `${dm(de)} a ${dm(ate)}`);
 const nf = (n: number) => n.toLocaleString("pt-BR");
 const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
 const curto = (n: number) => n >= 1e6 ? `R$ ${(n / 1e6).toFixed(2).replace(".", ",")} mi` : n >= 1e3 ? `R$ ${(n / 1e3).toFixed(1).replace(".", ",")} mil` : n ? brl(n) : "—";
@@ -58,14 +70,22 @@ export default function Diretoria() {
   const { session, role, signOut } = useAuth();
   const nav = useNavigate();
   const [aba, setAba] = useState<Aba>("hoje");
-  const [dias, setDias] = useState(30);
+  // Mesmo período do gerente e do super (Hoje · Ontem · 7 dias · 30 dias · Escolher período), guardado entre as abas.
+  const { periodo, definir } = usePeriodo();
+  const dias = periodo.dias;
+  const faixa = useMemo(() => ({ de: periodo.de, ate: periodo.ate }), [periodo.de, periodo.ate]);
+  // o rollup do servidor só sabe "últimos N dias até hoje": cobre do início do período até hoje
+  const diasAteHoje = Math.max(1, Math.round((new Date(diaHojeSP() + "T12:00:00Z").getTime() - new Date(periodo.de + "T12:00:00Z").getTime()) / 864e5) + 1);
+  const [abrirDatas, setAbrirDatas] = useState(false);
+  const [deD, setDeD] = useState(periodo.de);
+  const [ateD, setAteD] = useState(periodo.ate);
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
   const tog = (k: string) => setAberto((v) => ({ ...v, [k]: !v[k] }));
   const abrirPainel = (id: string) => nav(`/manager?manager=${id}`);
 
   const { data: diretorId } = useDiretorId(role, session?.user?.id);
-  const { data: dir, isLoading, isPlaceholderData: dirVelho } = useDiretoria(diretorId, dias);
-  const { data: cons, isLoading: carregandoCons, isPlaceholderData: consVelho } = useConsolidadoSuper(diretorId ?? undefined, dias);
+  const { data: dir, isLoading, isPlaceholderData: dirVelho } = useDiretoria(diretorId, diasAteHoje, faixa);
+  const { data: cons, isLoading: carregandoCons, isPlaceholderData: consVelho } = useConsolidadoSuper(diretorId ?? undefined, dias, faixa);
   const atualizando = dirVelho || consVelho;
 
   const porId = useMemo(() => new Map((cons?.linhas ?? []).map((l) => [l.id, l])), [cons]);
@@ -83,28 +103,60 @@ export default function Diretoria() {
   const diasMes = new Date(hojeD.getFullYear(), hojeD.getMonth() + 1, 0).getDate();
 
   return (
-    <div className="dir">
-      <header className="dir-top">
-        <div className="dir-logo">C</div>
-        <div className="dir-ola">
+    <div className="dir dir-app">
+      {/* Menu na lateral, igual ao do gerente e do super (15/10): mesma ordem, Sair sempre no pé */}
+      <nav className="dir-rail" aria-label="Seções">
+        <img className="dir-rail-lobo" src="/comandra-lobo.png" alt="Comandra" />
+        {ABAS.map(([k, t]) => (
+          <button key={k} type="button" className={aba === k ? "on" : ""} aria-current={aba === k ? "page" : undefined} onClick={() => setAba(k)}>
+            <svg viewBox="0 0 24 24" aria-hidden><path d={ICONE_ABA[k]} /></svg>{RAIL_ROTULO[k] ?? t}
+          </button>
+        ))}
+        <span className="dir-rail-sep" />
+        <Link to="/super?aba=time" title="Tela anterior, com cadastro e desligamento">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM3 21v-1a6 6 0 0 1 12 0v1M16 3.5a4 4 0 0 1 0 7.5M21 21v-1a6 6 0 0 0-4-5.6" /></svg>Gestão do time
+        </Link>
+        {role === "ADMIN" ? (
+          <Link to="/admin" title="Área de admin"><svg viewBox="0 0 24 24" aria-hidden><path d="M15 18l-6-6 6-6" /></svg>Admin</Link>
+        ) : null}
+        <span className="dir-rail-flex" />
+        <button type="button" onClick={signOut} title="Sair da conta">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6" /></svg>Sair
+        </button>
+      </nav>
+
+      <div className="dir-col">
+      <header className="dir-top2">
+        <div className="dir-ola2">
           <small>Diretoria · {nomeMes(inicioMes())} · dia {hojeD.getDate()} de {diasMes}</small>
           <b>{saudacao()}, {String(primeiroNome).split(" ")[0]}</b>
         </div>
-        <nav className="dir-nav" aria-label="Seções">
-          {ABAS.map(([k, t]) => <button key={k} className={aba === k ? "on" : ""} aria-current={aba === k ? "page" : undefined} onClick={() => setAba(k)}>{t}</button>)}
-        </nav>
-        {role === "ADMIN" ? <Link to="/admin" className="dir-ghost">Admin</Link> : null}
-        <Link to="/super?aba=time" className="dir-ghost" title="Tela anterior, com cadastro e desligamento">Gestão do time</Link>
-        <button type="button" className="dir-ghost" onClick={signOut} title="Sair da conta">Sair</button>
+        {aba === "equipes" || aba === "leads" ? (
+          <div className="dir-periodo">
+            <div className="dir-per" role="group" aria-label="Período">
+              {([["hoje", "Hoje"], ["ontem", "Ontem"], ["7", "7 dias"], ["30", "30 dias"]] as const).map(([k, t]) => (
+                <button key={k} type="button" className={periodo.preset === k ? "on" : ""} aria-pressed={periodo.preset === k}
+                  onClick={() => { definir(k); setAbrirDatas(false); }}>{t}</button>
+              ))}
+              <button type="button" className={periodo.preset === "custom" ? "on" : ""} aria-expanded={abrirDatas}
+                onClick={() => setAbrirDatas((v) => !v)}>{periodo.preset === "custom" ? periodo.rotulo : "Escolher período"}</button>
+            </div>
+            {abrirDatas ? (
+              <div className="dir-datas">
+                <label>De<input type="date" value={deD} max={diaHojeSP()} onChange={(e) => setDeD(e.target.value)} /></label>
+                <label>Até<input type="date" value={ateD} max={diaHojeSP()} onChange={(e) => setAteD(e.target.value)} /></label>
+                <button type="button" className="dir-btn" onClick={() => { if (deD && ateD && deD <= ateD) { definir("custom", deD, ateD); setAbrirDatas(false); } }}>Aplicar</button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
       <main className="dir-wrap">
-        {aba !== "hoje" && aba !== "estrategia" && aba !== "pastas" && aba !== "bi" && aba !== "config" ? (
+        {aba === "equipes" || aba === "leads" ? (
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <span className="dir-lbl">Período</span>
-            <div className="dir-per">{PERIODOS.map(([n, t]) => <button key={n} className={dias === n ? "on" : ""} onClick={() => setDias(n)}>{t}</button>)}</div>
-            {atualizando ? <span className="dir-chip c-blue">atualizando para {PERIODOS.find(([n]) => n === dias)?.[1] ?? `${dias} dias`}…</span>
-              : <span className="dir-nota">{aba === "equipes" ? "O período muda plantões, visitas e pastas; vendas e meta são sempre do mês." : "Clique na superintendência para abrir os gerentes; no gerente para abrir os corretores."}</span>}
+            {atualizando ? <span className="dir-chip c-blue">atualizando para {periodo.rotulo}…</span>
+              : <span className="dir-nota">{fmtFaixa(periodo.de, periodo.ate)} · {aba === "equipes" ? "O período muda plantões, visitas e pastas; vendas e meta são sempre do mês." : "Clique na superintendência para abrir os gerentes; no gerente para abrir os corretores."}</span>}
           </div>
         ) : null}
 
@@ -120,7 +172,7 @@ export default function Diretoria() {
               {aberto["tabela-equipes"] ? <Equipes supers={supers} linhasDoSuper={linhasDoSuper} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} /> : null}
             </>}
             {aba === "leads" && <AnunciosSaude diretorId={diretorId!} supers={supers} />}
-            {aba === "leads" && <Leads dias={dias} supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
+            {aba === "leads" && <Leads dias={dias} deP={periodo.de} supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
             {aba === "pastas" && <>
               <PastasPainel diretorId={diretorId!} supers={supers} pastas={dir.pastas} />
               <button className="dir-btn" style={{ alignSelf: "flex-start" }} onClick={() => tog("tabela-pastas")}>
@@ -135,6 +187,7 @@ export default function Diretoria() {
         {aba === "config" ? <div className="mgr10 dir-cfg" style={{ background: "transparent", paddingBottom: 0 }}><Configuracoes nivel="diretor" donoId={null} /></div> : null}
         <p className="dir-nota">Fontes: Junix (venda, VGV, pastas) · C2S (plantão, visita) · Facebook (anúncio) · Comandra (leads, login).</p>
       </main>
+      </div>
     </div>
   );
 }
@@ -1052,12 +1105,12 @@ function Equipes({ supers, linhasDoSuper, aberto, tog, abrirPainel, carregandoCo
 }
 
 /* ───────────────────────── LEADS ───────────────────────── */
-function Leads({ supers, linhasDoSuper, total, aberto, tog, abrirPainel, carregandoCons, dias }: ArvoreProps & { total: LinhaConsolidado | null; dias: number }) {
+function Leads({ supers, linhasDoSuper, total, aberto, tog, abrirPainel, carregandoCons, dias, deP }: ArvoreProps & { total: LinhaConsolidado | null; dias: number; deP?: string }) {
   // anúncio que chegou mas ficou sem gerente (barrado pela região, ou página sem corretor na fila) — a árvore não enxerga
   const { data: semDono } = useQuery({
-    queryKey: ["leads-anuncio-sem-dono", dias], staleTime: 2 * 60_000,
+    queryKey: ["leads-anuncio-sem-dono", dias, deP], staleTime: 2 * 60_000,
     queryFn: async () => {
-      const de = new Date(Date.now() - 3 * 3600e3 - (dias - 1) * 864e5).toISOString().slice(0, 10);
+      const de = deP ?? new Date(Date.now() - 3 * 3600e3 - (dias - 1) * 864e5).toISOString().slice(0, 10);
       const { data } = await supabase.rpc("leads_anuncio_sem_dono" as any, { p_de: `${de}T03:00:00Z` });
       return (data ?? {}) as { fora_regiao?: number; sem_dono?: number };
     },
