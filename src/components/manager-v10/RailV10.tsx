@@ -56,6 +56,8 @@ export const ABAS_SUPER: { k: Aba; label: string; to: string }[] = [
   { k: "time", label: "Equipes", to: "/super?aba=time" },
   { k: "leads", label: "Leads", to: "/super?aba=leads" },
   { k: "pastas", label: "Pastas", to: "/super?aba=pastas" },
+  // disparo de WhatsApp: mesma tela do gerente, com as contas do super, dos gerentes e dos corretores dele
+  { k: "disparar", label: "Disparar", to: "/manager/whatsapp" },
   { k: "estrategia", label: "Estratégia", to: "/super?aba=estrategia" },
   { k: "bi", label: "B.I.", to: "/super?aba=bi" },
   { k: "config", label: "Configurar", to: "/super?aba=config" },
@@ -107,7 +109,8 @@ export function RailV10({
         );
         // O /super resolve todas as abas na própria tela; o /manager só Tempo real e Time
         // (Leads, Pastas, Disparar... são páginas próprias). Sem isso, toda aba do gerente caía no B.I.
-        return onAba && (ehSuper || a.k === "tempo" || a.k === "time") ? (
+        // aba do super que mora em outra página (Disparar) é link, não troca de aba interna
+        return onAba && ((ehSuper && a.to.startsWith("/super")) || (!ehSuper && (a.k === "tempo" || a.k === "time"))) ? (
           <button key={a.k} type="button" className={`railb${on ? " on" : ""}`}
             aria-current={on ? "page" : undefined} onClick={() => onAba(a.k)}>
             {conteudo}

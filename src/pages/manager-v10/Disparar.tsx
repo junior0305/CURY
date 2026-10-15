@@ -1750,7 +1750,9 @@ export default function Disparar() {
                   <label htmlFor="d-tpl">Qual mensagem</label>
                   <select id="d-tpl" value={tplSel} onChange={(e) => setTplSel(e.target.value)}>
                     <option value="">— escolha —</option>
-                    {d.templates.filter((t) => (t.status ?? "").toUpperCase() === "APPROVED").map((t) => (
+                    {/* só os templates aprovados NA CONTA do número que vai enviar: template de outra conta é recusado pela Meta */}
+                    {d.templates.filter((t) => (t.status ?? "").toUpperCase() === "APPROVED"
+                      && (!cfgEnvio?.wabaId || !t.waba || t.waba === cfgEnvio.wabaId)).map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.nome} — {t.categoria === "UTILITY" ? "Utilidade" : "Marketing"} · {brl(preco(t.categoria))}
                       </option>
@@ -1921,7 +1923,7 @@ export default function Disparar() {
                 {/* De qual numero sai, e de quem e a conta. Faltava por completo:
                     dava para disparar mil mensagens sem saber que estavam saindo
                     pelo numero compartilhado — ou seja, no cartao da empresa. */}
-                <div className={`sai${cfgEnvio && cfgEnvio.ownerId !== userId ? " casa" : ""}`}>
+                <div className={`sai${cfgEnvio && !cfgEnvio.ownerId ? " casa" : ""}`}>
                   <span>Sai pelo número</span>
                   {d.meusNumeros.length > 1 ? (
                     <select className="sai-sel" value={cfgEnvio?.id ?? ""}
@@ -1939,7 +1941,9 @@ export default function Disparar() {
                   <i>{!cfgEnvio ? "conecte um número antes de disparar"
                      : cfgEnvio.ownerId === userId
                        ? "é o seu número — a conta é sua"
-                       : "número compartilhado da empresa — quem paga é a empresa"}</i>
+                       : cfgEnvio.ownerId
+                         ? "número de alguém da sua equipe — a conta é dele"
+                         : "número compartilhado da empresa — quem paga é a empresa"}</i>
                 </div>
 
                 <div className="conta">

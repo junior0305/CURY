@@ -44,6 +44,8 @@ export interface Template {
   variaveis: string[];
   status: string | null;
   metaId: string | null;
+  /** conta (WABA) onde o template foi aprovado: só serve para número dessa conta */
+  waba?: string | null;
 }
 
 export interface Campanha {
@@ -230,6 +232,12 @@ export function useDisparar(managerId: string | undefined, teamManagerIds?: stri
       // tela não mudar; `meusNumeros` é a lista de onde ele escolhe na hora do
       // disparo. Sem a lista, escolher número seria escolher entre um.
       const meus = cfgs.filter((c) => c.owner_id === managerId && ativa(c));
+      // Super/diretor: também os números dos gerentes e corretores dele (a regra de acesso já
+      // limita ao que está abaixo). Vêm depois dos próprios, com o nome do dono na frente.
+      const donosEquipe = equipe ? new Set<string>([...equipe, ...time.map((b: any) => b.id)]) : null;
+      const daEquipe = donosEquipe
+        ? cfgs.filter((c) => c.owner_id && c.owner_id !== managerId && donosEquipe.has(c.owner_id) && ativa(c))
+        : [];
       const minha = meus[0] ?? cfgs.find((c) => !c.owner_id && ativa(c)) ?? null;
 
       const numeros = time.map((b: any) => ({
@@ -243,7 +251,7 @@ export function useDisparar(managerId: string | undefined, teamManagerIds?: stri
         idioma: t.language ?? "pt_BR", corpo: t.body_text ?? "",
         rodape: t.footer_text, headerTipo: t.header_type, headerImagem: t.header_image_url,
         botoes: t.buttons, variaveis: varsDoCorpo(t.body_text ?? "", t.variables),
-        status: t.meta_status, metaId: t.meta_template_id,
+        status: t.meta_status, metaId: t.meta_template_id, waba: t.waba_id ?? null,
       }));
 
       /* ── campanhas ── */
@@ -314,7 +322,14 @@ export function useDisparar(managerId: string | undefined, teamManagerIds?: stri
 
       return {
         config: minha ? monta(minha) : null,
-        meusNumeros: meus.map(monta),
+        meusNumeros: [
+          ...meus.map(monta),
+          ...daEquipe.map((c) => {
+            const m = monta(c);
+            const dono = gerNomePor.get(c.owner_id) ?? nomePor.get(c.owner_id) ?? "equipe";
+            return { ...m, label: `${dono} · ${m.label ?? m.displayNumber ?? ""}`.trim() };
+          }),
+        ],
         numeros, templates, campanhas, conversas, publicos,
         corretores: time.map((b: any) => ({
           id: b.id, nome: nomePor.get(b.id) ?? "—",
