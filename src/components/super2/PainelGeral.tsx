@@ -218,7 +218,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
       {/* ── CABEÇALHO DO COCKPIT NO PADRÃO DO GERENTE ── */}
       <header className="cockpit-v3-header">
         <div className="cockpit-v3-title">
-          <h1>🎯 Cockpit de Gestão da Superintendência</h1>
+          <h1>Cockpit de Gestão da Superintendência</h1>
           <p>Superintendência · {superNome} · Gestão consolidada de equipes, canais de leads e esteira de fechamento</p>
         </div>
 
@@ -283,7 +283,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
             <div key={dItem.id} className="alerta-queima-caixa">
               <div className="alerta-queima-conteudo">
                 <div className="alerta-queima-icone">
-                  <span style={{ fontSize: 18 }}>🔥</span>
+                  
                 </div>
                 <div className="alerta-queima-texto">
                   <div className="alerta-queima-titulo">
@@ -315,7 +315,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
       <section className="hero-placar-v3">
         {/* Vendas do Mês da Superintendência */}
         <div className="kpi-card-v3 destaque">
-          <span className="kpi-title-v3">🎯 Vendas Confirmadas (Junix)</span>
+          <span className="kpi-title-v3">Vendas Confirmadas (Junix)</span>
           <div className="kpi-val-v3 mono">
             <span style={{ color: "var(--cv-brand)" }}>{realizado}</span>
             <span style={{ fontSize: 18, color: "var(--cv-text-muted)", fontWeight: 500 }}>
@@ -335,7 +335,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
 
         {/* Ritmo e Projeção */}
         <div className="kpi-card-v3">
-          <span className="kpi-title-v3">📈 Projeção de Fechamento</span>
+          <span className="kpi-title-v3">Projeção de Fechamento</span>
           <div className="kpi-val-v3 mono">
             <span style={{ color: projecao && d?.meta && projecao >= d.meta ? "var(--cv-green)" : "var(--cv-amber)" }}>
               {projecao ?? "—"}
@@ -343,13 +343,13 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
             <span style={{ fontSize: 15, color: "var(--cv-text-muted)", fontWeight: 500 }}>vendas</span>
           </div>
           <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
-            Ritmo: <b className="mono">{porDia} un/dia útil</b> · {projecao && d?.meta && projecao >= d.meta ? "🟢 No ritmo" : "🟠 Abaixo do ritmo"}
+            Ritmo: <b className="mono">{porDia} un/dia útil</b> · {projecao && d?.meta && projecao >= d.meta ? "No ritmo" : "Abaixo do ritmo"}
           </span>
         </div>
 
         {/* Leads Recebidos no Período Selecionado */}
         <div className="kpi-card-v3">
-          <span className="kpi-title-v3">📥 Leads no Período Selecionado</span>
+          <span className="kpi-title-v3">Leads no Período Selecionado</span>
           <div className="kpi-val-v3 mono">
             <span style={{ color: "var(--cv-blue)" }}>{t?.leadsTot ?? 0}</span>
             <span style={{ fontSize: 14, color: "var(--cv-text-muted)", fontWeight: 500 }}>
@@ -366,7 +366,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
 
         {/* Poder de Fogo (Mídia & Anúncios) */}
         <div className="kpi-card-v3">
-          <span className="kpi-title-v3">💥 Poder de Fogo (Mídia Meta)</span>
+          <span className="kpi-title-v3">Poder de Fogo (Mídia Meta)</span>
           <div className="kpi-val-v3 mono">
             <span style={{ color: "var(--cv-brand)" }}>{t ? curto(t.gasto) : "—"}</span>
           </div>
@@ -380,12 +380,12 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
       <section className="leads-section-v3">
         <div className="leads-header-v3">
           <div className="leads-title-v3">
-            <h2>📊 Esteira de Fechamento da Superintendência</h2>
+            <h2>Esteira de Fechamento da Superintendência</h2>
             <span>Acompanhamento da conversão de ponta a ponta: do clique no anúncio até a pasta e venda</span>
           </div>
           {funilGargalo && (
             <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cv-rose)", background: "var(--cv-rose-light)", padding: "5px 12px", borderRadius: "var(--cv-radius-full)" }}>
-              ⚠️ {funilGargalo}
+              {funilGargalo}
             </span>
           )}
         </div>
@@ -404,14 +404,14 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
             className={`origem-pill-btn-v3 ${canalFunil === "anuncio" ? "active" : ""}`}
             onClick={() => setCanalFunil("anuncio")}
           >
-            📢 Anúncios Meta Ads <span className="mono">{t?.leads.anuncio ?? 0}</span>
+            Anúncios Meta Ads <span className="mono">{t?.leads.anuncio ?? 0}</span>
           </button>
           <button
             type="button"
             className={`origem-pill-btn-v3 ${canalFunil === "disparo" ? "active" : ""}`}
             onClick={() => setCanalFunil("disparo")}
           >
-            ⚡ Disparos Ativos <span className="mono">{t?.leads.disparo ?? 0}</span>
+            Disparos Ativos <span className="mono">{t?.leads.disparo ?? 0}</span>
           </button>
           <button
             type="button"
@@ -472,7 +472,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
       <section className="tropa-section-v3">
         <div className="tropa-header-v3">
           <div className="tropa-title-v3">
-            <h2>👥 Raio-X Comparativo de Equipes</h2>
+            <h2>Raio-X Comparativo de Equipes</h2>
             <span>Desempenho por gerente, canais de leads, eficiência de atendimento e fechamento de vendas</span>
           </div>
 
@@ -482,7 +482,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
               className={`origem-pill-btn-v3 ${modoTabelaEquipes === "tabela" ? "active" : ""}`}
               onClick={() => setModoTabelaEquipes("tabela")}
             >
-              📋 Tabela Comparativa
+              Tabela Comparativa
             </button>
             <button
               type="button"
@@ -501,8 +501,8 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
                 <tr>
                   <th>Gerente</th>
                   <th style={{ textAlign: "center" }}>Corretores</th>
-                  <th className="mono" style={{ textAlign: "right" }} title="Leads de formulários Meta Ads">📢 Anúncio</th>
-                  <th className="mono" style={{ textAlign: "right" }} title="Disparos ativos de WhatsApp">⚡ Disparo</th>
+                  <th className="mono" style={{ textAlign: "right" }} title="Leads de formulários Meta Ads">Anúncio</th>
+                  <th className="mono" style={{ textAlign: "right" }} title="Disparos ativos de WhatsApp">Disparo</th>
                   <th className="mono" style={{ textAlign: "right" }} title="Presença no plantão C2S">🏢 Plantão</th>
                   <th className="mono" style={{ textAlign: "right" }} title="Pescados e outras fontes">🌐 Outros</th>
                   <th className="mono" style={{ textAlign: "right", fontWeight: 700 }}>Total Leads</th>
@@ -609,7 +609,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
                                 onClick={() => cobrar(g.id, g.nome, gg[0], `${g.nome}, no Raio-X da superintendência identificamos um gargalo em ${gg[0]}: ${gg[1]} Como podemos resolver isso hoje com os corretores?`)}
                                 title="Cobrar gerente no WhatsApp"
                               >
-                                💬 Cobrar
+                                Cobrar
                               </button>
                             )}
                           </div>
@@ -695,7 +695,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
                         style={{ padding: "5px 10px", fontSize: 12 }}
                         onClick={() => cobrar(g.id, g.nome, "alinhamento", `${g.nome}, como está o andamento da equipe hoje? Vi os números da sua esteira aqui no painel da superintendência.`)}
                       >
-                        💬 Cobrar
+                        Cobrar
                       </button>
                     </div>
                   </div>

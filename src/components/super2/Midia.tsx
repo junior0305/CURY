@@ -98,8 +98,8 @@ export default function Midia({ superId }: { superId: string }) {
     const { data: pData } = await sb.from("profiles").select("phone").eq("id", c.donoId).maybeSingle();
     const fone = String(pData?.phone ?? "").replace(/\D/g, "");
     const msg = `Fala ${c.dono.split(" ")[0]}, olhando a conta de anúncios da sua equipe:\n• Gasto no período: ${brl(c.gasto)}\n• Leads que entraram: ${c.campanhas.reduce((a, x) => a + x.resultado, 0)}\n${
-      (c.fora_regiao ?? 0) > 0 ? `• ⚠️ ${c.fora_regiao} leads vieram com DDD fora da região (desperdício de verba)\n` : ""
-    }${(c.sem_toque ?? 0) > 0 ? `• ⚠️ ${c.sem_toque} leads estão sem primeiro contato há +24h na equipe!\n` : ""}Vamos alinhar isso hoje com a equipe e com o gestor de tráfego?`;
+      (c.fora_regiao ?? 0) > 0 ? `• ${c.fora_regiao} leads vieram com DDD fora da região (desperdício de verba)\n` : ""
+    }${(c.sem_toque ?? 0) > 0 ? `• ${c.sem_toque} leads estão sem primeiro contato há +24h na equipe!\n` : ""}Vamos alinhar isso hoje com a equipe e com o gestor de tráfego?`;
 
     if (fone) {
       window.open(`https://wa.me/${fone.startsWith("55") ? fone : "55" + fone}?text=${encodeURIComponent(msg)}`, "_blank");
@@ -115,7 +115,7 @@ export default function Midia({ superId }: { superId: string }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: "var(--cv-text-main)" }}>
-            📢 Saúde dos Anúncios & Contas Meta Ads
+            Saúde dos Anúncios & Contas Meta Ads
           </h2>
           <span style={{ fontSize: 13, color: "var(--cv-text-muted)" }}>
             Contas de anúncio das suas equipes sincronizadas ao vivo com o Facebook · {p.texto}
@@ -139,7 +139,7 @@ export default function Midia({ superId }: { superId: string }) {
       {/* ── PLACAR HERO DE MÍDIA ── */}
       <section className="hero-placar-v3">
         <div className="kpi-card-v3">
-          <span className="kpi-title-v3">💰 Gasto em Anúncios</span>
+          <span className="kpi-title-v3">Gasto em Anúncios</span>
           <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-text-main)" }}>
             {isLoading ? "…" : brl(gasto)}
           </div>
@@ -149,7 +149,7 @@ export default function Midia({ superId }: { superId: string }) {
         </div>
 
         <div className="kpi-card-v3">
-          <span className="kpi-title-v3">🎯 Leads do Facebook</span>
+          <span className="kpi-title-v3">Leads do Facebook</span>
           <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-text-main)" }}>
             {isLoading ? "…" : res}
           </div>
@@ -159,7 +159,7 @@ export default function Midia({ superId }: { superId: string }) {
         </div>
 
         <div className="kpi-card-v3 destaque">
-          <span className="kpi-title-v3">📉 Custo Médio por Lead (CPL)</span>
+          <span className="kpi-title-v3">Custo Médio por Lead (CPL)</span>
           <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-brand)" }}>
             {isLoading ? "…" : brl2(media)}
           </div>
@@ -169,7 +169,7 @@ export default function Midia({ superId }: { superId: string }) {
         </div>
 
         <div className="kpi-card-v3">
-          <span className="kpi-title-v3">⚠️ Leads com DDD Fora</span>
+          <span className="kpi-title-v3">Leads com DDD Fora</span>
           <div
             className="kpi-val-v3 mono"
             style={{ fontSize: 26, color: totalForaRegiao > 0 ? "var(--cv-rose)" : "inherit" }}
@@ -304,7 +304,7 @@ export default function Midia({ superId }: { superId: string }) {
                               style={{ padding: "4px 8px", fontSize: 11, background: "var(--cv-brand)", boxShadow: "none" }}
                               onClick={() => copiarPedidoGestor(c)}
                             >
-                              📋 Pedido Gestor
+                              Pedido Gestor
                             </button>
                             <button
                               type="button"
@@ -312,7 +312,7 @@ export default function Midia({ superId }: { superId: string }) {
                               style={{ padding: "4px 8px", fontSize: 11 }}
                               onClick={() => cobrarGerenteMidia(c)}
                             >
-                              💬 Cobrar Gerente
+                              Cobrar Gerente
                             </button>
                           </div>
                         </td>
@@ -416,7 +416,7 @@ function Assistente({ fatos, pronto }: { fatos: any; pronto: boolean }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
         <div>
           <b style={{ fontSize: 16, color: "var(--cv-text-main)", display: "flex", alignItems: "center", gap: 6 }}>
-            <span>🤖</span> Assistente de IA de Tráfego & Mídia
+            Assistente de IA de Tráfego & Mídia
           </b>
           <span style={{ fontSize: 12.5, color: "var(--cv-text-muted)" }}>
             Analisa os números da tela e indica o que cortar, o que escalar e os pedidos ao gestor de tráfego.
@@ -430,7 +430,7 @@ function Assistente({ fatos, pronto }: { fatos: any; pronto: boolean }) {
           disabled={!pronto || enviando || lin?.status === "pendente"}
           onClick={() => pedir("midia")}
         >
-          {lin?.status === "pendente" ? "Analisando com IA… (aguarde)" : "✨ Diagnosticar com IA"}
+          {lin?.status === "pendente" ? "Analisando com IA… (aguarde)" : "Diagnosticar com IA"}
         </button>
       </div>
 

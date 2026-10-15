@@ -62,7 +62,7 @@ export default function MetaSuperacao({ superId }: { superId: string }) {
       </div>
       <div className="s2-meta-op">+</div>
       <div className="s2-meta-c s2-meta-sup">
-        <small>Superação 🚀</small>
+        <small>Superação</small>
         {souEu ? (
           <input type="number" min={0} inputMode="numeric" value={sup} placeholder="0" disabled={herdada == null || salvando}
             aria-label="Vendas a mais além da meta da diretoria"

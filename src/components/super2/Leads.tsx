@@ -12,8 +12,8 @@ const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
 
 type Canal = "anuncio" | "disparo" | "pescados" | "outros";
 const CANAIS: [Canal, string, string][] = [
-  ["anuncio", "Meta Ads (Facebook/Instagram)", "📢"],
-  ["disparo", "Disparos WhatsApp", "💬"],
+  ["anuncio", "Meta Ads (Facebook/Instagram)", ""],
+  ["disparo", "Disparos WhatsApp", ""],
   ["pescados", "Pescados & Carteira", "🎣"],
   ["outros", "Ações / Outros", "🏃"],
 ];
@@ -143,7 +143,7 @@ export default function Leads({ superId }: { superId: string }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: "var(--cv-text-main)" }}>
-            📊 Esteira de Captação & Canais de Entrada
+            Esteira de Captação & Canais de Entrada
           </h2>
           <span style={{ fontSize: 13, color: "var(--cv-text-muted)" }}>
             Volume de leads recebidos, velocidade de primeiro contato e avanço para visita · {p.texto}
@@ -171,7 +171,7 @@ export default function Leads({ superId }: { superId: string }) {
             <div key={idx} className="alerta-queima-caixa">
               <div className="alerta-queima-conteudo">
                 <div className="alerta-queima-icone">
-                  <span style={{ fontSize: 18 }}>🔥</span>
+                  
                 </div>
                 <div className="alerta-queima-texto">
                   <div className="alerta-queima-titulo">

@@ -97,7 +97,7 @@ export default function Tropa({ superId }: { superId: string }) {
       {/* ── CABEÇALHO DO COCKPIT NO PADRÃO EXECUTIVO ── */}
       <header className="cockpit-v3-header">
         <div className="cockpit-v3-title">
-          <h1>👥 Gestão de Equipes & Tropa</h1>
+          <h1>Gestão de Equipes & Tropa</h1>
           <p>
             {ger === "geral"
               ? `Superintendência · Visão consolidada de todas as equipes · ${p.texto}`
@@ -185,7 +185,7 @@ export default function Tropa({ superId }: { superId: string }) {
           {/* ── PLACAR HERO CONSOLIDADO DA TROPA ── */}
           <section className="hero-placar-v3">
             <div className="kpi-card-v3">
-              <span className="kpi-title-v3">👥 Corretores na Tropa</span>
+              <span className="kpi-title-v3">Corretores na Tropa</span>
               <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-text-main)" }}>
                 {tot.cor}
               </div>
@@ -195,7 +195,7 @@ export default function Tropa({ superId }: { superId: string }) {
             </div>
 
             <div className="kpi-card-v3">
-              <span className="kpi-title-v3">📍 Plantão Presencial (C2S)</span>
+              <span className="kpi-title-v3">Plantão Presencial (C2S)</span>
               <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-text-main)" }}>
                 {tot.pl}
               </div>
@@ -205,7 +205,7 @@ export default function Tropa({ superId }: { superId: string }) {
             </div>
 
             <div className="kpi-card-v3">
-              <span className="kpi-title-v3">📥 Leads Recebidos</span>
+              <span className="kpi-title-v3">Leads Recebidos</span>
               <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-text-main)" }}>
                 {tot.leads}
               </div>
@@ -215,7 +215,7 @@ export default function Tropa({ superId }: { superId: string }) {
             </div>
 
             <div className="kpi-card-v3 destaque">
-              <span className="kpi-title-v3">🏆 Vendas Confirmadas (Junix)</span>
+              <span className="kpi-title-v3">Vendas Confirmadas (Junix)</span>
               <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-brand)" }}>
                 {tot.vendas} un
               </div>
@@ -313,7 +313,7 @@ export default function Tropa({ superId }: { superId: string }) {
                               style={{ padding: "4px 8px", fontSize: 11.5 }}
                               onClick={() => cobrarGerente(g.id, g.nome)}
                             >
-                              💬 Cobrar
+                              Cobrar
                             </button>
                           </div>
                         </td>
@@ -329,13 +329,13 @@ export default function Tropa({ superId }: { superId: string }) {
           <section className="tropa-section-v3">
             <div className="tropa-header-v3">
               <div className="tropa-title-v3">
-                <h2>🏆 Todos os Corretores da Tropa</h2>
+                <h2>Todos os Corretores da Tropa</h2>
                 <span>{corretores.length} corretores · Compare o ritmo e engajamento da equipe inteira</span>
               </div>
 
               {/* Barra de Busca de Corretor */}
               <div className="search-box-v3" style={{ width: 300 }}>
-                <span>🔍</span>
+                <span></span>
                 <input
                   type="text"
                   placeholder="Buscar por corretor ou gerente..."

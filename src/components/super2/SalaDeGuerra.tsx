@@ -72,21 +72,21 @@ export default function SalaDeGuerra({
           className={`origem-pill-btn-v3 ${aba === "plano" ? "active" : ""}`}
           onClick={() => setAba("plano")}
         >
-          🎯 Plano Estratégico
+          Plano Estratégico
         </button>
         <button
           type="button"
           className={`origem-pill-btn-v3 ${aba === "verba" ? "active" : ""}`}
           onClick={() => setAba("verba")}
         >
-          💰 Aporte de Verba
+          Aporte de Verba
         </button>
         <button
           type="button"
           className={`origem-pill-btn-v3 ${aba === "gastos" ? "active" : ""}`}
           onClick={() => setAba("gastos")}
         >
-          📉 Gestão de Gastos
+          Gestão de Gastos
         </button>
       </div>
 
@@ -187,7 +187,7 @@ function Verba({ superId, superNome, mes }: { superId: string; superNome: string
       >
         <div>
           <b style={{ fontSize: 16, color: "var(--cv-text-main)", display: "block" }}>
-            💰 Verba de Mídia da Superintendência
+            Verba de Mídia da Superintendência
           </b>
           <span style={{ fontSize: 12.5, color: "var(--cv-text-muted)" }}>
             Verba da diretoria e aportes por equipe para anúncios no mês
@@ -316,7 +316,7 @@ function Verba({ superId, superNome, mes }: { superId: string; superNome: string
       >
         <div>
           <b style={{ fontSize: 16, color: "var(--cv-text-main)", display: "block" }}>
-            🎯 Poder de Compra da Verba
+            Poder de Compra da Verba
           </b>
           <span style={{ fontSize: 12.5, color: "var(--cv-text-muted)" }}>
             Calculado pelo custo real de conversão das suas equipes nos últimos 30 dias

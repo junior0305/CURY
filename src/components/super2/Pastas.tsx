@@ -79,7 +79,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
       {/* ── CABEÇALHO DO COCKPIT NO PADRÃO EXECUTIVO ── */}
       <header className="cockpit-v3-header">
         <div className="cockpit-v3-title">
-          <h1>📁 Pastas & Aprovação de Crédito (Junix)</h1>
+          <h1>Pastas & Aprovação de Crédito (Junix)</h1>
           <p>
             Superintendência · Pastas dos corretores das suas equipes ·{" "}
             {todoPeriodo ? "Esteira contínua (todas as pastas em andamento)" : `Cadastradas ${p.texto}`}
@@ -149,7 +149,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
               onClick={() => setSit(sit === "vivas" ? "todas" : "vivas")}
               title="Clique para filtrar apenas pastas vivas"
             >
-              <span className="kpi-title-v3">📁 Pastas Vivas no Funil</span>
+              <span className="kpi-title-v3">Pastas Vivas no Funil</span>
               <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-brand)" }}>
                 {conta("vivas")} un
               </div>
@@ -164,7 +164,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
               onClick={() => setSit(sit === "paradas" ? "todas" : "paradas")}
               title="Clique para filtrar apenas pastas paradas há 7d+"
             >
-              <span className="kpi-title-v3">⚠️ Paradas há 7d+ (Gargalo)</span>
+              <span className="kpi-title-v3">Paradas há 7d+ (Gargalo)</span>
               <div
                 className="kpi-val-v3 mono"
                 style={{ fontSize: 26, color: conta("paradas") > 0 ? "var(--cv-rose)" : "inherit" }}
@@ -182,7 +182,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
               onClick={() => setSit(sit === "reprovadas" ? "todas" : "reprovadas")}
               title="Clique para filtrar apenas reprovadas"
             >
-              <span className="kpi-title-v3">❌ Reprovadas Caixa</span>
+              <span className="kpi-title-v3">Reprovadas Caixa</span>
               <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-rose)" }}>
                 {conta("reprovadas")} un
               </div>
@@ -197,7 +197,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
               onClick={() => setSit("todas")}
               title="Clique para ver todas as pastas"
             >
-              <span className="kpi-title-v3">📋 Total de Pastas Cadastradas</span>
+              <span className="kpi-title-v3">Total de Pastas Cadastradas</span>
               <div className="kpi-val-v3 mono" style={{ fontSize: 26, color: "var(--cv-text-main)" }}>
                 {lidas.length} un
               </div>
@@ -212,7 +212,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
             <div className="alerta-queima-caixa">
               <div className="alerta-queima-conteudo">
                 <div className="alerta-queima-icone">
-                  <span style={{ fontSize: 18 }}>🔥</span>
+                  
                 </div>
                 <div className="alerta-queima-texto">
                   <div className="alerta-queima-titulo">
@@ -245,7 +245,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
           <section className="tropa-section-v3">
             <div className="tropa-header-v3">
               <div className="tropa-title-v3">
-                <h2>📋 Lista Detalhada de Pastas</h2>
+                <h2>Lista Detalhada de Pastas</h2>
                 <span>Acompanhe o andamento de cada proposta e cobre o gerente com 1 clique</span>
               </div>
             </div>
@@ -265,7 +265,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
                       : s === "vivas"
                       ? "Vivas"
                       : s === "paradas"
-                      ? "⚠️ Paradas 7d+"
+                      ? "Paradas 7d+"
                       : s === "reprovadas"
                       ? "Reprovadas"
                       : "Sem chance"}{" "}
@@ -419,7 +419,7 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
                               style={{ padding: "4px 8px", fontSize: 11.5 }}
                               onClick={() => cobrarGerente(x.gerente, x.cliente, x.dias ?? 0, etapaNome)}
                             >
-                              💬 Cobrar
+                              Cobrar
                             </button>
                           </td>
                         </tr>

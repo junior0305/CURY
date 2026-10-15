@@ -12,15 +12,15 @@ export default function LeadsSuper({ superId, inicial }: { superId: string; inic
     <div className="cockpit-v3">
       <header className="cockpit-v3-header" style={{ marginBottom: 0 }}>
         <div className="cockpit-v3-title">
-          <h1>📥 Central de Leads & Mídia da Superintendência</h1>
+          <h1>Central de Leads & Mídia da Superintendência</h1>
           <p>Superintendência · Gestão de tráfego, canais de aquisição e saúde dos anúncios das equipes</p>
         </div>
       </header>
 
       <AbasInternas<"leads" | "midia">
         abas={[
-          ["leads", "📊 Esteira de Leads por Canal"],
-          ["midia", "📢 Saúde dos Anúncios Meta Ads"],
+          ["leads", "Esteira de Leads por Canal"],
+          ["midia", "Saúde dos Anúncios Meta Ads"],
         ]}
         atual={sub}
         onTroca={(k) => setSub(k)}

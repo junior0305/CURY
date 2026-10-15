@@ -154,7 +154,7 @@ export default function Superintendente() {
           <div className="cockpit-v3">
             <header className="cockpit-v3-header" style={{ marginBottom: 0 }}>
               <div className="cockpit-v3-title">
-                <h1>📈 B.I. & Fechamento da {ehDiretoria ? "Diretoria" : "Superintendência"}</h1>
+                <h1>B.I. & Fechamento da {ehDiretoria ? "Diretoria" : "Superintendência"}</h1>
                 <p>
                   {ehDiretoria
                     ? "A empresa inteira — todas as superintendências e equipes, num lugar só"
@@ -346,13 +346,13 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
         <div className="sup-k"><span>Gerentes</span><b>{data.gerentes.length}</b></div>
         <div className="sup-k"><span>Corretores cadastrados</span><b>{totalAtivos}</b>
           <i>{data.corretores.length - totalAtivos} desligados</i></div>
-        <div className="sup-k bom" style={{ borderColor: "#10B981" }}>
-          <span>🟢 Online no Comandra</span>
-          <b style={{ color: "#059669" }}>{totalOnlineAgora}</b>
+        <div className="sup-k bom" style={{ borderColor: "var(--cv-green)" }}>
+          <span>Online no Comandra</span>
+          <b style={{ color: "var(--cv-green)" }}>{totalOnlineAgora}</b>
           <i>{totalAtivos ? Math.round((totalOnlineAgora / totalAtivos) * 100) : 0}% da tropa ativa</i>
         </div>
         <div className="sup-k">
-          <span>📍 No plantão hoje (C2S)</span>
+          <span>No plantão hoje (C2S)</span>
           <b>{totalPlantaoHoje}</b>
           <i>check-in nas lojas</i>
         </div>
@@ -381,7 +381,7 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
                 <b>{b.titulo}</b>
                 <span className="sup-ger-cor">{ativos.length} corretores</span>
                 <span className="sup-ger-nums">
-                  <em><b style={{ color: "#059669" }}>{ativos.filter(isOnline).length}</b> online Comandra</em>
+                  <em><b style={{ color: "var(--cv-green)" }}>{ativos.filter(isOnline).length}</b> online Comandra</em>
                   <em><b>{ativos.filter((c) => plantaoHoje.has(c.id)).length}</b> no plantão hoje</em>
                   <em><b>{ativos.filter((c) => c.lead_assignment_enabled !== false).length}</b> recebem lead</em>
                   {sem.length ? <em style={{ color: "var(--red)" }}><b>{sem.length}</b> sem login</em> : null}
@@ -402,13 +402,13 @@ function TimeSuper({ superId, plantaoHoje }: { superId: string | undefined; plan
                         <s className={isOnline(c) ? "on" : "off"} />
                         {nome(c)}
                         {isOnline(c) ? (
-                          <span style={{ marginLeft: 6, fontSize: 10.5, color: "#047857", fontWeight: 700, background: "#D1FAE5", padding: "1px 5px", borderRadius: 4 }}>
-                            🟢 online
+                          <span style={{ marginLeft: 6, fontSize: 10.5, color: "var(--cv-green)", fontWeight: 700, background: "var(--cv-green-light)", padding: "1px 5px", borderRadius: 4 }}>
+                            online
                           </span>
                         ) : null}
                         {plantaoHoje.has(c.id) ? (
                           <em style={{ marginLeft: 6, fontStyle: "normal", fontSize: 11, color: "var(--good)", fontWeight: 700 }}>
-                            📍 plantão
+                            plantão
                           </em>
                         ) : null}
                       </span>
@@ -488,7 +488,7 @@ function CampanhasNaoLead({ superId }: { superId: string | undefined }) {
                 </span>
                 <span className="sup-cor-nums">
                   <em>resp. <b>{p.gerente}</b></em>
-                  <em className={p.falou ? "bom" : ""}><b>{p.falou ? "falou ✅" : "não falou"}</b></em>
+                  <em className={p.falou ? "bom" : ""}><b>{p.falou ? "falou " : "não falou"}</b></em>
                   <em>{fmt(p.quando)}</em>
                   <em><a href={`https://wa.me/${p.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" style={{ color: "var(--blue)", textDecoration: "none" }}>WhatsApp →</a></em>
                 </span>

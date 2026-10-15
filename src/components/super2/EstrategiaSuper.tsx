@@ -36,9 +36,9 @@ export default function EstrategiaSuper({ superId, superNome, abaInicial }: { su
     <div className="dir s2-est" style={{ minHeight: 0, background: "transparent" }}>
       <style>{CSS}</style>
       <div className="s2-est-top">
-        <div className="dir-per" style={{ background: "#E2E8F0", padding: 4 }}>
-          <button className={visao === "estrategia" ? "on" : ""} onClick={() => setVisao("estrategia")}>🎯 Estratégia</button>
-          <button className={visao === "plano" ? "on" : ""} onClick={() => setVisao("plano")}>💰 Plano, verba e gastos</button>
+        <div className="dir-per" style={{ background: "var(--sunk)", padding: 4 }}>
+          <button className={visao === "estrategia" ? "on" : ""} onClick={() => setVisao("estrategia")}>Estratégia</button>
+          <button className={visao === "plano" ? "on" : ""} onClick={() => setVisao("plano")}>Plano, verba e gastos</button>
         </div>
         <span>{comoDiretor ? "Visão da diretoria inteira" : `Superintendência · ${superNome}`}</span>
       </div>
