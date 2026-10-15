@@ -20,101 +20,106 @@ import { empresa } from "@/lib/empresa";
 type Nivel = "gerente" | "corretor";
 
 const BI_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap');
-.biv1{--canvas-bg:#DCE3EC;--navy-header:#0A192F;--navy-cury:#0D3868;--navy-cury-dark:#082649;--navy-row-1:#0F3E73;--navy-row-2:#144985;--navy-hover:#1E5CA8;--navy-panel:#0B1D36;--gold:#FACC15;--green-bright:#4ADE80;--red-bright:#F87171;--sans:'Archivo',-apple-system,BlinkMacSystemFont,sans-serif;--mono:'JetBrains Mono',monospace;background:var(--canvas-bg);border-radius:14px;overflow:hidden;font-family:var(--sans);color:#0F172A;-webkit-font-smoothing:antialiased}
+/* B.I. nas cores da tela do diretor (diretoria.css), 15/10: fundo claro, cartões brancos, cor só onde é sinal */
+.biv1{--bi-bg:#F3F5F8;--bi-card:#FFFFFF;--bi-sunk:#EEF1F5;--bi-row2:#F7F9FB;--bi-line:#E1E6EE;--bi-hair:#F0F3F7;
+  --bi-ink:#0F1B2D;--bi-ink2:#3C4B5F;--bi-mut:#5B6B80;--bi-navy:#0F1B2D;--bi-navy2:#16263D;--bi-navy3:#2A3E5C;--bi-onnavy:#9FB3CC;
+  --bi-blue:#1F5C9E;--bi-blue-bg:#E6F0FB;--bi-good:#1D6B45;--bi-good-bg:#E7F4EE;--bi-red:#A8322A;--bi-red-bg:#FDECEA;--bi-org:#8A5200;--bi-org-bg:#FFF1DE;--bi-track:#E3E8EF;
+  --gold:var(--bi-org);--green-bright:var(--bi-good);--red-bright:var(--bi-red);
+  --sans:'Archivo',-apple-system,BlinkMacSystemFont,sans-serif;--mono:'JetBrains Mono',monospace;
+  background:var(--bi-bg);border-radius:14px;overflow:hidden;font-family:var(--sans);color:var(--bi-ink);-webkit-font-smoothing:antialiased;border:1px solid var(--bi-line)}
+html[data-theme="dark"] .biv1{--bi-bg:#0B1220;--bi-card:#121C2C;--bi-sunk:#182436;--bi-row2:#152031;--bi-line:#24324A;--bi-hair:#1B2638;
+  --bi-ink:#E8EEF8;--bi-ink2:#A9B8CE;--bi-mut:#7B8BA3;--bi-navy:#0F1B2D;--bi-navy2:#16263D;--bi-navy3:#2A3E5C;
+  --bi-blue:#6FA6E6;--bi-blue-bg:rgba(111,166,230,.15);--bi-good:#4FB585;--bi-good-bg:rgba(79,181,133,.15);--bi-red:#E8857B;--bi-red-bg:rgba(232,133,123,.15);--bi-org:#E0A34A;--bi-org-bg:rgba(224,163,74,.15);--bi-track:#1F2D42}
 .biv1 *{box-sizing:border-box}
-.biv1 .top-tabs-bar{background:#050E1D;padding:7px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #1E3A8A;gap:10px;flex-wrap:wrap}
-.biv1 .ttb-left{display:flex;gap:8px;flex-wrap:wrap}
-.biv1 .ttb-btn{background:#0F2544;color:#94A3B8;border:1px solid #1E4275;padding:7px 16px;border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--sans);transition:all .15s}
-.biv1 .ttb-btn:hover{color:#fff;background:#173763}
-.biv1 .ttb-btn.active{background:linear-gradient(90deg,#2563EB,#6D28D9);color:#fff;border-color:#60A5FA;box-shadow:0 0 12px rgba(59,130,246,.45)}
-.biv1 .ttb-right{font-size:11.5px;color:#93C5FD;font-weight:600}
-.biv1 .top-hero{background:var(--navy-header);color:#fff;padding:12px 22px 46px;border-bottom:1px solid #1E293B}
+.biv1 .top-tabs-bar{background:var(--bi-card);padding:8px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bi-line);gap:10px;flex-wrap:wrap}
+.biv1 .ttb-left{display:flex;gap:4px;flex-wrap:wrap;background:var(--bi-sunk);padding:3px;border-radius:10px}
+.biv1 .ttb-btn{background:transparent;color:var(--bi-ink2);border:0;padding:7px 12px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--sans)}
+.biv1 .ttb-btn:hover{color:var(--bi-ink)}
+.biv1 .ttb-btn.active{background:var(--bi-navy);color:#fff}
+.biv1 .ttb-right{font-size:11.5px;color:var(--bi-mut);font-weight:600}
+.biv1 .top-hero{background:var(--bi-navy);color:#fff;padding:12px 22px 14px}
 .biv1 .top-hero-inner{max-width:1640px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
 .biv1 .brand-cluster{display:flex;align-items:center;gap:14px}
-.biv1 .brand-mark{display:flex;align-items:center;gap:8px;padding-right:14px;border-right:2px solid rgba(255,255,255,.18)}
-.biv1 .brand-mark img{width:30px;height:30px;object-fit:contain}
-.biv1 .brand-mark strong{font-size:22px;font-weight:800;letter-spacing:.04em}
-.biv1 .hero-title-block h1{font-size:20px;font-weight:800;letter-spacing:.01em;text-transform:uppercase}
-.biv1 .hero-filter-badge{display:inline-block;margin-top:2px;background:rgba(250,204,21,.16);border:1px solid rgba(250,204,21,.45);color:var(--gold);font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px}
+.biv1 .brand-mark{display:flex;align-items:center;gap:8px;padding-right:14px;border-right:1px solid var(--bi-navy3)}
+.biv1 .brand-mark img{width:34px;height:34px;object-fit:contain}
+.biv1 .brand-mark strong{font-size:18px;font-weight:800;letter-spacing:.02em}
+.biv1 .hero-title-block h1{font-size:18px;font-weight:800;letter-spacing:-.01em}
+.biv1 .hero-filter-badge{display:inline-block;margin-top:3px;background:var(--bi-navy2);border:1px solid var(--bi-navy3);color:var(--bi-onnavy);font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px}
 .biv1 .hero-controls{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}
-.biv1 .hc-box{background:#132847;border:1px solid #264B7F;border-radius:7px;padding:4px 8px}
-.biv1 .hc-box label{display:block;font-size:9.5px;font-weight:700;color:#93C5FD;text-transform:uppercase;margin-bottom:2px}
-.biv1 .hc-box select{background:#081528;color:#fff;border:1px solid #335E99;border-radius:4px;padding:3px 6px;font-size:11.5px;font-weight:700;font-family:var(--sans);cursor:pointer}
-.biv1 .hc-buttons{display:inline-flex;background:#132847;border:1px solid #264B7F;border-radius:7px;padding:3px;gap:3px}
-.biv1 .hc-btn{border:none;background:transparent;color:#CBD5E1;padding:6px 12px;border-radius:5px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:var(--sans)}
-.biv1 .hc-btn.active{background:var(--gold);color:#081528;font-weight:800}
-.biv1 .main-wrap{max-width:1640px;margin:-34px auto 0;padding:0 20px 22px}
+.biv1 .hc-box{background:var(--bi-navy2);border:1px solid var(--bi-navy3);border-radius:8px;padding:4px 8px}
+.biv1 .hc-box label{display:block;font-size:9.5px;font-weight:700;color:var(--bi-onnavy);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.biv1 .hc-box select{background:var(--bi-navy);color:#fff;border:1px solid var(--bi-navy3);border-radius:5px;padding:3px 6px;font-size:11.5px;font-weight:700;font-family:var(--sans);cursor:pointer}
+.biv1 .hc-buttons{display:inline-flex;background:var(--bi-navy2);border:1px solid var(--bi-navy3);border-radius:8px;padding:3px;gap:3px}
+.biv1 .hc-btn{border:none;background:transparent;color:var(--bi-onnavy);padding:6px 12px;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:var(--sans)}
+.biv1 .hc-btn.active{background:#fff;color:var(--bi-navy);font-weight:800}
+.biv1 .main-wrap{max-width:1640px;margin:0 auto;padding:16px 20px 22px}
 .biv1 .hero-kpi-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}
 @media(max-width:1020px){.biv1 .hero-kpi-4{grid-template-columns:repeat(2,1fr)}}
-.biv1 .gk-card{border-radius:12px;padding:13px 16px;color:#fff;display:flex;align-items:center;gap:13px;box-shadow:0 8px 20px rgba(8,25,48,.22);position:relative;overflow:hidden}
-.biv1 .gk-card.purple{background:linear-gradient(135deg,#5B21B6,#4338CA)}
-.biv1 .gk-card.pink{background:linear-gradient(135deg,#E11D48,#DB2777)}
-.biv1 .gk-card.green{background:linear-gradient(135deg,#059669,#0D9488)}
-.biv1 .gk-card.blue{background:linear-gradient(135deg,#1D4ED8,#0284C7)}
-.biv1 .gk-icon{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.18);border:3px solid rgba(255,255,255,.3);display:grid;place-items:center;font-size:20px;flex-shrink:0}
+.biv1 .gk-card{border-radius:12px;padding:14px 16px;color:var(--bi-ink);background:var(--bi-card);border:1px solid var(--bi-line);display:flex;align-items:center;gap:13px;position:relative;overflow:hidden}
+.biv1 .gk-card.purple,.biv1 .gk-card.pink,.biv1 .gk-card.green,.biv1 .gk-card.blue{background:var(--bi-card)}
+.biv1 .gk-icon{display:none}
 .biv1 .gk-body{flex:1;min-width:0}
-.biv1 .gk-lbl{font-size:11.5px;font-weight:700;opacity:.92;text-transform:uppercase;letter-spacing:.02em}
-.biv1 .gk-val{font-family:var(--mono);font-size:23px;font-weight:800;letter-spacing:-.02em;margin:1px 0 3px}
-.biv1 .gk-delta{font-size:11px;font-weight:700;background:rgba(0,0,0,.2);padding:2px 8px;border-radius:999px;display:inline-block}
+.biv1 .gk-lbl{font-size:11px;font-weight:700;color:var(--bi-mut);text-transform:uppercase;letter-spacing:.05em}
+.biv1 .gk-val{font-family:var(--mono);font-size:23px;font-weight:800;letter-spacing:-.02em;margin:2px 0 4px;color:var(--bi-ink)}
+.biv1 .gk-delta{font-size:11px;font-weight:700;background:var(--bi-sunk);color:var(--bi-ink2);padding:2px 8px;border-radius:999px;display:inline-block}
 .biv1 .hybrid-grid{display:grid;grid-template-columns:1.12fr 1.52fr 330px;gap:12px;align-items:stretch}
 @media(max-width:1280px){.biv1 .hybrid-grid{grid-template-columns:1fr}}
-.biv1 .panel-cury{background:var(--navy-cury);border:1px solid #1C508D;border-radius:10px;overflow:hidden;box-shadow:0 4px 14px rgba(8,38,73,.2);color:#fff}
-.biv1 .p-hdr-bar{background:var(--navy-cury-dark);color:#fff;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2A5C9A;font-size:13.5px;font-weight:800;gap:8px;flex-wrap:wrap}
-.biv1 .p-hdr-bar small{font-size:11px;color:#93C5FD;font-weight:600}
-.biv1 .cascade-filter-bar{background:#07203F;padding:8px 10px;border-bottom:1px solid #1E4982;display:flex;flex-direction:column;gap:6px}
+.biv1 .panel-cury{background:var(--bi-card);border:1px solid var(--bi-line);border-radius:12px;overflow:hidden;color:var(--bi-ink)}
+.biv1 .p-hdr-bar{background:var(--bi-card);color:var(--bi-ink);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bi-line);font-size:14px;font-weight:800;gap:8px;flex-wrap:wrap}
+.biv1 .p-hdr-bar small{font-size:11.5px;color:var(--bi-mut);font-weight:600}
+.biv1 .cascade-filter-bar{background:var(--bi-sunk);padding:8px 10px;border-bottom:1px solid var(--bi-line);display:flex;flex-direction:column;gap:6px}
 .biv1 .cf-top-row{display:grid;grid-template-columns:1fr 1.1fr 1.3fr auto;gap:6px;align-items:end}
 @media(max-width:900px){.biv1 .cf-top-row{grid-template-columns:1fr 1fr}}
-.biv1 .cf-field label{display:block;font-size:9.5px;font-weight:800;color:#93C5FD;text-transform:uppercase;margin-bottom:2px}
-.biv1 .cf-field select,.biv1 .cf-field input{width:100%;background:#0D325E;color:#fff;border:1px solid #2E64A6;border-radius:5px;padding:4px 7px;font-size:11.5px;font-weight:700;font-family:var(--sans)}
-.biv1 .cf-field input::placeholder{color:#94A3B8;font-weight:500}
+.biv1 .cf-field label{display:block;font-size:9.5px;font-weight:800;color:var(--bi-mut);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.biv1 .cf-field select,.biv1 .cf-field input{width:100%;background:var(--bi-card);color:var(--bi-ink);border:1px solid var(--bi-line);border-radius:6px;padding:5px 7px;font-size:11.5px;font-weight:600;font-family:var(--sans)}
+.biv1 .cf-field input::placeholder{color:var(--bi-mut);font-weight:500}
 .biv1 .cf-mode-tabs{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;padding-top:2px}
-.biv1 .mode-pill-group{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
-.biv1 .m-pill{background:#123766;color:#CBD5E1;border:1px solid #285999;padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--sans);transition:all .12s}
-.biv1 .m-pill:hover{background:#1B4B8A;color:#fff}
-.biv1 .m-pill.active{background:var(--gold);color:#082649;border-color:#FEF08A;font-weight:800}
+.biv1 .mode-pill-group{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.biv1 .m-pill{background:var(--bi-card);color:var(--bi-ink2);border:1px solid var(--bi-line);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--sans)}
+.biv1 .m-pill:hover{color:var(--bi-ink)}
+.biv1 .m-pill.active{background:var(--bi-navy);color:#fff;border-color:var(--bi-navy)}
 .biv1 .tbl-scroll{max-height:230px;overflow-y:auto}
 .biv1 .tbl-scroll.tall-475{max-height:465px}
 .biv1 .tbl-scroll::-webkit-scrollbar{width:6px}
-.biv1 .tbl-scroll::-webkit-scrollbar-track{background:#082649}
-.biv1 .tbl-scroll::-webkit-scrollbar-thumb{background:#3B82F6;border-radius:3px}
-.biv1 table.h-tbl{width:100%;border-collapse:collapse;font-size:11.8px;color:#fff}
-.biv1 .h-tbl thead th{position:sticky;top:0;background:#061D39;color:#CBD5E1;font-weight:700;padding:7px 8px;text-align:left;border-bottom:1px solid #2E62A1;font-size:10.6px;z-index:2;white-space:nowrap}
-.biv1 .h-tbl tbody tr{background:var(--navy-row-1);border-bottom:1px solid rgba(255,255,255,.07);cursor:pointer;transition:background .1s}
-.biv1 .h-tbl tbody tr:nth-child(even){background:var(--navy-row-2)}
-.biv1 .h-tbl tbody tr:hover{background:var(--navy-hover)}
-.biv1 .h-tbl tbody tr.selected{background:#2563EB!important;box-shadow:inset 4px 0 0 var(--gold);font-weight:700}
+.biv1 .tbl-scroll::-webkit-scrollbar-track{background:var(--bi-sunk)}
+.biv1 .tbl-scroll::-webkit-scrollbar-thumb{background:var(--bi-line);border-radius:3px}
+.biv1 table.h-tbl{width:100%;border-collapse:collapse;font-size:12px;color:var(--bi-ink)}
+.biv1 .h-tbl thead th{position:sticky;top:0;background:var(--bi-sunk);color:var(--bi-mut);font-weight:700;padding:7px 8px;text-align:left;border-bottom:1px solid var(--bi-line);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;z-index:2;white-space:nowrap}
+.biv1 .h-tbl tbody tr{background:var(--bi-card);border-bottom:1px solid var(--bi-hair);cursor:pointer}
+.biv1 .h-tbl tbody tr:nth-child(even){background:var(--bi-row2)}
+.biv1 .h-tbl tbody tr:hover{background:var(--bi-sunk)}
+.biv1 .h-tbl tbody tr.selected{background:var(--bi-blue-bg)!important;box-shadow:inset 3px 0 0 var(--bi-blue);font-weight:700}
 .biv1 .h-tbl td{padding:6px 8px;white-space:nowrap;vertical-align:middle}
-.biv1 .h-tbl .r{text-align:right;font-family:var(--mono)}
+.biv1 .h-tbl .r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
 .biv1 .h-tbl thead th.r{font-family:var(--sans)}
-.biv1 .h-tbl tfoot td{position:sticky;bottom:0;background:#061D39;color:#fff;font-weight:800;padding:7px 8px;border-top:2px solid #38BDF8;font-size:11.8px}
+.biv1 .h-tbl tfoot td{position:sticky;bottom:0;background:var(--bi-sunk);color:var(--bi-ink);font-weight:800;padding:7px 8px;border-top:1px solid var(--bi-line);font-size:12px}
 .biv1 .cell-bar-wrap{display:flex;align-items:center;justify-content:flex-end;gap:6px}
-.biv1 .mini-bar-track{width:52px;height:8px;background:rgba(255,255,255,.12);border-radius:4px;overflow:hidden;flex-shrink:0}
-.biv1 .mini-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#38BDF8,#4ADE80)}
+.biv1 .mini-bar-track{width:52px;height:7px;background:var(--bi-track);border-radius:4px;overflow:hidden;flex-shrink:0}
+.biv1 .mini-bar-fill{height:100%;border-radius:4px;background:var(--bi-blue)}
 .biv1 .mgr-cell{display:flex;align-items:center;gap:7px}
-.biv1 .mgr-badge{width:22px;height:22px;border-radius:50%;display:inline-grid;place-items:center;font-size:9.5px;font-weight:800;color:#082649;background:#93C5FD;flex-shrink:0}
-.biv1 .wk-chart-mini{display:flex;align-items:flex-end;justify-content:space-around;height:102px;padding:16px 8px 6px;background:#082649;border-bottom:1px solid #1E4982;gap:8px}
+.biv1 .mgr-badge{width:22px;height:22px;border-radius:50%;display:inline-grid;place-items:center;font-size:9.5px;font-weight:800;color:var(--bi-ink2);background:var(--bi-sunk);flex-shrink:0}
+.biv1 .wk-chart-mini{display:flex;align-items:flex-end;justify-content:space-around;height:102px;padding:16px 8px 6px;background:var(--bi-card);border-bottom:1px solid var(--bi-line);gap:8px}
 .biv1 .wk-col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;position:relative;cursor:pointer}
-.biv1 .wk-col-val{font-family:var(--mono);font-size:10px;color:#E2E8F0;font-weight:700;margin-bottom:3px}
-.biv1 .wk-col-bar{width:100%;max-width:44px;border-radius:4px 4px 0 0;background:linear-gradient(180deg,#A78BFA,#6D28D9)}
-.biv1 .wk-col-lbl{font-size:9.5px;color:#93C5FD;font-weight:700;margin-top:3px;text-align:center}
-.biv1 .right-visual-panel{background:var(--navy-panel);border:1px solid #1E3A8A;border-radius:10px;padding:14px;color:#fff;display:flex;flex-direction:column;justify-content:space-between;gap:12px;box-shadow:0 6px 18px rgba(8,25,48,.25)}
-.biv1 .rvp-title{font-size:13px;font-weight:800;color:#F8FAFC;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
-.biv1 .donut-row{display:flex;align-items:center;gap:14px;background:rgba(255,255,255,.04);padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.08)}
+.biv1 .wk-col-val{font-family:var(--mono);font-size:10px;color:var(--bi-ink2);font-weight:700;margin-bottom:3px}
+.biv1 .wk-col-bar{width:100%;max-width:44px;border-radius:4px 4px 0 0;background:var(--bi-track)}
+.biv1 .wk-col-lbl{font-size:9.5px;color:var(--bi-mut);font-weight:700;margin-top:3px;text-align:center}
+.biv1 .right-visual-panel{background:var(--bi-card);border:1px solid var(--bi-line);border-radius:12px;padding:14px;color:var(--bi-ink);display:flex;flex-direction:column;justify-content:space-between;gap:12px}
+.biv1 .rvp-title{font-size:13.5px;font-weight:800;color:var(--bi-ink);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+.biv1 .donut-row{display:flex;align-items:center;gap:14px;background:var(--bi-sunk);padding:10px;border-radius:10px;border:1px solid var(--bi-line)}
 .biv1 .donut-circle{width:96px;height:96px;border-radius:50%;display:grid;place-items:center;flex-shrink:0}
-.biv1 .donut-inner{width:62px;height:62px;border-radius:50%;background:var(--navy-panel);display:flex;flex-direction:column;align-items:center;justify-content:center}
-.biv1 .donut-inner strong{font-family:var(--mono);font-size:14px;color:#4ADE80}
-.biv1 .donut-inner small{font-size:9px;color:#94A3B8}
+.biv1 .donut-inner{width:62px;height:62px;border-radius:50%;background:var(--bi-sunk);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.biv1 .donut-inner strong{font-family:var(--mono);font-size:14px;color:var(--bi-good)}
+.biv1 .donut-inner small{font-size:9px;color:var(--bi-mut)}
 .biv1 .sup-bars-list{display:flex;flex-direction:column;gap:7px}
 .biv1 .sb-row{display:grid;grid-template-columns:88px 1fr;align-items:center;gap:8px;font-size:11px;cursor:pointer}
-.biv1 .sb-row:hover .sb-fill{filter:brightness(1.15)}
-.biv1 .sb-name{text-align:right;font-weight:700;color:#CBD5E1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.biv1 .sb-track{background:rgba(255,255,255,.08);height:22px;border-radius:5px;overflow:hidden}
-.biv1 .sb-fill{height:100%;background:linear-gradient(90deg,#059669,#10B981);border-radius:5px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;color:#fff;font-family:var(--mono);font-size:10.5px;font-weight:800;white-space:nowrap;min-width:0}
-.biv1 .up-txt{color:var(--green-bright);font-weight:800}
-.biv1 .dn-txt{color:var(--red-bright);font-weight:800}
-.biv1 .bi-soon{padding:60px 20px;text-align:center;color:#CBD5E1}
-.biv1 .bi-soon b{color:#fff;font-size:16px}
+.biv1 .sb-row:hover .sb-fill{filter:brightness(1.1)}
+.biv1 .sb-name{text-align:right;font-weight:700;color:var(--bi-ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.biv1 .sb-track{background:var(--bi-track);height:22px;border-radius:5px;overflow:hidden}
+.biv1 .sb-fill{height:100%;background:var(--bi-blue);border-radius:5px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;color:#fff;font-family:var(--mono);font-size:10.5px;font-weight:800;white-space:nowrap;min-width:0}
+.biv1 .up-txt{color:var(--bi-good);font-weight:800}
+.biv1 .dn-txt{color:var(--bi-red);font-weight:800}
+.biv1 .bi-soon{padding:60px 20px;text-align:center;color:var(--bi-mut)}
+.biv1 .bi-soon b{color:var(--bi-ink);font-size:16px}
 `;
 
 const nf = (n: number) => (n ?? 0).toLocaleString("pt-BR");
@@ -312,13 +317,13 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
       {/* BARRA DAS 4 TELAS */}
       <div className="top-tabs-bar">
         <div className="ttb-left">
-          <button className={`ttb-btn${screen === 1 ? " active" : ""}`} onClick={() => setScreen(1)}>🏆 TELA 1: Vendas × Visitas × Docs</button>
+          <button className={`ttb-btn${screen === 1 ? " active" : ""}`} onClick={() => setScreen(1)}>TELA 1: Vendas × Visitas × Docs</button>
           <button className={`ttb-btn${screen === 2 ? " active" : ""}`} onClick={() => setScreen(2)}>📣 TELA 2: Anúncios por gerente</button>
           <button className={`ttb-btn${screen === 3 ? " active" : ""}`} onClick={() => setScreen(3)}>🏦 TELA 3: Análises Bancárias & Repasses</button>
-          <button className={`ttb-btn${screen === 4 ? " active" : ""}`} onClick={() => setScreen(4)}>👥 TELA 4: Turnover, Contratações & Retenção</button>
-          <button className={`ttb-btn${screen === 5 ? " active" : ""}`} onClick={() => setScreen(5)}>📍 TELA 5: Plantão — Empresa toda</button>
+          <button className={`ttb-btn${screen === 4 ? " active" : ""}`} onClick={() => setScreen(4)}>TELA 4: Turnover, Contratações & Retenção</button>
+          <button className={`ttb-btn${screen === 5 ? " active" : ""}`} onClick={() => setScreen(5)}>TELA 5: Plantão — Empresa toda</button>
         </div>
-        <div className="ttb-right">📊 Dados reais · Junix + C2S + Comandra</div>
+        <div className="ttb-right">Dados reais · Junix + C2S + Comandra</div>
       </div>
 
       {screen === 5 ? (
@@ -333,7 +338,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
           <header className="top-hero">
             <div className="top-hero-inner">
               <div className="brand-cluster">
-                <div className="brand-mark"><img src="/comandra-icon.png" alt="" /><strong>COMANDRA</strong></div>
+                <div className="brand-mark"><img src="/comandra-lobo.png" alt="" /><strong>COMANDRA</strong></div>
                 <div className="hero-title-block">
                   <h1>Fechamento &amp; Comparativo — Vendas × Visitas × Documentos</h1>
                   <span className="hero-filter-badge">
@@ -352,7 +357,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                 </div>
                 <div className="hc-buttons">
                   <button className={`hc-btn${nivel === "gerente" ? " active" : ""}`} onClick={() => setNivel("gerente")}>🧑‍💼 {nf(porGerenteEcon.length)} Gerentes</button>
-                  <button className={`hc-btn${nivel === "corretor" ? " active" : ""}`} onClick={() => setNivel("corretor")}>🏃‍♂️ {nf(porCorretorEcon.length)} Corretores</button>
+                  <button className={`hc-btn${nivel === "corretor" ? " active" : ""}`} onClick={() => setNivel("corretor")}>{nf(porCorretorEcon.length)} Corretores</button>
                 </div>
               </div>
             </div>
@@ -360,13 +365,13 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
 
           <div className="main-wrap">
             {isLoading || !t ? (
-              <div className="panel-cury" style={{ padding: 40, textAlign: "center", color: "#CBD5E1" }}>Somando a operação…</div>
+              <div className="panel-cury" style={{ padding: 40, textAlign: "center", color: "var(--bi-mut)" }}>Somando a operação…</div>
             ) : (
               <>
                 {/* 4 CARTÕES GRADIENTE */}
                 <div className="hero-kpi-4">
                   <div className="gk-card purple">
-                    <div className="gk-icon">💰</div>
+                    <div className="gk-icon"></div>
                     <div className="gk-body">
                       <div className="gk-lbl">Vendas (Junix) & VGV</div>
                       <div className="gk-val">{nf(vjQtd)} un · R$ {moneyM(vjVgv)}</div>
@@ -374,7 +379,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                     </div>
                   </div>
                   <div className="gk-card pink">
-                    <div className="gk-icon">🏠</div>
+                    <div className="gk-icon"></div>
                     <div className="gk-body">
                       <div className="gk-lbl">Visitas no plantão (C2S)</div>
                       <div className="gk-val">{nf(op?.visitas ?? 0)} visitas</div>
@@ -382,7 +387,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                     </div>
                   </div>
                   <div className="gk-card green">
-                    <div className="gk-icon">📁</div>
+                    <div className="gk-icon"></div>
                     <div className="gk-body">
                       <div className="gk-lbl">Pastas (Junix)</div>
                       <div className="gk-val">{nf(op?.pastasAndamento ?? 0)} em andamento</div>
@@ -390,7 +395,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                     </div>
                   </div>
                   <div className="gk-card blue">
-                    <div className="gk-icon">📍</div>
+                    <div className="gk-icon"></div>
                     <div className="gk-body">
                       <div className="gk-lbl">Check-ins no plantão (C2S)</div>
                       <div className="gk-val">{dias === 1 ? `${nf(op?.presentesHoje ?? 0)} hoje` : `${nf1(op?.mediaDia ?? 0)} por dia`}</div>
@@ -401,7 +406,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
 
                 {/* VENDAS DO PERÍODO — JUNIX */}
                 <div className="panel-cury" style={{ marginBottom: 12 }}>
-                  <div className="p-hdr-bar"><span>🏆 Vendas do período — Junix</span><small>{nf(vjQtd)} un · R$ {moneyFull(vjVgv)} VGV</small></div>
+                  <div className="p-hdr-bar"><span>Vendas do período — Junix</span><small>{nf(vjQtd)} un · R$ {moneyFull(vjVgv)} VGV</small></div>
                   <div className="tbl-scroll">
                     <table className="h-tbl">
                       <thead><tr><th>Contrato</th><th>Corretor</th><th>Gerente</th><th>Superint.</th><th>Empreendimento</th><th>Unidade</th><th>Fase</th><th style={{ textAlign: "right" }}>VGV</th></tr></thead>
@@ -417,7 +422,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                             <td><span className={/confirmada/i.test(v.fase || "") ? "up-txt" : "dn-txt"}>{v.fase || "—"}</span></td>
                             <td style={{ textAlign: "right", fontFamily: "var(--mono)" }}>R$ {moneyFull(Number(v.vgv || 0))}</td>
                           </tr>
-                        )) : <tr><td colSpan={8} style={{ textAlign: "center", color: "#CBD5E1", padding: 16 }}>Nenhuma venda no Junix neste período.</td></tr>}
+                        )) : <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--bi-mut)", padding: 16 }}>Nenhuma venda no Junix neste período.</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -443,7 +448,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                                 <td className="r">{g.vgv ? moneyFull(g.vgv) : "—"}</td>
                               </tr>
                             ))}
-                            {!porGerenteEcon.length ? <tr><td colSpan={5} style={{ textAlign: "center", padding: 18, color: "#93C5FD" }}>Sem dados no período.</td></tr> : null}
+                            {!porGerenteEcon.length ? <tr><td colSpan={5} style={{ textAlign: "center", padding: 18, color: "var(--bi-mut)" }}>Sem dados no período.</td></tr> : null}
                           </tbody>
                           <tfoot><tr><td>Total</td><td className="r">{nf(porGerenteEcon.reduce((a, g) => a + g.checkins, 0))}</td><td className="r">{nf(porGerenteEcon.reduce((a, g) => a + g.visitas, 0))}</td><td className="r">{nf(vjQtd)}</td><td className="r">{moneyFull(vjVgv)}</td></tr></tfoot>
                         </table>
@@ -458,7 +463,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                           return (
                             <>
                               <div className="wk-col"><div className="wk-col-val">{nf(a)} un</div><div className="wk-col-bar" style={{ height: `${Math.round((a / mx) * 70) + 6}px` }} /><div className="wk-col-lbl">Anterior</div></div>
-                              <div className="wk-col"><div className="wk-col-val">{nf(c)} un</div><div className="wk-col-bar" style={{ height: `${Math.round((c / mx) * 70) + 6}px`, background: "linear-gradient(180deg,#4ADE80,#059669)" }} /><div className="wk-col-lbl">Atual</div></div>
+                              <div className="wk-col"><div className="wk-col-val">{nf(c)} un</div><div className="wk-col-bar" style={{ height: `${Math.round((c / mx) * 70) + 6}px`, background: "var(--bi-blue)" }} /><div className="wk-col-lbl">Atual</div></div>
                             </>
                           );
                         })()}
@@ -477,20 +482,20 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
 
                   {/* CENTRO */}
                   <div className="panel-cury">
-                    <div className="p-hdr-bar"><span>🏆 Ranking &amp; Comparativo — {nivel === "corretor" ? `${nf(rankEcon.length)} Corretores` : `${nf(rankEcon.length)} Gerentes`}</span><small>C2S + Junix</small></div>
+                    <div className="p-hdr-bar"><span>Ranking &amp; Comparativo — {nivel === "corretor" ? `${nf(rankEcon.length)} Corretores` : `${nf(rankEcon.length)} Gerentes`}</span><small>C2S + Junix</small></div>
                     <div className="cascade-filter-bar">
                       <div className="cf-mode-tabs">
                         <div className="mode-pill-group">
-                          <span style={{ fontSize: 10.5, color: "#93C5FD", fontWeight: 800, alignSelf: "center", marginRight: 4 }}>VISUALIZAR POR:</span>
+                          <span style={{ fontSize: 10.5, color: "var(--bi-mut)", fontWeight: 800, alignSelf: "center", marginRight: 4 }}>VISUALIZAR POR:</span>
                           <button className={`m-pill${nivel === "gerente" ? " active" : ""}`} onClick={() => setNivel("gerente")}>🧑‍💼 Gerentes ({nf(porGerenteEcon.length)})</button>
-                          <button className={`m-pill${nivel === "corretor" ? " active" : ""}`} onClick={() => setNivel("corretor")}>🏃‍♂️ Corretores ({nf(porCorretorEcon.length)})</button>
+                          <button className={`m-pill${nivel === "corretor" ? " active" : ""}`} onClick={() => setNivel("corretor")}>Corretores ({nf(porCorretorEcon.length)})</button>
                         </div>
                       </div>
                       <div className="cf-top-row">
                         <div className="cf-field">
                           <label>Filtrar por Gerente</label>
                           <select value={selMgr} onChange={(e) => { setSelMgr(e.target.value); setNivel("corretor"); }} disabled={nivel !== "corretor"}>
-                            <option value="ALL">👥 Todos os gerentes</option>
+                            <option value="ALL">Todos os gerentes</option>
                             {porGerenteEcon.map((g) => <option key={g.gerente} value={g.gerente}>{g.gerente}</option>)}
                           </select>
                         </div>
@@ -503,7 +508,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                           </select>
                         </div>
                         <div className="cf-field">
-                          <label>🔍 Buscar nome</label>
+                          <label>Buscar nome</label>
                           <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Ex: Datti, Rafael…" />
                         </div>
                       </div>
@@ -524,7 +529,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                             const val = ordem === "vgv" ? l.vgv : ordem === "checkins" ? l.checkins : l.visitas;
                             return (
                               <tr key={"c" + l.nome + i}>
-                                <td><div className="mgr-cell"><span className="mgr-badge">{i + 1}</span><span>{l.nome}{nivel === "corretor" && l.gerente && l.gerente !== "—" ? <small style={{ color: "#93C5FD", fontWeight: 600 }}> · {l.gerente}</small> : null}</span></div></td>
+                                <td><div className="mgr-cell"><span className="mgr-badge">{i + 1}</span><span>{l.nome}{nivel === "corretor" && l.gerente && l.gerente !== "—" ? <small style={{ color: "var(--bi-mut)", fontWeight: 600 }}> · {l.gerente}</small> : null}</span></div></td>
                                 <td className="r">{nf(l.checkins)}</td>
                                 <td className="r">{nf(l.visitas)}</td>
                                 <td className="r">{nf(l.vendas)}</td>
@@ -532,7 +537,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                               </tr>
                             );
                           })}
-                          {!rankEcon.length ? <tr><td colSpan={5} style={{ textAlign: "center", padding: 18, color: "#93C5FD" }}>Sem dados no período.</td></tr> : null}
+                          {!rankEcon.length ? <tr><td colSpan={5} style={{ textAlign: "center", padding: 18, color: "var(--bi-mut)" }}>Sem dados no período.</td></tr> : null}
                         </tbody>
                         <tfoot>
                           <tr>
@@ -558,16 +563,16 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                         const taxa = ck ? Math.round((vi / ck) * 100) : 0;
                         return (
                           <>
-                            <div className="rvp-title"><span>🎯 Plantão → Venda</span><span style={{ color: "var(--green-bright)", fontFamily: "var(--mono)" }} title="visitas por check-in">{pct(taxa)}</span></div>
+                            <div className="rvp-title"><span>Plantão → Venda</span><span style={{ color: "var(--green-bright)", fontFamily: "var(--mono)" }} title="visitas por check-in">{pct(taxa)}</span></div>
                             <div className="donut-row">
-                              <div className="donut-circle" style={{ background: `conic-gradient(#10B981 0% ${Math.min(100, taxa)}%, #1E3A8A ${Math.min(100, taxa)}% 100%)` }}>
+                              <div className="donut-circle" style={{ background: `conic-gradient(var(--bi-good) 0% ${Math.min(100, taxa)}%, var(--bi-track) ${Math.min(100, taxa)}% 100%)` }}>
                                 <div className="donut-inner"><strong>{nf(vi)}</strong><small>Visitas</small></div>
                               </div>
-                              <div style={{ fontSize: 11.5, color: "#CBD5E1", lineHeight: 1.55 }}>
-                                <div>📍 <strong>{nf(ck)}</strong> Check-ins</div>
-                                <div>👀 <strong style={{ color: "#4ADE80" }}>{nf(vi)}</strong> Visitas no estande</div>
-                                <div>📁 <strong style={{ color: "#38BDF8" }}>{nf(pa)}</strong> Pastas em andamento</div>
-                                <div>💰 <strong style={{ color: "var(--gold)" }}>{nf(vjQtd)}</strong> Vendas</div>
+                              <div style={{ fontSize: 11.5, color: "var(--bi-mut)", lineHeight: 1.55 }}>
+                                <div><strong>{nf(ck)}</strong> Check-ins</div>
+                                <div><strong style={{ color: "var(--bi-good)" }}>{nf(vi)}</strong> Visitas no estande</div>
+                                <div><strong style={{ color: "var(--bi-blue)" }}>{nf(pa)}</strong> Pastas em andamento</div>
+                                <div><strong style={{ color: "var(--gold)" }}>{nf(vjQtd)}</strong> Vendas</div>
                               </div>
                             </div>
                           </>
@@ -576,7 +581,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                     </div>
 
                     <div style={{ flex: 1 }}>
-                      <div className="rvp-title"><span>🏅 Vendas por Gerente</span><small style={{ color: "#93C5FD", fontSize: 10.5 }}>Clique p/ ver corretores</small></div>
+                      <div className="rvp-title"><span>Vendas por Gerente</span><small style={{ color: "var(--bi-mut)", fontSize: 10.5 }}>Clique p/ ver corretores</small></div>
                       <div className="sup-bars-list">
                         {(() => {
                           const lista = porGerenteEcon.slice(0, 8);
@@ -586,21 +591,21 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                               <div className="sb-name">{i + 1}. {g.gerente}</div>
                               <div className="sb-track"><div className="sb-fill" style={{ width: `${Math.max(18, Math.round(((g.vgv || g.checkins) / mx) * 100))}%` }}><span>{g.vendas ? `${nf(g.vendas)} un · R$ ${moneyM(g.vgv)}` : `${nf(g.checkins)} check-ins`}</span></div></div>
                             </div>
-                          )) : <div style={{ color: "#93C5FD", fontSize: 11.5 }}>Sem dados no período.</div>;
+                          )) : <div style={{ color: "var(--bi-mut)", fontSize: 11.5 }}>Sem dados no período.</div>;
                         })()}
                       </div>
                     </div>
 
-                    <div style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 9, padding: "10px 12px", fontSize: 11.5 }}>
-                      <div style={{ fontWeight: 800, color: "var(--gold)", marginBottom: 5 }}>⚡ Atalho</div>
-                      <button onClick={() => { setSelMgr("ALL"); setNivel("corretor"); }} style={{ width: "100%", background: "linear-gradient(90deg,#2563EB,#3B82F6)", color: "#fff", border: "none", padding: 8, borderRadius: 6, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>
-                        🏃‍♂️ Abrir Ranking de Corretores ➔
+                    <div style={{ background: "var(--bi-sunk)", border: "1px solid var(--bi-line)", borderRadius: 9, padding: "10px 12px", fontSize: 11.5 }}>
+                      <div style={{ fontWeight: 800, color: "var(--gold)", marginBottom: 5 }}>Atalho</div>
+                      <button onClick={() => { setSelMgr("ALL"); setNivel("corretor"); }} style={{ width: "100%", background: "var(--bi-navy)", color: "#fff", border: "none", padding: 8, borderRadius: 6, fontWeight: 800, fontSize: 12, cursor: "pointer" }}>
+                        Abrir Ranking de Corretores 
                       </button>
                     </div>
                   </aside>
                 </div>
 
-                <div style={{ fontSize: 11, color: "#475569", marginTop: 10, padding: "0 4px" }}>
+                <div style={{ fontSize: 11, color: "var(--bi-mut)", marginTop: 10, padding: "0 4px" }}>
                   Fontes: vendas, VGV e pastas = Junix · check-ins e visitas no estande = C2S ({empresa().diretoria_c2s || "diretoria configurada"}). Período anterior = mesmo número de dias, logo antes.
                 </div>
               </>

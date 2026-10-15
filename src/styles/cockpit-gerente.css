@@ -3,6 +3,77 @@
    Design limpo, tático e sem poluição visual para tomada de decisão imediata
    ══════════════════════════════════════════════════════════════════════ */
 
+/* As cores do painel valem em TODAS as telas de gestor (.mgr10), não só dentro do Cockpit:
+   Leads, Pastas, Disparar, Estratégia, Time e o super usam var(--cv-*) e, fora do Cockpit,
+   caíam na cor de reserva escrita no código (a paleta antiga). 15/10 */
+.mgr10 {
+  --cv-bg: #F3F5F8;
+  --cv-surface: #FFFFFF;
+  --cv-surface-subtle: #EEF1F5;
+  --cv-border: #E1E6EE;
+  --cv-border-subtle: #F0F3F7;
+  --cv-text-main: #0F1B2D;
+  --cv-text-muted: #5B6B80;
+  --cv-text-dim: #8593A6;
+  --cv-brand: #0F1B2D;
+  --cv-brand-light: #E8ECF2;
+  --cv-brand-hover: #16263D;
+  --cv-blue: #1F5C9E;
+  --cv-blue-light: #E6F0FB;
+  --cv-blue-border: #C5D9F0;
+  --cv-green: #1D6B45;
+  --cv-green-light: #E7F4EE;
+  --cv-green-border: #BFDFCD;
+  --cv-amber: #8A5200;
+  --cv-amber-light: #FFF1DE;
+  --cv-amber-border: #F2D3A6;
+  --cv-rose: #A8322A;
+  --cv-rose-light: #FDECEA;
+  --cv-rose-border: #F2C4BF;
+  --cv-purple: #2A3E5C;
+  --cv-purple-light: #E8ECF2;
+  --cv-purple-border: #CDD5E1;
+  --cv-radius-sm: 8px;
+  --cv-radius-md: 12px;
+  --cv-radius-lg: 16px;
+  --cv-radius-full: 9999px;
+  --cv-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --cv-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --cv-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+}
+
+html[data-theme="dark"] .mgr10 {
+  --cv-bg: #0B1220;
+  --cv-surface: #121C2C;
+  --cv-surface-subtle: #182436;
+  --cv-border: #24324A;
+  --cv-border-subtle: #182436;
+  --cv-text-main: #E8EEF8;
+  --cv-text-muted: #A9B8CE;
+  --cv-text-dim: #7B8BA3;
+  --cv-brand: #6FA6E6;
+  --cv-brand-light: rgba(111, 166, 230, 0.15);
+  --cv-brand-hover: #8DB9EC;
+  --cv-blue: #6FA6E6;
+  --cv-blue-light: rgba(111, 166, 230, 0.15);
+  --cv-blue-border: rgba(111, 166, 230, 0.3);
+  --cv-green: #4FB585;
+  --cv-green-light: rgba(79, 181, 133, 0.15);
+  --cv-green-border: rgba(79, 181, 133, 0.3);
+  --cv-amber: #E0A34A;
+  --cv-amber-light: rgba(224, 163, 74, 0.15);
+  --cv-amber-border: rgba(224, 163, 74, 0.3);
+  --cv-rose: #E8857B;
+  --cv-rose-light: rgba(232, 133, 123, 0.15);
+  --cv-rose-border: rgba(232, 133, 123, 0.3);
+  --cv-purple: #9FB3CC;
+  --cv-purple-light: rgba(159, 179, 204, 0.15);
+  --cv-purple-border: rgba(159, 179, 204, 0.3);
+  --cv-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --cv-shadow-md: 0 4px 10px rgba(0, 0, 0, 0.5);
+  --cv-shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.7);
+}
+
 .cockpit-v3 {
   --cv-bg: #F3F5F8;
   --cv-surface: #FFFFFF;

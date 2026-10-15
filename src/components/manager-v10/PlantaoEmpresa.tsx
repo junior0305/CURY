@@ -11,35 +11,35 @@ import { supabase } from "@/integrations/supabase/client";
 const CSS = `
 .biv1 .pe-wrap{max-width:1640px;margin:0 auto;padding:16px 20px 22px}
 .biv1 .pe-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-.biv1 .pe-head h2{font-size:18px;font-weight:800;text-transform:uppercase;color:#0F172A}
-.biv1 .pe-head p{font-size:12px;color:#334155;margin-top:2px}
+.biv1 .pe-head h2{font-size:18px;font-weight:800;text-transform:uppercase;color:var(--bi-ink)}
+.biv1 .pe-head p{font-size:12px;color:var(--bi-mut);margin-top:2px}
 .biv1 .pe-ctrls{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}
 .biv1 .pe-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
 @media(max-width:820px){.biv1 .pe-kpis{grid-template-columns:repeat(2,1fr)}}
-.biv1 .pe-kpi{background:var(--navy-cury);border:1px solid #1C508D;border-radius:10px;padding:10px 14px;color:#fff}
-.biv1 .pe-kpi small{display:block;font-size:10.5px;font-weight:700;color:#93C5FD;text-transform:uppercase}
+.biv1 .pe-kpi{background:var(--bi-card);border:1px solid var(--bi-line);border-radius:10px;padding:10px 14px;color:var(--bi-ink)}
+.biv1 .pe-kpi small{display:block;font-size:10.5px;font-weight:700;color:var(--bi-mut);text-transform:uppercase}
 .biv1 .pe-kpi b{font-family:var(--mono);font-size:22px;font-weight:800}
-.biv1 .pe-tree{background:var(--navy-cury);border:1px solid #1C508D;border-radius:10px;overflow:hidden;color:#fff}
-.biv1 .pe-row{display:grid;grid-template-columns:minmax(0,1fr) 92px 92px 92px 84px;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.07);font-size:12.5px}
-.biv1 .pe-row.hdr{background:var(--navy-cury-dark);font-size:10.5px;font-weight:800;color:#93C5FD;text-transform:uppercase;position:sticky;top:0}
+.biv1 .pe-tree{background:var(--bi-card);border:1px solid var(--bi-line);border-radius:10px;overflow:hidden;color:var(--bi-ink)}
+.biv1 .pe-row{display:grid;grid-template-columns:minmax(0,1fr) 92px 92px 92px 84px;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--bi-hair);font-size:12.5px}
+.biv1 .pe-row.hdr{background:var(--bi-sunk);font-size:10.5px;font-weight:800;color:var(--bi-mut);text-transform:uppercase;position:sticky;top:0}
 .biv1 .pe-row.click{cursor:pointer}
-.biv1 .pe-row.click:hover{background:var(--navy-hover)}
-.biv1 .pe-row.l0{background:var(--navy-row-1);font-weight:800;font-size:13.5px}
-.biv1 .pe-row.l1{background:var(--navy-row-2);font-weight:700}
+.biv1 .pe-row.click:hover{background:var(--bi-sunk)}
+.biv1 .pe-row.l0{background:var(--bi-card);font-weight:800;font-size:13.5px}
+.biv1 .pe-row.l1{background:var(--bi-row2);font-weight:700}
 .biv1 .pe-row.l2{font-weight:600}
-.biv1 .pe-row.l3{color:#CBD5E1;font-size:12px}
+.biv1 .pe-row.l3{color:var(--bi-ink2);font-size:12px}
 .biv1 .pe-name{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap}
 .biv1 .pe-name span.t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.biv1 .pe-caret{width:14px;flex-shrink:0;color:#93C5FD;font-size:10px}
-.biv1 .pe-tag{font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:999px;background:rgba(147,197,253,.16);color:#93C5FD;flex-shrink:0;white-space:nowrap}
-.biv1 .pe-tag.foco{background:rgba(250,204,21,.16);color:var(--gold)}
-.biv1 .pe-tag.fisico{background:rgba(74,222,128,.15);color:var(--green-bright)}
-.biv1 .pe-tag.lanc{background:rgba(244,114,182,.16);color:#F9A8D4}
-.biv1 .pe-tag.fila{background:rgba(148,163,184,.18);color:#CBD5E1}
+.biv1 .pe-caret{width:14px;flex-shrink:0;color:var(--bi-mut);font-size:10px}
+.biv1 .pe-tag{font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:999px;background:var(--bi-sunk);color:var(--bi-mut);flex-shrink:0;white-space:nowrap}
+.biv1 .pe-tag.foco{background:var(--bi-org-bg);color:var(--gold)}
+.biv1 .pe-tag.fisico{background:var(--bi-good-bg);color:var(--green-bright)}
+.biv1 .pe-tag.lanc{background:var(--bi-org-bg);color:var(--bi-org)}
+.biv1 .pe-tag.fila{background:var(--bi-sunk);color:var(--bi-ink2)}
 .biv1 .pe-num{text-align:right;font-family:var(--mono);font-weight:700}
-.biv1 .pe-bar{height:4px;border-radius:2px;background:rgba(255,255,255,.08);margin-top:3px;overflow:hidden}
-.biv1 .pe-bar i{display:block;height:100%;background:#38BDF8}
-.biv1 .pe-empty{padding:40px 20px;text-align:center;color:#CBD5E1}
+.biv1 .pe-bar{height:4px;border-radius:2px;background:var(--bi-hair);margin-top:3px;overflow:hidden}
+.biv1 .pe-bar i{display:block;height:100%;background:var(--bi-blue)}
+.biv1 .pe-empty{padding:40px 20px;text-align:center;color:var(--bi-ink2)}
 @media(max-width:640px){
   .biv1 .pe-row{grid-template-columns:minmax(0,1fr) 64px 64px;padding:8px}
   .biv1 .pe-row .pe-hide{display:none}
@@ -239,7 +239,7 @@ export default function PlantaoEmpresa() {
           : !raiz.filhos.size ? <div className="pe-empty">Nenhum check-in no período ainda.</div>
           : ordenar(raiz.filhos).flatMap(renderNo)}
       </div>
-      <p style={{ fontSize: 11, color: "#334155", marginTop: 6 }}>
+      <p style={{ fontSize: 11, color: "var(--bi-mut)", marginTop: 6 }}>
         {dias > 1 ? "* corretores distintos no período; no corretor, “Nd” = dias com check-in. Média/dia = presenças ÷ dias com dado. " : ""}
         “fila/anúncio” = roleta de anúncio que o C2S também chama de estande.
       </p>

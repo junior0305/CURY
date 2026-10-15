@@ -9,26 +9,26 @@ import { supabase } from "@/integrations/supabase/client";
 const CSS = `
 .biv1 .an-wrap{max-width:1640px;margin:0 auto;padding:16px 20px 22px}
 .biv1 .an-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-.biv1 .an-head h2{font-size:18px;font-weight:800;text-transform:uppercase;color:#0F172A}
-.biv1 .an-head p{font-size:12px;color:#334155;margin-top:2px}
+.biv1 .an-head h2{font-size:18px;font-weight:800;text-transform:uppercase;color:var(--bi-ink)}
+.biv1 .an-head p{font-size:12px;color:var(--bi-mut);margin-top:2px}
 .biv1 .an-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px}
 @media(max-width:980px){.biv1 .an-kpis{grid-template-columns:repeat(2,1fr)}}
-.biv1 .an-kpi{background:var(--navy-cury);border:1px solid #1C508D;border-radius:10px;padding:10px 14px;color:#fff}
-.biv1 .an-kpi small{display:block;font-size:10.5px;font-weight:700;color:#93C5FD;text-transform:uppercase}
+.biv1 .an-kpi{background:var(--bi-card);border:1px solid var(--bi-line);border-radius:10px;padding:10px 14px;color:var(--bi-ink)}
+.biv1 .an-kpi small{display:block;font-size:10.5px;font-weight:700;color:var(--bi-mut);text-transform:uppercase}
 .biv1 .an-kpi b{font-family:var(--mono);font-size:21px;font-weight:800}
-.biv1 .an-tbl-wrap{background:var(--navy-cury);border:1px solid #1C508D;border-radius:10px;overflow-x:auto}
-.biv1 .an-tbl{width:100%;border-collapse:collapse;font-size:12.5px;color:#fff;min-width:880px}
-.biv1 .an-tbl th{background:var(--navy-cury-dark);color:#93C5FD;font-size:10.5px;font-weight:800;text-transform:uppercase;text-align:left;padding:8px 10px;white-space:nowrap}
-.biv1 .an-tbl td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.07);white-space:nowrap}
-.biv1 .an-tbl tr.dono{background:var(--navy-row-1);cursor:pointer}
-.biv1 .an-tbl tr.dono:hover{background:var(--navy-hover)}
-.biv1 .an-tbl tr.camp td{background:#0B2D55;color:#CBD5E1;font-size:11.5px}
+.biv1 .an-tbl-wrap{background:var(--bi-card);border:1px solid var(--bi-line);border-radius:10px;overflow-x:auto}
+.biv1 .an-tbl{width:100%;border-collapse:collapse;font-size:12.5px;color:var(--bi-ink);min-width:880px}
+.biv1 .an-tbl th{background:var(--bi-sunk);color:var(--bi-mut);font-size:10.5px;font-weight:800;text-transform:uppercase;text-align:left;padding:8px 10px;white-space:nowrap}
+.biv1 .an-tbl td{padding:8px 10px;border-bottom:1px solid var(--bi-hair);white-space:nowrap}
+.biv1 .an-tbl tr.dono{background:var(--bi-card);cursor:pointer}
+.biv1 .an-tbl tr.dono:hover{background:var(--bi-sunk)}
+.biv1 .an-tbl tr.camp td{background:var(--bi-row2);color:var(--bi-ink2);font-size:11.5px}
 .biv1 .an-tbl .r{text-align:right;font-family:var(--mono)}
 .biv1 .an-tag{font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:999px;margin-left:6px}
-.biv1 .an-tag.on{background:rgba(74,222,128,.15);color:var(--green-bright)}
-.biv1 .an-tag.off{background:rgba(148,163,184,.18);color:#CBD5E1}
-.biv1 .an-tag.err{background:rgba(248,113,113,.16);color:var(--red-bright)}
-.biv1 .an-empty{padding:40px 20px;text-align:center;color:#CBD5E1}
+.biv1 .an-tag.on{background:var(--bi-good-bg);color:var(--green-bright)}
+.biv1 .an-tag.off{background:var(--bi-sunk);color:var(--bi-ink2)}
+.biv1 .an-tag.err{background:var(--bi-red-bg);color:var(--red-bright)}
+.biv1 .an-empty{padding:40px 20px;text-align:center;color:var(--bi-ink2)}
 `;
 
 type Conta = { owner_id: string; nome: string; cargo: string; account_id: string; label: string; leads_comandra: number };
@@ -126,7 +126,7 @@ export default function AnunciosGerentes({ diasInicial = 30 }: { diasInicial?: n
                       <td>
                         <b>{c.nome}</b>{c.cargo === "SUPERINTENDENT" ? <span className="an-tag off">super</span> : null}
                         {falha ? <span className="an-tag err" title={fb?.motivo || fb?.error}>sem acesso</span> : null}
-                        <div style={{ fontSize: 10.5, color: "#93C5FD" }}>{fb?.conta || c.label}</div>
+                        <div style={{ fontSize: 10.5, color: "var(--bi-mut)" }}>{fb?.conta || c.label}</div>
                       </td>
                       <td className="r">{falha ? "—" : brl(Number(fb?.gasto || 0))}</td>
                       <td className="r">{falha ? "—" : nf(Number(fb?.leads || 0))}</td>
@@ -152,7 +152,7 @@ export default function AnunciosGerentes({ diasInicial = 30 }: { diasInicial?: n
             </table>
           )}
       </div>
-      <p style={{ fontSize: 11, color: "#334155", marginTop: 6 }}>
+      <p style={{ fontSize: 11, color: "var(--bi-mut)", marginTop: 6 }}>
         Leads FB = formulário de lead (Facebook). Leads Comandra = leads que entraram na equipe do dono no período. Vendas = Junix
         (para superintendente, soma a superintendência inteira — inclui as equipes dos gerentes que também têm conta).
       </p>
