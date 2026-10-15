@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEscopoSuper } from "./escopo";
 import { usePeriodoSuper } from "./Periodo";
 import "@/styles/cockpit-gerente.css";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 const sb = supabase as any;
 const brl = (n: number | null | undefined) => (n == null || !isFinite(n) ? "—" : "R$ " + Math.round(n).toLocaleString("pt-BR"));
@@ -95,18 +96,11 @@ export default function Midia({ superId }: { superId: string }) {
   };
 
   const cobrarGerenteMidia = async (c: Conta) => {
-    const { data: pData } = await sb.from("profiles").select("phone").eq("id", c.donoId).maybeSingle();
-    const fone = String(pData?.phone ?? "").replace(/\D/g, "");
     const msg = `Fala ${c.dono.split(" ")[0]}, olhando a conta de anúncios da sua equipe:\n• Gasto no período: ${brl(c.gasto)}\n• Leads que entraram: ${c.campanhas.reduce((a, x) => a + x.resultado, 0)}\n${
       (c.fora_regiao ?? 0) > 0 ? `• ${c.fora_regiao} leads vieram com DDD fora da região (desperdício de verba)\n` : ""
     }${(c.sem_toque ?? 0) > 0 ? `• ${c.sem_toque} leads estão sem primeiro contato há +24h na equipe!\n` : ""}Vamos alinhar isso hoje com a equipe e com o gestor de tráfego?`;
 
-    if (fone) {
-      window.open(`https://wa.me/${fone.startsWith("55") ? fone : "55" + fone}?text=${encodeURIComponent(msg)}`, "_blank");
-      toast.success(`Mensagem aberta para ${c.dono}!`);
-    } else {
-      toast.info(`${c.dono} não tem telefone cadastrado.`);
-    }
+    await enviarPeloMeuChip({ paraId: c.donoId, rotulo: c.dono, mensagem: msg, motivo: `anúncios · ${c.dono}` });
   };
 
   return (

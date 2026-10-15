@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import "@/styles/manager-v10.css";
 import "@/styles/cockpit-gerente.css";
 import "@/styles/pastas-kanban.css";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 const ini = (s: string) => s.trim().slice(0, 2).toUpperCase();
 
@@ -76,9 +77,8 @@ export default function Pastas() {
   const cobrancasWhatsApp = (p: Pasta) => {
     const corretorNome = p.corretor || "Corretor";
     const msg = `Fala ${corretorNome}, a pasta do cliente ${p.cliente} (Proposta #${p.id}) está na etapa "${p.etapa}" há ${p.dias} dias no Junix. Você consegue verificar o destravamento hoje para não perdermos o prazo da Caixa?`;
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
-    window.open(url, "_blank");
-    toast.success(`Cobrança aberta no WhatsApp para ${corretorNome}!`);
+    // sai pelo WhatsApp do gerente (chip), sem abrir o WhatsApp ao lado; o nome vem do Junix
+    enviarPeloMeuChip({ paraNome: corretorNome, mensagem: msg, motivo: "pasta parada" });
   };
 
   const listaFiltrada = useMemo(() => {
@@ -431,7 +431,7 @@ export default function Pastas() {
                       style={{ padding: "4px 8px", fontSize: 11 }}
                       onClick={() => {
                         const msg = `Fala ${c.nome.split(" ")[0]}, você está com ${c.total} pastas ativas no Junix (${c.travadas} paradas há mais de 7 dias). Vamos alinhar as pendências com a Caixa hoje?`;
-                        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "_blank");
+                        enviarPeloMeuChip({ paraNome: c.nome.split(" ")[0], rotulo: c.nome, mensagem: msg, motivo: "pastas paradas" });
                       }}
                     >
                       Cobrar Geral

@@ -11,6 +11,7 @@ import { useConsolidadoSuper } from "@/hooks/useConsolidadoSuper";
 import { useEscopoSuper } from "./escopo";
 import { usePeriodoSuper } from "./Periodo";
 import "@/styles/cockpit-gerente.css";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 const nf = (n: number) => (n ?? 0).toLocaleString("pt-BR");
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
@@ -81,15 +82,7 @@ export default function Tropa({ superId }: { superId: string }) {
 
   async function cobrarGerente(gerenteId: string, gerenteNome: string) {
     const texto = `${gerenteNome}, como está o alinhamento com a equipe hoje? Vi a posição de plantão e esteira aqui no painel da superintendência.`;
-    await (supabase as any)
-      .from("cobrancas")
-      .insert({ de_id: session?.user?.id, para_id: gerenteId, motivo: "alinhamento_equipe", canal: "whatsapp", mensagem: texto })
-      .then(() => {}, () => {});
-
-    const { data: pData } = await supabase.from("profiles").select("phone").eq("id", gerenteId).maybeSingle();
-    const f = String(pData?.phone ?? "").replace(/\D/g, "");
-    if (f) window.open(`https://wa.me/${f.startsWith("55") ? f : "55" + f}?text=${encodeURIComponent(texto)}`, "_blank");
-    else toast.info(`${gerenteNome} não tem telefone cadastrado.`);
+    await enviarPeloMeuChip({ paraId: gerenteId, rotulo: gerenteNome, mensagem: texto, motivo: "alinhamento_equipe" });
   }
 
   return (

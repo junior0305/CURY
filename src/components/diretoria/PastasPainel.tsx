@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useMetasDiretoria, donoJunix, type SuperDiretoria, type PastaJunix } from "@/hooks/useDiretoria";
 import { lerPastas, resumoPastas, ORDEM_ETAPAS, ROTULO_ETAPA, CHANCE, DIAS_MORTA, type PastaLida } from "./pastasAnalise";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 const TICKET_PADRAO = 300_000;
 const chaveEmp = (s: string | null | undefined) => (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/^CONDOMINIO\s+/, "").replace(/[^A-Z0-9]/g, "");
@@ -85,9 +86,8 @@ export default function PastasPainel({ diretorId, supers, pastas, modoSuper }: {
     if (alvo === "gerente") await supabase.from("internal_notifications").insert({ from_id: diretorId, to_id: s.id, type: "COBRANCA_DIRETOR",
       message: `O diretor cobrou o ${paraNome} direto sobre a pasta de ${cliCurto(p!.cliente)} (${titulo(p!.empreendimento)}): ${p!.prox}.` }).then(() => {}, () => {});
     qc.invalidateQueries({ queryKey: ["diretoria"] });
-    const wa = foneWa(fone);
-    if (wa) { window.open(`https://api.whatsapp.com/send?phone=${wa}&text=${encodeURIComponent(msg)}`, "_blank"); toast.success(`Cobrança de ${paraNome} registrada. A mensagem abriu no seu WhatsApp.`); }
-    else toast.info(`${paraNome} não tem telefone cadastrado. A cobrança ficou só no histórico.`);
+    // sai pelo WhatsApp de quem clica (chip), sem abrir o WhatsApp ao lado
+    await enviarPeloMeuChip({ paraId, rotulo: paraNome, mensagem: msg, motivo, registrar: false });
   }
 
   if (!pastas.length) return <div className="dir-card dir-vazio">Nenhuma pasta no Junix agora.</div>;

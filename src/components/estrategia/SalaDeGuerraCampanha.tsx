@@ -18,6 +18,7 @@ import type { SuperDiretoria } from "@/hooks/useDiretoria";
 import { usePlanoAcoes, useEstoque } from "@/hooks/usePlano";
 import type { LinhaConsolidado } from "@/hooks/useConsolidadoSuper";
 import PlacarMetas, { MetaPainel, Combinar } from "./PlacarMetas";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
 const inicioMes = (desloc = 0) => {
@@ -662,6 +663,7 @@ export default function SalaDeGuerraCampanha({
   // Modal de WhatsApp
   const [modalWpp, setModalWpp] = useState<{
     superNome: string;
+    superId?: string;
     telefone: string | null;
     mensagem: string;
   } | null>(null);
@@ -1936,12 +1938,13 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
                 onClick={() =>
                   setModalWpp({
                     superNome: s.nome,
+                    superId: s.id,
                     telefone: s.phone ?? null,
                     mensagem: gerarMensagemSuper(s),
                   })
                 }
               >
-                📱 Enviar para {s.nome.split(" ")[0]}
+                Enviar para {s.nome.split(" ")[0]}
               </button>
             ))}
           </div>
@@ -2003,21 +2006,14 @@ Vamos para cima! Repasse aos seus gerentes e corretores para acelerar desde hoje
           <button className="dir-btn" onClick={() => setModalWpp(null)}>Cancelar</button>
           <button
             className="dir-btn-wpp"
-            onClick={() => {
-              if (modalWpp.telefone) {
-                const cleanPhone = modalWpp.telefone.replace(/\D/g, "");
-                const fullPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-                const url = `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(modalWpp.mensagem)}`;
-                window.open(url, "_blank");
-                toast.success(`WhatsApp de ${modalWpp.superNome} aberto com o acordo!`);
-              } else {
-                navigator.clipboard.writeText(modalWpp.mensagem);
-                toast.info(`${modalWpp.superNome} não tem telefone cadastrado. Mensagem copiada para a área de transferência!`);
-              }
-              setModalWpp(null);
+            onClick={async () => {
+              // sai pelo WhatsApp de quem clica (chip), sem abrir o WhatsApp ao lado
+              const ok = await enviarPeloMeuChip({ paraId: modalWpp.superId, paraPhone: modalWpp.superId ? null : modalWpp.telefone,
+                rotulo: modalWpp.superNome, mensagem: modalWpp.mensagem, motivo: "acordo da campanha" });
+              if (ok) setModalWpp(null);
             }}
           >
-            <span>📱 Abrir no WhatsApp</span>
+            <span>Enviar pelo meu WhatsApp</span>
           </button>
         </div>
       </div>

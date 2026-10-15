@@ -12,6 +12,7 @@ import AlertaDisparoQueima from "@/components/manager-v10/AlertaDisparoQueima";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { usePeriodo } from "@/hooks/usePeriodo";
 import "@/styles/cockpit-gerente.css";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 interface CockpitGerenteV3Props {
   managerId: string;
@@ -338,10 +339,10 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
       toast.success(`Cobrança registrada para ${nomeCorretor}!`);
       qc.invalidateQueries({ queryKey: ["v10", managerId] });
     } catch (e) {
-      // Fallback para abrir WhatsApp direto
+      // sem abrir o WhatsApp ao lado: manda o texto pelo chip de quem clicou
       const msg = `Fala ${nomeCorretor}, o cliente ${nomeCliente} está sem atendimento há mais de 2 horas. Consegue dar retorno agora ou prefere que eu passe para outro corretor da roleta?`;
-      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "_blank");
-      toast.info(`Link de cobrança aberto via WhatsApp para ${nomeCorretor}.`);
+      if (lead.broker_id) await enviarPeloMeuChip({ paraId: lead.broker_id, rotulo: nomeCorretor, mensagem: msg, motivo: "lead parado", leadIds: [lead.id] });
+      else toast.error((e as any)?.message || "Não consegui cobrar.");
     } finally {
       setOcupado(null);
     }

@@ -8,6 +8,7 @@ import { lerPastas, ROTULO_ETAPA } from "@/components/diretoria/pastasAnalise";
 import { useEscopoSuper } from "./escopo";
 import { usePeriodoSuper } from "./Periodo";
 import "@/styles/cockpit-gerente.css";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 type Situacao = "todas" | "vivas" | "paradas" | "reprovadas" | "mortas";
 
@@ -56,22 +57,8 @@ export default function PastasDoSuper({ superId }: { superId: string }) {
 
   async function cobrarGerente(gerenteNome: string, clienteNome: string, dias: number, etapa: string) {
     const texto = `${gerenteNome}, a pasta do cliente ${titulo(clienteNome)} está travada há ${dias} dias na etapa de ${etapa}. Consegue priorizar o desatravamento hoje junto ao correspondente Caixa?`;
-    toast.success("Mensagem de cobrança pronta!");
-
-    const { data: gerPerfil } = await supabase.from("profiles").select("id, phone").ilike("first_name", `%${gerenteNome}%`).maybeSingle();
-    if (gerPerfil?.id) {
-      await (supabase as any)
-        .from("cobrancas")
-        .insert({ de_id: session?.user?.id, para_id: gerPerfil.id, motivo: "pasta_travada", canal: "whatsapp", mensagem: texto })
-        .then(() => {}, () => {});
-    }
-
-    const f = String(gerPerfil?.phone ?? "").replace(/\D/g, "");
-    if (f) window.open(`https://wa.me/${f.startsWith("55") ? f : "55" + f}?text=${encodeURIComponent(texto)}`, "_blank");
-    else {
-      navigator.clipboard.writeText(texto);
-      toast.info(`Texto copiado para a área de transferência.`);
-    }
+    // sai pelo WhatsApp de quem clica (chip), sem abrir o WhatsApp ao lado; registra em cobrancas
+    await enviarPeloMeuChip({ paraNome: gerenteNome, mensagem: texto, motivo: "pasta_travada" });
   }
 
   return (

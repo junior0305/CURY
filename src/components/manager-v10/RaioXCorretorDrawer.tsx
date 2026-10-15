@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { definirRecebimento } from "@/hooks/useTempoReal";
 import { cobrarCorretor, redistribuir, useConversaLead, type MsgConversa } from "@/hooks/useLeads";
 import {
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
   X,
   Phone,
   MessageCircle,
@@ -170,17 +171,16 @@ export default function RaioXCorretorDrawer({ brokerId, managerId, onClose }: Ra
         {/* ── BOTÕES DE COMANDO RÁPIDO ── */}
         <div className="drawer-acoes-rapidas">
           {telLimpo && (
-            <a
-              href={`https://wa.me/55${telLimpo}?text=${encodeURIComponent(
-                `Fala ${corretor?.first_name}! Vamos fazer um alinhamento rápido sobre seus atendimentos de hoje?`
-              )}`}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
               className="drawer-btn-wa"
+              title="Envia pelo seu WhatsApp (chip), sem abrir o WhatsApp ao lado"
+              onClick={() => enviarPeloMeuChip({ paraId: brokerId, rotulo: corretor?.first_name ?? "o corretor",
+                mensagem: `Fala ${corretor?.first_name}! Vamos fazer um alinhamento rápido sobre seus atendimentos de hoje?`, motivo: "alinhamento" })}
             >
               <MessageCircle size={15} />
-              Conversar no WhatsApp
-            </a>
+              Mandar no WhatsApp
+            </button>
           )}
 
           <button

@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import "@/styles/cockpit-gerente.css";
 import "@/styles/time-gerente.css";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 const ini = (n: string) => n.trim().slice(0, 2).toUpperCase();
 const limparTel = (t: string | null | undefined) => {
@@ -506,14 +507,14 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
 
                     <div className="time-coach-footer">
                       {telLimpo ? (
-                        <a
+                        <button
+                          type="button"
                           className="time-coach-btn-wa"
-                          href={`https://wa.me/${telLimpo}?text=${msgWa}`}
-                          target="_blank"
-                          rel="noreferrer"
+                          title="Envia pelo seu WhatsApp (chip), sem abrir o WhatsApp ao lado"
+                          onClick={() => enviarPeloMeuChip({ paraId: a.profileId, mensagem: decodeURIComponent(msgWa), motivo: "coach do time" })}
                         >
-                          <MessageCircle size={14} /> WhatsApp
-                        </a>
+                          <MessageCircle size={14} /> Cobrar no WhatsApp
+                        </button>
                       ) : (
                         <button
                           className="time-coach-btn-wa"

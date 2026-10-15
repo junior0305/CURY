@@ -14,6 +14,7 @@ import { useMetasDiretoria, chaveGerente, chaveNome, colado, superJunix, diaSP, 
   type SuperDiretoria } from "@/hooks/useDiretoria";
 import { CombinarAcao, type Combinar } from "@/components/estrategia/Estrategia";
 import { empresa } from "@/lib/empresa";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 // Referências da casa (aprovadas no protótipo de 13/10)
 const REF = { presenca: 0.6, plantoesMes: 12, plantoesPorVisita: 8, conversao: 0.4 };
@@ -147,9 +148,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
       canal: "whatsapp", enviada_em: new Date().toISOString() });
     if (error) { toast.error("Não registrei a cobrança: " + error.message); return; }
     qc.invalidateQueries({ queryKey: ["diretoria"] });
-    const fone = String(c.s.phone ?? "").replace(/\D/g, "");
-    if (fone) { window.open(`https://api.whatsapp.com/send?phone=${fone.startsWith("55") ? fone : "55" + fone}&text=${encodeURIComponent(msg)}`, "_blank"); toast.success(`Cobrança de ${nome} registrada. A mensagem abriu no seu WhatsApp.`); }
-    else toast.info(`${nome} não tem telefone cadastrado. A cobrança ficou só no histórico.`);
+    await enviarPeloMeuChip({ paraId: c.s.id, rotulo: nome, mensagem: msg, motivo: "ritmo da meta", registrar: false });
   }
 
   // faixa Empresa

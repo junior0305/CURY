@@ -21,6 +21,7 @@ import { usePlanos, atrasada } from "@/hooks/usePlano";
 import "@/styles/diretoria.css";
 import Configuracoes from "@/components/config/Configuracoes";
 import { usePeriodo, diaSP as diaHojeSP } from "@/hooks/usePeriodo";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 type Aba = "hoje" | "equipes" | "leads" | "pastas" | "bi" | "estrategia" | "config";
 const ABAS: [Aba, string][] = [["hoje", "Hoje"], ["equipes", "Equipes"], ["leads", "Leads e investimento"], ["pastas", "Pastas"], ["bi", "B.I."], ["estrategia", "Estratégia"], ["config", "Configurar"]];
@@ -331,14 +332,8 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
         });
       }
 
-      if (telefone) {
-        const cleanPhone = telefone.replace(/\D/g, "");
-        const fullPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-        const url = `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(mensagem)}`;
-        window.open(url, "_blank");
-      } else {
-        toast.info(`${destNome} não possui telefone cadastrado. Cobrança salva apenas no histórico interno.`);
-      }
+      // sai pelo WhatsApp de quem clica (chip), sem abrir o WhatsApp ao lado
+      await enviarPeloMeuChip({ paraId: destId, rotulo: destNome, mensagem, motivo, registrar: false });
     } catch (err: any) {
       toast.error("Erro ao registrar cobrança: " + err.message);
     } finally {

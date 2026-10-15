@@ -10,6 +10,7 @@ import { usePeriodoSuper, SeletorPeriodoSuper, diaSP } from "./Periodo";
 import CadastrarGerente from "@/components/superintendente/CadastrarGerente";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import "@/styles/cockpit-gerente.css";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 const sb = supabase as any;
 const nf = (n: number) => (n ?? 0).toLocaleString("pt-BR");
@@ -75,10 +76,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
   }
 
   async function cobrar(gerenteId: string, gerenteNome: string, motivo: string, texto: string) {
-    await sb.from("cobrancas").insert({ de_id: session?.user?.id, para_id: gerenteId, motivo, canal: "whatsapp", mensagem: texto }).then(() => {}, () => {});
-    const f = String(extra?.fone.get(gerenteId) ?? "").replace(/\D/g, "");
-    if (f) window.open(`https://wa.me/${f.startsWith("55") ? f : "55" + f}?text=${encodeURIComponent(texto)}`, "_blank");
-    else toast.info(`${gerenteNome} não tem telefone cadastrado. A cobrança ficou só no histórico.`);
+    await enviarPeloMeuChip({ paraId: gerenteId, rotulo: gerenteNome, mensagem: texto, motivo });
   }
 
   // Meta do mês da Superintendência

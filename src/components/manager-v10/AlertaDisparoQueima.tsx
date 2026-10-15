@@ -14,7 +14,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { redistribuir } from "@/hooks/useLeads";
+import { redistribuir, cobrarCorretor } from "@/hooks/useLeads";
 import {
   Flame,
   AlertOctagon,
@@ -376,8 +376,13 @@ export default function AlertaDisparoQueima({ managerId, quem = "Gerente", compa
                           type="button"
                           className="btn-acao-micro"
                           title="Cobrar corretor responsável no WhatsApp"
-                          onClick={() => {
-                            window.open(`https://api.whatsapp.com/send?text=${msgCobrarCorretor}`, "_blank");
+                          onClick={async () => {
+                            // cobra pelo chip do gerente (cobrar-corretor), sem abrir o WhatsApp ao lado
+                            try {
+                              const r = await cobrarCorretor(l.id, quem);
+                              r.avisado_no_whats ? toast.success(`${r.corretor} foi cobrado no WhatsApp.`)
+                                : toast.info(`Cobrança registrada; o WhatsApp de ${r.corretor} não recebeu (sem chip conectado).`);
+                            } catch (e: any) { toast.error(e?.message || "Não consegui cobrar."); }
                           }}
                         >
                           <MessageCircle size={14} /> Cobrar

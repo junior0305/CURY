@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { SuperDiretoria } from "@/hooks/useDiretoria";
 import { empresa } from "@/lib/empresa";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 type Alerta = { g: "red" | "org" | "grn"; tipo: string; titulo: string; detalhe: string; acao: "super" | "trafego" };
 type Anuncio = { id: string; nome: string; status: string; gasto: number; leads: number; impr: number };
@@ -72,9 +73,7 @@ export default function AnunciosSaude({ diretorId, supers }: { diretorId: string
     const { error } = await supabase.from("cobrancas" as any).insert({ de_id: diretorId, para_id: s.id, motivo: `anúncios · ${c.dono}`, canal: "whatsapp", enviada_em: new Date().toISOString() });
     if (error) { toast.error("Não registrei a cobrança: " + error.message); return; }
     qc.invalidateQueries({ queryKey: ["diretoria"] });
-    const f = String(s.phone ?? "").replace(/\D/g, "");
-    if (f) { window.open(`https://api.whatsapp.com/send?phone=${f.startsWith("55") ? f : "55" + f}&text=${encodeURIComponent(msg)}`, "_blank"); toast.success(`Cobrança de ${nome} registrada. A mensagem abriu no seu WhatsApp.`); }
-    else toast.info(`${nome} não tem telefone cadastrado. A cobrança ficou só no histórico.`);
+    await enviarPeloMeuChip({ paraId: s.id, rotulo: nome, mensagem: msg, motivo: `anúncios · ${c.dono}`, registrar: false });
   }
   const copiarTrafego = (c: Conta, a: Alerta) => {
     const txt = `Conta ${c.conta} (${c.dono}): ${a.titulo}. ${a.detalhe}`;

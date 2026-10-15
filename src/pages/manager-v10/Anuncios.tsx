@@ -21,6 +21,7 @@ import { usePeriodo } from "@/hooks/usePeriodo";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import { Link } from "react-router-dom";
 import "@/styles/manager-v10.css";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 const brl = (n: number) => "R$ " + n.toFixed(2).replace(".", ",");
 
@@ -324,8 +325,8 @@ export default function Anuncios() {
                       <div className="an-msga">
                         <button className="mini solid" onClick={() => {
                           if (!gestor) { toast.error("Cadastre o contato do gestor de tráfego abaixo."); return; }
-                          const n = gestor.telefone.replace(/\D/g, "");
-                          window.open(`https://wa.me/${n.startsWith("55") ? n : "55" + n}?text=${encodeURIComponent(texto)}`, "_blank");
+                          enviarPeloMeuChip({ paraPhone: gestor.telefone, rotulo: "o gestor de tráfego", mensagem: texto, motivo: "pedido ao gestor de tráfego" })
+                            .then((ok) => { if (ok) setAberto(null); });
                         }}>Mandar pelo meu WhatsApp</button>
                         <button className="mini" onClick={() => setAberto(null)}>Cancelar</button>
                         <small>sai do seu número, não do sistema</small>
