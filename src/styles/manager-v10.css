@@ -21,14 +21,15 @@
 .mgr10{
   /* Paleta validada nos mockups (15/09): neutros com viés azul, não cinza puro —
      cinza neutro lê como "não escolhido". */
---paper:#F4F7FC; --card:#FFFFFF; --sunk:#EDF2FA; --sunk-2:#E1E9F6;
-  --line:rgba(23,53,110,.13); --hair:rgba(23,53,110,.07);
-  --ink:#0B1B36; --ink-2:#44557A; --ink-3:#7F8EAB;
-  --blue:#0D9488; --blue-air:rgba(13,148,136,.10);
-  --red:#C8265C;  --red-air:rgba(200,38,92,.11);
-  --amber:#B4690E; --amber-air:rgba(180,105,14,.12);
-  --good:#0E8A5F; --good-air:rgba(14,138,95,.12);
-  --lift:0 1px 2px rgba(11,27,54,.05),0 10px 28px -16px rgba(11,27,54,.22);
+--paper:#F3F5F8; --card:#FFFFFF; --sunk:#EEF1F5; --sunk-2:#E3E8EF;
+  --line:#E1E6EE; --hair:#F0F3F7;
+  --ink:#0F1B2D; --ink-2:#3C4B5F; --ink-3:#5B6B80;
+  /* cores da tela do diretor (diretoria.css), 15/10: um produto só do gerente ao diretor */
+  --blue:#1F5C9E; --blue-air:rgba(31,92,158,.10);
+  --red:#A8322A;  --red-air:rgba(168,50,42,.10);
+  --amber:#8A5200; --amber-air:rgba(138,82,0,.12);
+  --good:#1D6B45; --good-air:rgba(29,107,69,.12);
+  --lift:0 1px 2px rgba(15,27,45,.05),0 10px 28px -16px rgba(15,27,45,.20);
   --s1:8px; --s2:16px; --s3:24px; --s4:32px; --s5:48px; --s6:64px; --r:14px;
 }
 
@@ -36,13 +37,13 @@
    (`html[data-theme]`), não o prefers-color-scheme do protótipo, pra que o
    toggle do CRM continue mandando numa tela só. */
 html[data-theme="dark"] .mgr10{
---paper:#080E1C; --card:#111927; --sunk:#18212F; --sunk-2:#212C3E;
-  --line:rgba(150,180,235,.15); --hair:rgba(150,180,235,.07);
-  --ink:#E9EFFA; --ink-2:#9FB0CC; --ink-3:#6C7D9C;
-  --blue:#14B8A6; --blue-air:rgba(20,184,166,.15);
-  --red:#FF6E9C;  --red-air:rgba(255,110,156,.14);
+--paper:#0B1220; --card:#121C2C; --sunk:#182436; --sunk-2:#1F2D42;
+  --line:rgba(160,185,225,.14); --hair:rgba(160,185,225,.07);
+  --ink:#E8EEF8; --ink-2:#A9B8CE; --ink-3:#7B8BA3;
+  --blue:#6FA6E6; --blue-air:rgba(111,166,230,.16);
+  --red:#E8857B;  --red-air:rgba(232,133,123,.15);
   --amber:#E0A34A; --amber-air:rgba(224,163,74,.14);
-  --good:#3FCF96; --good-air:rgba(63,207,150,.14);
+  --good:#4FB585; --good-air:rgba(79,181,133,.14);
   --lift:0 1px 2px rgba(0,0,0,.45),0 12px 34px -18px rgba(0,0,0,.8);
 }
 
@@ -119,13 +120,13 @@ html[data-theme="dark"] .mgr10{
    a gravidade tem que ganhar o olho.
    ────────────────────────────────────────────────────────────────────────── */
 .mgr10 .tr{ --crit:var(--red); --crit-s:var(--red-air);
-            --trav:#8B46C9; --trav-s:rgba(139,70,201,.12);
+            --trav:#2A3E5C; --trav-s:rgba(42,62,92,.10);
             --warn:var(--amber); --warn-s:var(--amber-air);
             --okk:var(--good);  --okk-s:var(--good-air);
-            --o-anuncio:var(--blue); --o-disparo:#8B46C9;
+            --o-anuncio:var(--blue); --o-disparo:#6E93C2;
             --o-repescagem:var(--amber); --o-propria:#9AA9C4; }
-html[data-theme="dark"] .mgr10 .tr{ --trav:#C08BF0; --trav-s:rgba(192,139,240,.15);
-            --o-disparo:#C08BF0; --o-propria:#5B6C8A; }
+html[data-theme="dark"] .mgr10 .tr{ --trav:#9FB3CC; --trav-s:rgba(159,179,204,.15);
+            --o-disparo:#9DBDE6; --o-propria:#5B6C8A; }
 
 .mgr10 .tr-filtros{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:var(--s2)}
 .mgr10 .tr-fl{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card);
@@ -287,10 +288,10 @@ html[data-theme="dark"] .mgr10 .tr{ --trav:#C08BF0; --trav-s:rgba(192,139,240,.1
   font-variant-numeric:tabular-nums}
 .mgr10 .fo-row b span{color:var(--ink-3);font-weight:400;font-size:11.5px;margin-left:5px}
 .mgr10 .fo-nota{margin-top:var(--s2);font-size:12px;color:var(--ink-3);line-height:1.5;max-width:70ch}
-.mgr10 .fo .o-anuncio{background:var(--blue)} .mgr10 .fo .o-disparo{background:#8B46C9}
+.mgr10 .fo .o-anuncio{background:var(--blue)} .mgr10 .fo .o-disparo{background:#6E93C2}
 .mgr10 .fo .o-repescagem{background:var(--amber)} .mgr10 .fo .o-propria{background:#9AA9C4}
-html[data-theme="dark"] .mgr10 .fo .o-anuncio{background:#6D99FF}
-html[data-theme="dark"] .mgr10 .fo .o-disparo{background:#C08BF0}
+html[data-theme="dark"] .mgr10 .fo .o-anuncio{background:#6FA6E6}
+html[data-theme="dark"] .mgr10 .fo .o-disparo{background:#9DBDE6}
 html[data-theme="dark"] .mgr10 .fo .o-repescagem{background:#E0A34A}
 html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
 @media(max-width:900px){.mgr10 .fo-steps{grid-template-columns:repeat(3,1fr);gap:6px}
@@ -305,7 +306,7 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
 .mgr10 .pv-b.on{grid-template-rows:auto 1fr}
 .mgr10 .pv-b::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
 .mgr10 .pv-b.t-crit::before{background:var(--red)}
-.mgr10 .pv-b.t-trav::before{background:#8B46C9}
+.mgr10 .pv-b.t-trav::before{background:var(--trav,#2A3E5C)}
 .mgr10 .pv-b.t-warn::before{background:var(--amber)}
 .mgr10 .pv-h{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto;align-items:center;
   gap:13px;padding:12px 15px 12px 17px;cursor:pointer}
@@ -314,7 +315,7 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
 .mgr10 .pv-c{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
   font-family:"JetBrains Mono",monospace;font-weight:700;font-size:14px;background:var(--sunk);color:var(--ink-2)}
 .mgr10 .pv-b.t-crit .pv-c{background:var(--red-air);color:var(--red)}
-.mgr10 .pv-b.t-trav .pv-c{background:rgba(139,70,201,.12);color:#8B46C9}
+.mgr10 .pv-b.t-trav .pv-c{background:var(--sunk);color:var(--ink-2)}
 .mgr10 .pv-b.t-warn .pv-c{background:var(--amber-air);color:var(--amber)}
 .mgr10 .pv-t{min-width:0}
 .mgr10 .pv-t b{display:block;font-size:14.5px;font-weight:600;letter-spacing:-.012em}
@@ -594,24 +595,23 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
    coluna inteira e quem rola é o conteúdo, não a página — assim a tarja navy vai
    sempre até o fim da tela. */
 .mgr10.app2{display:grid;grid-template-columns:76px 1fr;height:100vh;overflow:hidden;padding:0}
-.mgr10 .rail{background:#0f172a;padding:16px 8px;display:flex;flex-direction:column;
+.mgr10 .rail{background:#0F1B2D;padding:16px 8px;display:flex;flex-direction:column;
   align-items:center;gap:8px;height:100%}
 .mgr10 .rail-brand{display:flex;flex-direction:column;align-items:center;padding:0 0 14px}
 .mgr10 .rail-brand>div:not(.rail-m){display:none}
-.mgr10 .rail-m{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
-  background:var(--blue);color:#fff;font-weight:900;font-size:17px;box-shadow:0 4px 14px rgba(13,148,136,.4)}
+.mgr10 .rail-m{width:52px;height:46px;display:block;object-fit:contain}
 .mgr10 .rail a,.mgr10 .rail button.railb{position:relative;width:56px;padding:9px 0 7px;
-  border-radius:12px;color:#94a3b8;display:flex;flex-direction:column;align-items:center;gap:4px;
+  border-radius:12px;color:#9FB3CC;display:flex;flex-direction:column;align-items:center;gap:4px;
   font-size:10px;font-weight:600;text-align:center;text-decoration:none;transition:background .13s,color .13s}
 .mgr10 .rail a:hover,.mgr10 .rail button.railb:hover{color:#fff;background:rgba(255,255,255,.06)}
-.mgr10 .rail .on{color:#fff;background:rgba(20,184,166,.22);font-weight:700}
+.mgr10 .rail .on{color:#fff;background:#2A3E5C;font-weight:700}
 .mgr10 .rail .on::before{content:"";position:absolute;left:-8px;top:12px;bottom:12px;width:4px;
-  border-radius:0 4px 4px 0;background:var(--blue)}
+  border-radius:0 4px 4px 0;background:#0E7C7B}
 .mgr10 .rail svg{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7}
 .mgr10 .rail .soon{opacity:.42;pointer-events:none}
 .mgr10 .rail .pip{position:absolute;top:4px;right:8px;min-width:17px;height:17px;border-radius:99px;
   background:var(--blue);color:#fff;font:800 10px "JetBrains Mono",monospace;display:grid;
-  place-items:center;padding:0 4px;font-style:normal;border:2px solid #0f172a}
+  place-items:center;padding:0 4px;font-style:normal;border:2px solid #0F1B2D}
 .mgr10 .rail-sep{height:1px;background:rgba(255,255,255,.1);width:60%;margin:6px auto}
 .mgr10 .rail-foot{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0 0}
 .mgr10 .rail-foot .railb.sair{width:56px}
@@ -633,7 +633,7 @@ html[data-theme="dark"] .mgr10 .fo .o-propria{background:#5B6C8A}
 @media(max-width:1020px){
   .mgr10.app2{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}
   .mgr10 .rail{position:sticky;top:0;z-index:30;height:auto;flex-direction:row;overflow-x:auto;
-    padding:8px 9px;border-right:0;background:#0f172a;justify-content:space-around}
+    padding:8px 9px;border-right:0;background:#0F1B2D;justify-content:space-around}
   .mgr10 .rail .on::before{display:none}
   .mgr10 .rail-brand,.mgr10 .rail-sep{display:none}
   .mgr10 .rail-foot{display:flex;flex-direction:row;margin:0 0 0 auto;padding:0 2px;gap:4px;align-items:center;flex-shrink:0}

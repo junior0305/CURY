@@ -9,6 +9,8 @@ import { cobrarCorretor, redistribuir, useConversaLead } from "@/hooks/useLeads"
 import { buscarPlantao } from "@/utils/c2sMatching";
 import { chaveNome, chaveGerente, gerenteC2S } from "@/hooks/useDiretoria";
 import AlertaDisparoQueima from "@/components/manager-v10/AlertaDisparoQueima";
+import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
+import { usePeriodo } from "@/hooks/usePeriodo";
 import "@/styles/cockpit-gerente.css";
 
 interface CockpitGerenteV3Props {
@@ -16,7 +18,6 @@ interface CockpitGerenteV3Props {
   quem: string;
 }
 
-type PeriodoPreset = "hoje" | "ontem" | "semana" | "mes" | "data";
 type OrigemFiltro = "todos" | "anuncio" | "disparo" | "pescado" | "acao";
 
 const diaSP = (offsetDias = 0) => {
@@ -82,8 +83,9 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
   const { data: cruz } = useCruzamentoCury(managerId);
 
   // Estados dos Filtros
-  const [periodo, setPeriodo] = useState<PeriodoPreset>("hoje");
-  const [dataCustom, setDataCustom] = useState<string>(diaSP(0));
+  // período único de todas as telas de gestor (Hoje · Ontem · 7 dias · 30 dias · Escolher período)
+  const { periodo: per } = usePeriodo();
+  const umDia = per.de === per.ate;
   const [origemFiltro, setOrigemFiltro] = useState<OrigemFiltro>("todos");
   const [busca, setBusca] = useState("");
 
@@ -209,25 +211,11 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
   }, [corretores]);
 
   // Filtragem de Leads por Período
-  const leadsFiltradosPorData = useMemo(() => {
-    const hojeStr = diaSP(0);
-    const ontemStr = diaSP(1);
-    const inicioSemana = new Date(Date.now() - 7 * 864e5).toISOString();
-    const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-
-    return listaLeadsBase.filter((l) => {
-      const criada = l.created_at;
-      if (!criada) return false;
-      const criadaDia = diaDe(criada);
-
-      if (periodo === "hoje") return criadaDia === hojeStr;
-      if (periodo === "ontem") return criadaDia === ontemStr;
-      if (periodo === "semana") return criada >= inicioSemana;
-      if (periodo === "mes") return criada >= inicioMes;
-      if (periodo === "data") return criadaDia === dataCustom;
-      return true;
-    });
-  }, [listaLeadsBase, periodo, dataCustom]);
+  const leadsFiltradosPorData = useMemo(() => listaLeadsBase.filter((l) => {
+    if (!l.created_at) return false;
+    const dia = diaDe(l.created_at);
+    return dia >= per.de && dia <= per.ate;
+  }), [listaLeadsBase, per.de, per.ate]);
 
   // Contadores por Origem
   const contagemOrigem = useMemo(() => {
@@ -392,46 +380,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
           <p>Visão tática em tempo real · Metas, leads recebidos e controle da tropa</p>
         </div>
 
-        <div className="periodo-bar-v3">
-          <button
-            type="button"
-            className={`periodo-btn-v3 ${periodo === "hoje" ? "active" : ""}`}
-            onClick={() => setPeriodo("hoje")}
-          >
-            Hoje
-          </button>
-          <button
-            type="button"
-            className={`periodo-btn-v3 ${periodo === "ontem" ? "active" : ""}`}
-            onClick={() => setPeriodo("ontem")}
-          >
-            Ontem
-          </button>
-          <button
-            type="button"
-            className={`periodo-btn-v3 ${periodo === "semana" ? "active" : ""}`}
-            onClick={() => setPeriodo("semana")}
-          >
-            Esta Semana
-          </button>
-          <button
-            type="button"
-            className={`periodo-btn-v3 ${periodo === "mes" ? "active" : ""}`}
-            onClick={() => setPeriodo("mes")}
-          >
-            Mês ({new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(new Date())})
-          </button>
-          <input
-            type="date"
-            className="date-custom-input-v3"
-            value={dataCustom}
-            title="Escolha qualquer data específica"
-            onChange={(e) => {
-              setDataCustom(e.target.value);
-              setPeriodo("data");
-            }}
-          />
-        </div>
+        <SeletorPeriodo />
       </header>
 
       {/* ── ALERTA DE RISCO FINANCEIRO: RESPOSTAS DE DISPAROS NO VÁCUO (>30MIN) ── */}
@@ -441,7 +390,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
       <section className="hero-placar-v3">
         {/* Vendas do Mês */}
         <div className="kpi-card-v3 destaque">
-          <span className="kpi-title-v3">🎯 Vendas Confirmadas (Junix)</span>
+          <span className="kpi-title-v3">Vendas Confirmadas (Junix)</span>
           <div className="kpi-val-v3 mono">
             <span style={{ color: "var(--cv-brand)" }}>{heroPlacar.vendas}</span>
             <span style={{ fontSize: 18, color: "var(--cv-text-muted)", fontWeight: 500 }}>
@@ -475,11 +424,11 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
 
         {/* Leads Recebidos no Período Selecionado */}
         <div className="kpi-card-v3">
-          <span className="kpi-title-v3">📥 Leads no Período Selecionado</span>
+          <span className="kpi-title-v3">Leads no Período Selecionado</span>
           <div className="kpi-val-v3 mono">
             <span style={{ color: "var(--cv-blue)" }}>{heroPlacar.leadsPeriodo}</span>
             <span style={{ fontSize: 14, color: "var(--cv-text-muted)", fontWeight: 500 }}>
-              {periodo === "hoje" ? "hoje" : periodo === "ontem" ? "ontem" : "no período"}
+              {per.preset === "hoje" || per.preset === "ontem" ? per.rotulo : "no período"}
             </span>
           </div>
           <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
@@ -492,12 +441,11 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
 
         {/* Poder de Fogo da Equipe */}
         <div className="kpi-card-v3">
-          <span className="kpi-title-v3">💥 Poder de Fogo (Mídia)</span>
+          <span className="kpi-title-v3">Poder de Fogo (Mídia)</span>
           {midia ? (() => {
             // dia a dia só existe para os últimos dias; semana e mês usam os 7 dias do robô
-            const doDia = periodo === "hoje" ? midia.porDia[diaSP(0)] : periodo === "ontem" ? midia.porDia[diaSP(1)]
-              : periodo === "data" ? midia.porDia[dataCustom] : undefined;
-            const porDiaOk = periodo === "hoje" || periodo === "ontem" || periodo === "data";
+            const doDia = umDia ? midia.porDia[per.de] : undefined;
+            const porDiaOk = umDia;
             const valor = porDiaOk ? doDia : midia.gasto7;
             return <>
               <div className="kpi-val-v3 mono" style={{ fontSize: 24, color: "var(--cv-text-main)" }}>
@@ -523,7 +471,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
       <section className="leads-section-v3">
         <div className="leads-header-v3">
           <div className="leads-title-v3">
-            <h2>📥 Leads Recebidos da Equipe</h2>
+            <h2>Leads recebidos da equipe</h2>
             <span>Veja com quem cada cliente está e transfira para outro corretor com 1 clique</span>
           </div>
 
@@ -664,7 +612,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                       </td>
                       <td>
                         <span className="mono" style={{ fontSize: 12 }}>
-                          {periodo === "hoje" ? `Hoje às ${horaStr}` : `${diaStr} às ${horaStr}`}
+                          {per.preset === "hoje" ? `Hoje às ${horaStr}` : `${diaStr} às ${horaStr}`}
                         </span>
                       </td>
                       <td>

@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-export type Preset = "hoje" | "semana" | "7" | "30" | "90" | "custom";
+export type Preset = "hoje" | "ontem" | "semana" | "7" | "30" | "90" | "custom";
 
 export interface Periodo {
   preset: Preset;
@@ -41,6 +41,8 @@ export function resolver(preset: Preset, de?: string, ate?: string): Periodo {
   switch (preset) {
     case "hoje":
       return { preset, de: hoje, ate: hoje, rotulo: "hoje", dias: 1 };
+    case "ontem":
+      return { preset, de: menos(1), ate: menos(1), rotulo: "ontem", dias: 1 };
     case "semana":
       return { preset, de: segunda(), ate: hoje, rotulo: "esta semana",
                dias: conta(segunda(), hoje) };

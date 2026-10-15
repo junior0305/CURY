@@ -6,6 +6,8 @@
 
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useEffect } from "react";
 
 export function loadFonts() {
   if (typeof document === "undefined") return;
@@ -71,6 +73,8 @@ export function RailV10({
   pip?: number;
 }) {
   const { signOut, role } = useAuth();
+  const { preferLight } = useTheme();
+  useEffect(() => { preferLight(); }, [preferLight]);
   const { pathname } = useLocation();
   // Diretor e admin abrindo o /super usam o mesmo menu do super (antes caíam no menu do gerente
   // e as abas do super apareciam como botões no alto da tela).
@@ -88,7 +92,7 @@ export function RailV10({
   return (
     <nav className="rail" aria-label="Seções">
       <div className="rail-brand">
-        <div className="rail-m">C</div>
+        <img className="rail-m" src="/comandra-lobo.png" alt="Comandra" />
         <div><b>Comandra</b>{sub ? <i>{sub}</i> : null}</div>
       </div>
 

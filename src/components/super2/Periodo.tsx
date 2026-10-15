@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 
 export type ChavePeriodo = "hoje" | "ontem" | "7d" | "30d" | "datas";
 export const diaSP = (desloc = 0) => new Date(Date.now() - 3 * 3600e3 - desloc * 86400e3).toISOString().slice(0, 10);
-const ROTULO: [ChavePeriodo, string][] = [["hoje", "Hoje"], ["ontem", "Ontem"], ["7d", "7 dias"], ["30d", "30 dias"], ["datas", "Escolher datas"]];
+const ROTULO: [ChavePeriodo, string][] = [["hoje", "Hoje"], ["ontem", "Ontem"], ["7d", "7 dias"], ["30d", "30 dias"], ["datas", "Escolher período"]];
 
 export function usePeriodoSuper(padrao: ChavePeriodo = "7d") {
   const [params, setParams] = useSearchParams();

@@ -6,12 +6,13 @@
 import { useState } from "react";
 import { usePeriodo, diaSP, type Preset } from "@/hooks/usePeriodo";
 
+// Mesmas opções em todas as telas de gestor (gerente, super e diretor), 15/10.
+// "Esta semana" e "90 dias" saíram da lista; quem tinha um deles salvo continua vendo o período certo.
 const OPCOES: { k: Preset; label: string }[] = [
   { k: "hoje", label: "Hoje" },
-  { k: "semana", label: "Esta semana" },
+  { k: "ontem", label: "Ontem" },
   { k: "7", label: "7 dias" },
   { k: "30", label: "30 dias" },
-  { k: "90", label: "90 dias" },
 ];
 
 export default function SeletorPeriodo() {
@@ -33,7 +34,7 @@ export default function SeletorPeriodo() {
         <button type="button" className={periodo.preset === "custom" ? "on" : ""}
           aria-pressed={periodo.preset === "custom"} aria-expanded={abrir}
           onClick={() => setAbrir((v) => !v)}>
-          {periodo.preset === "custom" ? periodo.rotulo : "Escolher datas"}
+          {periodo.preset === "custom" ? periodo.rotulo : "Escolher período"}
         </button>
       </div>
 
