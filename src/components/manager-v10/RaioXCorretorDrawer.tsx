@@ -10,7 +10,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { definirRecebimento } from "@/hooks/useTempoReal";
 import { cobrarCorretor, redistribuir, useConversaLead, type MsgConversa } from "@/hooks/useLeads";
 import {
-import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
   X,
   Phone,
   MessageCircle,
@@ -25,6 +24,7 @@ import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
   Award,
   Eye,
 } from "lucide-react";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 interface RaioXCorretorDrawerProps {
   brokerId: string | null;
