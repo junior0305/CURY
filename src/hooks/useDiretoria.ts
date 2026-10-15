@@ -146,12 +146,14 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
       });
 
       const plantaoHojeTotal = new Set(plantao.map((r) => `${chaveGerente(r.gerente)}|${chaveNome(r.corretor)}`)).size;
-      // super sem corretor no Comandra (sem gerente, ou gerentes recém-cadastrados ainda sem time, como o Silva em 14/10):
-      // plantão direto do C2S (nome exato; "Silva" não pode pegar "Silvano")
+      // super com o time ainda quase todo fora do Comandra (Adajes e Silva, chegados em 12/10): plantão direto do C2S.
+      // Não basta "algum gerente já tem corretor": 1 cadastro derrubava a contagem de 61 para 7 (15/10).
+      // Fica no C2S enquanto o Comandra tiver menos da metade dos corretores que o C2S viu em 30 dias.
+      // (nome exato; "Silva" não pode pegar "Silvano")
       const de = diaSP(Date.now() - (dias - 1) * 864e5);
       const de30 = diaSP(Date.now() - (Math.max(dias, 30) - 1) * 864e5);
       for (const s of supers) {
-        if (s.gerentes.some((g) => g.corretores > 0)) continue;
+        const noComandra = s.gerentes.reduce((a, g) => a + g.corretores, 0);
         const nomes = nomesSuperC2S(s.nome);
         const rows: any[] = [];
         for (let a = 0; ; a += 1000) {
@@ -171,6 +173,8 @@ export function useDiretoria(diretorId: string | null | undefined, dias: number)
         }
         const gerentes = [...porG.entries()].map(([nome, x]) => ({ nome, dias: x.dias.size, hoje: x.hoje.size, corretores: x.cor.size, corretores30: x.cor30.size }))
           .sort((a, b) => b.dias - a.dias);
+        const noC2S = gerentes.reduce((a, g) => a + g.corretores30, 0);
+        if (noComandra > 0 && noComandra * 2 >= noC2S) continue;
         s.c2s = { dias: gerentes.reduce((a, g) => a + g.dias, 0), hoje: gerentes.reduce((a, g) => a + g.hoje, 0), gerentes };
       }
 
