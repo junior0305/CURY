@@ -300,9 +300,9 @@ export default function Estrategia() {
                 const textoSimulacao = encodeURIComponent(
                   `*Simulação Caixa — ${p.empreendimento}*\n\n` +
                   `👤 Renda simulada: ${brl(renda)}\n` +
-                  `🏦 Financiamento Caixa aprovado: ${brl(p.financiamento)}\n` +
+                  `Financiamento Caixa aprovado: ${brl(p.financiamento)}\n` +
                   (p.subsidio ? `🎁 Subsídio do Governo: ${brl(p.subsidio)}\n` : "") +
-                  `📍 Unidades a partir de: Entrada ${p.entrada_min <= 0 ? "R$ 0 (Zero)" : brl(p.entrada_min)}\n\n` +
+                  `Unidades a partir de: Entrada ${p.entrada_min <= 0 ? "R$ 0 (Zero)" : brl(p.entrada_min)}\n\n` +
                   `Temos ${p.disponiveis} unidades disponíveis no estoque! Quer agendar uma visita?`
                 );
 
@@ -348,7 +348,7 @@ export default function Estrategia() {
 
                     <div className="estrategia-card-footer">
                       <button className="estrategia-btn-drill" onClick={() => setAberto(p)}>
-                        🔍 Ver {p.disponiveis} Unidades
+                        Ver {p.disponiveis} Unidades
                       </button>
                       <a
                         className="estrategia-btn-share-wa"

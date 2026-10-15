@@ -593,7 +593,7 @@ export default function Leads() {
 
               <div style={{ background: "var(--cv-surface)", border: "1px solid var(--cv-border)", borderRadius: "12px", padding: "18px 20px" }}>
                 <h3 style={{ fontSize: "15px", fontWeight: 800, margin: "0 0 8px" }}>
-                  💡 Como funciona a triagem de entrada
+                  Como funciona a triagem de entrada
                 </h3>
                 <p style={{ margin: 0, fontSize: "13px", color: "var(--cv-text-muted)", lineHeight: 1.5 }}>
                   Todos os leads que entram no Comandra são validados por DDD e número real antes de entrar no rodízio de distribuição da equipe. Clientes com DDD de fora do estado são filtrados para evitar desperdício de tempo da tropa.
@@ -802,13 +802,13 @@ export default function Leads() {
                     className={`estrategia-chip-btn ${modo === "online" ? "active" : ""}`}
                     onClick={() => setModo("online")}
                   >
-                    🟢 Online Agora ({d.corretores.filter((c) => c.online).length})
+                    Online Agora ({d.corretores.filter((c) => c.online).length})
                   </button>
                   <button
                     className={`estrategia-chip-btn ${modo === "plantao" ? "active" : ""}`}
                     onClick={() => setModo("plantao")}
                   >
-                    📍 No Plantão ({d.corretores.filter((c) => c.plantao).length})
+                    No Plantão ({d.corretores.filter((c) => c.plantao).length})
                   </button>
                   <button
                     className={`estrategia-chip-btn ${modo === "escolher" ? "active" : ""}`}

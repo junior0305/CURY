@@ -738,7 +738,7 @@ export default function Disparar() {
             <div style={{ fontSize: 12, color: "var(--cv-text-muted, #64748b)", marginTop: 2 }}>
               {d.conversas.filter((c) => c.esperando).length > 0 ? (
                 <span style={{ color: "var(--cv-rose, #e11d48)", fontWeight: 700 }}>
-                  ⚠️ {d.conversas.filter((c) => c.esperando).length} aguardando retorno
+                  {d.conversas.filter((c) => c.esperando).length} aguardando retorno
                 </span>
               ) : (
                 "todas respondidas pelo time"

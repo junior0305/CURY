@@ -179,7 +179,7 @@ export default function PlantaoEmpresa() {
           {modo === "estande" && n.nivel === 0 ? <span className="pe-tag foco">{pctTxt(n.corretores.size / Math.max(1, totais.corretores))} da empresa</span> : null}
           {((modo === "hier" && n.nivel === 0) || (modo === "estande" && n.nivel === 1)) && n.tag ? <span className="pe-tag">{n.tag}</span> : null}
           {temFilhos ? <span className="pe-tag pe-hide">{n.filhos.size} {rotuloFilhos(n.nivel)}</span> : null}
-          {f ? <span className="pe-tag foco" title="Estande com mais corretores deste time">📍 {f.nome} {pctTxt(f.pct)}</span> : null}
+          {f ? <span className="pe-tag foco" title="Estande com mais corretores deste time">{f.nome} {pctTxt(f.pct)}</span> : null}
           {modo === "hier" && estandesCorretor.length ? <span className="pe-tag pe-hide" title={estandesCorretor.join(", ")}>{estandesCorretor[0]}{estandesCorretor.length > 1 ? ` +${estandesCorretor.length - 1}` : ""}</span> : null}
         </div>
         <div className="pe-num">
@@ -200,13 +200,13 @@ export default function PlantaoEmpresa() {
       <style>{CSS}</style>
       <div className="pe-head">
         <div>
-          <h2>📍 Plantão — Empresa toda</h2>
-          <p>Check-in no C2S · {modo === "hier" ? "clique numa diretoria para abrir superintendências, gerentes e corretores · 📍 = estande onde o time se concentra" : "clique num estande para ver quais diretorias, gerentes e corretores estão nele"}</p>
+          <h2>Plantão — Empresa toda</h2>
+          <p>Check-in no C2S · {modo === "hier" ? "clique numa diretoria para abrir superintendências, gerentes e corretores · o selo mostra o estande onde o time se concentra" : "clique num estande para ver quais diretorias, gerentes e corretores estão nele"}</p>
         </div>
         <div className="pe-ctrls">
           <div className="hc-buttons">
             <button className={`hc-btn${modo === "hier" ? " active" : ""}`} onClick={() => mudarModo("hier")}>🏢 Hierarquia</button>
-            <button className={`hc-btn${modo === "estande" ? " active" : ""}`} onClick={() => mudarModo("estande")}>📍 Estande</button>
+            <button className={`hc-btn${modo === "estande" ? " active" : ""}`} onClick={() => mudarModo("estande")}>Estande</button>
           </div>
           <div className="hc-box">
             <label>Período</label>

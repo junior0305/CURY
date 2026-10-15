@@ -331,7 +331,7 @@ export default function AlertaDisparoQueima({ managerId, quem = "Gerente", compa
                     <option value="">Ou escolher um corretor específico...</option>
                     {corretoresOnline.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.nome} {c.online ? "🟢 Online" : "⚪ Offline"} {!c.roleta ? "(Pausado)" : ""}
+                        {c.nome} {c.online ? "Online" : "⚪ Offline"} {!c.roleta ? "(Pausado)" : ""}
                       </option>
                     ))}
                   </select>

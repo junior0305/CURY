@@ -29,19 +29,19 @@ const FASES_CREDITO: ColunaFase[] = [
   {
     id: "montagem",
     titulo: "Montagem de Pasta",
-    icone: "📝",
+    icone: "",
     etapasJunix: ["cadastro", "anexar documento", "selecionar unidade", "simular", "proposta"],
   },
   {
     id: "analise",
     titulo: "Em Análise Caixa",
-    icone: "🏦",
+    icone: "",
     etapasJunix: ["laudo / pré-análise", "laudo", "pré-análise", "sem análise", "análise"],
   },
   {
     id: "pendencia",
     titulo: "Pendências Caixa",
-    icone: "⚠️",
+    icone: "",
     etapasJunix: ["pendência", "pendencia", "exigência", "documentação pendente"],
   },
   {
@@ -196,7 +196,7 @@ export default function Pastas() {
               className={`pastas-view-btn ${viewModo === "corretor" ? "active" : ""}`}
               onClick={() => setViewModo("corretor")}
             >
-              📊 Resumo por Corretor
+              Resumo por Corretor
             </button>
           </div>
         </header>
@@ -224,7 +224,7 @@ export default function Pastas() {
             className={`pasta-kpi-card alert ${filtroAtivo === "travadas" ? "active" : ""}`}
             onClick={() => setFiltroAtivo((v) => (v === "travadas" ? "todas" : "travadas"))}
           >
-            <span className="pasta-kpi-label">🔥 Travadas (+{DIAS_TRAVADA} dias)</span>
+            <span className="pasta-kpi-label">Travadas (+{DIAS_TRAVADA} dias)</span>
             <div className="pasta-kpi-val mono" style={{ color: "var(--cv-rose)" }}>
               {totalTravadas}
             </div>
@@ -236,7 +236,7 @@ export default function Pastas() {
             className={`pasta-kpi-card ${filtroAtivo === "analise" ? "active" : ""}`}
             onClick={() => setFiltroAtivo((v) => (v === "analise" ? "todas" : "analise"))}
           >
-            <span className="pasta-kpi-label">🏦 Em Análise Caixa</span>
+            <span className="pasta-kpi-label">Em Análise Caixa</span>
             <div className="pasta-kpi-val mono" style={{ color: "var(--cv-brand)" }}>
               {totalAnalise}
             </div>
@@ -248,7 +248,7 @@ export default function Pastas() {
             className={`pasta-kpi-card ${filtroAtivo === "sem_corretor" ? "active" : ""}`}
             onClick={() => setFiltroAtivo((v) => (v === "sem_corretor" ? "todas" : "sem_corretor"))}
           >
-            <span className="pasta-kpi-label">⚠️ Sem Corretor</span>
+            <span className="pasta-kpi-label">Sem Corretor</span>
             <div className="pasta-kpi-val mono" style={{ color: totalSemCorretor > 0 ? "var(--cv-amber)" : "inherit" }}>
               {totalSemCorretor}
             </div>
@@ -259,7 +259,7 @@ export default function Pastas() {
         {/* ── BARRA DE BUSCA E CONTROLE ── */}
         <section className="pastas-toolbar">
           <div className="pastas-search-box">
-            <span>🔍</span>
+            <span></span>
             <input
               type="text"
               placeholder="Buscar por cliente, corretor, proposta # ou etapa..."
@@ -388,7 +388,7 @@ export default function Pastas() {
                                 className="btn-cobrar-whats"
                                 onClick={() => cobrancasWhatsApp(p)}
                               >
-                                💬 Cobrar Corretor no WhatsApp
+                                Cobrar Corretor no WhatsApp
                               </button>
                             </div>
                           </div>
@@ -434,7 +434,7 @@ export default function Pastas() {
                         window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "_blank");
                       }}
                     >
-                      💬 Cobrar Geral
+                      Cobrar Geral
                     </button>
                   </Tr>
                 ))}

@@ -96,7 +96,7 @@ export default function DesligarCorretor({ brokerId, onFechar, onPronto }: {
             <h3 id="dc-t">Desligar {pv.corretor} — {pv.quente + pv.roleta + pv.frio} leads na carteira</h3>
             <p>O login é bloqueado, ele sai da roleta e das filas. Vendas e histórico continuam no nome dele.</p>
 
-            {bloco("🔥", pv.quente, "quentes", "responderam nos últimos 7 dias, negociação, visita ou documentos — passe para quem vai atender hoje",
+            {bloco("", pv.quente, "quentes", "responderam nos últimos 7 dias, negociação, visita ou documentos — passe para quem vai atender hoje",
               chips(quentesPara, setQuentesPara, pv.colegas.filter((c) => c.recebe || quentesPara.has(c.id))))}
             {bloco("🆕", pv.roleta, "para a roleta", "novos e mornos — vão em rodízio para quem está recebendo lead",
               chips(roletaPara, setRoletaPara, pv.colegas.filter((c) => c.recebe || roletaPara.has(c.id))))}
@@ -104,8 +104,8 @@ export default function DesligarCorretor({ brokerId, onFechar, onPronto }: {
               <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, fontSize: 13.5 }}>
                 <input type="checkbox" checked={friosPool} onChange={(e) => setFriosPool(e.target.checked)} />
                 mandar para o Pescar (pool) {friosPool ? "" : "— desmarcado: vão para a roleta junto"}</label>)}
-            {pv.vendidos ? <p style={{ fontSize: 13, margin: "10px 0 0" }}>✅ {pv.vendidos} vendido{pv.vendidos > 1 ? "s" : ""} ficam com {pv.corretor} no histórico (comissão e relatório).</p> : null}
-            {pv.pastas_junix ? <p className="tm-aviso">📁 {pv.pastas_junix} pasta{pv.pastas_junix > 1 ? "s" : ""} no Junix em nome de {pv.corretor} — transfira no Junix; o Comandra não mexe lá.</p> : null}
+            {pv.vendidos ? <p style={{ fontSize: 13, margin: "10px 0 0" }}>{pv.vendidos} vendido{pv.vendidos > 1 ? "s" : ""} ficam com {pv.corretor} no histórico (comissão e relatório).</p> : null}
+            {pv.pastas_junix ? <p className="tm-aviso">{pv.pastas_junix} pasta{pv.pastas_junix > 1 ? "s" : ""} no Junix em nome de {pv.corretor} — transfira no Junix; o Comandra não mexe lá.</p> : null}
             {!pv.quente && !pv.roleta && !pv.frio ? <p>A carteira está vazia — é só desligar.</p> : null}
             {pv.roleta && !roletaPara.size ? <p className="tm-aviso">Sem ninguém marcado para a roleta, esses {pv.roleta} leads ficam com {pv.corretor} até você redistribuir na aba Leads.</p> : null}
 

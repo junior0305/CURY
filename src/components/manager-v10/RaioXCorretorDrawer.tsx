@@ -153,7 +153,7 @@ export default function RaioXCorretorDrawer({ brokerId, managerId, onClose }: Ra
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <h3 className="drawer-nome">{nomeCompleto}</h3>
                 <span className={`status-presenca-pill ${online ? "online" : "offline"}`}>
-                  {online ? "🟢 Online agora" : "⚪ Offline"}
+                  {online ? "Online agora" : "⚪ Offline"}
                 </span>
               </div>
               <p className="drawer-sub">

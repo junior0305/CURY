@@ -71,10 +71,10 @@ function rotuloOrigem(lead: { source?: string | null; fb_campaign?: string | nul
   const cat = classificarOrigem(lead);
   // Make manda o ID da campanha; o nome fica em campanha_nome.
   const campanha = lead.campanha_nome || (lead.fb_campaign && !/^\d{10,}$/.test(lead.fb_campaign) ? lead.fb_campaign : "");
-  if (cat === "disparo") return { cat, label: "💬 Disparo WhatsApp · " + (lead.fb_campaign || "Base Oficial") };
+  if (cat === "disparo") return { cat, label: "Disparo WhatsApp · " + (lead.fb_campaign || "Base Oficial") };
   if (cat === "pescado") return { cat, label: "🎣 Pescado · " + (lead.source === "cold_pool" ? "Cold Pool Cury" : lead.fb_campaign || "Carteira Cury") };
   if (cat === "acao") return { cat, label: "🏃 Ação / Stand · " + (lead.source?.replace(/_/g, " ") || "Presencial") };
-  return { cat, label: "📢 Meta Ads · " + (campanha || "Facebook/Instagram") };
+  return { cat, label: "Meta Ads · " + (campanha || "Facebook/Instagram") };
 }
 
 export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Props) {
@@ -410,7 +410,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
 
         {/* Ritmo e Projeção */}
         <div className="kpi-card-v3">
-          <span className="kpi-title-v3">📈 Projeção de Fechamento</span>
+          <span className="kpi-title-v3">Projeção de Fechamento</span>
           <div className="kpi-val-v3 mono">
             <span style={{ color: heroPlacar.projecao >= heroPlacar.meta ? "var(--cv-green)" : "var(--cv-amber)" }}>
               {heroPlacar.projecao}
@@ -485,7 +485,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                   setLeadEmTransferencia(null);
                 }}
               >
-                ⚡ Redistribuir {leadsSelecionados.size} Selecionados
+                Redistribuir {leadsSelecionados.size} Selecionados
               </button>
             )}
           </div>
@@ -505,14 +505,14 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
             className={`origem-pill-btn-v3 ${origemFiltro === "anuncio" ? "active" : ""}`}
             onClick={() => setOrigemFiltro("anuncio")}
           >
-            📢 Meta Ads (Facebook/Instagram) <span className="mono">{contagemOrigem.anuncio}</span>
+            Meta Ads (Facebook/Instagram) <span className="mono">{contagemOrigem.anuncio}</span>
           </button>
           <button
             type="button"
             className={`origem-pill-btn-v3 ${origemFiltro === "disparo" ? "active" : ""}`}
             onClick={() => setOrigemFiltro("disparo")}
           >
-            💬 Disparos WhatsApp <span className="mono">{contagemOrigem.disparo}</span>
+            Disparos WhatsApp <span className="mono">{contagemOrigem.disparo}</span>
           </button>
           <button
             type="button"
@@ -533,7 +533,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
         {/* Barra de Pesquisa */}
         <div className="leads-toolbar-v3">
           <div className="search-box-v3">
-            <span>🔍</span>
+            <span></span>
             <input
               type="text"
               placeholder="Buscar por cliente, telefone ou corretor..."
@@ -627,20 +627,20 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                                 className={`mini-badge-v3 ${corretor.online ? "online" : corretor.plantao ? "plantao" : "offline"}`}
                                 style={{ fontSize: 10 }}
                               >
-                                {corretor.online ? "🟢 online" : corretor.plantao ? "📍 plantão" : "⚪ offline"}
+                                {corretor.online ? "online" : corretor.plantao ? "plantão" : "offline"}
                               </span>
                             </div>
                           </div>
                         ) : (
                           <span style={{ color: "var(--cv-rose)", fontWeight: 700, fontSize: 12 }}>
-                            ⚠️ Sem corretor
+                            Sem corretor
                           </span>
                         )}
                       </td>
                       <td>
                         {isParado ? (
                           <span className="lead-status-pill-v3 urgente">
-                            🔥 Cliente aguardando (+2h)
+                            Cliente aguardando (+2h)
                           </span>
                         ) : atendido(lead as LeadSinal) ? (
                           <span className="lead-status-pill-v3 andando">
@@ -648,7 +648,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                           </span>
                         ) : (
                           <span className="lead-status-pill-v3 espera">
-                            ⏳ Aguardando 1º contato
+                            Aguardando 1º contato
                           </span>
                         )}
                       </td>
@@ -663,7 +663,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                               setTransferenciaLote(false);
                             }}
                           >
-                            ⚡ Passar Lead
+                            Passar Lead
                           </button>
                           <button
                             type="button"
@@ -672,7 +672,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                             onClick={() => handleCobrar(lead)}
                             title="Cobrar atendimento no WhatsApp"
                           >
-                            💬 Cobrar
+                            Cobrar
                           </button>
                           <button
                             type="button"
@@ -697,13 +697,13 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
       <section className="tropa-section-v3">
         <div className="tropa-header-v3">
           <div className="tropa-title-v3">
-            <h2>👥 Minha Tropa & Chave de Roleta</h2>
+            <h2>Minha Tropa & Chave de Roleta</h2>
             <span>Ligue ou pause corretores para receberem os próximos leads que chegarem de anúncios e campanhas</span>
           </div>
 
           <div style={{ display: "flex", gap: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cv-green)", background: "var(--cv-green-light)", padding: "4px 10px", borderRadius: "var(--cv-radius-full)" }}>
-              🟢 {corretores.filter((c) => c.ativoRoleta).length} Corretores na Roleta Ativa
+              {corretores.filter((c) => c.ativoRoleta).length} Corretores na Roleta Ativa
             </span>
           </div>
         </div>
@@ -731,9 +731,9 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                       <div className="broker-name-box-v3">
                         <b>{c.nome}</b>
                         <div className="broker-tags-v3">
-                          {c.online && <span className="mini-badge-v3 online">🟢 online</span>}
-                          {c.plantao && <span className="mini-badge-v3 plantao">📍 plantão C2S</span>}
-                          {!c.online && !c.plantao && <span className="mini-badge-v3 offline">⚪ offline</span>}
+                          {c.online && <span className="mini-badge-v3 online">online</span>}
+                          {c.plantao && <span className="mini-badge-v3 plantao">plantão C2S</span>}
+                          {!c.online && !c.plantao && <span className="mini-badge-v3 offline">offline</span>}
                         </div>
                       </div>
                     </div>
@@ -779,7 +779,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
           <div className="modal-card-v3" onClick={(e) => e.stopPropagation()}>
             <div className="modal-hd-v3">
               <div>
-                <h3>⚡ Transferir Lead</h3>
+                <h3>Transferir Lead</h3>
                 <span style={{ fontSize: 13, color: "var(--cv-text-muted)" }}>
                   {transferenciaLote
                     ? `Transferir ${leadsSelecionados.size} leads selecionados`
@@ -811,7 +811,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div className="avatar-clean-v3" style={{ width: 28, height: 28, background: "var(--cv-purple-light)", color: "var(--cv-purple)" }}>
-                    ⚡
+                    
                   </div>
                   <div>
                     <b>Próximo da Roleta Automática</b>
@@ -839,7 +839,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                     <div>
                       <b>{c.nome}</b>
                       <span style={{ display: "block", fontSize: 11, color: c.online ? "var(--cv-green)" : c.plantao ? "var(--cv-blue)" : "var(--cv-text-muted)" }}>
-                        {c.online ? "🟢 Online agora" : c.plantao ? "📍 No plantão C2S" : "⚪ Offline"} · {c.leadsAtivos} leads ativos
+                        {c.online ? "Online agora" : c.plantao ? "No plantão C2S" : "Offline"} · {c.leadsAtivos} leads ativos
                       </span>
                     </div>
                   </div>
@@ -948,7 +948,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                   handleCobrar(leadRef);
                 }}
               >
-                💬 Cobrar Corretor no WhatsApp
+                Cobrar Corretor no WhatsApp
               </button>
               <button
                 type="button"
@@ -961,7 +961,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                   setTransferenciaLote(false);
                 }}
               >
-                ⚡ Tirar do Corretor e Passar
+                Tirar do Corretor e Passar
               </button>
             </div>
           </div>
