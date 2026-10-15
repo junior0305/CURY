@@ -1112,3 +1112,14 @@ html[data-theme="dark"] .cockpit-v3 {
   gap: 6px;
 }
 
+
+/* Cabeçalho da aba (título + período) fica preso no topo enquanto a tela rola (15/10).
+   O fundo cobre o que passa por baixo; a margem negativa mantém o desenho igual parado. */
+.mgr10 .cockpit-v3-header, .mgr10 .time-v3-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--cv-bg, var(--paper));
+  padding-top: 14px;
+  margin-top: -14px;
+}
