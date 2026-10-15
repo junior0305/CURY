@@ -386,7 +386,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
-          VISÃO 1: 🚨 QUEM COBRAR AGORA (FOCO & URGÊNCIAS)
+          VISÃO 1: QUEM COBRAR AGORA (FOCO & URGÊNCIAS)
           ══════════════════════════════════════════════════════════════════════ */}
       {subAba === "urgencias" && (
         <div className="time-radar-section">
@@ -407,21 +407,21 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
               style={filtroRadar === "crit" ? { background: "var(--cv-rose)", color: "#fff", borderColor: "var(--cv-rose)" } : {}}
               onClick={() => setFiltroRadar("crit")}
             >
-              🔴 Críticos ({achados.filter((a) => a.tom === "crit").length})
+              Críticos ({achados.filter((a) => a.tom === "crit").length})
             </button>
             <button
               className={`time-btn-action ${filtroRadar === "warn" ? "active" : ""}`}
               style={filtroRadar === "warn" ? { background: "var(--cv-amber)", color: "#fff", borderColor: "var(--cv-amber)" } : {}}
               onClick={() => setFiltroRadar("warn")}
             >
-              🟡 Atenção ({achados.filter((a) => a.tom === "warn").length})
+              Atenção ({achados.filter((a) => a.tom === "warn").length})
             </button>
             <button
               className={`time-btn-action ${filtroRadar === "good" ? "active" : ""}`}
               style={filtroRadar === "good" ? { background: "var(--cv-green)", color: "#fff", borderColor: "var(--cv-green)" } : {}}
               onClick={() => setFiltroRadar("good")}
             >
-              🟢 Destaques ({achados.filter((a) => a.tom === "good").length})
+              Destaques ({achados.filter((a) => a.tom === "good").length})
             </button>
           </div>
 
@@ -558,7 +558,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          VISÃO 2: 🏆 TABELA UNIFICADA DA TROPA (PRODUÇÃO & GESTÃO)
+          VISÃO 2: TABELA UNIFICADA DA TROPA (PRODUÇÃO & GESTÃO)
           ══════════════════════════════════════════════════════════════════════ */}
       {subAba === "tropa" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -588,7 +588,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                 style={filtroTropa === "online" ? { background: "var(--cv-brand)", color: "#fff", borderColor: "var(--cv-brand)" } : {}}
                 onClick={() => setFiltroTropa("online")}
               >
-                🟢 Online ({onlineCount})
+                Online ({onlineCount})
               </button>
               <button
                 className={`time-btn-action ${filtroTropa === "pausados" ? "active" : ""}`}
@@ -657,7 +657,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                         {/* Presença */}
                         <td>
                           <span className={`time-kpi-badge ${online ? "green" : "subtle"}`}>
-                            {online ? "🟢 Online" : quandoAcesso(p.last_seen_at)}
+                            {online ? "Online" : quandoAcesso(p.last_seen_at)}
                           </span>
                         </td>
 
@@ -858,7 +858,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                       </div>
                       <div className={`time-milestone-step ${jaVendeu ? "achieved" : "pending"}`}>
                         <span>1ª Venda Confirmada:</span>
-                        <b>{jaVendeu ? `com ${n.primeiraVenda}d 🏆` : "Pendente"}</b>
+                        <b>{jaVendeu ? `com ${n.primeiraVenda}d` : "Pendente"}</b>
                       </div>
                     </div>
 
@@ -1209,7 +1209,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                   className={`funil-canal-chip ${filtroModalOnline === "online" ? "active" : ""}`}
                   onClick={() => setFiltroModalOnline("online")}
                 >
-                  🟢 Online Agora ({onlineCount})
+                  Online Agora ({onlineCount})
                 </button>
                 <button
                   type="button"

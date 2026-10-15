@@ -14,9 +14,10 @@
   --cv-text-dim: #8593A6;
 
   /* cores da tela do diretor (diretoria.css), 15/10 */
-  --cv-brand: #0E7C7B;
-  --cv-brand-light: #E3F1F0;
-  --cv-brand-hover: #0A5E5D;
+  /* seleção e ação principal em azul-marinho, como os botões do diretor; o verde-petróleo fica só na marca */
+  --cv-brand: #0F1B2D;
+  --cv-brand-light: #E8ECF2;
+  --cv-brand-hover: #16263D;
 
   --cv-blue: #1F5C9E;
   --cv-blue-light: #E6F0FB;
@@ -65,9 +66,9 @@ html[data-theme="dark"] .cockpit-v3 {
   --cv-text-muted: #A9B8CE;
   --cv-text-dim: #7B8BA3;
 
-  --cv-brand: #3BB3B1;
-  --cv-brand-light: rgba(59, 179, 177, 0.15);
-  --cv-brand-hover: #5CC6C4;
+  --cv-brand: #6FA6E6;
+  --cv-brand-light: rgba(111, 166, 230, 0.15);
+  --cv-brand-hover: #8DB9EC;
 
   --cv-blue: #6FA6E6;
   --cv-blue-light: rgba(111, 166, 230, 0.15);

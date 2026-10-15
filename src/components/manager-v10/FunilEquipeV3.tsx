@@ -231,7 +231,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
     if (totalLeads > 5 && semContato / totalLeads >= 0.25) {
       const pct = Math.round((semContato / totalLeads) * 100);
       diagnostico = {
-        titulo: `🚨 Gargalo Crítico: ${pct}% dos Leads estão Sem Contato`,
+        titulo: `Gargalo Crítico: ${pct}% dos Leads estão Sem Contato`,
         descricao: "Leads pagos estão esfriando na mão dos corretores sem mensagem inicial.",
         tipo: "crit",
         acao: "Puxe os leads parados há mais de 2 horas e devolva para quem está online no Comandra agora.",
@@ -239,7 +239,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
     } else if (comparecidos >= 3 && pastas / comparecidos < 0.35) {
       const perda = 100 - Math.round((pastas / comparecidos) * 100);
       diagnostico = {
-        titulo: `⚠️ Vazamento de Conversão: ${perda}% das Visitas não viram Pastas`,
+        titulo: `Vazamento de Conversão: ${perda}% das Visitas não viram Pastas`,
         descricao: "O cliente vai até o estande, toma café, mas o corretor não colhe a documentação Caixa.",
         tipo: "warn",
         acao: "Dispare o Checklist Caixa (RG, Holerite, FGTS) no WhatsApp do cliente logo após a visita.",
@@ -247,7 +247,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
     } else if (agendados >= 5 && comparecidos / agendados < 0.5) {
       const noShow = 100 - Math.round((comparecidos / agendados) * 100);
       diagnostico = {
-        titulo: `⚠️ Taxa de No-Show Alta: ${noShow}% das Visitas Agendadas não Compareceram`,
+        titulo: `Taxa de No-Show Alta: ${noShow}% das Visitas Agendadas não Compareceram`,
         descricao: "Falta confirmação no dia anterior e envio de localização 2h antes da visita.",
         tipo: "warn",
         acao: "Oriente o time a mandar o endereço no Google Maps e um vídeo rápido da fachada do estande.",
@@ -261,7 +261,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
       };
     } else if (vendas >= 3) {
       diagnostico = {
-        titulo: "🔥 Excelente Eficiência de Vendas",
+        titulo: "Excelente Eficiência de Vendas",
         descricao: `A equipe já converteu ${vendas} vendas com ${pastas} pastas em análise neste período.`,
         tipo: "good",
         acao: "Injete mais leads do canal com maior retorno para acelerar o fechamento de metas.",
@@ -328,7 +328,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
             className={`funil-chip disparo ${canalAtivo === "disparo" ? "active" : ""}`}
             onClick={() => setCanalAtivo("disparo")}
           >
-            💬 Disparos WhatsApp
+            Disparos WhatsApp
             <span className="funil-chip-count">{contagemCanais.disparo}</span>
           </button>
 
@@ -337,7 +337,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
             className={`funil-chip meta ${canalAtivo === "meta" ? "active" : ""}`}
             onClick={() => setCanalAtivo("meta")}
           >
-            📢 Meta Ads
+            Meta Ads
             <span className="funil-chip-count">{contagemCanais.meta}</span>
           </button>
 
@@ -346,7 +346,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
             className={`funil-chip google ${canalAtivo === "google" ? "active" : ""}`}
             onClick={() => setCanalAtivo("google")}
           >
-            🔍 Google Ads
+            Google Ads
             <span className="funil-chip-count">{contagemCanais.google}</span>
           </button>
 
@@ -355,7 +355,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
             className={`funil-chip portais ${canalAtivo === "portais" ? "active" : ""}`}
             onClick={() => setCanalAtivo("portais")}
           >
-            🏠 Portais
+            Portais
             <span className="funil-chip-count">{contagemCanais.portais}</span>
           </button>
 
@@ -364,7 +364,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
             className={`funil-chip c2s ${canalAtivo === "c2s" ? "active" : ""}`}
             onClick={() => setCanalAtivo("c2s")}
           >
-            📍 C2S Plantão
+            C2S Plantão
             <span className="funil-chip-count">{contagemCanais.c2s}</span>
           </button>
 
@@ -373,7 +373,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
             className={`funil-chip propria ${canalAtivo === "propria" ? "active" : ""}`}
             onClick={() => setCanalAtivo("propria")}
           >
-            👥 Própria / Indicação
+            Própria / Indicação
             <span className="funil-chip-count">{contagemCanais.propria}</span>
           </button>
         </div>
@@ -413,7 +413,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
           </div>
           <div className="funil-degrau-sub">
             {funil.semContato > 0 ? (
-              <span style={{ color: "var(--cv-rose)", fontWeight: 700 }}>⚠️ Parados sem falar</span>
+              <span style={{ color: "var(--cv-rose)", fontWeight: 700 }}>Parados sem falar</span>
             ) : (
               "Todos contatados"
             )}
@@ -500,7 +500,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
             {funil.vendas}
           </div>
           <div className="funil-degrau-sub" style={{ color: "var(--cv-green)", fontWeight: 700 }}>
-            🎯 Contratos fechados
+            Contratos fechados
           </div>
         </div>
       </div>
