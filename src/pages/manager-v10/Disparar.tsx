@@ -128,7 +128,7 @@ export default function Disparar() {
   const [tipoCampanha, setTipoCampanha] = useState<"lead" | "outro">("lead");
   const { mode, toggle } = useTheme();
   const qc = useQueryClient();
-  const { data, isLoading } = useDisparar(userId, teamIds);
+  const { data, isLoading } = useDisparar(userId, teamIds, role === "ADMIN");
 
   // Vindo da aba Leads ("Disparar reativação"): abre direto no disparo com a fila marcada.
   const [params] = useSearchParams();
@@ -515,10 +515,12 @@ export default function Disparar() {
   // O número que vai enviar de fato: o escolhido, senão o padrão. Tudo na tela
   // de disparo lê daqui — teto, custo e o aviso de conta da empresa — para não
   // acontecer de a tela mostrar um número e a mensagem sair por outro.
-  const cfgEnvio = useMemo(
-    () => (data?.meusNumeros ?? []).find((n) => n.id === numEnvio) ?? data?.config ?? null,
-    [numEnvio, data?.meusNumeros, data?.config],
-  );
+  // Com mais de um número (ex.: o Dudu), a pessoa ESCOLHE por qual sai — nada de pegar o primeiro calado.
+  const cfgEnvio = useMemo(() => {
+    const lista = data?.meusNumeros ?? [];
+    if (lista.length > 1) return lista.find((n) => n.id === numEnvio) ?? null;
+    return lista[0] ?? data?.config ?? null;
+  }, [numEnvio, data?.meusNumeros, data?.config]);
 
   const ABRE = "08:00", FECHA = "19:30";
   const marcado = useMemo(() => {
@@ -577,6 +579,10 @@ export default function Disparar() {
     }
 
     if (problemaDaHora) { toast.error(problemaDaHora); return; }
+    if (!cfgEnvio) {
+      toast.error((data.meusNumeros?.length ?? 0) > 1 ? "Escolha por qual número o disparo vai sair." : "Você ainda não tem um número de WhatsApp conectado.");
+      return;
+    }
 
     setDisparando(true);
     try {
@@ -598,7 +604,7 @@ export default function Disparar() {
         // filtrar chip/roleta. "fila" segue o rodizio normal.
         manual: destino === "escolher",
         kind: tipoCampanha,
-        configId: cfgEnvio?.id ?? data.config?.id ?? null,
+        configId: cfgEnvio!.id,
         imagem: urlImagem,
         quando: marcado ? marcado.toISOString() : null,
       });
@@ -1927,7 +1933,8 @@ export default function Disparar() {
                   <span>Sai pelo número</span>
                   {d.meusNumeros.length > 1 ? (
                     <select className="sai-sel" value={cfgEnvio?.id ?? ""}
-                      onChange={(e) => setNumEnvio(e.target.value)}>
+                      onChange={(e) => setNumEnvio(e.target.value)} aria-label="Número que vai enviar">
+                      <option value="" disabled>Escolha o número…</option>
                       {d.meusNumeros.map((n) => (
                         <option key={n.id} value={n.id}>
                           {n.displayNumber} — {n.label ?? "sem nome"}
@@ -1938,7 +1945,7 @@ export default function Disparar() {
                   ) : (
                     <b>{cfgEnvio?.displayNumber ?? "nenhum"}</b>
                   )}
-                  <i>{!cfgEnvio ? "conecte um número antes de disparar"
+                  <i>{!cfgEnvio ? (d.meusNumeros.length > 1 ? "escolha por qual número vai sair" : "conecte um número antes de disparar")
                      : cfgEnvio.ownerId === userId
                        ? "é o seu número — a conta é sua"
                        : cfgEnvio.ownerId

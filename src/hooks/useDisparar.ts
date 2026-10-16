@@ -131,13 +131,15 @@ function varsDoCorpo(corpo: string, declaradas: any): string[] {
   return [...new Set([...(corpo ?? "").matchAll(/\{\{\s*([\wÀ-ÿ]+)\s*\}\}/g)].map((m) => m[1]))];
 }
 
-export function useDisparar(managerId: string | undefined, teamManagerIds?: string[]) {
+/** `incluirCasa`: só o admin vê e usa os números da empresa (sem dono). Gerente e super veem só os próprios
+ *  — e o super também os dos gerentes dele (15/10). */
+export function useDisparar(managerId: string | undefined, teamManagerIds?: string[], incluirCasa = false) {
   // Super/diretor: o "time" (corretores e leads) abrange todos os gerentes dele.
   // O CHIP e os templates continuam sendo os DELE (managerId) — ela dispara pela
   // conta dela, mas escolhe corretor de qualquer equipe abaixo.
   const equipe = teamManagerIds && teamManagerIds.length ? teamManagerIds : null;
   return useQuery<DadosDisparar>({
-    queryKey: ["disparar", managerId, equipe?.join(",") ?? ""],
+    queryKey: ["disparar", managerId, equipe?.join(",") ?? "", incluirCasa],
     enabled: !!managerId,
     staleTime: 60_000,
     refetchInterval: 2 * 60_000,
@@ -232,13 +234,14 @@ export function useDisparar(managerId: string | undefined, teamManagerIds?: stri
       // tela não mudar; `meusNumeros` é a lista de onde ele escolhe na hora do
       // disparo. Sem a lista, escolher número seria escolher entre um.
       const meus = cfgs.filter((c) => c.owner_id === managerId && ativa(c));
-      // Super/diretor: também os números dos gerentes e corretores dele (a regra de acesso já
-      // limita ao que está abaixo). Vêm depois dos próprios, com o nome do dono na frente.
-      const donosEquipe = equipe ? new Set<string>([...equipe, ...time.map((b: any) => b.id)]) : null;
-      const daEquipe = donosEquipe
-        ? cfgs.filter((c) => c.owner_id && c.owner_id !== managerId && donosEquipe.has(c.owner_id) && ativa(c))
+      // Super/diretor: também os números dos GERENTES dele (não os dos corretores, nem de outros supers).
+      const gerentesIds = equipe ? new Set<string>(equipe) : null;
+      const daEquipe = gerentesIds
+        ? cfgs.filter((c) => c.owner_id && c.owner_id !== managerId && gerentesIds.has(c.owner_id) && ativa(c))
         : [];
-      const minha = meus[0] ?? cfgs.find((c) => !c.owner_id && ativa(c)) ?? null;
+      // Número da empresa (sem dono): só para o admin. Antes ele virava o padrão de quem não tinha número.
+      const daCasa = incluirCasa ? cfgs.filter((c) => !c.owner_id && ativa(c)) : [];
+      const minha = meus[0] ?? (daEquipe.length === 1 && !meus.length ? daEquipe[0] : null) ?? daCasa[0] ?? null;
 
       const numeros = time.map((b: any) => ({
         nome: nomePor.get(b.id) ?? "—", profileId: b.id,
@@ -329,6 +332,7 @@ export function useDisparar(managerId: string | undefined, teamManagerIds?: stri
             const dono = gerNomePor.get(c.owner_id) ?? nomePor.get(c.owner_id) ?? "equipe";
             return { ...m, label: `${dono} · ${m.label ?? m.displayNumber ?? ""}`.trim() };
           }),
+          ...daCasa.map((c) => { const m = monta(c); return { ...m, label: `Empresa · ${m.label ?? m.displayNumber ?? ""}`.trim() }; }),
         ],
         numeros, templates, campanhas, conversas, publicos,
         corretores: time.map((b: any) => ({
