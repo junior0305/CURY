@@ -113,6 +113,10 @@ export default function Diretoria() {
             <svg viewBox="0 0 24 24" aria-hidden><path d={ICONE_ABA[k]} /></svg>{RAIL_ROTULO[k] ?? t}
           </button>
         ))}
+        {/* Disparar: a mesma tela de disparo do gerente e do super; o diretor escolhe qualquer corretor da empresa */}
+        <Link to="/manager/whatsapp" title="Disparar mensagens pelo WhatsApp oficial">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M21 3L10 14M21 3l-7 18-4-7-7-4z" /></svg>Disparar
+        </Link>
         <span className="dir-rail-sep" />
         <Link to="/super?aba=time" title="Tela anterior, com cadastro e desligamento">
           <svg viewBox="0 0 24 24" aria-hidden><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM3 21v-1a6 6 0 0 1 12 0v1M16 3.5a4 4 0 0 1 0 7.5M21 21v-1a6 6 0 0 0-4-5.6" /></svg>Gestão do time

@@ -20,7 +20,8 @@ import { Fragment, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
 import { useEffectiveManagerId, useSuperintendenteRollup } from "@/hooks/useSuperintendente";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
@@ -122,7 +123,24 @@ export default function Disparar() {
   const ehGestorAcima = role === "SUPERINTENDENT" || role === "ADMIN" || role === "DIRECTOR";
   const { data: rollupSup } = useSuperintendenteRollup(ehGestorAcima ? session?.user?.id : undefined, 30);
   const gerentes = rollupSup?.gerentes ?? [];
-  const teamIds = ehGestorAcima ? gerentes.map((g) => g.id) : undefined;
+  // Diretor (e admin): a empresa inteira — todos os supers e gerentes abaixo dele, para escolher
+  // qualquer corretor da empresa e ver os números de cada super e gerente.
+  const ehDiretoria = role === "DIRECTOR" || role === "ADMIN";
+  const { data: arvoreDir } = useQuery({
+    queryKey: ["disparar-arvore-diretoria", session?.user?.id, role],
+    enabled: ehDiretoria && !!session?.user?.id, staleTime: 5 * 60_000,
+    queryFn: async () => {
+      let qs = supabase.from("profiles").select("id").eq("role", "SUPERINTENDENT").eq("is_active", true);
+      if (role === "DIRECTOR") qs = qs.eq("manager_id", session!.user!.id);
+      const { data: sups } = await qs;
+      const supIds = ((sups ?? []) as any[]).map((x) => x.id as string);
+      let qg = supabase.from("profiles").select("id").eq("role", "MANAGER").eq("is_active", true);
+      if (role === "DIRECTOR") qg = qg.in("manager_id", [session!.user!.id, ...supIds]);
+      const { data: gers } = await qg;
+      return [...supIds, ...((gers ?? []) as any[]).map((x) => x.id as string)];
+    },
+  });
+  const teamIds = ehDiretoria ? (arvoreDir ?? undefined) : ehGestorAcima ? gerentes.map((g) => g.id) : undefined;
   // Tipo da campanha: 'lead' (resposta vira lead do corretor) ou 'outro'
   // (não-lead, ex.: contratação — resposta só notifica + guarda, não vira lead).
   const [tipoCampanha, setTipoCampanha] = useState<"lead" | "outro">("lead");
