@@ -241,6 +241,7 @@ export default function Disparar() {
 
   const [csv, setCsv] = useState<{ leadId: string; nome: string | null; telefone: string }[]>([]);
   const [csvNome, setCsvNome] = useState("");
+  const [csvFora, setCsvFora] = useState(0);
   // Imagem DESTE disparo. Fica aqui e não no template porque a Meta trata o
   // topo como variável: o template declara que tem imagem, a foto muda a cada
   // envio. E porque voltar duas telas para trocar a foto é trabalho à toa.
@@ -331,8 +332,16 @@ export default function Disparar() {
         toast.error("Não achei telefone nesse arquivo. Precisa de uma coluna com o número.");
         return;
       }
-      setCsv(linhas); setCsvNome(f.name);
-      toast.success(`${linhas.length} pessoas lidas de ${f.name}.`);
+      // Só celular entra (55 + DDD + 9 + 8 dígitos): fixo ou número quebrado a Meta devolve
+      // "não entregável" — 15 das 16 falhas do disparo de 17/10 eram isso.
+      const celular = (t: string) => { let d = t.replace(/\D/g, ""); if (d.length === 10 || d.length === 11) d = "55" + d; return /^55[1-9][1-9]9\d{8}$/.test(d) ? d : null; };
+      const bons = linhas.flatMap((l) => { const d = celular(l.telefone); return d ? [{ ...l, telefone: d }] : []; });
+      const fora = linhas.length - bons.length;
+      if (!bons.length) { toast.error(`Nenhum celular válido em ${f.name} (${fora} números fora do formato).`); return; }
+      setCsv(bons); setCsvNome(f.name); setCsvFora(fora);
+      toast.success(fora
+        ? `${bons.length} celulares válidos em ${f.name} · ${fora} descartados (não são celular).`
+        : `${bons.length} pessoas lidas de ${f.name}.`, { duration: 8000 });
     } catch (e: any) { toast.error(`Não consegui ler: ${e?.message ?? e}`); }
   }
   const [conectando, setConectando] = useState(false);
@@ -1793,8 +1802,8 @@ export default function Disparar() {
                   <label className={`up${csv.length ? " tem" : ""}`} style={{ display: "block" }}>
                     {csv.length ? (
                       <div style={{ padding: "10px 4px" }}>
-                        <b>{csv.length} pessoas</b>
-                        <span>{csvNome} — clique para trocar</span>
+                        <b>{csv.length} celulares válidos</b>
+                        <span>{csvNome}{csvFora ? ` · ${csvFora} descartados (não são celular)` : ""} — clique para trocar</span>
                       </div>
                     ) : (
                       <>
@@ -1813,7 +1822,8 @@ export default function Disparar() {
                     </button>
                   ) : (
                     <small>Aceita vírgula ou ponto e vírgula, com ou sem cabeçalho.
-                      Repetidos são descartados.</small>
+                      Repetidos e números que não são celular são descartados.
+                      Antes de cada lote, o sistema também confere quem tem WhatsApp.</small>
                   )}
                 </div>
 
