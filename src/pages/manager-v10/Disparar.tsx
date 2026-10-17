@@ -229,6 +229,9 @@ export default function Disparar() {
   // "rt is not a function", tela branca, sem pista nenhuma na interface.
   // Com vários números, qual deles envia. Vazio = o padrão.
   const [numEnvio, setNumEnvio] = useState<string>("");
+  // Lista maior que o teto do número: o que fazer com quem sobra (17/10)
+  const [resto, setResto] = useState<"nao" | "outro" | "amanha">("nao");
+  const [numResto, setNumResto] = useState<string>("");
 
   // Dia, semana e mês no mesmo botão: o gerente compara o disparo de ontem
   // com o ritmo do mês, e é a comparação que diz se melhorou.
@@ -610,6 +613,10 @@ export default function Disparar() {
       toast.error((data.meusNumeros?.length ?? 0) > 1 ? "Escolha por qual número o disparo vai sair." : "Você ainda não tem um número de WhatsApp conectado.");
       return;
     }
+    if (unicos.length > teto && resto === "outro" && !numResto) {
+      toast.error("Escolha o número que vai mandar para quem sobrou.");
+      return;
+    }
 
     setDisparando(true);
     try {
@@ -635,9 +642,31 @@ export default function Disparar() {
         imagem: urlImagem,
         quando: marcado ? marcado.toISOString() : null,
       });
-      toast.success(marcado
+      // Quem passou do teto do número: por outro número da MESMA conta (o template só existe nela)
+      // ou amanhã às 8h pelo mesmo número.
+      const sobra = unicos.slice(teto);
+      let parte2 = "";
+      if (sobra.length && resto !== "nao") {
+        const cfg2 = resto === "outro" ? (data.meusNumeros ?? []).find((n) => n.id === numResto) : cfgEnvio;
+        if (cfg2) {
+          const vai2 = sobra.slice(0, cfg2.tetoHoje);
+          const amanha8 = (() => { const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(8, 0, 0, 0); return t.toISOString(); })();
+          await dispararCampanha({
+            managerId: userId, templateId: tplAtivo.id,
+            nome: `${tplAtivo.nome} · ${new Date().toLocaleDateString("pt-BR")} · parte 2`,
+            alvos: vai2, vars: valores, brokerIds: brokers, manual: destino === "escolher", kind: tipoCampanha,
+            configId: cfg2.id, imagem: urlImagem,
+            quando: resto === "amanha" ? amanha8 : (marcado ? marcado.toISOString() : null),
+          });
+          parte2 = resto === "amanha"
+            ? ` Mais ${vai2.length} marcadas para amanhã às 8h pelo mesmo número.`
+            : ` Mais ${vai2.length} pelo número ${cfg2.displayNumber}.`;
+          if (sobra.length > vai2.length) parte2 += ` ${sobra.length - vai2.length} ficaram de fora (passaram também do teto desse número).`;
+        }
+      }
+      toast.success((marcado
         ? `Marcado para ${marcado.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} — ${vai.length} pessoas. Da para desmarcar ate la.`
-        : `Disparo criado para ${vai.length} pessoas. O primeiro lote ja saiu.`);
+        : `Disparo criado para ${vai.length} pessoas. O primeiro lote ja saiu.`) + parte2, { duration: 9000 });
       setPubs(new Set()); setImgDisparo(null);
       qc.invalidateQueries({ queryKey: ["disparar"] });
     } catch (e: any) {
@@ -1990,6 +2019,39 @@ export default function Disparar() {
                   <div className="conta-l conta-t"><span>Vai custar</span>
                     <b>{brl(Math.min(alvos, cfgEnvio?.tetoHoje ?? alvos) * preco(tplAtivo?.categoria ?? "MARKETING"))}</b></div>
                 </div>
+
+                {/* Lista maior que o teto do número: o Comandra pergunta o que fazer com quem sobra */}
+                {cfgEnvio && alvos > cfgEnvio.tetoHoje ? (() => {
+                  const sobra = alvos - cfgEnvio.tetoHoje;
+                  const mesmaConta = d.meusNumeros.filter((n) => n.id !== cfgEnvio.id && n.wabaId === cfgEnvio.wabaId);
+                  const opc = (k: "nao" | "outro" | "amanha", titulo: string, sub: string, desabilitado = false) => (
+                    <button type="button" className={`dst${resto === k ? " on" : ""}`} disabled={desabilitado}
+                      onClick={() => setResto(k)} style={desabilitado ? { opacity: 0.5, cursor: "not-allowed" } : undefined}>
+                      <input type="radio" readOnly checked={resto === k} />
+                      <span><b>{titulo}</b><span>{sub}</span></span>
+                    </button>
+                  );
+                  return (
+                    <div className="card" style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                      <div style={{ fontWeight: 700 }}>
+                        Este número envia até {cfgEnvio.tetoHoje.toLocaleString("pt-BR")} por dia. Sobram {sobra.toLocaleString("pt-BR")} pessoas. O que fazer com elas?
+                      </div>
+                      {opc("outro", "Mandar pelo outro número", mesmaConta.length
+                        ? "na mesma conta, com o mesmo template"
+                        : "nenhum outro número tem este template aprovado (o template é de cada conta)", !mesmaConta.length)}
+                      {resto === "outro" && mesmaConta.length ? (
+                        <select className="sai-sel" value={numResto} onChange={(e) => setNumResto(e.target.value)} aria-label="Número para quem sobra">
+                          <option value="" disabled>Escolha o número…</option>
+                          {mesmaConta.map((n) => (
+                            <option key={n.id} value={n.id}>{n.displayNumber} — {n.label ?? "sem nome"} · até {n.tetoHoje.toLocaleString("pt-BR")}/dia</option>
+                          ))}
+                        </select>
+                      ) : null}
+                      {opc("amanha", "Mandar amanhã às 8h pelo mesmo número", "sai sozinho, no horário permitido")}
+                      {opc("nao", `Só os primeiros ${cfgEnvio.tetoHoje.toLocaleString("pt-BR")}`, "quem sobra não recebe")}
+                    </div>
+                  );
+                })() : null}
 
                 <div className="quando">
                   <div className="qw-tabs">

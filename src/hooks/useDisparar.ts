@@ -120,7 +120,8 @@ function tetoDoDia(onboardedEm: string | null, tier: string | null) {
   if (d < 4) return 200;
   if (d < 30) return 250;
   const porTier: Record<string, number> = {
-    TIER_250: 250, TIER_1K: 1000, TIER_10K: 10000, TIER_100K: 100000,
+    // TIER_2K: os números da casa estão nele (17/10); sem a linha, caía no padrão de 1.000
+    TIER_250: 250, TIER_1K: 1000, TIER_2K: 2000, TIER_10K: 10000, TIER_100K: 100000, TIER_UNLIMITED: 100000,
     base: 250, "1k": 1000, "10k": 10000,
   };
   return porTier[tier ?? ""] ?? 1000;
