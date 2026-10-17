@@ -208,9 +208,7 @@ export default function Disparar() {
   const alerta = cheiros.length > 0;
   const nomeCheck = nomeExib.trim() ? checarNome(nomeExib) : null;
 
-  const tplAtivo: Template | null =
-    data?.templates.find((t) => t.id === tplSel) ??
-    data?.templates.find((t) => t.status === "APPROVED" || t.status === "approved") ?? null;
+  const tplAtivo: Template | null = data?.templates.find((t) => t.id === tplSel) ?? null;
 
   const preco = (cat: string) =>
     (cat === "UTILITY" ? data?.precos.utility : data?.precos.marketing) ?? 0.3;
@@ -551,6 +549,11 @@ export default function Disparar() {
     if (lista.length > 1) return lista.find((n) => n.id === numEnvio) ?? null;
     return lista[0] ?? data?.config ?? null;
   }, [numEnvio, data?.meusNumeros, data?.config]);
+
+  // Mensagens que este número pode mandar: aprovadas na conta (WABA) dele. Nada de outra conta.
+  const tplsDoNumero = useMemo(() => (data?.templates ?? []).filter((t) =>
+    (t.status ?? "").toUpperCase() === "APPROVED" && !!cfgEnvio?.wabaId && t.waba === cfgEnvio.wabaId),
+  [data?.templates, cfgEnvio?.wabaId]);
 
   const ABRE = "08:00", FECHA = "19:30";
   const marcado = useMemo(() => {
@@ -1814,13 +1817,28 @@ export default function Disparar() {
                   )}
                 </div>
 
+                {/* 1º o número, 2º a mensagem: cada número só mostra os templates aprovados na conta dele (17/10) */}
+                {d.meusNumeros.length > 1 ? (
+                  <div className="f">
+                    <label htmlFor="d-num">Por qual número vai sair</label>
+                    <select id="d-num" value={cfgEnvio?.id ?? ""}
+                      onChange={(e) => { setNumEnvio(e.target.value); setTplSel(""); }}>
+                      <option value="" disabled>Escolha o número…</option>
+                      {d.meusNumeros.map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.displayNumber} — {n.label ?? "sem nome"}{n.quality ? ` · ${n.quality.toLowerCase()}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
                 <div className="f">
                   <label htmlFor="d-tpl">Qual mensagem</label>
-                  <select id="d-tpl" value={tplSel} onChange={(e) => setTplSel(e.target.value)}>
-                    <option value="">— escolha —</option>
+                  <select id="d-tpl" value={tplSel} onChange={(e) => setTplSel(e.target.value)} disabled={!cfgEnvio}>
+                    <option value="">{cfgEnvio ? "— escolha —" : "escolha o número primeiro"}</option>
                     {/* só os templates aprovados NA CONTA do número que vai enviar: template de outra conta é recusado pela Meta */}
-                    {d.templates.filter((t) => (t.status ?? "").toUpperCase() === "APPROVED"
-                      && (!cfgEnvio?.wabaId || !t.waba || t.waba === cfgEnvio.wabaId)).map((t) => (
+                    {tplsDoNumero.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.nome} — {t.categoria === "UTILITY" ? "Utilidade" : "Marketing"} · {brl(preco(t.categoria))}
                       </option>
