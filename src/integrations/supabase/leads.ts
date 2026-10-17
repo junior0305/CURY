@@ -25,6 +25,7 @@ const mapLeadFromDB = (l: any): Lead => ({
   contactAttempts:    l.contact_attempts    ?? 0,
   lastAttemptAt:      l.last_attempt_at     ?? null,
   negotiatingSince:   l.negotiating_since   ?? null,
+  nextActionDate:     l.next_action_date    ?? null,
   followupStartedAt:  l.followup_started_at ?? null,
   originalBrokerId:   l.original_broker_id  ?? null,
   redistributionCount: l.redistribution_count ?? 0,
@@ -406,6 +407,20 @@ export const updateLeadStatus = async (
  * Incrementa contact_attempts e atualiza last_attempt_at.
  * Também atualiza last_broker_whatsapp_at para resetar o timer de redistribuição.
  */
+/** Desfaz a última tentativa (botão "Desfazer", até 10 min). */
+export const undoContactAttempt = async (leadId: string) => {
+  const { data } = await supabase.from("leads").select("contact_attempts").eq("id", leadId).single();
+  const n = Math.max(0, ((data as any)?.contact_attempts ?? 0) - 1);
+  await supabase.from("leads").update({ contact_attempts: n }).eq("id", leadId);
+  return n;
+};
+
+/** "Combinado retorno em": guarda a data em next_action_date (null tira). */
+export const setLeadReturnDate = async (leadId: string, dateIso: string | null) => {
+  const { error } = await supabase.from("leads").update({ next_action_date: dateIso }).eq("id", leadId);
+  if (error) throw error;
+};
+
 export const registerContactAttempt = async (leadId: string) => {
   const now = new Date().toISOString();
   const { data } = await supabase

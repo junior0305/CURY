@@ -102,6 +102,7 @@ export interface Lead {
   contactAttempts: number;             // Tentativas de contato sem resposta
   lastAttemptAt: string | null;        // Última tentativa de contato
   negotiatingSince: string | null;     // Quando entrou em NEGOTIATING (alerta 5 dias)
+  nextActionDate?: string | null;      // "Combinado retorno em" — pausa a contagem de dias sem avanço
   followupStartedAt: string | null;    // Quando entrou em FOLLOW_UP_AUTO
   originalBrokerId: string | null;     // Corretor original antes de redistribuição
   redistributionCount: number;         // Quantas vezes foi redistribuído

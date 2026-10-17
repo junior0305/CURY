@@ -14,7 +14,7 @@ import { MessageCircle, Send, Fish, Moon, ArrowLeft, LogOut } from "lucide-react
 import { toast } from "sonner";
 import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchLeadsForDashboard, updateLeadStatus, setLeadNegotiating } from "@/integrations/supabase/leads";
+import { fetchLeadsForDashboard, updateLeadStatus, setLeadNegotiating, registerContactAttempt, undoContactAttempt, setLeadReturnDate } from "@/integrations/supabase/leads";
 import { fetchLeadNotes, addLeadNote, waLink } from "@/integrations/supabase/atender";
 import { DisparoCorretor } from "@/components/broker/DisparoCorretor";
 import MetaCascata from "@/components/manager-v10/MetaCascata";
@@ -35,6 +35,19 @@ const DISCARD_REASONS: NonNullable<LostReason>[] = [
   "RENDA_FORA_FAIXA", "JA_TEM_IMOVEL", "JA_USOU_PROGRAMA", "RESTRICAO_CPF",
   "NAO_COMPARECEU", "FOI_CONCORRENTE", "LOCALIZACAO",
 ];
+
+// ── RÉGUA / ANDAMENTO (17/10) ──────────────────────────────────────────────
+// Régua só para pescados a partir de hoje; toques no dia da pesca, no seguinte, no 3º e no 7º dia.
+// Um toque por dia (dias distintos com tentativa). Nesta etapa nada sai do corretor sozinho.
+const REGUA_DESDE = "2026-10-17";
+const OFFS_REGUA = [0, 1, 3, 7];
+const PREFIXO_TENTATIVA = "Tentativa de contato";
+const diaSP = (d: string | number | Date) => new Date(d).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+const diasEntre = (a: string, b: string) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+const somaDias = (dia: string, n: number) => new Date(Date.parse(dia + "T12:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+const fmtDia = (dia: string) => { const d = new Date(dia + "T12:00:00Z"); return d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" }).replace(".", ""); };
+const ehTentativa = (txt: string) => txt.startsWith(PREFIXO_TENTATIVA);
+const RESPONDEU_STATUS = new Set(["NEGOTIATING", "VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED", "CONCLUDED"]);
 
 const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
 const initials = (name: string) => name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
@@ -115,8 +128,72 @@ const CorretorPainel = () => {
     if (filter === "prio") r = leads.filter((l) => l.leadTemperature === "quente" || l.status === "NEW" || l.status === "IN_PROGRESS" || l.status === "NEGOTIATING");
     else if (filter === "pescados") r = leads.filter((l) => l.source === "cold_pool");
     else if (filter === "visita") r = leads.filter((l) => l.status === "VISIT_SCHEDULED" || l.status === "VISITA_REALIZADA");
-    return r;
+    // "Cliente esperando" sempre no topo
+    const esp = (l: Lead) => !!l.lastLeadResponseAt && (!l.lastBrokerWhatsappAt || new Date(l.lastLeadResponseAt) > new Date(l.lastBrokerWhatsappAt));
+    return [...r.filter(esp), ...r.filter((l) => !esp(l))];
   }, [leads, filter]);
+
+  // Notas que alimentam a régua (tentativas) e o andamento (última conversa) — uma consulta para a lista toda
+  const idsRegua = useMemo(() => leads
+    .filter((l) => (l.source === "cold_pool" && diaSP(l.createdAt) >= REGUA_DESDE) || l.status === "NEGOTIATING")
+    .slice(0, 300).map((l) => l.id), [leads]);
+  const { data: notasRegua = [] } = useQuery<{ lead_id: string; content: string; created_at: string }[]>({
+    queryKey: ["painelNotasRegua", idsRegua.join(",")], enabled: idsRegua.length > 0, refetchInterval: 60000,
+    queryFn: async () => {
+      const desde = new Date(Date.now() - 45 * 864e5).toISOString();
+      const { data } = await supabase.from("lead_notes").select("lead_id, content, created_at").in("lead_id", idsRegua).gte("created_at", desde);
+      return (data as any[]) || [];
+    },
+  });
+  const porLead = useMemo(() => {
+    const m = new Map<string, { dias: Set<string>; ultConversa: string | null }>();
+    for (const n of notasRegua) {
+      const cur = m.get(n.lead_id) || { dias: new Set<string>(), ultConversa: null };
+      if (ehTentativa(n.content)) cur.dias.add(diaSP(n.created_at));
+      else if (!cur.ultConversa || n.created_at > cur.ultConversa) cur.ultConversa = n.created_at;
+      m.set(n.lead_id, cur);
+    }
+    return m;
+  }, [notasRegua]);
+
+  const esperando = (l: Lead) => !!l.lastLeadResponseAt && (!l.lastBrokerWhatsappAt || new Date(l.lastLeadResponseAt) > new Date(l.lastBrokerWhatsappAt));
+
+  // Régua do pescado (antes de responder). null = fora da régua.
+  const reguaDe = (l: Lead) => {
+    if (l.source !== "cold_pool" || diaSP(l.createdAt) < REGUA_DESDE) return null;
+    if (l.lastLeadResponseAt || RESPONDEU_STATUS.has(l.status) || l.status === "ABANDONED") return null;
+    const hoje = diaSP(Date.now()); const pesca = diaSP(l.createdAt);
+    const dias = [...(porLead.get(l.id)?.dias ?? new Set<string>())].filter((d) => d >= pesca);
+    const feitos = Math.min(4, dias.length);
+    const tocouHoje = dias.includes(hoje);
+    const d = diasEntre(pesca, hoje);
+    if (feitos >= 4) return { feitos, atrasado: false, tipo: "completa" as const, badge: "Régua completa", txt: `${l.contactAttempts || feitos} tentativas · siga tentando ou descarte` };
+    const devido = OFFS_REGUA[feitos];
+    if (tocouHoje || d < devido) {
+      const prox = OFFS_REGUA[feitos];
+      return { feitos, atrasado: false, tipo: "emdia" as const, badge: "Em dia", txt: `Em dia · ${feitos + 1}º toque ${prox <= d ? "amanhã" : "em " + fmtDia(somaDias(pesca, prox))}` };
+    }
+    if (d === devido) return { feitos, atrasado: false, tipo: "hoje" as const, badge: `${feitos + 1}º toque hoje`, txt: `Faça o ${feitos + 1}º toque hoje` };
+    return { feitos, atrasado: true, tipo: "atrasado" as const, badge: "Toque atrasado", txt: `${feitos + 1}º toque atrasado · era ${fmtDia(somaDias(pesca, devido))}` };
+  };
+
+  // Andamento depois que o cliente respondeu (Negociando). null = não se aplica.
+  const andamentoDe = (l: Lead) => {
+    if (l.status !== "NEGOTIATING") return null;
+    const agora = Date.now();
+    const ret = l.nextActionDate ? new Date(l.nextActionDate).getTime() : null;
+    const retDia = l.nextActionDate ? diaSP(l.nextActionDate) : null;
+    const hoje = diaSP(agora);
+    if (retDia && retDia > hoje) return { nivel: "pausa" as const, dias: 0, badge: `Retorno ${retDia.slice(8, 10)}/${retDia.slice(5, 7)}`, txt: `Retorno combinado em ${fmtDia(retDia)} · contagem pausada até lá` };
+    if (retDia && retDia === hoje) return { nivel: "laranja" as const, dias: 0, badge: "Retornar hoje", txt: "Hoje é o dia do retorno combinado" };
+    const marcos = [l.negotiatingSince, l.lastLeadResponseAt, porLead.get(l.id)?.ultConversa ?? null, ret ? new Date(ret).toISOString() : null]
+      .filter(Boolean).map((x) => new Date(x as string).getTime());
+    const base = marcos.length ? Math.max(...marcos) : new Date(l.createdAt).getTime();
+    const dias = Math.floor((agora - base) / 864e5);
+    if (dias >= 7) return { nivel: "vermelho" as const, dias, badge: `Parado há ${dias} dias`, txt: `Parado há ${dias} dias · marque a visita, registre a conversa ou combine um retorno` };
+    if (dias >= 3) return { nivel: "laranja" as const, dias, badge: `Sem avanço há ${dias} dias`, txt: `Sem avanço há ${dias} dias · marque a visita ou registre a conversa` };
+    return { nivel: "ok" as const, dias, badge: "Negociando", txt: dias === 0 ? "Negociando · último avanço hoje" : `Negociando · último avanço há ${dias} dia${dias > 1 ? "s" : ""}` };
+  };
 
   const sel = useMemo(() => leads.find((l) => l.id === selId) || rows[0] || null, [leads, rows, selId]);
   const ci = sel ? STAGES.findIndex(([k]) => k === sel.status) : -1;
@@ -141,10 +218,63 @@ const CorretorPainel = () => {
     try {
       if (status === "NEGOTIATING") await setLeadNegotiating(sel.id);
       else await updateLeadStatus(sel.id, status);
+      const rotulo = STAGES.find(([k]) => k === status)?.[1] ?? status;
+      if (user) await addLeadNote(sel.id, user.id, `Fase · ${rotulo}`).catch(() => {});
       qc.invalidateQueries({ queryKey: ["painelLeads"] });
+      qc.invalidateQueries({ queryKey: ["painelNotes", sel.id] });
+      qc.invalidateQueries({ queryKey: ["painelNotasRegua"] });
       toast.success("Status atualizado");
     } catch { toast.error("Não consegui atualizar o status"); }
   };
+
+  // ── TENTATIVAS ─────────────────────────────────────────────────────────────
+  const registrarTentativa = async (origem: string) => {
+    if (!sel || !user) return;
+    const lead = sel;
+    try {
+      const antesHoje = porLead.get(lead.id)?.dias.has(diaSP(Date.now())) ?? false;
+      const regua = reguaDe(lead);
+      await registerContactAttempt(lead.id);
+      await addLeadNote(lead.id, user.id, `${PREFIXO_TENTATIVA} · ${origem}`);
+      if (lead.status === "NEW") await updateLeadStatus(lead.id, "IN_PROGRESS").catch(() => {});
+      qc.invalidateQueries({ queryKey: ["painelLeads"] });
+      qc.invalidateQueries({ queryKey: ["painelNotes", lead.id] });
+      qc.invalidateQueries({ queryKey: ["painelNotasRegua"] });
+      toast.success(regua && antesHoje
+        ? "Tentativa registrada. A régua conta um toque por dia; esta fica no histórico."
+        : regua ? "Tentativa registrada · a régua avançou." : "Tentativa registrada.",
+        { duration: 8000, action: { label: "Desfazer", onClick: () => desfazerTentativa(lead.id) } });
+    } catch { toast.error("Não consegui registrar a tentativa"); }
+  };
+  const desfazerTentativa = async (leadId: string, noteId?: string) => {
+    try {
+      let alvo = noteId;
+      if (!alvo) {
+        const { data } = await supabase.from("lead_notes").select("id, created_at").eq("lead_id", leadId)
+          .like("content", `${PREFIXO_TENTATIVA}%`).order("created_at", { ascending: false }).limit(1);
+        const n = (data as any[])?.[0];
+        if (!n || Date.now() - new Date(n.created_at).getTime() > 10 * 60_000) { toast.error("Só dá para desfazer nos primeiros 10 minutos."); return; }
+        alvo = n.id;
+      }
+      await supabase.from("lead_notes").delete().eq("id", alvo);
+      await undoContactAttempt(leadId);
+      qc.invalidateQueries({ queryKey: ["painelLeads"] });
+      qc.invalidateQueries({ queryKey: ["painelNotes", leadId] });
+      qc.invalidateQueries({ queryKey: ["painelNotasRegua"] });
+      toast.info("Tentativa desfeita.");
+    } catch { toast.error("Não consegui desfazer"); }
+  };
+  const combinarRetorno = async (dia: string | null) => {
+    if (!sel || !user) return;
+    try {
+      await setLeadReturnDate(sel.id, dia ? new Date(dia + "T12:00:00-03:00").toISOString() : null);
+      if (dia) await addLeadNote(sel.id, user.id, `Combinado retorno em ${dia.slice(8, 10)}/${dia.slice(5, 7)}`).catch(() => {});
+      qc.invalidateQueries({ queryKey: ["painelLeads"] });
+      qc.invalidateQueries({ queryKey: ["painelNotes", sel.id] });
+      toast.success(dia ? "Retorno combinado. A contagem fica pausada até lá." : "Retorno tirado.");
+    } catch { toast.error("Não consegui salvar o retorno"); }
+  };
+  const focarNota = () => { const el = document.getElementById("cp-nota"); el?.scrollIntoView({ behavior: "smooth", block: "center" }); (el as HTMLInputElement | null)?.focus(); };
 
   const discard = async (reason: NonNullable<LostReason>) => {
     if (!sel) return;
@@ -165,14 +295,20 @@ const CorretorPainel = () => {
       if (l.status === "CONCLUDED" || l.status === "ABANDONED") continue;
       const nome = firstName(l.name);
       const respondeu = l.lastLeadResponseAt && (!l.lastBrokerWhatsappAt || new Date(l.lastLeadResponseAt) > new Date(l.lastBrokerWhatsappAt));
+      const rg = reguaDe(l); const an = andamentoDe(l);
       if (respondeu) items.push({ id: l.id, u: 100, icon: "💬", txt: `${nome} respondeu e está esperando você` });
+      else if (rg?.atrasado) items.push({ id: l.id, u: 88, icon: "⏰", txt: `Faça o ${rg.feitos + 1}º toque em ${nome} (atrasado)` });
+      else if (an && an.nivel === "vermelho") items.push({ id: l.id, u: 86, icon: "🛑", txt: `${nome} está parado há ${an.dias} dias` });
+      else if (an && an.badge === "Retornar hoje") items.push({ id: l.id, u: 85, icon: "📞", txt: `Hoje é o retorno combinado com ${nome}` });
+      else if (an && an.nivel === "laranja") items.push({ id: l.id, u: 75, icon: "⏳", txt: `${nome} está sem avanço há ${an.dias} dias` });
+      else if (rg?.tipo === "hoje") items.push({ id: l.id, u: 65, icon: "🎣", txt: `Faça o ${rg.feitos + 1}º toque em ${nome} hoje` });
       else if (l.leadTemperature === "quente" && h(l.lastInteractionAt) >= 2) items.push({ id: l.id, u: 90, icon: "🔥", txt: `${nome} está quente e parado há ${Math.round(h(l.lastInteractionAt))}h` });
       else if (l.status === "VISIT_SCHEDULED") items.push({ id: l.id, u: 80, icon: "📅", txt: `Confirme a visita de ${nome}` });
       else if (l.status === "DOCS_REQUESTED") items.push({ id: l.id, u: 70, icon: "📄", txt: `Cobre os documentos de ${nome}` });
       else if (l.status === "NEW" && (l.contactAttempts || 0) === 0) items.push({ id: l.id, u: 60, icon: "🆕", txt: `${nome} é novo — faça o 1º contato` });
     }
     return items.sort((a, b) => b.u - a.u);
-  }, [leads]);
+  }, [leads, porLead]); // eslint-disable-line
 
   // ── SIMULADOR (sliders) ─────────────────────────────────────────────────────
   const [rRenda, setRRenda] = useState(3600);
@@ -368,7 +504,14 @@ const CorretorPainel = () => {
     .filter(([k]) => !/regi|bairro|zona|morar|cidade|localiza|renda|salari|ganha|trabalh|emprego|ocupa|profiss/i.test(k));
 
   const badgeFor = (l: Lead) => {
+    if (esperando(l)) return { cls: "l-badge wait", txt: "Cliente esperando" };
     if (l.status === "VISIT_SCHEDULED") return { cls: "l-badge", txt: "Visita marcada" };
+    if (l.status === "VISITA_REALIZADA") return { cls: "l-badge", txt: "Compareceu" };
+    if (l.status === "DOCS_REQUESTED") return { cls: "l-badge", txt: "Docs" };
+    const an = andamentoDe(l);
+    if (an) return { cls: `l-badge${an.nivel === "vermelho" ? " danger" : an.nivel === "laranja" ? " urgent" : ""}`, txt: an.badge };
+    const rg = reguaDe(l);
+    if (rg) return { cls: `l-badge${rg.atrasado ? " urgent" : ""}`, txt: rg.badge };
     if (l.leadTemperature === "quente") return { cls: "l-badge urgent", txt: "Quente" };
     if (l.lastLeadResponseAt) return { cls: "l-badge ready", txt: "Respondeu" };
     return { cls: "l-badge urgent", txt: "Falta retorno" };
@@ -472,8 +615,46 @@ const CorretorPainel = () => {
                           <h1 className="lead-title">{sel.name}</h1>
                           <div className="lead-sub">{sel.phone}{sel.product ? <> • <span style={{ color: "var(--accent)", fontWeight: 600 }}>{sel.product}</span></> : null}</div>
                         </div>
-                        <a className="btn-primary" href={waLink(sel.phone)} target="_blank" rel="noreferrer">🟢 Chamar no WhatsApp ↗</a>
+                        <div className="contato-btns">
+                          <a className="btn-primary" href={waLink(sel.phone)} target="_blank" rel="noreferrer" onClick={() => registrarTentativa("WhatsApp")}>🟢 Chamar no WhatsApp ↗</a>
+                          <a className="btn-ghost btn-ligar" href={`tel:${(sel.phone || "").replace(/\D/g, "")}`} onClick={() => registrarTentativa("Ligação")}>📞 Ligar</a>
+                        </div>
                       </div>
+                      <div className="tent-row">
+                        <span className="tent-lbl">Tentativas</span><b className="tent-n">{sel.contactAttempts || 0}</b>
+                        <span className="tent-hint">o clique em WhatsApp ou Ligar já conta</span>
+                      </div>
+                      {(() => {
+                        const rg = reguaDe(sel);
+                        if (!rg) return null;
+                        return (
+                          <div className={`regua-line${rg.atrasado ? " late" : ""}`}>
+                            <span className="regua-lbl">Régua</span>
+                            <span className="regua-dots" aria-label={`${rg.feitos} de 4 toques`}>
+                              {[0, 1, 2, 3].map((i) => <span key={i} className={`rd${i < rg.feitos ? " on" : i === rg.feitos && rg.atrasado ? " late" : ""}`} />)}
+                            </span>
+                            <span className="regua-txt">{rg.txt}</span>
+                          </div>
+                        );
+                      })()}
+                      {(() => {
+                        const an = andamentoDe(sel);
+                        if (!an) return null;
+                        return (
+                          <div className={`regua-line and-${an.nivel}`}>
+                            <span className="regua-lbl">Andamento</span>
+                            <span className="regua-txt">{an.txt}</span>
+                            <span style={{ flex: 1 }} />
+                            {an.nivel === "pausa" ? (
+                              <button className="link-btn" onClick={() => combinarRetorno(null)}>tirar retorno</button>
+                            ) : (
+                              <label className="retorno-lbl">Combinado retorno em
+                                <input type="date" min={somaDias(diaSP(Date.now()), 1)} onChange={(e) => e.target.value && combinarRetorno(e.target.value)} />
+                              </label>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <div className="lead-facts-grid">
                         {facts.map(([k, v]) => (
                           <div className="fact-cell" key={k}><span className="fact-lbl">{k}</span><span className="fact-val">{v}</span></div>
@@ -484,7 +665,7 @@ const CorretorPainel = () => {
                       </div>
                       <div className="pipeline">
                         {STAGES.map(([k, lbl], i) => (
-                          <div key={k} className={`pipe-step${i === ci ? " current" : i < ci ? " done" : ""}`} onClick={() => advance(k)}>{lbl}</div>
+                          <div key={k} className={`pipe-step ro${i === ci ? " current" : i < ci ? " done" : ""}`}>{lbl}</div>
                         ))}
                       </div>
                       <button className="btn-discard" onClick={() => setDiscardOpen(true)}>🗑️ Descartar lead · sem interesse, número errado…</button>
@@ -492,15 +673,35 @@ const CorretorPainel = () => {
 
                     {/* 2. Registro do atendimento (substitui o espelho de conversa) */}
                     <div className="card">
-                      <div className="action-prompt">
-                        <span className="prompt-label">Registro do atendimento</span>
-                        <span className="prompt-hint">O que você conversou com o cliente</span>
-                      </div>
-                      <div className="action-row">
-                        <button className="act-btn" onClick={() => advance("NEGOTIATING")}><span className="act-title">🔥 Respondeu</span><span className="act-sub">Negociando</span></button>
-                        <button className="act-btn" onClick={() => advance("IN_PROGRESS")}><span className="act-title">📨 Já chamei</span><span className="act-sub">Esperando ler</span></button>
-                        <button className="act-btn" onClick={() => advance("VISIT_SCHEDULED")}><span className="act-title">📅 Visita</span><span className="act-sub">Agendada</span></button>
-                        <button className="act-btn" onClick={() => advance("VISITA_REALIZADA")}><span className="act-title">✅ Compareceu</span><span className="act-sub">Veio à visita</span></button>
+                      {(() => {
+                        const tentar = () => registrarTentativa("Não respondeu ainda");
+                        type B = [string, () => void, boolean];
+                        const P: Record<string, { q: string; dica: string; b: B[] }> = {
+                          NEW: { q: "Faça o primeiro contato", dica: "Chame no WhatsApp ou ligue. O clique já conta como tentativa.", b: [["Registrar tentativa", tentar, true], ["Respondeu", () => advance("NEGOTIATING"), false]] },
+                          IN_PROGRESS: { q: "O cliente respondeu?", dica: "Respondeu: o lead sai da régua e é seu. Ainda não: registre a tentativa.", b: [["Respondeu", () => advance("NEGOTIATING"), true], ["Registrar tentativa", tentar, false]] },
+                          NEGOTIATING: { q: "Marcou a visita?", dica: "Combine dia e hora. Se o cliente pediu para esperar, use \"Combinado retorno em\" lá em cima.", b: [["Agendar visita", () => advance("VISIT_SCHEDULED"), true], ["Registrar conversa", focarNota, false], ["Registrar tentativa", tentar, false]] },
+                          VISIT_SCHEDULED: { q: "Ele veio à visita?", dica: "Depois da visita, peça os documentos no mesmo dia.", b: [["Compareceu", () => advance("VISITA_REALIZADA"), true], ["Não veio, remarcar", () => advance("NEGOTIATING"), false]] },
+                          VISITA_REALIZADA: { q: "Pediu os documentos?", dica: "Marque o que já recebeu na aba Pasta, nas ferramentas abaixo.", b: [["Pedir documentos", () => advance("DOCS_REQUESTED"), true]] },
+                          DOCS_REQUESTED: { q: "A pasta foi para a Caixa?", dica: "Quando a venda sair, marque aqui.", b: [["Venda feita", () => advance("CONCLUDED"), true]] },
+                          CONCLUDED: { q: "Venda feita", dica: "Parabéns. O lead fica no seu histórico.", b: [] },
+                        };
+                        const p = P[sel.status] ?? P.IN_PROGRESS;
+                        return (
+                          <div className="proximo">
+                            <span className="proximo-lbl">Próximo passo</span>
+                            <div className="proximo-q">{p.q}</div>
+                            <div className="proximo-dica">{p.dica}</div>
+                            {p.b.length > 0 && (
+                              <div className="proximo-btns">
+                                {p.b.map(([t, fn, prim]) => <button key={t} className={prim ? "pb prim" : "pb"} onClick={fn}>{t}</button>)}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                      <div className="action-prompt" style={{ marginTop: 14 }}>
+                        <span className="prompt-label">Anotações</span>
+                        <span className="prompt-hint">O que você conversou com o cliente (não é obrigatório)</span>
                       </div>
                       <div className="convo-log-area">
                         <div className="quick-tags">
@@ -510,14 +711,18 @@ const CorretorPainel = () => {
                           <span className={`q-tag${hasTag("spc") ? " on" : ""}`} onClick={() => toggleTag("spc")}>{hasTag("spc") ? "✓" : "+"} Restrição SPC</span>
                         </div>
                         <div className="note-input-row">
-                          <input className="note-input" placeholder="Resumo do que conversaram…" value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveNote()} />
+                          <input id="cp-nota" className="note-input" placeholder="Resumo do que conversaram…" value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveNote()} />
                           <button className="btn-save-note" onClick={saveNote}>Salvar</button>
                         </div>
                         <div className="notes-history">
                           {notes.length ? notes.map((n) => (
                             <div className="note-line" key={n.id}>
                               <span className="note-time">{new Date(n.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-                              <span><b>Você:</b> {n.content}</span>
+                              <span className={`note-tipo ${ehTentativa(n.content) ? "t" : n.content.startsWith("Fase · ") ? "f" : "c"}`}>{ehTentativa(n.content) ? "Tentativa" : n.content.startsWith("Fase · ") ? "Fase" : "Conversa"}</span>
+                              <span style={{ flex: 1 }}>{ehTentativa(n.content) ? n.content.replace(`${PREFIXO_TENTATIVA} · `, "") : n.content.startsWith("Fase · ") ? n.content.slice(7) : n.content}</span>
+                              {ehTentativa(n.content) && Date.now() - new Date(n.createdAt).getTime() < 10 * 60_000 && (
+                                <button className="link-btn" onClick={() => desfazerTentativa(sel.id, n.id)}>desfazer</button>
+                              )}
                             </div>
                           )) : <div className="note-line"><span style={{ color: "var(--faint)" }}>Nenhum registro ainda. Anote o que aconteceu para liberar o próximo lead.</span></div>}
                         </div>
@@ -824,6 +1029,43 @@ html.dark .cpv2{--bg:#080e1c;--surface:#111927;--subtle:#18212f;--rail-bg:#060a1
 .cpv2 .pescado-tag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:var(--accent-soft);color:var(--accent);margin-left:6px;white-space:nowrap;vertical-align:middle;}
 .cpv2 .l-badge.urgent{background:var(--warn-soft);color:var(--warn);}
 .cpv2 .l-badge.ready{background:var(--accent-soft);color:var(--accent);}
+.cpv2 .l-badge.wait{background:var(--accent);color:#fff;font-weight:700;}
+.cpv2 .l-badge.danger{background:rgba(185,28,28,.1);color:#b91c1c;}
+html.dark .cpv2 .l-badge.danger{background:rgba(248,113,113,.14);color:#f87171;}
+.cpv2 .contato-btns{display:flex;gap:8px;flex-wrap:wrap;}
+.cpv2 .btn-ligar{display:inline-flex;align-items:center;padding:10px 16px;font-size:13.5px;border-radius:10px;}
+.cpv2 .tent-row{display:flex;align-items:baseline;gap:8px;margin:10px 0 4px;font-size:12.5px;color:var(--muted);flex-wrap:wrap;}
+.cpv2 .tent-lbl{font-weight:700;text-transform:uppercase;letter-spacing:.05em;font-size:11px;}
+.cpv2 .tent-n{font-size:18px;color:var(--text);}
+.cpv2 .tent-hint{color:var(--faint);}
+.cpv2 .regua-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:9px 12px;border-radius:10px;background:var(--subtle);border:1px solid var(--border);margin:8px 0;}
+.cpv2 .regua-line.late,.cpv2 .regua-line.and-laranja{background:var(--warn-soft);border-color:rgba(217,119,6,.35);}
+.cpv2 .regua-line.late .regua-txt,.cpv2 .regua-line.and-laranja .regua-txt{color:var(--warn);}
+.cpv2 .regua-line.and-vermelho{background:rgba(185,28,28,.07);border-color:rgba(185,28,28,.3);}
+.cpv2 .regua-line.and-vermelho .regua-txt{color:#b91c1c;}
+html.dark .cpv2 .regua-line.and-vermelho .regua-txt{color:#f87171;}
+.cpv2 .regua-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.cpv2 .regua-dots{display:flex;gap:5px;}
+.cpv2 .rd{width:11px;height:11px;border-radius:50%;border:2px solid var(--border);box-sizing:border-box;}
+.cpv2 .rd.on{background:var(--text);border-color:var(--text);}
+.cpv2 .rd.late{border-color:var(--warn);}
+.cpv2 .regua-txt{font-size:13px;font-weight:600;color:var(--text);}
+.cpv2 .retorno-lbl{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--text);}
+.cpv2 .retorno-lbl input{min-height:34px;padding:0 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;}
+.cpv2 .link-btn{background:none;border:0;color:var(--accent);font-weight:700;font-size:12.5px;cursor:pointer;padding:4px 6px;}
+.cpv2 .pipe-step.ro{cursor:default;}
+.cpv2 .proximo{border:1px solid var(--accent-border);background:var(--accent-soft);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;}
+.cpv2 .proximo-lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);}
+.cpv2 .proximo-q{font-size:17px;font-weight:800;color:var(--text);}
+.cpv2 .proximo-dica{font-size:13px;color:var(--muted);}
+.cpv2 .proximo-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+.cpv2 .pb{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-weight:700;font-size:13.5px;cursor:pointer;}
+.cpv2 .pb.prim{background:var(--accent);border-color:var(--accent);color:#fff;}
+.cpv2 .pb:hover{border-color:var(--accent);}
+.cpv2 .note-tipo{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:99px;white-space:nowrap;}
+.cpv2 .note-tipo.t{background:var(--subtle);color:var(--muted);}
+.cpv2 .note-tipo.f{background:var(--accent-soft);color:var(--accent);}
+.cpv2 .note-tipo.c{background:var(--warn-soft);color:var(--warn);}
 .cpv2 .stage{overflow-y:auto;padding:28px 38px;display:flex;justify-content:center;height:100%;flex:1;min-width:0;}
 .cpv2 .stage-inner{width:100%;max-width:760px;display:flex;flex-direction:column;gap:18px;padding-bottom:40px;}
 .cpv2 .mobile-back-bar{display:none;align-items:center;justify-content:space-between;margin-bottom:4px;}
