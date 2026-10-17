@@ -141,12 +141,21 @@ export default function Disparar() {
     },
   });
   const teamIds = ehDiretoria ? (arvoreDir ?? undefined) : ehGestorAcima ? gerentes.map((g) => g.id) : undefined;
+  // Grupos do "Corretores que eu escolher": super usa os gerentes dele; diretor/admin agrupa os corretores
+  // carregados pelo líder de cada um (antes vinha do rollup do super, que para o diretor volta vazio).
+  const gruposEscolhaBase = (lista: { gerenteId: string | null; gerenteNome: string | null }[]) => {
+    if (!ehDiretoria) return gerentes.map((g) => ({ id: g.id, nome: g.nome, papel: "gerente" }));
+    const m = new Map<string, string>();
+    for (const c of lista) if (c.gerenteId && !m.has(c.gerenteId)) m.set(c.gerenteId, c.gerenteNome ?? "—");
+    return [...m.entries()].map(([id, nome]) => ({ id, nome, papel: "líder" })).sort((a, b) => a.nome.localeCompare(b.nome));
+  };
   // Tipo da campanha: 'lead' (resposta vira lead do corretor) ou 'outro'
   // (não-lead, ex.: contratação — resposta só notifica + guarda, não vira lead).
   const [tipoCampanha, setTipoCampanha] = useState<"lead" | "outro">("lead");
   const { mode, toggle } = useTheme();
   const qc = useQueryClient();
   const { data, isLoading } = useDisparar(userId, teamIds, role === "ADMIN");
+  const gruposEscolha = useMemo(() => gruposEscolhaBase(data?.corretores ?? []), [data?.corretores, gerentes, ehDiretoria]); // eslint-disable-line
 
   // Vindo da aba Leads ("Disparar reativação"): abre direto no disparo com a fila marcada.
   const [params] = useSearchParams();
@@ -1883,7 +1892,7 @@ export default function Disparar() {
                       // Super/diretor: a estrutura inteira — cada gerente (também
                       // selecionável como quem recebe) com os corretores dele embaixo.
                       <div className="dest-cor">
-                        {gerentes.map((g) => {
+                        {gruposEscolha.map((g) => {
                           const doGer = d.corretores.filter((c) => c.gerenteId === g.id);
                           return (
                             <Fragment key={g.id}>
@@ -1893,7 +1902,7 @@ export default function Disparar() {
                                     const n = new Set(s); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n;
                                   })} />
                                 <span className="av">{ini(g.nome)}</span>
-                                <span><b>{g.nome}</b><i>gerente · recebe a resposta direto</i></span>
+                                <span><b>{g.nome}</b><i>{g.papel} · recebe a resposta direto</i></span>
                               </label>
                               {doGer.map((c) => (
                                 <label className="dc dc-cor" key={c.id}>
