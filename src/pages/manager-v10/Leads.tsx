@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { supabase } from "@/integrations/supabase/client";
 import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -151,6 +152,21 @@ export default function Leads() {
     } finally {
       setSalvando(false);
     }
+  }
+
+  // Régua etapa 2: "segurar" = mais 7 dias com o mesmo corretor (retorno combinado pausa a contagem)
+  async function segurar(ids: string[]) {
+    if (!ids.length) { toast.error("Selecione os leads."); return; }
+    try {
+      const ate = new Date(Date.now() + 7 * 864e5).toISOString();
+      const { error } = await supabase.from("leads").update({ next_action_date: ate }).in("id", ids);
+      if (error) throw error;
+      await supabase.from("lead_notes").insert(ids.map((id) => ({ lead_id: id, broker_id: session?.user?.id ?? null,
+        content: `Gerente segurou mais 7 dias (retorno até ${new Date(ate).toLocaleDateString("pt-BR")})` })));
+      toast.success(`${ids.length} lead${ids.length > 1 ? "s ficam" : " fica"} com o corretor por mais 7 dias.`);
+      setSel((s) => ({ ...s, decidir: new Set() }));
+      qc.invalidateQueries({ queryKey: ["aba-leads"] });
+    } catch (e: any) { toast.error(`Não consegui segurar: ${e?.message ?? e}`); }
   }
 
   async function descartarLote(fila: string) {
@@ -353,7 +369,9 @@ export default function Leads() {
                             style={{ fontSize: "12.5px", padding: "6px 12px" }}
                             disabled={cobrando === f.chave}
                             onClick={() => {
-                              if (f.acoes[0].startsWith("Redistribuir") || f.acoes[0] === "Distribuir") {
+                              if (f.acoes[0] === "Segurar mais 7 dias") {
+                                segurar(f.ids);
+                              } else if (f.acoes[0].startsWith("Redistribuir") || f.acoes[0] === "Distribuir") {
                                 setRed({ ids: f.ids });
                               } else if (f.acoes[0] === "Cobrar os corretores") {
                                 cobrar(f.chave, f.ids);
@@ -405,6 +423,11 @@ export default function Leads() {
                               </div>
 
                               <div className="leads-lote-buttons">
+                                {f.chave === "decidir" && (
+                                  <button className="time-btn-action" disabled={!marcadosFila.size} onClick={() => segurar([...marcadosFila])}>
+                                    Segurar 7 dias ({marcadosFila.size})
+                                  </button>
+                                )}
                                 <button
                                   className="time-btn-action"
                                   disabled={!marcadosFila.size}

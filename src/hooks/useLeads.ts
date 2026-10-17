@@ -167,6 +167,9 @@ export function useLeads(managerId: string | undefined,
         .select("cury_id").eq("escopo", "gerente").in("profile_id", donos);
       const gerenteCuryIds = ((euCury ?? []) as any[]).map((e) => e.cury_id);
 
+      // Régua etapa 2: negociação parada há 15+ dias — o gerente decide (view com a mesma conta do painel do corretor)
+      const paradaRes = await supabase.from("v_negociacao_parada" as any).select("lead_id,dias").in("manager_id", donos).gte("dias", 15);
+      const diasParada = new Map<string, number>(((paradaRes.data ?? []) as any[]).map((r) => [r.lead_id, r.dias]));
       const [timeRes, leadsRes, todosRes, curyRes, campRes, thrRes, poolRes, welcRes] = await Promise.all([
         supabase.from("profiles")
           .select("id,first_name,last_name,last_seen_at").in("manager_id", donos).eq("role", "BROKER"),
@@ -294,7 +297,15 @@ export function useLeads(managerId: string | undefined,
       const semCorretor = ativos.filter((l) => !l.broker_id);
 
       const ord = (a: LeadLinha, b: LeadLinha) => b.dias - a.dias;
+      const decidir = ativos.filter((l) => diasParada.has(l.id));
       const filas: Fila[] = ([
+        { chave: "decidir", tom: "crit",
+          titulo: "Negociação parada há 15 dias ou mais — decida",
+          porque: "O cliente respondeu, mas nada andou. Segure mais 7 dias com o corretor, passe para outro ou descarte.",
+          total: decidir.length,
+          ids: decidir.map((l) => l.id),
+          leads: decidir.map((l) => ({ ...linha(l, null), dias: diasParada.get(l.id) ?? 0 })).sort(ord).slice(0, 8),
+          acoes: ["Segurar mais 7 dias", "Redistribuir", "Descartar"] },
         { chave: "respondeu", tom: "crit",
           titulo: "O cliente perguntou e ninguém voltou",
           porque: "Levantaram a mão e estão esperando. O convencimento já foi feito.",

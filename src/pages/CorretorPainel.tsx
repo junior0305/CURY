@@ -47,6 +47,9 @@ const diasEntre = (a: string, b: string) => Math.round((Date.parse(b + "T12:00:0
 const somaDias = (dia: string, n: number) => new Date(Date.parse(dia + "T12:00:00Z") + n * 864e5).toISOString().slice(0, 10);
 const fmtDia = (dia: string) => { const d = new Date(dia + "T12:00:00Z"); return d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" }).replace(".", ""); };
 const ehTentativa = (txt: string) => txt.startsWith(PREFIXO_TENTATIVA);
+// O promote do Pescar grava last_lead_response_at = criação; só conta resposta depois disso.
+const respostaReal = (l: Lead) => !!l.lastLeadResponseAt &&
+  !(l.source === "cold_pool" && Math.abs(new Date(l.lastLeadResponseAt).getTime() - new Date(l.createdAt).getTime()) < 120_000);
 const RESPONDEU_STATUS = new Set(["NEGOTIATING", "VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED", "CONCLUDED"]);
 
 const brl = (n: number) => "R$ " + Math.round(n).toLocaleString("pt-BR");
@@ -129,7 +132,7 @@ const CorretorPainel = () => {
     else if (filter === "pescados") r = leads.filter((l) => l.source === "cold_pool");
     else if (filter === "visita") r = leads.filter((l) => l.status === "VISIT_SCHEDULED" || l.status === "VISITA_REALIZADA");
     // "Cliente esperando" sempre no topo
-    const esp = (l: Lead) => !!l.lastLeadResponseAt && (!l.lastBrokerWhatsappAt || new Date(l.lastLeadResponseAt) > new Date(l.lastBrokerWhatsappAt));
+    const esp = (l: Lead) => respostaReal(l) && (!l.lastBrokerWhatsappAt || new Date(l.lastLeadResponseAt) > new Date(l.lastBrokerWhatsappAt));
     return [...r.filter(esp), ...r.filter((l) => !esp(l))];
   }, [leads, filter]);
 
@@ -156,25 +159,30 @@ const CorretorPainel = () => {
     return m;
   }, [notasRegua]);
 
-  const esperando = (l: Lead) => !!l.lastLeadResponseAt && (!l.lastBrokerWhatsappAt || new Date(l.lastLeadResponseAt) > new Date(l.lastBrokerWhatsappAt));
+  const esperando = (l: Lead) => respostaReal(l) && (!l.lastBrokerWhatsappAt || new Date(l.lastLeadResponseAt) > new Date(l.lastBrokerWhatsappAt));
 
   // Régua do pescado (antes de responder). null = fora da régua.
   const reguaDe = (l: Lead) => {
     if (l.source !== "cold_pool" || diaSP(l.createdAt) < REGUA_DESDE) return null;
-    if (l.lastLeadResponseAt || RESPONDEU_STATUS.has(l.status) || l.status === "ABANDONED") return null;
+    if (respostaReal(l) || RESPONDEU_STATUS.has(l.status) || l.status === "ABANDONED") return null;
     const hoje = diaSP(Date.now()); const pesca = diaSP(l.createdAt);
     const dias = [...(porLead.get(l.id)?.dias ?? new Set<string>())].filter((d) => d >= pesca);
     const feitos = Math.min(4, dias.length);
     const tocouHoje = dias.includes(hoje);
     const d = diasEntre(pesca, hoje);
-    if (feitos >= 4) return { feitos, atrasado: false, tipo: "completa" as const, badge: "Régua completa", txt: `${l.contactAttempts || feitos} tentativas · siga tentando ou descarte` };
+    if (feitos >= 4) {
+      const ult = dias.sort().slice(-1)[0];
+      const limite = [somaDias(ult, 3), somaDias(pesca, 15)].sort()[0];
+      return { feitos, atrasado: false, tipo: "completa" as const, badge: "Régua completa", txt: `${l.contactAttempts || feitos} tentativas · fica com você se tentar de novo até ${fmtDia(limite)}` };
+    }
     const devido = OFFS_REGUA[feitos];
     if (tocouHoje || d < devido) {
       const prox = OFFS_REGUA[feitos];
       return { feitos, atrasado: false, tipo: "emdia" as const, badge: "Em dia", txt: `Em dia · ${feitos + 1}º toque ${prox <= d ? "amanhã" : "em " + fmtDia(somaDias(pesca, prox))}` };
     }
     if (d === devido) return { feitos, atrasado: false, tipo: "hoje" as const, badge: `${feitos + 1}º toque hoje`, txt: `Faça o ${feitos + 1}º toque hoje` };
-    return { feitos, atrasado: true, tipo: "atrasado" as const, badge: "Toque atrasado", txt: `${feitos + 1}º toque atrasado · era ${fmtDia(somaDias(pesca, devido))}` };
+    // a regra do servidor (00:10) devolve quem passou o dia do toque e o seguinte sem tentativa
+    return { feitos, atrasado: true, tipo: "atrasado" as const, badge: "Atrasado · volta hoje à noite", txt: `${feitos + 1}º toque atrasado · faça hoje ou o lead volta pro pool à meia-noite` };
   };
 
   // Andamento depois que o cliente respondeu (Negociando). null = não se aplica.
@@ -186,11 +194,12 @@ const CorretorPainel = () => {
     const hoje = diaSP(agora);
     if (retDia && retDia > hoje) return { nivel: "pausa" as const, dias: 0, badge: `Retorno ${retDia.slice(8, 10)}/${retDia.slice(5, 7)}`, txt: `Retorno combinado em ${fmtDia(retDia)} · contagem pausada até lá` };
     if (retDia && retDia === hoje) return { nivel: "laranja" as const, dias: 0, badge: "Retornar hoje", txt: "Hoje é o dia do retorno combinado" };
-    const marcos = [l.negotiatingSince, l.lastLeadResponseAt, porLead.get(l.id)?.ultConversa ?? null, ret ? new Date(ret).toISOString() : null]
+    const marcos = [l.negotiatingSince, respostaReal(l) ? l.lastLeadResponseAt : null, porLead.get(l.id)?.ultConversa ?? null, ret ? new Date(ret).toISOString() : null]
       .filter(Boolean).map((x) => new Date(x as string).getTime());
     const base = marcos.length ? Math.max(...marcos) : new Date(l.createdAt).getTime();
     const dias = Math.floor((agora - base) / 864e5);
-    if (dias >= 7) return { nivel: "vermelho" as const, dias, badge: `Parado há ${dias} dias`, txt: `Parado há ${dias} dias · marque a visita, registre a conversa ou combine um retorno` };
+    if (dias >= 15) return { nivel: "vermelho" as const, dias, badge: `Parado há ${dias} dias`, txt: `Parado há ${dias} dias · seu gerente decide se fica com você, vai para outro corretor ou é descartado` };
+    if (dias >= 7) return { nivel: "vermelho" as const, dias, badge: `Parado há ${dias} dias`, txt: `Parado há ${dias} dias · seu gerente é avisado. Marque a visita, registre a conversa ou combine um retorno` };
     if (dias >= 3) return { nivel: "laranja" as const, dias, badge: `Sem avanço há ${dias} dias`, txt: `Sem avanço há ${dias} dias · marque a visita ou registre a conversa` };
     return { nivel: "ok" as const, dias, badge: "Negociando", txt: dias === 0 ? "Negociando · último avanço hoje" : `Negociando · último avanço há ${dias} dia${dias > 1 ? "s" : ""}` };
   };
@@ -294,7 +303,7 @@ const CorretorPainel = () => {
     for (const l of leads) {
       if (l.status === "CONCLUDED" || l.status === "ABANDONED") continue;
       const nome = firstName(l.name);
-      const respondeu = l.lastLeadResponseAt && (!l.lastBrokerWhatsappAt || new Date(l.lastLeadResponseAt) > new Date(l.lastBrokerWhatsappAt));
+      const respondeu = respostaReal(l) && (!l.lastBrokerWhatsappAt || new Date(l.lastLeadResponseAt) > new Date(l.lastBrokerWhatsappAt));
       const rg = reguaDe(l); const an = andamentoDe(l);
       if (respondeu) items.push({ id: l.id, u: 100, icon: "💬", txt: `${nome} respondeu e está esperando você` });
       else if (rg?.atrasado) items.push({ id: l.id, u: 88, icon: "⏰", txt: `Faça o ${rg.feitos + 1}º toque em ${nome} (atrasado)` });
@@ -513,7 +522,7 @@ const CorretorPainel = () => {
     const rg = reguaDe(l);
     if (rg) return { cls: `l-badge${rg.atrasado ? " urgent" : ""}`, txt: rg.badge };
     if (l.leadTemperature === "quente") return { cls: "l-badge urgent", txt: "Quente" };
-    if (l.lastLeadResponseAt) return { cls: "l-badge ready", txt: "Respondeu" };
+    if (respostaReal(l)) return { cls: "l-badge ready", txt: "Respondeu" };
     return { cls: "l-badge urgent", txt: "Falta retorno" };
   };
 
