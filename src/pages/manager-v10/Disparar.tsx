@@ -613,6 +613,12 @@ export default function Disparar() {
       toast.error((data.meusNumeros?.length ?? 0) > 1 ? "Escolha por qual número o disparo vai sair." : "Você ainda não tem um número de WhatsApp conectado.");
       return;
     }
+    // Template de outra conta: a Meta recusa todas ("template não existe"). Caso de 17/10: simulacao_v2
+    // (conta da Liliane) escolhido e depois trocado o número para a Comandra — 60 falhas.
+    if (tplAtivo.waba && cfgEnvio.wabaId && tplAtivo.waba !== cfgEnvio.wabaId) {
+      toast.error(`O template "${tplAtivo.nome}" não existe na conta do número ${cfgEnvio.displayNumber}. Escolha um template desta conta.`, { duration: 9000 });
+      return;
+    }
     if (unicos.length > teto && resto === "outro" && !numResto) {
       toast.error("Escolha o número que vai mandar para quem sobrou.");
       return;
@@ -1989,7 +1995,7 @@ export default function Disparar() {
                   <span>Sai pelo número</span>
                   {d.meusNumeros.length > 1 ? (
                     <select className="sai-sel" value={cfgEnvio?.id ?? ""}
-                      onChange={(e) => setNumEnvio(e.target.value)} aria-label="Número que vai enviar">
+                      onChange={(e) => { setNumEnvio(e.target.value); setTplSel(""); }} aria-label="Número que vai enviar">
                       <option value="" disabled>Escolha o número…</option>
                       {d.meusNumeros.map((n) => (
                         <option key={n.id} value={n.id}>
