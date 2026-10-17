@@ -305,22 +305,41 @@ const CorretorPainel = () => {
     try {
       const { data: skips } = await supabase.from("cold_skip").select("contact_id").eq("broker_id", user.id).gte("skipped_at", new Date(Date.now() - 7 * 864e5).toISOString());
       const skipIds = new Set((skips || []).map((s: any) => s.contact_id));
-      let q = supabase.from("cold_contacts").select("id, name, phone, tag").eq("status", "available").or(`previous_broker_id.is.null,previous_broker_id.neq.${user.id}`).order("created_at", { ascending: true }).limit(60);
+      // Busca uma faixa maior e EMBARALHA para cada corretor: antes todos da mesma região viam os mesmos
+      // 60 contatos na mesma ordem e disputavam o mesmo lead, um por vez (queixa do time da Monalisa, 17/10).
+      let q = supabase.from("cold_contacts").select("id, name, phone, tag").eq("status", "available").or(`previous_broker_id.is.null,previous_broker_id.neq.${user.id}`).order("created_at", { ascending: true }).limit(400);
       if (regiaoAtual) q = q.in("tag", regiaoAtual.tags);
       const { data } = await q;
-      setFila(((data as any[]) || []).filter((c) => !skipIds.has(c.id)));
+      const lista = ((data as any[]) || []).filter((c) => !skipIds.has(c.id));
+      for (let i = lista.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [lista[i], lista[j]] = [lista[j], lista[i]]; }
+      setFila(lista.slice(0, 80));
     } finally { setCarregandoFila(false); }
   };
   useEffect(() => { if (mode === "pescar" && regioes.length) carregarFila(); }, [mode, regiaoSel, regioes.length]); // eslint-disable-line
   const atual = fila[0] || null;
   const proximoCard = () => { if (fila.length <= 1) carregarFila(); else setFila((f) => f.slice(1)); };
+  // Se outro corretor pegar o contato que está na tela (ou um dos próximos), ele some sozinho.
+  useEffect(() => {
+    if (mode !== "pescar" || !fila.length) return;
+    const t = setInterval(async () => {
+      const ids = fila.slice(0, 8).map((c) => c.id);
+      const { data } = await supabase.from("cold_contacts").select("id").in("id", ids).neq("status", "available");
+      const foram = new Set(((data as any[]) || []).map((c) => c.id));
+      if (foram.size) setFila((f) => { const r = f.filter((c) => !foram.has(c.id)); if (!r.length) carregarFila(); return r; });
+    }, 15000);
+    return () => clearInterval(t);
+  }, [mode, fila]); // eslint-disable-line
 
   const pegar = async () => {
     if (!user || !atual || busyCard) return;
     setBusyCard(true);
     try {
       const { error: e1 } = await supabase.rpc("claim_cold_contact", { p_broker_id: user.id, p_contact_id: atual.id });
-      if (e1) { toast.error((e1 as any).details || e1.message || "Não consegui pegar."); return; }
+      if (e1) {
+        // outro corretor pegou antes: sem erro, só passa para o próximo
+        if (/already_claimed/i.test(String(e1.message || ""))) { toast.info("Outro corretor pegou esse agora. Aqui vai o próximo."); proximoCard(); return; }
+        toast.error((e1 as any).details || e1.message || "Não consegui pegar."); return;
+      }
       await supabase.rpc("promote_cold_to_lead", { p_contact_id: atual.id });
       toast.success(`✅ ${firstName(atual.name || "Lead")} é seu! Já está nas suas fichas.`);
       qc.invalidateQueries({ queryKey: ["pescaHoje"] });
