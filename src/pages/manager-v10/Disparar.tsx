@@ -191,6 +191,10 @@ export default function Disparar() {
   // cliente. Variável só tem conteúdo depois que alguém escreve.
   const [valores, setValores] = useState<Record<string, string>>({});
   const [destino, setDestino] = useState<Destino>("fila");
+  // Diretor/admin: a "fila" é a empresa inteira (~90 corretores). Começa em "escolher" — em 17/10
+  // a tela recarregou, voltou para a fila e o disparo foi para a empresa toda em vez dos 8 marcados.
+  const jaAjustouDestino = useRef(false);
+  if (ehDiretoria && !jaAjustouDestino.current) { jaAjustouDestino.current = true; if (destino === "fila") setDestino("escolher"); }
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
 
   /* ── etapa 4 · respostas ── */
@@ -1941,8 +1945,8 @@ export default function Disparar() {
                   <div className="dest">
                     <button className={`dst${destino === "fila" ? " on" : ""}`} onClick={() => setDestino("fila")}>
                       <input type="radio" readOnly checked={destino === "fila"} />
-                      <span><b>Fila da equipe, na ordem (rodízio)</b>
-                        <span>quem estiver na vez recebe, igual a lead de anúncio</span></span>
+                      <span><b>{ehDiretoria ? `Toda a empresa, em rodízio (${d.corretores.length} corretores)` : "Fila da equipe, na ordem (rodízio)"}</b>
+                        <span>{ehDiretoria ? "cada resposta vai para o próximo corretor de qualquer equipe" : "quem estiver na vez recebe, igual a lead de anúncio"}</span></span>
                     </button>
                     <button className={`dst${destino === "escolher" ? " on" : ""}`} onClick={() => setDestino("escolher")}>
                       <input type="radio" readOnly checked={destino === "escolher"} />
@@ -2045,6 +2049,13 @@ export default function Disparar() {
 
                 <div className="conta">
                   <div className="conta-l"><span>Pessoas selecionadas</span><b>{alvos}</b></div>
+                  {/* Quem recebe as respostas — à vista antes de disparar */}
+                  <div className="conta-l"><span>Quem recebe as respostas</span>
+                    <b title={destino === "escolher" ? d.corretores.filter((c) => marcados.has(c.id)).map((c) => c.nome).join(", ") : ""}>
+                      {destino === "escolher"
+                        ? (marcados.size ? `${marcados.size} escolhido${marcados.size > 1 ? "s" : ""}: ${[...gruposEscolha.filter((g) => marcados.has(g.id)).map((g) => g.nome), ...d.corretores.filter((c) => marcados.has(c.id)).map((c) => c.nome)].slice(0, 4).join(", ")}${marcados.size > 4 ? "…" : ""}` : "ninguém marcado")
+                        : (ehDiretoria ? `toda a empresa (${d.corretores.length})` : `fila da equipe (${d.corretores.length})`)}
+                    </b></div>
                   <div className="conta-l"><span>Preço por mensagem</span>
                     <b>{brlUn(preco(tplAtivo?.categoria ?? "MARKETING"))}</b></div>
                   {cfgEnvio && alvos > cfgEnvio.tetoHoje ? (
