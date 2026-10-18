@@ -29,6 +29,8 @@ export interface ConfigWA {
   novo: boolean;
   /** teto de hoje, considerando o aquecimento */
   tetoHoje: number;
+  /** conta (WABA) bloqueada pela Meta: desde quando. null = enviando normal */
+  bloqueadaEm: string | null;
 }
 
 export interface Template {
@@ -225,6 +227,7 @@ export function useDisparar(managerId: string | undefined, teamManagerIds?: stri
         novo: (c.quality ?? 'UNKNOWN') === 'UNKNOWN'
           && (c.onboarded_at ? horas(c.onboarded_at) / 24 < 30 : false),
         tetoHoje: tetoDoDia(c.onboarded_at, c.tier),
+        bloqueadaEm: c.bloqueada_em ?? null,
       });
       // A minha: a que eu conectei E que está ativa. Sem o `is_active` a tela
       // dizia "conectado e liberado para enviar" mostrando uma configuração

@@ -629,6 +629,10 @@ export default function Disparar() {
       toast.error((data.meusNumeros?.length ?? 0) > 1 ? "Escolha por qual número o disparo vai sair." : "Você ainda não tem um número de WhatsApp conectado.");
       return;
     }
+    if (cfgEnvio.bloqueadaEm) {
+      toast.error(`O número ${cfgEnvio.displayNumber} está com a conta bloqueada pela Meta desde ${new Date(cfgEnvio.bloqueadaEm).toLocaleDateString("pt-BR")}. Escolha outro número.`, { duration: 9000 });
+      return;
+    }
     // Template de outra conta: a Meta recusa todas ("template não existe"). Caso de 17/10: simulacao_v2
     // (conta da Liliane) escolhido e depois trocado o número para a Comandra — 60 falhas.
     if (tplAtivo.waba && cfgEnvio.wabaId && tplAtivo.waba !== cfgEnvio.wabaId) {
@@ -1831,6 +1835,16 @@ export default function Disparar() {
                   )}
                 </div>
 
+                {/* Contas bloqueadas pela Meta (18/10): à vista, para ninguém disparar achando que sai */}
+                {d.meusNumeros.some((n) => n.bloqueadaEm) && (
+                  <div className="f" style={{ border: "1px solid rgba(168,50,42,.35)", background: "rgba(168,50,42,.07)", borderRadius: 10, padding: "10px 12px" }}>
+                    <b style={{ color: "#A8322A" }}>🔒 Bloqueado pela Meta — não envia nada:</b>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>
+                      {d.meusNumeros.filter((n) => n.bloqueadaEm).map((n) => `${n.label ?? n.displayNumber} (${n.displayNumber}) desde ${new Date(n.bloqueadaEm!).toLocaleDateString("pt-BR")}`).join(" · ")}
+                    </div>
+                    <small style={{ color: "var(--ink-2, #3C4B5F)" }}>A Meta recusa toda mensagem desses números, mesmo para quem tem WhatsApp. Para desbloquear: Gerenciador do WhatsApp → a conta → Qualidade da conta → Solicitar análise. Libera sozinho aqui assim que uma mensagem for entregue.</small>
+                  </div>
+                )}
                 {/* 1º o número, 2º a mensagem: cada número só mostra os templates aprovados na conta dele (17/10) */}
                 {d.meusNumeros.length > 1 ? (
                   <div className="f">
@@ -1839,8 +1853,8 @@ export default function Disparar() {
                       onChange={(e) => { setNumEnvio(e.target.value); setTplSel(""); }}>
                       <option value="" disabled>Escolha o número…</option>
                       {d.meusNumeros.map((n) => (
-                        <option key={n.id} value={n.id}>
-                          {n.displayNumber} — {n.label ?? "sem nome"}{n.quality ? ` · ${n.quality.toLowerCase()}` : ""}
+                        <option key={n.id} value={n.id} disabled={!!n.bloqueadaEm}>
+                          {n.bloqueadaEm ? "🔒 " : ""}{n.displayNumber} — {n.label ?? "sem nome"}{n.bloqueadaEm ? ` · bloqueado pela Meta desde ${new Date(n.bloqueadaEm).toLocaleDateString("pt-BR")}` : n.quality ? ` · ${n.quality.toLowerCase()}` : ""}
                         </option>
                       ))}
                     </select>
@@ -2030,9 +2044,9 @@ export default function Disparar() {
                       onChange={(e) => { setNumEnvio(e.target.value); setTplSel(""); }} aria-label="Número que vai enviar">
                       <option value="" disabled>Escolha o número…</option>
                       {d.meusNumeros.map((n) => (
-                        <option key={n.id} value={n.id}>
-                          {n.displayNumber} — {n.label ?? "sem nome"}
-                          {n.quality ? ` · ${n.quality.toLowerCase()}` : ""}
+                        <option key={n.id} value={n.id} disabled={!!n.bloqueadaEm}>
+                          {n.bloqueadaEm ? "🔒 " : ""}{n.displayNumber} — {n.label ?? "sem nome"}
+                          {n.bloqueadaEm ? ` · bloqueado pela Meta desde ${new Date(n.bloqueadaEm).toLocaleDateString("pt-BR")}` : n.quality ? ` · ${n.quality.toLowerCase()}` : ""}
                         </option>
                       ))}
                     </select>
