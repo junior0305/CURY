@@ -120,7 +120,7 @@ const EXPLICIT_KEY = "crm-theme-explicit";
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [mode, setMode] = useState<ThemeMode>(() => {
-    return (localStorage.getItem("crm-theme") as ThemeMode) ?? "dark";
+    return (localStorage.getItem("crm-theme") as ThemeMode) ?? "light"; // claro é o padrão (planoego abria tudo preto, 18/10)
   });
 
   // Apply to <html>
