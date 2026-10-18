@@ -224,7 +224,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
           <button
             type="button"
             className="btn-queima-primario"
-            style={{ background: "var(--cv-brand)", boxShadow: "none" }}
+            style={{ background: "var(--cv-brand)", color: "#fff", boxShadow: "none" }}
             onClick={() => setModalGerenteAberto(true)}
           >
             <span>👔</span> + Cadastrar Gerente
