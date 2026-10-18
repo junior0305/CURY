@@ -103,13 +103,15 @@ const ProtectedManagerRoute = ({ children }: { children: React.ReactNode }) => {
 
 // Painel do superintendente (e admin): a visao de cima, com drill nos gerentes.
 const ProtectedSuperRoute = ({ children }: { children: React.ReactNode }) => {
-  const { session, role, loading } = useAuth();
+  const { session, role, loading, mustChangePassword } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" />;
   if (role === "SECRETARY") return <Navigate to="/secretaria" />;
-  // empresa em que admin é só o ADMIN: diretor e super voltam para a tela deles
+  // empresa em que admin é só o ADMIN: diretor volta para a tela dele.
+  // (Havia também "super → /super" aqui: dentro do próprio /super virava redirecionamento
+  //  em loop e a tela ficava branca para o superintendente da planoego — 18/10.)
   if (ADMIN_SO_ADMIN && role === "DIRECTOR") return <Navigate to="/diretor" />;
-  if (ADMIN_SO_ADMIN && role === "SUPERINTENDENT") return <Navigate to="/super" />;
+  if (mustChangePassword) return <Navigate to="/force-password-change" replace />;
   if (role !== "SUPERINTENDENT" && role !== "ADMIN" && role !== "DIRECTOR") {
     if (role === "MANAGER") return <Navigate to="/manager" />;
     return <Navigate to="/dashboard" />;
@@ -119,9 +121,10 @@ const ProtectedSuperRoute = ({ children }: { children: React.ReactNode }) => {
 
 // Tela do diretor: só diretor e admin (o admin enxerga pelo perfil DIRECTOR).
 const ProtectedDiretorRoute = ({ children }: { children: React.ReactNode }) => {
-  const { session, role, loading } = useAuth();
+  const { session, role, loading, mustChangePassword } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!session) return <Navigate to="/login" />;
+  if (mustChangePassword) return <Navigate to="/force-password-change" replace />;
   if (role !== "DIRECTOR" && role !== "ADMIN") return <Navigate to="/super" />;
   return <>{children}</>;
 };
