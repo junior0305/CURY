@@ -1123,3 +1123,12 @@ html[data-theme="dark"] .cockpit-v3 {
   padding-top: 14px;
   margin-top: -14px;
 }
+
+/* Chave da roleta na Tabela da Tropa (19/10): existia sem estilo e ficava invisível */
+.mgr10 button.time-roleta-toggle{position:relative;display:inline-flex;align-items:center;width:46px;height:26px;padding:0;border-radius:99px;border:0;cursor:pointer;transition:background .15s;vertical-align:middle}
+.mgr10 button.time-roleta-toggle.ativo{background:#0E7C7B}
+.mgr10 button.time-roleta-toggle.inativo{background:#C9D2DE}
+.mgr10 button.time-roleta-toggle:disabled{opacity:.55;cursor:wait}
+.mgr10 .time-roleta-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(15,27,45,.3);transition:transform .15s}
+.mgr10 button.time-roleta-toggle.ativo .time-roleta-knob{transform:translateX(20px)}
+.mgr10 .time-roleta-rot{display:block;margin-top:3px;font-size:11px;font-weight:600;color:var(--cv-text-muted,#5B6B80)}

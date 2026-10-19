@@ -670,9 +670,12 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                             disabled={ocupadoRoleta === p.id}
                             title={ativoRoleta ? "Recebendo leads da roleta. Clique para pausar." : "Pausado da roleta. Clique para ativar."}
                             onClick={() => alternarRoleta(p.id, ativoRoleta, nomeCompleto)}
+                            aria-pressed={ativoRoleta}
+                            aria-label={ativoRoleta ? `Tirar ${nomeCompleto} da roleta` : `Colocar ${nomeCompleto} na roleta`}
                           >
                             <span className="time-roleta-knob" />
                           </button>
+                          <span className="time-roleta-rot">{ativoRoleta ? "recebe" : "fora"}</span>
                         </td>
 
                         {/* Leads na Mão */}
