@@ -204,16 +204,16 @@ const CSS = `
 .ff-card-txt{display:flex;flex-direction:column;gap:3px;min-width:0}
 .ff-card-txt b{font-size:14.5px}
 .ff-card-txt span{font-size:13px;color:var(--cv-text-muted,#5B6B80)}
-.ff-btn{min-height:42px;padding:0 16px;border-radius:10px;border:0;background:#0E7C7B;color:#fff;font-weight:700;font-size:13.5px;cursor:pointer}
+.ff-btn{min-height:42px;padding:0 16px !important;border-radius:10px !important;border:0 !important;background:#0E7C7B !important;color:#fff !important;font-weight:700;font-size:13.5px;cursor:pointer}
 .ff-btn:disabled{opacity:.6}
-.ff-btn.ghost{background:transparent;border:1px solid var(--cv-border,#CFD7E3);color:#A8322A}
+.ff-btn.ghost{background:transparent !important;border:1px solid var(--cv-border,#CFD7E3) !important;color:#A8322A !important}
 .ff-fundo{position:fixed;inset:0;background:rgba(15,27,45,.35);z-index:60;display:flex;justify-content:flex-end}
 .ff-gaveta{width:min(640px,100%);height:100%;overflow-y:auto;box-sizing:border-box;padding:20px 22px;display:flex;flex-direction:column;gap:10px;
   background:var(--cv-surface,#fff);color:var(--cv-text,#0F1B2D);box-shadow:-8px 0 30px rgba(0,0,0,.18)}
 .ff-topo{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:4px}
 .ff-topo h2{margin:0;font-size:19px;font-weight:800}
 .ff-topo p{margin:4px 0 0;font-size:13px;color:var(--cv-text-muted,#3C4B5F)}
-.ff-x{min-width:42px;min-height:42px;border-radius:10px;border:1px solid var(--cv-border,#CFD7E3);background:transparent;color:inherit;font-size:18px;cursor:pointer}
+.ff-x{min-width:42px;min-height:42px;border-radius:10px !important;border:1px solid var(--cv-border,#CFD7E3) !important;background:transparent !important;color:inherit;font-size:18px;cursor:pointer}
 .ff-form{border:1px solid var(--cv-border,#E1E6EE);border-radius:10px;overflow:hidden}
 .ff-form.on{border:2px solid #0E7C7B}
 .ff-linha{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;min-height:56px;padding:10px 12px;background:transparent;border:0;color:inherit;cursor:pointer;text-align:left}
@@ -227,8 +227,8 @@ const CSS = `
 .ff-grupo{display:flex;flex-direction:column;gap:5px}
 .ff-gnome{font-size:12.5px;font-weight:700}
 .ff-pills{display:flex;gap:7px;flex-wrap:wrap}
-.ff-pill{min-height:38px;padding:0 13px;border-radius:99px;border:1px solid var(--cv-border,#CFD7E3);background:transparent;color:inherit;font-size:13px;font-weight:600;cursor:pointer}
-.ff-pill.on{background:#0E7C7B;border-color:#0E7C7B;color:#fff}
+.ff-pill{min-height:38px;padding:0 13px !important;border-radius:99px !important;border:1px solid var(--cv-border,#CFD7E3) !important;background:transparent !important;color:inherit !important;font-size:13px;font-weight:600;cursor:pointer}
+.ff-pill.on{background:#0E7C7B !important;border-color:#0E7C7B !important;color:#fff !important}
 .ff-acoes{display:flex;gap:8px;flex-wrap:wrap}
 .ff-mut{font-size:12.5px;color:var(--cv-text-muted,#5B6B80)}
 .ff-mais{align-self:flex-start;background:none;border:0;color:#0E7C7B;font-weight:700;font-size:13px;cursor:pointer;padding:6px 0}
