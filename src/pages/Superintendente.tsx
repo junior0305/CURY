@@ -41,6 +41,7 @@ import PainelGeralSuper from "@/components/superintendente/PainelGeralSuper";
 import EstrategiaSuper from "@/components/super2/EstrategiaSuper";
 import PastasDoSuper from "@/components/super2/Pastas";
 import LeadsSuper from "@/components/super2/LeadsSuper";
+import FilasFormulario from "@/components/leads/FilasFormulario";
 import TelaSuper from "@/components/super2/Tela";
 import Tropa from "@/components/super2/Tropa";
 import PainelGeral from "@/components/super2/PainelGeral";
@@ -143,7 +144,10 @@ export default function Superintendente() {
         ) : aba === "pastas" && superId ? (
           <PastasDoSuper superId={superId} />
         ) : aba === "leads" && superId ? (
-          <LeadsSuper key="leads" superId={superId} inicial="leads" />
+          <>
+            <FilasFormulario />
+            <LeadsSuper key="leads" superId={superId} inicial="leads" />
+          </>
         ) : aba === "midia" && superId ? (
           <LeadsSuper key="midia" superId={superId} inicial="midia" />
         ) : aba === "config" ? (

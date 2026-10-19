@@ -21,6 +21,7 @@ import {
   type Cobranca,
 } from "@/hooks/useLeads";
 import OrigemDrawer from "@/components/manager-v10/OrigemDrawer";
+import FilasFormulario from "@/components/leads/FilasFormulario";
 import AlertaDisparoQueima from "@/components/manager-v10/AlertaDisparoQueima";
 import { usePeriodo } from "@/hooks/usePeriodo";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
@@ -339,6 +340,9 @@ export default function Leads() {
               {cobrancas.length > 0 && <span className="leads-tab-pill">{cobrancas.length}</span>}
             </button>
           </div>
+
+          {/* Fila de leads por formulário (19/10): o líder escolhe quem recebe cada formulário */}
+          <FilasFormulario />
 
           {/* ══════════════════════════════════════════════════════════════════════
               ABA 1: FILAS DE AÇÃO IMEDIATA (PROBLEMAS)
