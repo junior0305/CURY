@@ -17,7 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 
 type Form = { form_id: string; page_id: string | null; nome: string | null; nome_fonte: string | null; anuncios: string | null;
-  owner_id: string | null; status: string | null; leads_7d: number };
+  owner_id: string | null; status: string | null; leads_7d: number; anuncio_ativo: boolean };
 type Pessoa = { id: string; first_name: string | null; last_name: string | null; role: string; manager_id: string | null; lead_assignment_enabled: boolean | null };
 type Fila = { id: string; match_value: string; broker_ids: string[]; criado_por: string | null; last_assigned_index: number | null };
 
@@ -48,7 +48,7 @@ export default function FilasFormulario() {
       const arvore = tudo ? null : (((await supabase.rpc("ids_da_arvore" as any, { p: eu })).data ?? []) as any[]).map((r: any) => (typeof r === "string" ? r : r.ids_da_arvore));
       let qp = supabase.from("profiles").select("id,first_name,last_name,role,manager_id,lead_assignment_enabled").eq("is_active", true);
       if (arvore) qp = qp.in("id", arvore);
-      let qf = supabase.from("formularios_catalogo" as any).select("form_id,page_id,nome,nome_fonte,anuncios,owner_id,status,leads_7d");
+      let qf = supabase.from("formularios_catalogo" as any).select("form_id,page_id,nome,nome_fonte,anuncios,owner_id,status,leads_7d,anuncio_ativo");
       if (arvore) qf = qf.in("owner_id", arvore);
       const [pRes, fRes, qRes] = await Promise.all([
         qp,
@@ -62,7 +62,8 @@ export default function FilasFormulario() {
   const pessoas = data?.pessoas ?? [];
   const porId = useMemo(() => new Map(pessoas.map((p) => [p.id, p])), [pessoas]);
   const filaDe = useMemo(() => new Map((data?.filas ?? []).map((f) => [f.match_value, f])), [data?.filas]);
-  const ativos = (data?.forms ?? []).filter((f) => f.status === "ACTIVE" || f.leads_7d > 0 || filaDe.has(f.form_id));
+  // Em uso = anúncio rodando, lead nos últimos 7 dias ou fila criada. O resto fica escondido.
+  const ativos = (data?.forms ?? []).filter((f) => f.anuncio_ativo || f.leads_7d > 0 || filaDe.has(f.form_id));
   const pausados = (data?.forms ?? []).filter((f) => !ativos.includes(f));
   const lista = verPausados ? [...ativos, ...pausados] : ativos;
   const comFila = ativos.filter((f) => filaDe.has(f.form_id)).length;
@@ -119,8 +120,8 @@ export default function FilasFormulario() {
           <b>Fila de leads por formulário</b>
           <span>
             {ativos.length
-              ? `${comFila} formulário${comFila === 1 ? "" : "s"} com fila · ${ativos.length - comFila} sem fila (seguem o plantão)`
-              : "Nenhum formulário ativo nas suas contas de anúncio."}
+              ? `${ativos.length} formulário${ativos.length === 1 ? "" : "s"} em uso · ${comFila} com fila · ${ativos.length - comFila} seguem o plantão`
+              : "Nenhum formulário em uso nas suas contas de anúncio."}
           </span>
         </div>
         <button type="button" className="ff-btn" onClick={() => setAberto(true)}>Gerenciar filas</button>
@@ -140,7 +141,7 @@ export default function FilasFormulario() {
             {lista.map((f) => {
               const fila = filaDe.get(f.form_id);
               const on = sel === f.form_id;
-              const meta = [f.status === "ACTIVE" ? "Ativo" : "Pausado", f.leads_7d ? `${f.leads_7d} leads em 7 dias` : "ainda sem lead no Comandra",
+              const meta = [f.anuncio_ativo ? "Anúncio rodando" : f.leads_7d ? "Recebendo lead" : "Sem anúncio ativo", f.leads_7d ? `${f.leads_7d} leads em 7 dias` : "ainda sem lead no Comandra",
                 f.nome_fonte === "anuncio" ? "nome pelo anúncio" : null].filter(Boolean).join(" · ");
               return (
                 <div key={f.form_id} className={`ff-form${on ? " on" : ""}`}>
@@ -184,7 +185,7 @@ export default function FilasFormulario() {
 
             {pausados.length > 0 && (
               <button type="button" className="ff-mais" onClick={() => setVerPausados((v) => !v)}>
-                {verPausados ? "Esconder formulários pausados" : `Ver também ${pausados.length} formulário${pausados.length > 1 ? "s" : ""} de anúncios pausados`}
+                {verPausados ? "Esconder os que não estão em uso" : `Ver também ${pausados.length} formulário${pausados.length > 1 ? "s" : ""} sem uso (sem anúncio rodando nem lead em 7 dias)`}
               </button>
             )}
             <p className="ff-mut">
@@ -214,7 +215,8 @@ const CSS = `
 .ff-topo h2{margin:0;font-size:19px;font-weight:800}
 .ff-topo p{margin:4px 0 0;font-size:13px;color:var(--cv-text-muted,#3C4B5F)}
 .ff-x{min-width:42px;min-height:42px;border-radius:10px !important;border:1px solid var(--cv-border,#CFD7E3) !important;background:transparent !important;color:inherit;font-size:18px;cursor:pointer}
-.ff-form{border:1px solid var(--cv-border,#E1E6EE);border-radius:10px;overflow:hidden}
+.ff-gaveta > *{flex-shrink:0}
+.ff-form{border:1px solid var(--cv-border,#E1E6EE);border-radius:10px;overflow:hidden;flex-shrink:0}
 .ff-form.on{border:2px solid #0E7C7B}
 .ff-linha{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;min-height:56px;padding:10px 12px;background:transparent;border:0;color:inherit;cursor:pointer;text-align:left}
 .ff-nome{display:flex;flex-direction:column;gap:3px;min-width:0}
