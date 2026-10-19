@@ -74,7 +74,8 @@ export default function Leads() {
   const [jaCobrou, setJaCobrou] = useState<{ chave: string; ids: string[]; ja: JaCobrado[] } | null>(null);
 
   // Filas abertas e seleções em lote
-  const [abertas, setAbertas] = useState<Set<string>>(new Set(["respondeu", "nunca"]));
+  // Filas começam fechadas: o gerente abre a que quiser (19/10)
+  const [abertas, setAbertas] = useState<Set<string>>(new Set());
   const [sel, setSel] = useState<Record<string, Set<string>>>({});
   const [red, setRed] = useState<{ ids: string[] } | null>(null);
   const [modo, setModo] = useState<ModoRedistribuicao>("online");

@@ -38,6 +38,8 @@ export default function FilasFormulario() {
   const [marc, setMarc] = useState<Set<string>>(new Set());
   const [verPausados, setVerPausados] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [gruposAbertos, setGruposAbertos] = useState<Set<string>>(new Set());
   const tudo = role === "ADMIN" || role === "DIRECTOR";
 
   const { data } = useQuery({
@@ -55,7 +57,17 @@ export default function FilasFormulario() {
         qf.order("leads_7d", { ascending: false }),
         supabase.from("distribution_queues").select("id,match_value,broker_ids,criado_por,last_assigned_index").eq("match_field", "form_id").eq("is_active", true),
       ]);
-      return { pessoas: (pRes.data ?? []) as Pessoa[], forms: ((fRes.data ?? []) as unknown) as Form[], filas: ((qRes.data ?? []) as unknown) as Fila[] };
+      // "Mais frequentes": quem mais recebeu lead nos últimos 30 dias (atalho no topo da escolha)
+      const corretoresIds = ((pRes.data ?? []) as Pessoa[]).filter((p) => p.role === "BROKER").map((p) => p.id);
+      const freq = new Map<string, number>();
+      if (corretoresIds.length) {
+        const desde = new Date(Date.now() - 30 * 864e5).toISOString();
+        for (let i = 0; i < corretoresIds.length; i += 150) {
+          const { data: ls } = await supabase.from("leads").select("broker_id").in("broker_id", corretoresIds.slice(i, i + 150)).gte("created_at", desde).limit(5000);
+          for (const l of (ls ?? []) as any[]) freq.set(l.broker_id, (freq.get(l.broker_id) ?? 0) + 1);
+        }
+      }
+      return { pessoas: (pRes.data ?? []) as Pessoa[], forms: ((fRes.data ?? []) as unknown) as Form[], filas: ((qRes.data ?? []) as unknown) as Fila[], freq };
     },
   });
 
@@ -83,7 +95,23 @@ export default function FilasFormulario() {
     if (sel === f.form_id) { setSel(null); return; }
     setSel(f.form_id);
     setMarc(new Set(filaDe.get(f.form_id)?.broker_ids ?? []));
+    setBusca("");
+    // com poucas equipes abre tudo; com muitas, começa fechado (abre a equipe que já tem gente marcada)
+    const marcados = new Set(filaDe.get(f.form_id)?.broker_ids ?? []);
+    setGruposAbertos(new Set(grupos.length <= 2 ? grupos.map((g) => g.lider) : grupos.filter((g) => g.cs.some((c) => marcados.has(c.id))).map((g) => g.lider)));
   };
+  const freq = data?.freq ?? new Map<string, number>();
+  const frequentes = useMemo(() => pessoas.filter((p) => p.role === "BROKER" && (freq.get(p.id) ?? 0) > 0)
+    .sort((a, b) => (freq.get(b.id) ?? 0) - (freq.get(a.id) ?? 0)).slice(0, 8), [pessoas, freq]);
+  const norm = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const achados = busca.trim() ? pessoas.filter((p) => p.role === "BROKER" && norm(nomeDe(p)).includes(norm(busca.trim()))).slice(0, 20) : [];
+  const abreGrupo = (k: string) => setGruposAbertos((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const marcarGrupo = (cs: Pessoa[]) => setMarc((s) => { const n = new Set(s); const todos = cs.every((c) => n.has(c.id)); cs.forEach((c) => (todos ? n.delete(c.id) : n.add(c.id))); return n; });
+  const pill = (c: Pessoa) => (
+    <button type="button" key={c.id} className={`ff-pill${marc.has(c.id) ? " on" : ""}`} aria-pressed={marc.has(c.id)} onClick={() => toggle(c.id)}>
+      {nomeDe(c)}
+    </button>
+  );
   const toggle = (id: string) => setMarc((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   async function salvar(f: Form) {
@@ -158,18 +186,46 @@ export default function FilasFormulario() {
                     <div className="ff-edit">
                       <span className="ff-lbl">Quem recebe os leads deste formulário</span>
                       {grupos.length === 0 && <span className="ff-mut">Nenhum corretor na sua equipe.</span>}
-                      {grupos.map((g) => (
-                        <div key={g.lider} className="ff-grupo">
-                          <span className="ff-gnome">{g.nome}</span>
-                          <div className="ff-pills">
-                            {g.cs.map((c) => (
-                              <button type="button" key={c.id} className={`ff-pill${marc.has(c.id) ? " on" : ""}`} aria-pressed={marc.has(c.id)} onClick={() => toggle(c.id)}>
-                                {nomeDe(c)}
-                              </button>
-                            ))}
-                          </div>
+                      <input className="ff-busca" placeholder="Procurar corretor pelo nome…" value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Procurar corretor" />
+                      {busca.trim() ? (
+                        <div className="ff-pills">
+                          {achados.length ? achados.map(pill) : <span className="ff-mut">Ninguém com esse nome na sua equipe.</span>}
                         </div>
-                      ))}
+                      ) : (
+                        <>
+                          {frequentes.length > 0 && (
+                            <div className="ff-grupo">
+                              <span className="ff-gnome">Mais frequentes <small className="ff-mut">(quem mais recebeu lead em 30 dias)</small></span>
+                              <div className="ff-pills">{frequentes.map(pill)}</div>
+                            </div>
+                          )}
+                          {marc.size > 0 && (
+                            <div className="ff-grupo">
+                              <span className="ff-gnome">Escolhidos ({marc.size})</span>
+                              <div className="ff-pills">{pessoas.filter((p) => marc.has(p.id)).map(pill)}</div>
+                            </div>
+                          )}
+                          <span className="ff-lbl" style={{ marginTop: 4 }}>Por equipe</span>
+                          {grupos.map((g) => {
+                            const aberto = gruposAbertos.has(g.lider);
+                            const nMarc = g.cs.filter((c) => marc.has(c.id)).length;
+                            return (
+                              <div key={g.lider} className="ff-eq">
+                                <div className="ff-eq-top">
+                                  <button type="button" className="ff-eq-btn" onClick={() => abreGrupo(g.lider)} aria-expanded={aberto}>
+                                    <span>{aberto ? "▾" : "▸"} {g.nome}</span>
+                                    <small>{g.cs.length} corretor{g.cs.length > 1 ? "es" : ""}{nMarc ? ` · ${nMarc} escolhido${nMarc > 1 ? "s" : ""}` : ""}</small>
+                                  </button>
+                                  <button type="button" className="ff-link" onClick={() => marcarGrupo(g.cs)}>
+                                    {g.cs.every((c) => marc.has(c.id)) ? "desmarcar equipe" : "marcar equipe"}
+                                  </button>
+                                </div>
+                                {aberto && <div className="ff-pills">{g.cs.map(pill)}</div>}
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
                       <span className="ff-mut">
                         {marc.size ? `${marc.size} escolhido${marc.size > 1 ? "s" : ""} · rodízio entre eles${fila ? ` · próximo: ${proximo(fila)}` : ""}` : "Ninguém marcado: o formulário segue o plantão."}
                       </span>
@@ -232,6 +288,13 @@ const CSS = `
 .ff-pill{min-height:38px;padding:0 13px !important;border-radius:99px !important;border:1px solid var(--cv-border,#CFD7E3) !important;background:transparent !important;color:inherit !important;font-size:13px;font-weight:600;cursor:pointer}
 .ff-pill.on{background:#0E7C7B !important;border-color:#0E7C7B !important;color:#fff !important}
 .ff-acoes{display:flex;gap:8px;flex-wrap:wrap}
+.ff-busca{min-height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--cv-border,#CFD7E3);background:transparent;color:inherit;font:inherit;font-size:14px}
+.ff-eq{border:1px solid var(--cv-border,#E1E6EE);border-radius:10px;padding:6px 10px;display:flex;flex-direction:column;gap:8px}
+.ff-eq-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ff-eq-btn{display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-height:40px;justify-content:center;background:transparent !important;border:0 !important;color:inherit !important;cursor:pointer;text-align:left;padding:0 !important}
+.ff-eq-btn span{font-size:13.5px;font-weight:700}
+.ff-eq-btn small{font-size:12px;color:var(--cv-text-muted,#5B6B80)}
+.ff-link{background:none !important;border:0 !important;color:#0E7C7B !important;font-weight:700;font-size:12.5px;cursor:pointer;padding:6px !important}
 .ff-mut{font-size:12.5px;color:var(--cv-text-muted,#5B6B80)}
 .ff-mais{align-self:flex-start;background:none;border:0;color:#0E7C7B;font-weight:700;font-size:13px;cursor:pointer;padding:6px 0}
 `;
