@@ -85,7 +85,7 @@ Mais de uma sessão de IA trabalha neste repositório e publica no mesmo site (c
 - **WhatsApp:** chip do gerente → chip do super **da mesma equipe** → chip do Junior (`system_settings.notification_bot_instance_id`). Nunca chip de super para outra equipe; nunca chip de corretor.
 - **Cobrança:** o diretor cobra o **superintendente** primeiro (não passar por cima). Cobrar o gerente direto é opcional, e o super recebe `internal_notifications` tipo `COBRANCA_DIRETOR`.
 - **Venda** só conta em "Venda Confirmada" no Junix (`junix_vendas`, data = assinatura do cliente).
-- **Adajes:** vendas de antes de 12/10/2026 não contam no placar do diretor (`junix_vendas.fora_do_placar`); contam no painel dela.
+- **Adajes:** desde 20/10/2026 todas as vendas dela contam no placar do diretor (Junior liberou; `system_settings.junix_placar_corte` = {}). O mecanismo `fora_do_placar` continua para uma super nova: pôr `{"NOME": "AAAA-MM-DD"}` no corte.
 - **Leads:** nada de redistribuir automaticamente; quem decide é o gerente.
 - **Pastas:** previsão sempre com `lerPastas` / `resumoPastas` (`src/components/diretoria/pastasAnalise.ts`), que tiram da conta duplicadas, reprovadas e paradas há 60+ dias. Assim Hoje, Pastas e Estratégia mostram o mesmo número.
 - **Anúncios:** a aba Leads e investimento lê `public.fb_saude` (robô `/root/econ/fb_saude.py`, de hora em hora). Lead de formulário e conversa de WhatsApp têm referências separadas. O painel não escreve no Facebook (versão 1).
