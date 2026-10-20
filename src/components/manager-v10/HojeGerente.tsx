@@ -246,15 +246,15 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
     }
     return out;
   }, [segIniMes, iniMes, hoje]);
-  const ROT: Record<Metrica, string> = { leads: "Leads do Facebook", checkins: "Check-ins", visitas: "Visitas", pastas: "Pastas", vendas: "Vendas" };
+  const ROT: Record<Metrica, string> = { leads: "Leads", checkins: "Check-ins", visitas: "Visitas", pastas: "Pastas", vendas: "Vendas" };
   const origemCliente = (nome: string | null | undefined): Origem => origens?.porNome.get(chaveCliente(nome)) ?? "sem";
   // cada barra: total + pedaços por origem
   const fatias = (a: string, b: string): { total: number; partes: Partial<Record<Origem, number>> } => {
     const partes: Partial<Record<Origem, number>> = {};
     const soma = (o: Origem, n = 1) => { partes[o] = (partes[o] ?? 0) + n; };
     if (metrica === "leads") {
-      const n = pagos.filter((l) => entre(diaL(l), a, b) && origemDe(l) === "anuncio").length;
-      if (n) soma("anuncio", n);
+      // lead do Facebook + resposta de disparo que virou lead (pescaria e outros ficam fora)
+      for (const l of pagos) if (entre(diaL(l), a, b)) { const o = origemDe(l); if (o === "anuncio" || o === "disparo") soma(o); }
     } else if (metrica === "checkins") {
       const n = metricas.filter((m) => entre(m.data, a, b)).reduce((s, m) => s + (m.checkins || 0), 0);
       if (n) soma("plantao", n);
@@ -283,7 +283,8 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
     return { ...w, i, v: f ? f.total : null, partes: f?.partes ?? {}, atual: w.ini === segAtual, futura };
   });
   const maxB = Math.max(1, ...barras.map((b) => b.v ?? 0));
-  const legenda = ORIGENS.filter((o) => barras.some((b) => (b.partes[o.k] ?? 0) > 0));
+  // anúncio e disparo aparecem sempre (mesmo zerados) — é a comparação que o gerente quer ver
+  const legenda = ORIGENS.filter((o) => (metrica !== "checkins" && (o.k === "anuncio" || o.k === "disparo")) || barras.some((b) => (b.partes[o.k] ?? 0) > 0));
 
   // ── roleta ──
   const alternar = async (id: string, nome: string, on: boolean) => {
@@ -427,7 +428,14 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
             ))}
           </div>
           <div className="hj-graf-rot" style={{ gridTemplateColumns: `repeat(${barras.length}, minmax(0, 1fr))` }}>
-            {barras.map((b) => (<span key={b.ini}><b>Semana {b.i + 1}</b><i>{dm(b.ini)}–{dm(b.fim)}{b.atual ? " · agora" : ""}</i></span>))}
+            {barras.map((b) => (
+              <span key={b.ini}>
+                <b>Semana {b.i + 1}</b><i>{dm(b.ini)}–{dm(b.fim)}{b.atual ? " · agora" : ""}</i>
+                {metrica !== "checkins" && !b.futura && (
+                  <em className="hj-ad"><span style={{ color: "#1F5C9E" }}>Anúncio {b.partes.anuncio ?? 0}</span> · <span style={{ color: "#0E7C7B" }}>Disparo {b.partes.disparo ?? 0}</span></em>
+                )}
+              </span>
+            ))}
           </div>
           {legenda.length > 0 && (
             <div className="hj-leg">
@@ -554,6 +562,7 @@ const CSS = `
 .hj-pilha{width:70%;border-radius:6px 6px 0 0;overflow:hidden;display:flex;flex-direction:column-reverse}
 .hj-pilha.atual{outline:2px solid #0E7C7B;outline-offset:2px}
 .hj-pilha span{display:block;min-height:3px}
+.hj-ad{font-style:normal;font-size:11.5px;font-weight:700;margin-top:2px}
 .hj-leg{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--hj-mut)}
 .hj-leg span{display:inline-flex;align-items:center;gap:6px}
 .hj-leg i{width:11px;height:11px;border-radius:3px;display:inline-block}
