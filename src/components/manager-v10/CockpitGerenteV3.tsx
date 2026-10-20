@@ -456,8 +456,8 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
           </div>
           <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
             <b>{heroPlacar.leadsAtendidos} atendidos</b> ·{" "}
-            <span style={{ color: heroPlacar.leadsParados > 0 ? "var(--cv-rose)" : "var(--cv-green)", fontWeight: 700 }}>
-              {heroPlacar.leadsParados} parados (+2h)
+            <span style={{ color: heroPlacar.leadsPeriodo - heroPlacar.leadsAtendidos > 0 ? "var(--cv-rose)" : "var(--cv-green)", fontWeight: 700 }}>
+              {heroPlacar.leadsPeriodo - heroPlacar.leadsAtendidos} sem contato
             </span>
           </span>
         </div>

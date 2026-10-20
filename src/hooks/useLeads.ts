@@ -14,7 +14,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { atendido as atendidoRegra, ehTeste } from "@/lib/situacaoLead";
+import { atendido as atendidoRegra, ehTeste, ehPescado } from "@/lib/situacaoLead";
 
 export interface LeadLinha {
   id: string;
@@ -290,7 +290,8 @@ export function useLeads(managerId: string | undefined,
       // fase ou interação depois de chegar. Antes só os 2 primeiros contavam e 649 leads já trabalhados
       // (Respondeu, Já chamei, Negociação) apareciam como "ninguém nunca falou" (19/10).
       const atendido = (l: any) => atendidoRegra(l); // regra única: src/lib/situacaoLead.ts
-      const nuncaFalaram = ativos.filter((l) => !atendido(l));
+      // só lead pago: pescado sem toque é cuidado pela régua do Pescar (volta ao pool sozinho)
+      const nuncaFalaram = ativos.filter((l) => !ehPescado(l) && !atendido(l));
       const falouSemResp = ativos.filter((l) => l.last_broker_whatsapp_at && !l.last_lead_response_at);
       const emAndamento = ativos.filter((l) => l.last_lead_response_at && l.last_broker_whatsapp_at &&
         l.last_broker_whatsapp_at >= l.last_lead_response_at);

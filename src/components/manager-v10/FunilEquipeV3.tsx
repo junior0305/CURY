@@ -4,7 +4,7 @@
 // 2. Filtro de Canais em Chips: [Todos] [💬 Disparos WhatsApp] [📢 Meta Ads] [🔍 Google] [🏠 Portais] [📍 C2S Plantão]
 // 3. Diagnóstico de Gargalo Cirúrgico: Calcula onde o time mais perde clientes e sugere a ação imediata.
 
-import { atendido as atendidoRegra, ehTeste } from "@/lib/situacaoLead";
+import { atendido as atendidoRegra, ehTeste, ehPescado } from "@/lib/situacaoLead";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -173,8 +173,9 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
     const semContato = leadsFiltrados.filter((l) => {
       const ativo = !["CONCLUDED", "EXCLUDED", "ABANDONED"].includes(l.status ?? "");
       if (!ativo) return false;
-      // regra única (src/lib/situacaoLead.ts): a mesma do Tempo real e da aba Leads
-      return !atendidoRegra(l as any);
+      // regra única (src/lib/situacaoLead.ts): a mesma do Tempo real e da aba Leads.
+      // "Sem contato" é só lead pago: pescado sem toque é cuidado pela régua do Pescar.
+      return !ehPescado(l as any) && !atendidoRegra(l as any);
     }).length;
 
     // 2. Em Conversa: Houve contato e não está agendado nem concluído
@@ -225,15 +226,16 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
     // Diagnóstico do Maior Gargalo
     let diagnostico = {
       titulo: "Equipe em Ritmo Estável",
-      descricao: "A conversão entre as etapas está dentro das médias operacionais da Cury.",
+      descricao: "A conversão entre as etapas está dentro das médias da operação.",
       tipo: "normal" as "crit" | "warn" | "good" | "normal",
       acao: "Mantenha a roleta rodando e cobre o comparecimento das visitas agendadas.",
     };
 
-    if (totalLeads > 5 && semContato / totalLeads >= 0.25) {
-      const pct = Math.round((semContato / totalLeads) * 100);
+    const totalPagos = leadsFiltrados.filter((l) => !ehPescado(l as any) && !["EXCLUDED", "ABANDONED"].includes(l.status ?? "")).length;
+    if (totalPagos > 5 && semContato / totalPagos >= 0.25) {
+      const pct = Math.round((semContato / totalPagos) * 100);
       diagnostico = {
-        titulo: `Gargalo Crítico: ${pct}% dos Leads estão Sem Contato`,
+        titulo: `${pct}% dos leads pagos estão sem contato (${semContato} de ${totalPagos})`,
         descricao: "Leads pagos estão esfriando na mão dos corretores sem mensagem inicial.",
         tipo: "crit",
         acao: "Puxe os leads parados há mais de 2 horas e devolva para quem está online no Comandra agora.",
