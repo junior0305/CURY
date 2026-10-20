@@ -25,7 +25,7 @@ import { usePeriodo, diaSP, getSegunda } from "@/hooks/usePeriodo";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import FilasFormulario from "@/components/leads/FilasFormulario";
 import { useDadosEquipe, ORIGENS, origemDe, chaveCliente, type LeadH, type Origem } from "@/hooks/useDadosEquipe";
-import { atendido, esperando, ehTeste, ehPescado } from "@/lib/situacaoLead";
+import { atendido, esperando, ehTeste, ehPago } from "@/lib/situacaoLead";
 
 type Metrica = "leads" | "checkins" | "visitas" | "pastas" | "vendas";
 
@@ -70,7 +70,7 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
     },
   });
 
-  const pagos = useMemo(() => leads.filter((l) => !ehPescado(l)), [leads]);
+  const pagos = useMemo(() => leads.filter((l) => ehPago(l)), [leads]);
   const diaL = (l: LeadH) => diaSP(new Date(l.created_at));
   const entre = (d: string, a: string, b: string) => d >= a && d <= b;
   const pastas = pastasData?.minhas ?? [];

@@ -4,6 +4,7 @@
 // Meu WhatsApp (chip do líder: a mensagem assinada por ele só sai se estiver conectado) e
 // Facebook e leads (Integrações). Gerente em /manager/config; super e diretor na aba do /super.
 
+import BaseContatos from "@/components/config/BaseContatos";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
@@ -25,10 +26,11 @@ import IntegracaoFacebook from "@/pages/admin/IntegracaoFacebook";
 import "@/styles/manager-v10.css";
 
 type Nivel = "diretor" | "super" | "gerente";
-type Secao = "avisos" | "equipe" | "whatsapp" | "facebook" | "fontes" | "empresa";
+type Secao = "avisos" | "equipe" | "base" | "whatsapp" | "facebook" | "fontes" | "empresa";
 const SECOES: { k: Secao; label: string; sub: string }[] = [
   { k: "avisos", label: "Avisos e cobranças", sub: "O que o sistema cobra e quando" },
   { k: "equipe", label: "Equipe", sub: "Cadastrar, desabilitar e desligar corretor" },
+  { k: "base", label: "Base de contatos", sub: "Listas para o Pescar ou lead caindo" },
   { k: "whatsapp", label: "Meu WhatsApp", sub: "O chip que envia as suas mensagens" },
   { k: "facebook", label: "Facebook e leads", sub: "Páginas, formulários e quem recebe" },
   { k: "fontes", label: "Fontes de dados", sub: "C2S, Junix, Salesforce" },
@@ -66,6 +68,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
       <section className="cfg-corpo">
         {secaoOk === "avisos" ? <ReguaEquipe nivel={nivel} donoId={donoId} />
           : secaoOk === "equipe" ? <Equipe nivel={nivel} donoId={donoId} />
+          : secaoOk === "base" ? <BaseContatos />
           : secaoOk === "whatsapp" ? <MeuWhatsApp />
           : secaoOk === "fontes" ? <FontesDados />
           : secaoOk === "empresa" ? <DadosEmpresa />

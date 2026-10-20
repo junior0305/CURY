@@ -12,12 +12,12 @@ import { usePeriodo, diaSP } from "@/hooks/usePeriodo";
 import { chaveNome } from "@/hooks/useDiretoria";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { useDadosEquipe, origemDe, chaveCliente, type Origem } from "@/hooks/useDadosEquipe";
-import { atendido, ehPescado } from "@/lib/situacaoLead";
+import { atendido, ehPago } from "@/lib/situacaoLead";
 
-type Canal = "pagos" | "anuncio" | "disparo" | "pescado" | "outro";
+type Canal = "pagos" | "anuncio" | "disparo" | "pescado" | "lista" | "outro";
 const CANAIS: { k: Canal; nome: string }[] = [
   { k: "pagos", nome: "Leads pagos" }, { k: "anuncio", nome: "Anúncio" }, { k: "disparo", nome: "Disparo" },
-  { k: "pescado", nome: "Pescaria" }, { k: "outro", nome: "Outros" },
+  { k: "pescado", nome: "Pescaria" }, { k: "lista", nome: "Lista" }, { k: "outro", nome: "Outros" },
 ];
 const NOME_MES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const nf = (n: number) => n.toLocaleString("pt-BR");
@@ -37,7 +37,7 @@ export default function FunilCompleto({ managerId }: { managerId: string }) {
   const pastas = pastasData?.minhas ?? [];
   const entre = (d: string) => d >= de && d <= ate;
   const origemCliente = (nome: string | null | undefined): Origem => origens?.porNome.get(chaveCliente(nome)) ?? "sem";
-  const noCanal = (o: Origem) => (canal === "pagos" ? o !== "pescado" : o === canal);
+  const noCanal = (o: Origem) => (canal === "pagos" ? o !== "pescado" && o !== "lista" : o === canal);
 
   const calc = useMemo(() => {
     const ls = leads.filter((l) => entre(diaSP(new Date(l.created_at))) && noCanal(origemDe(l)));
@@ -58,11 +58,11 @@ export default function FunilCompleto({ managerId }: { managerId: string }) {
   }, [leads, metricas, origens, pastas, vendas, canal, de, ate]); // eslint-disable-line
   const conv = calc.map((f, i) => (i === 0 ? null : pct(f.v, calc[i - 1].v)));
   const pior = conv.reduce<number>((m, c, i) => (c != null && (m < 0 || c < (conv[m] ?? 101)) ? i : m), -1);
-  const contagem = (c: Canal) => leads.filter((l) => entre(diaSP(new Date(l.created_at))) && (c === "pagos" ? !ehPescado(l) : origemDe(l) === c)).length;
+  const contagem = (c: Canal) => leads.filter((l) => entre(diaSP(new Date(l.created_at))) && (c === "pagos" ? ehPago(l) : origemDe(l) === c)).length;
 
   // por corretor (leads pagos do período)
   const linhas = useMemo(() => brokers.map((b) => {
-    const ls = leads.filter((l) => l.broker_id === b.id && entre(diaSP(new Date(l.created_at))) && !ehPescado(l));
+    const ls = leads.filter((l) => l.broker_id === b.id && entre(diaSP(new Date(l.created_at))) && ehPago(l));
     const c = ls.filter((l) => atendido(l)).length;
     const vis = (origens?.visitas ?? []).filter((v) => v.brokerId === b.id && entre(v.dia)).length;
     const pas = pastas.filter((p) => p.corretorId === b.id && p.cadastradaEm && entre(diaSP(new Date(p.cadastradaEm)))).length;

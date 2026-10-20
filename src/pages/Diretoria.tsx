@@ -2,6 +2,7 @@
  * Hoje: meta em cascata, "decida hoje", pessoas, funil, cobranças.
  * Equipes / Leads / Pastas: árvore que abre superintendência → gerente → corretor.
  * Gastos: anúncio real por equipe; plano e outros gastos chegam na próxima entrega. */
+import VerComo from "@/components/manager-v10/VerComo";
 import FilasFormulario from "@/components/leads/FilasFormulario";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -159,6 +160,7 @@ export default function Diretoria() {
       </header>
 
       <main className="dir-wrap">
+        <VerComo />
         {aba === "equipes" || aba === "leads" ? (
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             {atualizando ? <span className="dir-chip c-blue">atualizando para {periodo.rotulo}…</span>

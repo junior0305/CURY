@@ -24,6 +24,7 @@ import { Navigate, useSearchParams } from "react-router-dom";
 import TempoReal from "@/components/manager-v10/TempoReal";
 import CockpitGerenteV3 from "@/components/manager-v10/CockpitGerenteV3";
 import HojeGerente from "@/components/manager-v10/HojeGerente";
+import VerComo from "@/components/manager-v10/VerComo";
 import FunilCompleto from "@/components/manager-v10/FunilCompleto";
 import TimeTab from "@/components/manager-v10/TimeTab";
 import RoletaHoje from "@/components/manager-v10/RoletaHoje";
@@ -205,7 +206,8 @@ export default function ManagerV10() {
   if (!userId || isLoading || !data || !calc) {
     return (
       <div className="mgr10">
-        <main className="shell2"><div className="blank">carregando o painel…</div></main>
+        <main className="shell2">
+        <VerComo /><div className="blank">carregando o painel…</div></main>
       </div>
     );
   }

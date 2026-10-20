@@ -41,6 +41,7 @@ import PainelGeralSuper from "@/components/superintendente/PainelGeralSuper";
 import EstrategiaSuper from "@/components/super2/EstrategiaSuper";
 import PastasDoSuper from "@/components/super2/Pastas";
 import LeadsSuper from "@/components/super2/LeadsSuper";
+import VerComo from "@/components/manager-v10/VerComo";
 import FilasFormulario from "@/components/leads/FilasFormulario";
 import TelaSuper from "@/components/super2/Tela";
 import Tropa from "@/components/super2/Tropa";
@@ -65,8 +66,11 @@ export default function Superintendente() {
       return (data?.id as string | undefined) ?? null;
     },
   });
-  const ehDiretoria = role === "DIRECTOR" || role === "ADMIN";
-  const superId = role === "ADMIN" ? (diretorId ?? undefined) : session?.user?.id;
+  // "Ver como" (20/10): admin/diretor abre a tela de um super específico com ?super=<id>
+  const [paramsVer] = useSearchParams();
+  const verComo = role === "ADMIN" || role === "DIRECTOR" ? paramsVer.get("super") : null;
+  const ehDiretoria = !verComo && (role === "DIRECTOR" || role === "ADMIN");
+  const superId = verComo ?? (role === "ADMIN" ? (diretorId ?? undefined) : session?.user?.id);
 
   // Busca o nome do Superintendente para Sala de Guerra e Pastas
   const { data: superPerfil } = useQuery({
@@ -134,6 +138,7 @@ export default function Superintendente() {
         }}
       />
       <main className="shell2">
+        <VerComo />
         {!ehDiretoria && aba === "consolidado" ? <MinhasTarefas donoId={superId ?? undefined} /> : null}
         {aba === "estrategia" && superId ? (
           <EstrategiaSuper
@@ -151,7 +156,7 @@ export default function Superintendente() {
         ) : aba === "midia" && superId ? (
           <LeadsSuper key="midia" superId={superId} inicial="midia" />
         ) : aba === "config" ? (
-          <Configuracoes nivel={ehDiretoria ? "diretor" : "super"} donoId={ehDiretoria ? null : (session?.user?.id ?? null)} />
+          <Configuracoes nivel={ehDiretoria ? "diretor" : "super"} donoId={ehDiretoria ? null : (verComo ?? session?.user?.id ?? null)} />
         ) : aba === "time" && superId ? (
           <Tropa superId={superId} />
         ) : aba === "bi" ? (

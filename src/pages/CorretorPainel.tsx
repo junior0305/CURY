@@ -457,7 +457,11 @@ const CorretorPainel = () => {
       const skipIds = new Set((skips || []).map((s: any) => s.contact_id));
       // Busca uma faixa maior e EMBARALHA para cada corretor: antes todos da mesma região viam os mesmos
       // 60 contatos na mesma ordem e disputavam o mesmo lead, um por vez (queixa do time da Monalisa, 17/10).
-      let q = supabase.from("cold_contacts").select("id, name, phone, tag").eq("status", "available").or(`previous_broker_id.is.null,previous_broker_id.neq.${user.id}`).order("created_at", { ascending: true }).limit(400);
+      // só contato da empresa toda (sem dono) ou de lista da própria cadeia (gerente/super/diretor dele) — Base de contatos, 20/10
+      const { data: acima } = await (supabase as any).rpc("ids_acima", { p: user.id });
+      const cadeia = ((acima ?? []) as any[]).map((r) => (typeof r === "string" ? r : r.ids_acima)).filter(Boolean);
+      let q = supabase.from("cold_contacts").select("id, name, phone, tag").eq("status", "available").or(`previous_broker_id.is.null,previous_broker_id.neq.${user.id}`)
+        .or(cadeia.length ? `dono_equipe.is.null,dono_equipe.in.(${cadeia.join(",")})` : "dono_equipe.is.null").order("created_at", { ascending: true }).limit(400);
       if (regiaoAtual) q = q.in("tag", regiaoAtual.tags);
       const { data } = await q;
       const lista = ((data as any[]) || []).filter((c) => !skipIds.has(c.id));
@@ -511,7 +515,8 @@ const CorretorPainel = () => {
     ["Renda Informada", fmtRenda(sel.rendaDeclarada)],
     ["Tipo de Trabalho", sel.tipoTrabalho ? TIPO_TRABALHO_LABEL[sel.tipoTrabalho] : "—"],
     ["Região de Interesse", regiaoDe(sel) || "—"],
-    ["Campanha / Origem", sel.campanhaNome || (sel.fbCampaign && !/^\d{10,}$/.test(sel.fbCampaign) ? sel.fbCampaign : "") || sel.product || sel.source || "—"],
+    // lead de lista (gotejamento): o corretor não vê a origem, só a região (decisão do Junior, 20/10)
+    ["Campanha / Origem", (sel.source as string) === "lista" ? (regiaoDe(sel) || "—") : (sel.campanhaNome || (sel.fbCampaign && !/^\d{10,}$/.test(sel.fbCampaign) ? sel.fbCampaign : "") || sel.product || sel.source || "—")],
   ] : [];
   // O que mais o cliente respondeu no formulário (o que busca, quando quer mudar…), fora o que já está acima.
   const outrasRespostas = Object.entries(sel?.formRespostas || {})

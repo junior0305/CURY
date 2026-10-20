@@ -14,11 +14,12 @@ export type LeadH = {
   last_interaction_at: string | null; contact_attempts: number | null;
   fb_campaign?: string | null; tag?: string | null;
 };
-export type Origem = "anuncio" | "disparo" | "pescado" | "outro" | "plantao" | "sem";
+export type Origem = "anuncio" | "disparo" | "pescado" | "lista" | "outro" | "plantao" | "sem";
 export const ORIGENS: { k: Origem; nome: string; cor: string }[] = [
   { k: "anuncio", nome: "Anúncio", cor: "#1F5C9E" },
   { k: "disparo", nome: "Disparo", cor: "#0E7C7B" },
   { k: "pescado", nome: "Pescaria", cor: "#B7791F" },
+  { k: "lista", nome: "Lista", cor: "#7A4FA3" },
   { k: "outro", nome: "Outros", cor: "#7B8BA3" },
   { k: "plantao", nome: "Plantão C2S", cor: "#2A3E5C" },
   { k: "sem", nome: "Origem não identificada", cor: "#C9D2DE" },
@@ -29,6 +30,7 @@ export function origemDe(l: { source?: string | null; fb_campaign?: string | nul
   const tag = (l.fb_campaign ?? l.tag ?? "").toUpperCase();
   if (src.startsWith("disparo") || src === "wa_oficial" || src === "campaign" || tag.startsWith("DISPARO") || tag === "BASE OFICIAL") return "disparo";
   if (src === "cold_pool") return "pescado";
+  if (src === "lista") return "lista";
   if (src.startsWith("facebook") || src.startsWith("fb") || src.startsWith("google") || src.startsWith("tiktok") || src === "instagram") return "anuncio";
   return "outro";
 }

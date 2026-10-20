@@ -26,6 +26,12 @@ export const ehTeste = (l: LeadCampos) => /test lead|dummy data/i.test(l.name ??
 /** Pescado do pool: contato que o próprio corretor puxou. Não é lead pago. */
 export const ehPescado = (l: LeadCampos) => l.source === "cold_pool";
 
+/** Lead que caiu de uma lista da Base de contatos (gotejamento). Também não é lead pago. */
+export const ehLista = (l: LeadCampos) => l.source === "lista";
+
+/** Lead pago = veio de mídia (anúncio/disparo/outros); pescado e lista ficam fora. */
+export const ehPago = (l: LeadCampos) => !ehPescado(l) && !ehLista(l);
+
 export const ativo = (l: LeadCampos) => !ENCERRADO.has(l.status ?? "");
 
 /** Atendido = o corretor fez alguma coisa: WhatsApp, tentativa registrada, mudou a fase
