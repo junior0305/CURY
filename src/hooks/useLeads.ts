@@ -14,6 +14,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { atendido as atendidoRegra, ehTeste } from "@/lib/situacaoLead";
 
 export interface LeadLinha {
   id: string;
@@ -210,7 +211,7 @@ export function useLeads(managerId: string | undefined,
       ]);
 
       const time = (timeRes.data ?? []) as any[];
-      const meus = (leadsRes.data ?? []) as any[];
+      const meus = ((leadsRes.data ?? []) as any[]).filter((l) => !ehTeste(l)); // lead de teste do Meta fora
       const nomePor = new Map<string, string>(
         time.map((b: any) => [b.id, [b.first_name, b.last_name].filter(Boolean).join(" ") || "—"]));
 
@@ -288,8 +289,7 @@ export function useLeads(managerId: string | undefined,
       // Mesma régua de "atendido" do cockpit e do super: WhatsApp do corretor, tentativa, mudança de
       // fase ou interação depois de chegar. Antes só os 2 primeiros contavam e 649 leads já trabalhados
       // (Respondeu, Já chamei, Negociação) apareciam como "ninguém nunca falou" (19/10).
-      const atendido = (l: any) => !!l.last_broker_whatsapp_at || (l.contact_attempts ?? 0) > 0 || (l.status && l.status !== "NEW")
-        || (l.last_interaction_at && new Date(l.last_interaction_at).getTime() > new Date(l.created_at).getTime() + 5 * 60e3);
+      const atendido = (l: any) => atendidoRegra(l); // regra única: src/lib/situacaoLead.ts
       const nuncaFalaram = ativos.filter((l) => !atendido(l));
       const falouSemResp = ativos.filter((l) => l.last_broker_whatsapp_at && !l.last_lead_response_at);
       const emAndamento = ativos.filter((l) => l.last_lead_response_at && l.last_broker_whatsapp_at &&

@@ -103,7 +103,9 @@ export function useLeadsQueimaDisparo(managerId: string | undefined) {
         if (brokerTime >= respTime) continue;
 
         const minutos = Math.round((agora - respTime) / 60_000);
-        if (minutos >= 30) {
+        // Acima de 48h não é mais "urgência de 30 min": é lead esquecido e vai para a fila
+        // "O cliente perguntou e ninguém voltou" da aba Leads. Antes o alerta mostrava 312h.
+        if (minutos >= 30 && minutos <= 48 * 60) {
           emRisco.push({
             id: l.id,
             name: l.name || "Cliente sem nome",
@@ -242,7 +244,7 @@ export default function AlertaDisparoQueima({ managerId, quem = "Gerente", compa
             <div className="alerta-queima-titulo">
               <span className="badge-risco-financeiro">RISCO FINANCEIRO · DISPAROS</span>
               <strong>
-                {leadsQueima.length} cliente{leadsQueima.length === 1 ? "" : "s"} respondeu{leadsQueima.length === 1 ? "" : "ram"} a disparos e {leadsQueima.length === 1 ? "está" : "estão"} no vácuo há +30min!
+                {leadsQueima.length} cliente{leadsQueima.length === 1 ? "" : "s"} {leadsQueima.length === 1 ? "respondeu" : "responderam"} a disparos e {leadsQueima.length === 1 ? "está" : "estão"} no vácuo há +30min!
               </strong>
             </div>
             <p className="alerta-queima-sub">
@@ -303,7 +305,7 @@ export default function AlertaDisparoQueima({ managerId, quem = "Gerente", compa
                 <div style={{ display: "flex", gap: "10px" }}>
                   <AlertOctagon size={18} style={{ color: "var(--cv-rose)", flexShrink: 0, marginTop: "2px" }} />
                   <div style={{ fontSize: "13px", lineHeight: "1.45" }}>
-                    <b>Regra de Proteção de Caixa da Cury:</b> A Meta cobra por cada conversa iniciada. Se o corretor não responder em até 30 minutos, o cliente esfria e perde-se o valor investido.
+                    <b>Regra de proteção do investimento:</b> A Meta cobra por cada conversa iniciada. Se o corretor não responder em até 30 minutos, o cliente esfria e perde-se o valor investido.
                   </div>
                 </div>
               </div>

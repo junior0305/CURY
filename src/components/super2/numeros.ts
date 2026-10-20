@@ -27,11 +27,8 @@ export function canalDe(l: any): Canal {
   if (src === "wa_oficial" || src === "campaign" || src.includes("disparo")) return "disparo";
   return "outros";
 }
-export const atendido = (l: any) => {
-  const c = new Date(l.created_at).getTime();
-  return !!l.last_broker_whatsapp_at || l.status !== "NEW" || (l.contact_attempts ?? 0) > 0
-    || (l.last_interaction_at && new Date(l.last_interaction_at).getTime() > c + 5 * 60e3);
-};
+// regra única de "atendido" para todas as telas: src/lib/situacaoLead.ts
+export { atendido } from "@/lib/situacaoLead";
 const AVANCOU = ["VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED", "CONCLUDED"];
 
 export function useNumerosSuper(supers: SuperDiretoria[], pastas: PastaJunix[], de: string, ate: string) {

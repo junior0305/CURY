@@ -26,15 +26,7 @@ function canalDe(l: any): Canal {
   return "outros";
 }
 
-const atendido = (l: any) => {
-  const c = new Date(l.created_at).getTime();
-  return (
-    !!l.last_broker_whatsapp_at ||
-    l.status !== "NEW" ||
-    (l.contact_attempts ?? 0) > 0 ||
-    (l.last_interaction_at && new Date(l.last_interaction_at).getTime() > c + 5 * 60e3)
-  );
-};
+import { atendido } from "@/lib/situacaoLead"; // regra única para todas as telas
 
 const avancou = (l: any) =>
   ["VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED", "CONCLUDED"].includes(l.status);

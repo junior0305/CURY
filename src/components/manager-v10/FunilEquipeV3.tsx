@@ -4,6 +4,7 @@
 // 2. Filtro de Canais em Chips: [Todos] [💬 Disparos WhatsApp] [📢 Meta Ads] [🔍 Google] [🏠 Portais] [📍 C2S Plantão]
 // 3. Diagnóstico de Gargalo Cirúrgico: Calcula onde o time mais perde clientes e sugere a ação imediata.
 
+import { atendido as atendidoRegra, ehTeste } from "@/lib/situacaoLead";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -161,6 +162,7 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
   const funil = useMemo(() => {
     // Filtra leads pelo canal selecionado
     const leadsFiltrados = leads.filter((l) => {
+      if (ehTeste(l as any)) return false;
       if (canalAtivo === "todos") return true;
       return classificarCanalLead(l) === canalAtivo;
     });
@@ -171,15 +173,15 @@ export default function FunilEquipeV3({ managerId }: FunilEquipeV3Props) {
     const semContato = leadsFiltrados.filter((l) => {
       const ativo = !["CONCLUDED", "EXCLUDED", "ABANDONED"].includes(l.status ?? "");
       if (!ativo) return false;
-      const temToque = !!l.last_broker_whatsapp_at || (l.contact_attempts ?? 0) > 0;
-      return !temToque;
+      // regra única (src/lib/situacaoLead.ts): a mesma do Tempo real e da aba Leads
+      return !atendidoRegra(l as any);
     }).length;
 
     // 2. Em Conversa: Houve contato e não está agendado nem concluído
     const emConversa = leadsFiltrados.filter((l) => {
       const ativo = !["CONCLUDED", "EXCLUDED", "ABANDONED"].includes(l.status ?? "");
       if (!ativo) return false;
-      const temToque = !!l.last_broker_whatsapp_at || (l.contact_attempts ?? 0) > 0;
+      const temToque = atendidoRegra(l as any);
       const jaAgendou = l.status === "VISIT_SCHEDULED" || l.status === "NEGOTIATING" || l.status === "DOCS_REQUESTED";
       return temToque && !jaAgendou;
     }).length;

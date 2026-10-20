@@ -13,6 +13,7 @@ import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { usePeriodo } from "@/hooks/usePeriodo";
 import "@/styles/cockpit-gerente.css";
 import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
+import { atendido as atendidoRegra, esperando as esperandoRegra, ehTeste, ehPescado } from "@/lib/situacaoLead";
 
 interface CockpitGerenteV3Props {
   managerId: string;
@@ -35,23 +36,14 @@ const diaDe = (iso: string) => new Date(new Date(iso).getTime() - 3 * 3600e3).to
 // O corretor atende pelo WhatsApp pessoal (sem chip), então "mensagem do corretor" sozinha não basta:
 // conta como atendido quem mudou de status, teve tentativa ou interação depois de chegar.
 type LeadSinal = V10Lead & { campanha_nome?: string | null; contact_attempts?: number | null };
-function atendido(l: LeadSinal) {
-  if (l.last_broker_whatsapp_at) return true;
-  if (l.status && l.status !== "NEW") return true;
-  if ((l.contact_attempts ?? 0) > 0) return true;
-  if (l.last_interaction_at && l.created_at &&
-      new Date(l.last_interaction_at).getTime() > new Date(l.created_at).getTime() + 5 * 60_000) return true;
-  return false;
-}
+// regra única em src/lib/situacaoLead.ts (a mesma do Time e da aba Leads)
+const atendido = (l: LeadSinal) => atendidoRegra(l as any);
 // Parado: cliente respondeu e ninguém voltou, ou chegou há 2h+ sem nenhum sinal de atendimento.
 // Pescado não entra: é contato que o próprio corretor puxou para ligar.
 function parado(l: LeadSinal) {
   if (classificarOrigem(l) === "pescado") return false;
   const resp = horas(l.last_lead_response_at);
-  if (Number.isFinite(resp) && resp > 2 && resp < 48) {
-    const depois = Math.min(horas(l.last_broker_whatsapp_at), horas(l.last_interaction_at));
-    if (depois > resp) return true;
-  }
+  if (esperandoRegra(l as any) && resp > 2 && resp < 48) return true;
   return !atendido(l) && horas(l.created_at) > 2;
 }
 
@@ -73,7 +65,7 @@ function rotuloOrigem(lead: { source?: string | null; fb_campaign?: string | nul
   // Make manda o ID da campanha; o nome fica em campanha_nome.
   const campanha = lead.campanha_nome || (lead.fb_campaign && !/^\d{10,}$/.test(lead.fb_campaign) ? lead.fb_campaign : "");
   if (cat === "disparo") return { cat, label: "Disparo WhatsApp · " + (lead.fb_campaign || "Base Oficial") };
-  if (cat === "pescado") return { cat, label: "🎣 Pescado · " + (lead.source === "cold_pool" ? "Cold Pool Cury" : lead.fb_campaign || "Carteira Cury") };
+  if (cat === "pescado") return { cat, label: "🎣 Pescado · " + ((lead as any).tag || lead.fb_campaign || "pool") };
   if (cat === "acao") return { cat, label: "🏃 Ação / Stand · " + (lead.source?.replace(/_/g, " ") || "Presencial") };
   return { cat, label: "Meta Ads · " + (campanha || "Facebook/Instagram") };
 }
@@ -213,6 +205,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
   // Filtragem de Leads por Período
   const leadsFiltradosPorData = useMemo(() => listaLeadsBase.filter((l) => {
     if (!l.created_at) return false;
+    if (ehTeste(l as any)) return false; // lead de teste do Meta não entra em conta nenhuma
     const dia = diaDe(l.created_at);
     return dia >= per.de && dia <= per.ate;
   }), [listaLeadsBase, per.de, per.ate]);
@@ -259,10 +252,14 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
     const faltam = Math.max(0, meta - vendas);
     const porDia = restantes > 0 ? (faltam / restantes).toFixed(1) : "0";
 
-    const leadsPeriodo = leadsFiltradosPorData.length;
-    const leadsParados = leadsFiltradosPorData.filter((l) => parado(l as LeadSinal)).length;
+    // Pescado não é lead pago: conta à parte para não inflar o número
+    const pagos = leadsFiltradosPorData.filter((l) => !ehPescado(l as any));
+    const leadsPeriodo = pagos.length;
+    const pescadosPeriodo = leadsFiltradosPorData.length - pagos.length;
+    const leadsAtendidos = pagos.filter((l) => atendido(l as LeadSinal)).length;
+    const leadsParados = pagos.filter((l) => parado(l as LeadSinal)).length;
 
-    return { vendas, meta, vgv, projecao, porDia, leadsPeriodo, leadsParados };
+    return { vendas, meta, vgv, projecao, porDia, leadsPeriodo, leadsParados, leadsAtendidos, pescadosPeriodo };
   }, [v10, cruz, leadsFiltradosPorData]);
 
   // Ações de Negócio
@@ -454,10 +451,11 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
             <span style={{ color: "var(--cv-blue)" }}>{heroPlacar.leadsPeriodo}</span>
             <span style={{ fontSize: 14, color: "var(--cv-text-muted)", fontWeight: 500 }}>
               {per.preset === "hoje" || per.preset === "ontem" ? per.rotulo : "no período"}
+              {heroPlacar.pescadosPeriodo ? ` · + ${heroPlacar.pescadosPeriodo} pescados` : ""}
             </span>
           </div>
           <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
-            <b>{heroPlacar.leadsPeriodo - heroPlacar.leadsParados} atendidos</b> ·{" "}
+            <b>{heroPlacar.leadsAtendidos} atendidos</b> ·{" "}
             <span style={{ color: heroPlacar.leadsParados > 0 ? "var(--cv-rose)" : "var(--cv-green)", fontWeight: 700 }}>
               {heroPlacar.leadsParados} parados (+2h)
             </span>
@@ -650,6 +648,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                               <b style={{ fontSize: 13 }}>{corretor.nome}</b>
                               <span
                                 className={`mini-badge-v3 ${corretor.online ? "online" : corretor.plantao ? "plantao" : "offline"}`}
+                                style={!corretor.online && !corretor.plantao ? { display: "none" } : undefined}
                                 style={{ fontSize: 10 }}
                               >
                                 {corretor.online ? "online" : corretor.plantao ? "plantão" : "offline"}
@@ -758,7 +757,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                         <div className="broker-tags-v3">
                           {c.online && <span className="mini-badge-v3 online">online</span>}
                           {c.plantao && <span className="mini-badge-v3 plantao">plantão C2S</span>}
-                          {!c.online && !c.plantao && <span className="mini-badge-v3 offline">offline</span>}
+                          {/* "offline" saiu: o corretor não usa mais chip conectado, a marca não dizia nada */}
                         </div>
                       </div>
                     </div>
