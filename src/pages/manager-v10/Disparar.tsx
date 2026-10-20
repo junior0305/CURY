@@ -16,7 +16,7 @@
 //    a um disparo e 17 ficaram sem retorno. Escolher o destino aqui é
 //    obrigatório, não opcional.
 
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
 import { useEffectiveManagerId, useSuperintendenteRollup } from "@/hooks/useSuperintendente";
@@ -567,6 +567,12 @@ export default function Disparar() {
   const tplsDoNumero = useMemo(() => (data?.templates ?? []).filter((t) =>
     (t.status ?? "").toUpperCase() === "APPROVED" && !!cfgEnvio?.wabaId && t.waba === cfgEnvio.wabaId),
   [data?.templates, cfgEnvio?.wabaId]);
+
+  // Sem mensagem escolhida a tela escondia o campo de imagem (e o resto do passo). Escolhe sozinha a
+  // primeira aprovada DO NÚMERO escolhido — nunca de outra conta (20/10, "o campo de imagem sumiu").
+  useEffect(() => {
+    if (cfgEnvio && tplsDoNumero.length && !tplsDoNumero.some((t) => t.id === tplSel)) setTplSel(tplsDoNumero[0].id);
+  }, [cfgEnvio?.id, tplsDoNumero]); // eslint-disable-line
 
   const ABRE = "08:00", FECHA = "19:30";
   const marcado = useMemo(() => {
