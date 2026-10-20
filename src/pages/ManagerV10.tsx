@@ -24,6 +24,7 @@ import { Navigate, useSearchParams } from "react-router-dom";
 import TempoReal from "@/components/manager-v10/TempoReal";
 import CockpitGerenteV3 from "@/components/manager-v10/CockpitGerenteV3";
 import HojeGerente from "@/components/manager-v10/HojeGerente";
+import FunilCompleto from "@/components/manager-v10/FunilCompleto";
 import TimeTab from "@/components/manager-v10/TimeTab";
 import RoletaHoje from "@/components/manager-v10/RoletaHoje";
 import BiTab from "@/components/manager-v10/BiTab";
@@ -242,6 +243,8 @@ export default function ManagerV10() {
                 <p>Vendas × Visitas × Documentos — a operação em números</p>
               </div>
             </header>
+            {/* funil completo da equipe (veio do Time em 20/10), mesmas contas do Hoje */}
+            <FunilCompleto managerId={userId} />
             <BiTab scope="gerente" managerId={userId} />
           </>
         )}

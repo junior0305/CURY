@@ -17,7 +17,6 @@ import Briefing from "@/components/manager-v10/Briefing";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
-import FunilEquipeV3 from "@/components/manager-v10/FunilEquipeV3";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { useLeadsQueimaDisparo } from "@/components/manager-v10/AlertaDisparoQueima";
 import RaioXCorretorDrawer from "@/components/manager-v10/RaioXCorretorDrawer";
@@ -283,7 +282,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       <VincularNomes managerId={managerId} />
 
       {/* ── FUNIL DA EQUIPE (CONVERSÃO POR CANAL & GARGALO) ── */}
-      <FunilEquipeV3 managerId={managerId!} onSelecionarCorretor={(id) => setCorretorRaioX(id)} />
+      {/* funil da equipe saiu daqui (20/10): resumo no Hoje, completo no Resultado (FunilCompleto) */}
 
       {/* ── BARRA RESUMO COMPACTA (ZERO POLUIÇÃO VISUAL & 100% INTERATIVA) ── */}
       <div className="time-resumo-compacto-bar">

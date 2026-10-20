@@ -24,33 +24,9 @@ import { usePastas } from "@/hooks/usePastas";
 import { usePeriodo, diaSP, getSegunda } from "@/hooks/usePeriodo";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import FilasFormulario from "@/components/leads/FilasFormulario";
+import { useDadosEquipe, ORIGENS, origemDe, chaveCliente, type LeadH, type Origem } from "@/hooks/useDadosEquipe";
 import { atendido, esperando, ehTeste, ehPescado } from "@/lib/situacaoLead";
 
-type LeadH = {
-  id: string; name: string | null; status: string | null; source: string | null; broker_id: string | null;
-  created_at: string; last_broker_whatsapp_at: string | null; last_lead_response_at: string | null;
-  last_interaction_at: string | null; contact_attempts: number | null;
-  fb_campaign?: string | null; tag?: string | null;
-};
-type Origem = "anuncio" | "disparo" | "pescado" | "outro" | "plantao" | "sem";
-const ORIGENS: { k: Origem; nome: string; cor: string }[] = [
-  { k: "anuncio", nome: "Anúncio", cor: "#1F5C9E" },
-  { k: "disparo", nome: "Disparo", cor: "#0E7C7B" },
-  { k: "pescado", nome: "Pescaria", cor: "#B7791F" },
-  { k: "outro", nome: "Outros", cor: "#7B8BA3" },
-  { k: "plantao", nome: "Plantão C2S", cor: "#2A3E5C" },
-  { k: "sem", nome: "Origem não identificada", cor: "#C9D2DE" },
-];
-/** de onde veio o lead: anúncio, disparo, pescaria ou outro (secretária, indicação, manual…) */
-function origemDe(l: { source?: string | null; fb_campaign?: string | null; tag?: string | null }): Origem {
-  const src = (l.source ?? "").toLowerCase();
-  const tag = (l.fb_campaign ?? l.tag ?? "").toUpperCase();
-  if (src.startsWith("disparo") || src === "wa_oficial" || src === "campaign" || tag.startsWith("DISPARO") || tag === "BASE OFICIAL") return "disparo";
-  if (src === "cold_pool") return "pescado";
-  if (src.startsWith("facebook") || src.startsWith("fb") || src.startsWith("google") || src.startsWith("tiktok") || src === "instagram") return "anuncio";
-  return "outro";
-}
-const chaveCliente = (n: string | null | undefined) => (n ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/).filter((t) => t.length > 1).slice(0, 2).join(" ");
 type Metrica = "leads" | "checkins" | "visitas" | "pastas" | "vendas";
 
 const nf = (n: number) => n.toLocaleString("pt-BR");
@@ -62,7 +38,7 @@ const NOME_MES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "j
 
 export default function HojeGerente({ managerId }: { managerId: string }) {
   const qc = useQueryClient();
-  const { data: v10 } = useManagerV10(managerId);
+
   const { data: pastasData } = usePastas(managerId);
   const { periodo: per } = usePeriodo();
   const [metrica, setMetrica] = useState<Metrica>("leads");
@@ -77,72 +53,9 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
   const segIniMes = getSegunda(new Date(iniMes + "T12:00:00Z"));
   // desde a 1ª segunda da 1ª semana do mês (ou da semana passada, se for antes)
   const desde = [segIniMes, segPassada, per.de].sort()[0];
+  const { v10, brokers, leads, origens, metricas, vendas } = useDadosEquipe(managerId, desde);
   const diasParaFechar = 7 - (new Date(hoje + "T12:00:00Z").getUTCDay() || 7);
 
-  // ── leads da equipe (manager_id ou corretor da equipe) ──
-  const { data: leads = [] } = useQuery<LeadH[]>({
-    queryKey: ["hoje-leads", managerId, desde],
-    refetchInterval: 60_000,
-    queryFn: async () => {
-      const { data: bs } = await supabase.from("profiles").select("id").eq("manager_id", managerId).eq("role", "BROKER");
-      const ids = (bs ?? []).map((b: any) => b.id);
-      const out: LeadH[] = [];
-      for (let a = 0; ; a += 1000) {
-        let q = supabase.from("leads")
-          .select("id,name,status,source,broker_id,created_at,last_broker_whatsapp_at,last_lead_response_at,last_interaction_at,contact_attempts,fb_campaign,tag")
-          .gte("created_at", `${desde}T03:00:00Z`).neq("status", "EXCLUDED");
-        q = ids.length ? q.or(`manager_id.eq.${managerId},broker_id.in.(${ids.join(",")})`) : q.eq("manager_id", managerId);
-        const { data, error } = await q.order("created_at", { ascending: false }).range(a, a + 999);
-        if (error) throw error;
-        out.push(...((data ?? []) as LeadH[]));
-        if (!data || data.length < 1000) break;
-      }
-      return out.filter((l) => !ehTeste(l));
-    },
-  });
-
-  // ── origem por cliente (para pastas e vendas do Junix, que só trazem o nome) e visitas marcadas "Veio" ──
-  const { data: origens } = useQuery({
-    queryKey: ["hoje-origens", managerId, desde],
-    staleTime: 10 * 60_000,
-    queryFn: async () => {
-      const { data: bs } = await supabase.from("profiles").select("id").eq("manager_id", managerId).eq("role", "BROKER");
-      const ids = (bs ?? []).map((b: any) => b.id);
-      const corte = new Date(Date.now() - 200 * 864e5).toISOString();
-      const porNome = new Map<string, Origem>();
-      const porId = new Map<string, Origem>();
-      for (let a = 0; ; a += 1000) {
-        let q = supabase.from("leads").select("id,name,source,fb_campaign,tag").gte("created_at", corte);
-        q = ids.length ? q.or(`manager_id.eq.${managerId},broker_id.in.(${ids.join(",")})`) : q.eq("manager_id", managerId);
-        const { data } = await q.range(a, a + 999);
-        for (const l of (data ?? []) as any[]) {
-          const o = origemDe(l);
-          porId.set(l.id, o);
-          const k = chaveCliente(l.name);
-          if (k && !porNome.has(k)) porNome.set(k, o);
-        }
-        if (!data || data.length < 1000) break;
-      }
-      // visita registrada no Comandra: o corretor marcou a fase "Veio" no painel
-      const { data: notas } = await supabase.from("lead_notes").select("lead_id,created_at").eq("content", "Fase · Veio").gte("created_at", `${desde}T03:00:00Z`).limit(2000);
-      const visitas = ((notas ?? []) as any[]).filter((n) => porId.has(n.lead_id)).map((n) => ({ dia: diaSP(new Date(n.created_at)), origem: porId.get(n.lead_id) as Origem }));
-      return { porNome, visitas };
-    },
-  });
-
-  // ── plantão (C2S): check-ins e visitas por dia ──
-  const { data: metricas = [] } = useQuery({
-    queryKey: ["hoje-metricas", managerId, desde],
-    staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const { data: eu } = await supabase.from("cury_pessoas").select("cury_id").eq("escopo", "gerente").eq("profile_id", managerId).maybeSingle();
-      const gid = (eu as any)?.cury_id;
-      if (!gid) return [] as { data: string; checkins: number; atendimentos: number }[];
-      const { data } = await supabase.from("cury_metricas_diarias").select("data,checkins,atendimentos")
-        .eq("escopo", "corretor").eq("gerente_cury_id", gid).gte("data", desde);
-      return (data ?? []) as { data: string; checkins: number; atendimentos: number }[];
-    },
-  });
   const { data: plantaoHoje } = useQuery({
     queryKey: ["hoje-plantao", managerId],
     refetchInterval: 60_000,
@@ -154,20 +67,6 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
       const kg = chaveGerente((ger as any)?.first_name);
       const daEquipe = (plantao as any[]).filter((r) => r.created_at?.slice(0, 10) >= hoje && chaveGerente(gerenteC2S(r.gerente)) === kg);
       return { chaves: new Set(daEquipe.map((r) => chaveNome(r.corretor))), total: new Set(daEquipe.map((r) => chaveNome(r.corretor))).size };
-    },
-  });
-
-  // ── vendas confirmadas no Junix (corretores da equipe), desde o início da 1ª semana do mês ──
-  const brokers = v10?.brokers ?? [];
-  const { data: vendas = [] } = useQuery({
-    queryKey: ["hoje-vendas", managerId, desde, brokers.length],
-    enabled: brokers.length > 0,
-    staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const { data } = await supabase.from("junix_vendas" as any).select("corretor,data_venda,vgv,fora_do_placar").gte("data_venda", desde);
-      const chaves = new Set(brokers.map((b) => chaveNome(b.first_name)));
-      return ((data ?? []) as any[]).filter((v) => !v.fora_do_placar && chaves.has(chaveNome(String(v.corretor ?? "").split(" ")[0])))
-        .map((v) => ({ dia: String(v.data_venda).slice(0, 10), vgv: Number(v.vgv) || 0 }));
     },
   });
 
