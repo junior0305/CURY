@@ -145,6 +145,9 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
   const semAnt = janela(segPassada, domPassado);
   const doPer = janela(per.de, per.ate);
   const doMes = janela(iniMes, hoje);
+  // Funil: com Hoje/Ontem o dia ainda tem pouco lead (de manhã fica tudo zero) — mostra o mês
+  const funilDoMes = per.de === per.ate;
+  const doFunil = funilDoMes ? doMes : doPer;
 
   // ── mês ──
   const meta = v10?.metaMes ?? null;
@@ -225,11 +228,11 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
     { k: "Vendas", a: sem.vendas, b: semAnt.vendas, cor: "#1D6B45" },
   ];
   const funil = [
-    { k: "Leads pagos", v: doPer.leads },
-    { k: "Com contato", v: doPer.atendidos },
-    { k: "Visitas", v: doPer.visitas },
-    { k: "Pastas", v: doPer.pastas },
-    { k: "Vendas", v: doPer.vendas },
+    { k: "Leads pagos", v: doFunil.leads },
+    { k: "Com contato", v: doFunil.atendidos },
+    { k: "Visitas", v: doFunil.visitas },
+    { k: "Pastas", v: doFunil.pastas },
+    { k: "Vendas", v: doFunil.vendas },
   ];
   const conv = funil.map((f, i) => (i === 0 ? null : funil[i - 1].v > 0 ? Math.round((f.v / funil[i - 1].v) * 100) : null));
   const piorIdx = conv.reduce<number>((m, c, i) => (c != null && (m < 0 || c < (conv[m] ?? 101)) ? i : m), -1);
@@ -363,7 +366,7 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
 
       <section className="hj-box">
         <div className="hj-box-top">
-          <div><h2>Funil · {per.rotulo}</h2><p className="hj-mut">A % é sobre a etapa anterior. Contato pela mesma regra do Time e do Leads.</p></div>
+          <div><h2>Funil · {funilDoMes ? NOME_MES[d0.getUTCMonth()] : per.rotulo}</h2><p className="hj-mut">A % é sobre a etapa anterior. Contato pela mesma regra do Time e do Leads.</p></div>
         </div>
         <div className="hj-funil">
           {funil.map((f, i) => (
