@@ -30,7 +30,27 @@ type LeadH = {
   id: string; name: string | null; status: string | null; source: string | null; broker_id: string | null;
   created_at: string; last_broker_whatsapp_at: string | null; last_lead_response_at: string | null;
   last_interaction_at: string | null; contact_attempts: number | null;
+  fb_campaign?: string | null; tag?: string | null;
 };
+type Origem = "anuncio" | "disparo" | "pescado" | "outro" | "plantao" | "sem";
+const ORIGENS: { k: Origem; nome: string; cor: string }[] = [
+  { k: "anuncio", nome: "Anúncio", cor: "#1F5C9E" },
+  { k: "disparo", nome: "Disparo", cor: "#0E7C7B" },
+  { k: "pescado", nome: "Pescaria", cor: "#B7791F" },
+  { k: "outro", nome: "Outros", cor: "#7B8BA3" },
+  { k: "plantao", nome: "Plantão C2S", cor: "#2A3E5C" },
+  { k: "sem", nome: "Origem não identificada", cor: "#C9D2DE" },
+];
+/** de onde veio o lead: anúncio, disparo, pescaria ou outro (secretária, indicação, manual…) */
+function origemDe(l: { source?: string | null; fb_campaign?: string | null; tag?: string | null }): Origem {
+  const src = (l.source ?? "").toLowerCase();
+  const tag = (l.fb_campaign ?? l.tag ?? "").toUpperCase();
+  if (src.startsWith("disparo") || src === "wa_oficial" || src === "campaign" || tag.startsWith("DISPARO") || tag === "BASE OFICIAL") return "disparo";
+  if (src === "cold_pool") return "pescado";
+  if (src.startsWith("facebook") || src.startsWith("fb") || src.startsWith("google") || src.startsWith("tiktok") || src === "instagram") return "anuncio";
+  return "outro";
+}
+const chaveCliente = (n: string | null | undefined) => (n ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z ]/g, " ").split(/\s+/).filter((t) => t.length > 1).slice(0, 2).join(" ");
 type Metrica = "leads" | "checkins" | "visitas" | "pastas" | "vendas";
 
 const nf = (n: number) => n.toLocaleString("pt-BR");
@@ -69,7 +89,7 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
       const out: LeadH[] = [];
       for (let a = 0; ; a += 1000) {
         let q = supabase.from("leads")
-          .select("id,name,status,source,broker_id,created_at,last_broker_whatsapp_at,last_lead_response_at,last_interaction_at,contact_attempts")
+          .select("id,name,status,source,broker_id,created_at,last_broker_whatsapp_at,last_lead_response_at,last_interaction_at,contact_attempts,fb_campaign,tag")
           .gte("created_at", `${desde}T03:00:00Z`).neq("status", "EXCLUDED");
         q = ids.length ? q.or(`manager_id.eq.${managerId},broker_id.in.(${ids.join(",")})`) : q.eq("manager_id", managerId);
         const { data, error } = await q.order("created_at", { ascending: false }).range(a, a + 999);
@@ -78,6 +98,35 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
         if (!data || data.length < 1000) break;
       }
       return out.filter((l) => !ehTeste(l));
+    },
+  });
+
+  // ── origem por cliente (para pastas e vendas do Junix, que só trazem o nome) e visitas marcadas "Veio" ──
+  const { data: origens } = useQuery({
+    queryKey: ["hoje-origens", managerId, desde],
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const { data: bs } = await supabase.from("profiles").select("id").eq("manager_id", managerId).eq("role", "BROKER");
+      const ids = (bs ?? []).map((b: any) => b.id);
+      const corte = new Date(Date.now() - 200 * 864e5).toISOString();
+      const porNome = new Map<string, Origem>();
+      const porId = new Map<string, Origem>();
+      for (let a = 0; ; a += 1000) {
+        let q = supabase.from("leads").select("id,name,source,fb_campaign,tag").gte("created_at", corte);
+        q = ids.length ? q.or(`manager_id.eq.${managerId},broker_id.in.(${ids.join(",")})`) : q.eq("manager_id", managerId);
+        const { data } = await q.range(a, a + 999);
+        for (const l of (data ?? []) as any[]) {
+          const o = origemDe(l);
+          porId.set(l.id, o);
+          const k = chaveCliente(l.name);
+          if (k && !porNome.has(k)) porNome.set(k, o);
+        }
+        if (!data || data.length < 1000) break;
+      }
+      // visita registrada no Comandra: o corretor marcou a fase "Veio" no painel
+      const { data: notas } = await supabase.from("lead_notes").select("lead_id,created_at").eq("content", "Fase · Veio").gte("created_at", `${desde}T03:00:00Z`).limit(2000);
+      const visitas = ((notas ?? []) as any[]).filter((n) => porId.has(n.lead_id)).map((n) => ({ dia: diaSP(new Date(n.created_at)), origem: porId.get(n.lead_id) as Origem }));
+      return { porNome, visitas };
     },
   });
 
@@ -197,13 +246,44 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
     }
     return out;
   }, [segIniMes, iniMes, hoje]);
-  const ROT: Record<Metrica, string> = { leads: "Leads", checkins: "Check-ins", visitas: "Visitas", pastas: "Pastas", vendas: "Vendas" };
+  const ROT: Record<Metrica, string> = { leads: "Leads do Facebook", checkins: "Check-ins", visitas: "Visitas", pastas: "Pastas", vendas: "Vendas" };
+  const origemCliente = (nome: string | null | undefined): Origem => origens?.porNome.get(chaveCliente(nome)) ?? "sem";
+  // cada barra: total + pedaços por origem
+  const fatias = (a: string, b: string): { total: number; partes: Partial<Record<Origem, number>> } => {
+    const partes: Partial<Record<Origem, number>> = {};
+    const soma = (o: Origem, n = 1) => { partes[o] = (partes[o] ?? 0) + n; };
+    if (metrica === "leads") {
+      const n = pagos.filter((l) => entre(diaL(l), a, b) && origemDe(l) === "anuncio").length;
+      if (n) soma("anuncio", n);
+    } else if (metrica === "checkins") {
+      const n = metricas.filter((m) => entre(m.data, a, b)).reduce((s, m) => s + (m.checkins || 0), 0);
+      if (n) soma("plantao", n);
+    } else if (metrica === "visitas") {
+      for (const v of origens?.visitas ?? []) if (entre(v.dia, a, b)) soma(v.origem);
+      const c2s = metricas.filter((m) => entre(m.data, a, b)).reduce((s, m) => s + (m.atendimentos || 0), 0);
+      if (c2s) soma("plantao", c2s);
+    } else if (metrica === "pastas") {
+      for (const p of pastas) if (p.cadastradaEm && entre(diaSP(new Date(p.cadastradaEm)), a, b)) soma(origemCliente(p.cliente));
+    } else {
+      // total = vendas confirmadas do Junix; origem pela pasta que virou "Venda Confirmada" na semana
+      const total = vendas.filter((v) => entre(v.dia, a, b)).length;
+      let conhecidas = 0;
+      for (const p of pastas) {
+        if (p.etapaOrdem !== 10 || !p.etapaDesde || !entre(diaSP(new Date(p.etapaDesde)), a, b) || conhecidas >= total) continue;
+        const o = origemCliente(p.cliente);
+        if (o !== "sem") { soma(o); conhecidas++; }
+      }
+      if (total - conhecidas > 0) soma("sem", total - conhecidas);
+    }
+    return { total: Object.values(partes).reduce((s, n) => s + (n ?? 0), 0), partes };
+  };
   const barras = semanas.map((w, i) => {
     const futura = w.ini > hoje;
-    const v = futura ? null : janela(w.ini, w.fim < hoje ? w.fim : hoje)[metrica];
-    return { ...w, i, v, atual: w.ini === segAtual, futura };
+    const f = futura ? null : fatias(w.ini, w.fim < hoje ? w.fim : hoje);
+    return { ...w, i, v: f ? f.total : null, partes: f?.partes ?? {}, atual: w.ini === segAtual, futura };
   });
   const maxB = Math.max(1, ...barras.map((b) => b.v ?? 0));
+  const legenda = ORIGENS.filter((o) => barras.some((b) => (b.partes[o.k] ?? 0) > 0));
 
   // ── roleta ──
   const alternar = async (id: string, nome: string, on: boolean) => {
@@ -333,13 +413,32 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
             {barras.map((b) => (
               <div key={b.ini} className="hj-graf-col">
                 <span className="hj-mono">{b.v == null ? "—" : nf(b.v)}</span>
-                <div style={{ height: b.v == null ? 2 : Math.max(4, Math.round(((b.v ?? 0) / maxB) * 120)), background: b.futura ? "var(--hj-line)" : b.atual ? "#0E7C7B" : "#1F5C9E" }} />
+                {b.v == null || b.v === 0 ? (
+                  <div style={{ height: 2, background: "var(--hj-line)" }} />
+                ) : (
+                  <div className={`hj-pilha${b.atual ? " atual" : ""}`} style={{ height: Math.max(4, Math.round((b.v / maxB) * 120)) }}
+                    title={ORIGENS.filter((o) => b.partes[o.k]).map((o) => `${o.nome}: ${b.partes[o.k]}`).join(" · ")}>
+                    {ORIGENS.filter((o) => b.partes[o.k]).map((o) => (
+                      <span key={o.k} style={{ flexGrow: b.partes[o.k], background: o.cor }} />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
           <div className="hj-graf-rot" style={{ gridTemplateColumns: `repeat(${barras.length}, minmax(0, 1fr))` }}>
             {barras.map((b) => (<span key={b.ini}><b>Semana {b.i + 1}</b><i>{dm(b.ini)}–{dm(b.fim)}{b.atual ? " · agora" : ""}</i></span>))}
           </div>
+          {legenda.length > 0 && (
+            <div className="hj-leg">
+              {legenda.map((o) => {
+                const tot = barras.reduce((s, b) => s + (b.partes[o.k] ?? 0), 0);
+                return <span key={o.k}><i style={{ background: o.cor }} />{o.nome} <b className="hj-mono">{nf(tot)}</b></span>;
+              })}
+            </div>
+          )}
+          {metrica === "visitas" && <p className="hj-mut">Plantão C2S não informa o cliente, por isso fica sem origem. As outras cores são visitas que o corretor marcou como "Veio" no Comandra.</p>}
+          {(metrica === "pastas" || metrica === "vendas") && <p className="hj-mut">Origem descoberta pelo nome do cliente no Junix, cruzado com os leads da equipe.</p>}
         </section>
 
         <section className="hj-box">
@@ -452,6 +551,13 @@ const CSS = `
 .hj-graf-col span{font-size:15px;font-weight:700}
 .hj-graf-col > div{width:70%;border-radius:6px 6px 0 0}
 .hj-graf-rot{display:grid;gap:14px;text-align:center}
+.hj-pilha{width:70%;border-radius:6px 6px 0 0;overflow:hidden;display:flex;flex-direction:column-reverse}
+.hj-pilha.atual{outline:2px solid #0E7C7B;outline-offset:2px}
+.hj-pilha span{display:block;min-height:3px}
+.hj-leg{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--hj-mut)}
+.hj-leg span{display:inline-flex;align-items:center;gap:6px}
+.hj-leg i{width:11px;height:11px;border-radius:3px;display:inline-block}
+.hj-leg b{color:var(--hj-ink)}
 .hj-graf-rot span{display:flex;flex-direction:column;gap:1px}
 .hj-graf-rot b{font-size:12.5px}
 .hj-graf-rot i{font-style:normal;font-size:11.5px;color:var(--hj-mut)}
