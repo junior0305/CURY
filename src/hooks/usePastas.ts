@@ -28,6 +28,8 @@ export interface Pasta {
   gerenteNome: string | null;
   superintendenteNome: string | null;
   daEquipe: boolean;
+  /** quando a pasta foi cadastrada no Junix (gráfico semana a semana do Hoje) */
+  cadastradaEm?: string | null;
 }
 
 export interface DadosPastas {
@@ -253,7 +255,7 @@ export function usePastas(managerId: string | undefined) {
       const pastas = await todas<any>((de, ate) =>
         supabase
           .from("junix_pastas" as any)
-          .select("proposta_id,cliente,etapa,etapa_ordem,status_texto,dias,fluxo,atualizado_em,corretor,gerente,superintendente")
+          .select("proposta_id,cliente,etapa,etapa_ordem,status_texto,dias,fluxo,atualizado_em,corretor,gerente,superintendente,cadastrada_em")
           .order("proposta_id")
           .range(de, ate)
       );
@@ -308,6 +310,7 @@ export function usePastas(managerId: string | undefined) {
           gerenteNome: r.gerente ? titulo(r.gerente) : null,
           superintendenteNome: r.superintendente ? titulo(r.superintendente) : null,
           daEquipe: true,
+          cadastradaEm: r.cadastrada_em ?? null,
         });
       }
 

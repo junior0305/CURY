@@ -23,6 +23,7 @@ import { Sec, Panel, ScoreRow, Cell, Pace, Funnel, Blank, Tbl, Tr } from "@/comp
 import { Navigate, useSearchParams } from "react-router-dom";
 import TempoReal from "@/components/manager-v10/TempoReal";
 import CockpitGerenteV3 from "@/components/manager-v10/CockpitGerenteV3";
+import HojeGerente from "@/components/manager-v10/HojeGerente";
 import TimeTab from "@/components/manager-v10/TimeTab";
 import RoletaHoje from "@/components/manager-v10/RoletaHoje";
 import BiTab from "@/components/manager-v10/BiTab";
@@ -228,7 +229,8 @@ export default function ManagerV10() {
         <MinhasTarefas donoId={userId} nome={userId !== session?.user?.id ? nome : undefined} />
         {view === "tempo" ? (
           <Boundary>
-            <CockpitGerenteV3 managerId={userId} quem={session?.user?.id ?? userId} />
+            {/* Hoje do gerente (protótipo aprovado 20/10). O CockpitGerenteV3 fica no código para voltar se precisar. */}
+            <HojeGerente managerId={userId} />
           </Boundary>
         ) : view === "time" ? (
           <TimeTab managerId={userId} />
