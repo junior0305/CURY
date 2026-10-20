@@ -70,7 +70,8 @@ export default function FunilCompleto({ managerId }: { managerId: string }) {
     const etapas = [ls.length, c, vis, pas, ven];
     const nomes = ["contato", "visita", "pasta", "venda"];
     let perda = "—";
-    for (let i = 1; i < etapas.length; i++) if (etapas[i - 1] > 0 && etapas[i] === 0) { perda = nomes[i - 1]; break; }
+    // quem já vendeu não "trava"; para os outros, a primeira etapa que zera depois de ter movimento
+    if (!ven) for (let i = 1; i < etapas.length; i++) if (etapas[i - 1] > 0 && etapas[i] === 0) { perda = nomes[i - 1]; break; }
     return { id: b.id, nome: b.first_name ?? "—", leads: ls.length, contato: pct(c, ls.length), vis, pas, ven, perda };
   }).filter((x) => x.leads || x.vis || x.pas || x.ven).sort((a, b) => b.ven - a.ven || b.pas - a.pas || b.leads - a.leads), [brokers, leads, origens, pastas, vendas, de, ate]); // eslint-disable-line
 
