@@ -211,12 +211,12 @@ const App = () => (
             <Route path="/admin/lista-cury" element={<ListaCury />} />
             <Route path="/diretor" element={<ProtectedDiretorRoute><Boundary><Diretoria /></Boundary></ProtectedDiretorRoute>} />
             <Route path="/super" element={<ProtectedSuperRoute><Boundary><Superintendente /></Boundary></ProtectedSuperRoute>} />
-            <Route path="/manager" element={<ProtectedManagerRoute><ManagerV10 /></ProtectedManagerRoute>} />
+            <Route path="/manager" element={<ProtectedManagerRoute><Boundary><ManagerV10 /></Boundary></ProtectedManagerRoute>} />
             <Route path="/integracoes" element={<ProtectedManagerRoute><IntegracaoGerente /></ProtectedManagerRoute>} />
             <Route path="/manager-v1" element={<ProtectedManagerRoute><ManagerDashboard /></ProtectedManagerRoute>} />
             <Route path="/manager-v3" element={<ProtectedManagerRoute><ManagerV3 /></ProtectedManagerRoute>} />
             {/* v10 em construção — o /manager de produção segue intocado. */}
-            <Route path="/manager-v10" element={<ProtectedManagerRoute><ManagerV10 /></ProtectedManagerRoute>} />
+            <Route path="/manager-v10" element={<ProtectedManagerRoute><Boundary><ManagerV10 /></Boundary></ProtectedManagerRoute>} />
             <Route path="/manager/leads" element={<ProtectedManagerRoute><LeadsV10 /></ProtectedManagerRoute>} />
             <Route path="/manager/pastas" element={<ProtectedManagerRoute><PastasV10 /></ProtectedManagerRoute>} />
             <Route path="/manager/config" element={<ProtectedManagerRoute><ConfiguracoesGerente /></ProtectedManagerRoute>} />

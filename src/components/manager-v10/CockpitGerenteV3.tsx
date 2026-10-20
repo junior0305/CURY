@@ -10,7 +10,7 @@ import { buscarPlantao } from "@/utils/c2sMatching";
 import { chaveNome, chaveGerente, gerenteC2S } from "@/hooks/useDiretoria";
 import AlertaDisparoQueima from "@/components/manager-v10/AlertaDisparoQueima";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
-import { usePeriodo, tempoAteDomingo, getSegunda, getDomingo } from "@/hooks/usePeriodo";
+import { usePeriodo, tempoAteDomingo, getSegunda, getDomingo, diaSP } from "@/hooks/usePeriodo";
 import { usePastas } from "@/hooks/usePastas";
 import "@/styles/cockpit-gerente.css";
 import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
@@ -22,11 +22,6 @@ interface CockpitGerenteV3Props {
 }
 
 type OrigemFiltro = "todos" | "anuncio" | "disparo" | "pescado" | "acao";
-
-const diaSP = (offsetDias = 0) => {
-  const d = new Date(Date.now() - 3 * 3600e3 - offsetDias * 864e5);
-  return d.toISOString().slice(0, 10);
-};
 
 const horas = (iso: string | null | undefined) =>
   iso ? (Date.now() - new Date(iso).getTime()) / 3_600_000 : Infinity;
@@ -51,7 +46,9 @@ function parado(l: LeadSinal) {
 const brl = (n: number) =>
   (n < 0 ? "-" : "") + "R$ " + Math.abs(Math.round(n)).toLocaleString("pt-BR");
 
-function calcularDeltaWoW(atual: number, anterior: number, unidade = "un") {
+function calcularDeltaWoW(atualRaw: number, anteriorRaw: number, unidade = "un") {
+  const atual = Number.isFinite(atualRaw) ? atualRaw : 0;
+  const anterior = Number.isFinite(anteriorRaw) ? anteriorRaw : 0;
   const diff = atual - anterior;
   const pct = anterior > 0 ? Math.round((diff / anterior) * 100) : atual > 0 ? 100 : 0;
   if (diff > 0) {
@@ -231,13 +228,13 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
         plantaoSet.has(chaveNome(`${b.first_name}${b.last_name ?? ""}`));
       const meusLeads = leads.filter((l) => l.broker_id === b.id);
       const ativos = meusLeads.filter((l) => !["CONCLUDED", "EXCLUDED", "ABANDONED"].includes(l.status ?? "")).length;
-      const vendasB = cruz?.porProfile.get(b.id)?.vendas ??
+      const vendasB = (cruz?.porProfile instanceof Map ? cruz.porProfile.get(b.id)?.vendas : undefined) ??
         meusLeads.filter((l) => l.status === "CONCLUDED").length;
 
       // custo só do lead pago (anúncio), ao CPL real das contas do gerente; pescado/carteira não custa
       const pagos = meusLeads.filter((l) => classificarOrigem(l) === "anuncio").length;
-      const custo = pagos * (midia?.cpl ?? v10.dinheiro.custoLead);
-      const retorno = vendasB * v10.dinheiro.comissaoCorretor;
+      const custo = pagos * (midia?.cpl ?? v10.dinheiro?.custoLead ?? 0);
+      const retorno = vendasB * (v10.dinheiro?.comissaoCorretor ?? 0);
       const saldo = retorno - custo;
 
       return {
@@ -338,7 +335,9 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
   const vendasAtual = useMemo(() => {
     const cv = metricasAtual.reduce((acc, m) => acc + (m.vendas || 0), 0);
     const lv = leadsFiltradosPorData.filter((l) => l.status === "CONCLUDED").length;
-    const junix = cruz?.porProfile.values() ? [...cruz.porProfile.values()].reduce((a, c) => a + c.vendas, 0) : 0;
+    const junix = (cruz?.porProfile instanceof Map)
+      ? [...cruz.porProfile.values()].reduce((a, c) => a + (Number(c.vendas) || 0), 0)
+      : 0;
     return Math.max(cv, lv, junix);
   }, [metricasAtual, leadsFiltradosPorData, cruz]);
 
@@ -350,7 +349,10 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
 
   const totalPastas = pastasData?.minhas?.length ?? 0;
   const pastasTravadas = (pastasData?.minhas ?? []).filter((p) => p.dias >= 4);
-  const pastasAntEstimada = Math.max(1, Math.round(visitasAnt > 0 ? (visitasAnt * (Math.max(1, totalPastas) / Math.max(1, visitasAtual))) : Math.round(totalPastas * 0.75)));
+  const rawPastasAnt = visitasAnt > 0
+    ? (visitasAnt * (Math.max(1, totalPastas) / Math.max(1, visitasAtual)))
+    : Math.round(totalPastas * 0.75);
+  const pastasAntEstimada = Math.max(1, Math.round(Number.isFinite(rawPastasAnt) ? rawPastasAnt : 1));
 
   // Deltas WoW
   const wowVendas = useMemo(() => calcularDeltaWoW(vendasAtual, vendasAnt, "un"), [vendasAtual, vendasAnt]);
@@ -471,7 +473,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
     if (!v10) return { vendas: 0, meta: 15, vgv: 0, projecao: 0, porDia: 0, leadsPeriodo: 0, leadsParados: 0 };
     const vendas = vendasAtual;
     const meta = v10.metaMes || 15;
-    const vgv = vendas * v10.dinheiro.ticket;
+    const vgv = vendas * (v10.dinheiro?.ticket ?? 295000);
     const hoje = new Date();
     const diaMes = hoje.getDate();
     const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
@@ -690,7 +692,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
             <span>{wowVisitas.texto}</span>
           </div>
           <div className="kpi-footer-wow">
-            <span>{plantaoHoje?.nomes.size ?? 0} no plantão hoje</span>
+            <span>{plantaoHoje?.nomes?.size ?? 0} no plantão hoje</span>
             <span>Período Ant: <b className="mono">{visitasAnt} un</b></span>
           </div>
           <div className="progress-bar-wrap-v3" style={{ marginTop: 8 }}>
@@ -936,7 +938,7 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
             <div className="urgency-item-v3 oportunidade">
               <div className="urgency-info-v3">
                 <span className="urgency-title-v3">
-                  {plantaoHoje?.nomes.size ?? 0} Corretores no Plantão Hoje (C2S)
+                  {plantaoHoje?.nomes?.size ?? 0} Corretores no Plantão Hoje (C2S)
                 </span>
                 <span className="urgency-sub-v3">
                   {corretores.filter((c) => c.plantao).length} com conta Comandra

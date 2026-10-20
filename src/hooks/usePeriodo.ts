@@ -36,13 +36,19 @@ export interface Periodo extends PeriodoJanela {
 const CHAVE = "mgr10-periodo";
 const EVENTO = "mgr10-periodo-mudou";
 
-export const diaSP = (d = new Date()) =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo",
-    year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
-const menos = (n: number) => diaSP(new Date(Date.now() - n * 86_400_000));
+export const diaSP = (d: Date | number = new Date()): string => {
+  const dataObj = typeof d === "number" ? new Date(Date.now() - d * 86_400_000) : d;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(dataObj);
+};
+const menos = (n: number) => diaSP(n);
 
 /** Segunda-feira da semana de uma data (fuso de SP) */
-export function getSegunda(d = new Date()): string {
+export function getSegunda(d: Date | number = new Date()): string {
   const hojeStr = diaSP(d);
   const dataRef = new Date(hojeStr + "T12:00:00Z");
   const day = dataRef.getUTCDay(); // 0 = Domingo, 1 = Segunda, ... 6 = Sábado
@@ -63,7 +69,7 @@ export function tempoAteDomingo(): { dias: number; horas: number; texto: string 
   const domStr = getDomingo(segStr);
   const fimDomingo = new Date(domStr + "T23:59:59-03:00");
   const diffMs = fimDomingo.getTime() - agora.getTime();
-  if (diffMs <= 0) return { dias: 0, horas: 0, texto: "Fechando hoje às 23:59" };
+  if (isNaN(diffMs) || diffMs <= 0) return { dias: 0, horas: 0, texto: "Fechando hoje às 23:59" };
   const dias = Math.floor(diffMs / 86_400_000);
   const horas = Math.floor((diffMs % 86_400_000) / 3_600_000);
   const texto = dias > 0 ? `${dias}d e ${horas}h` : `${horas}h`;
@@ -193,6 +199,16 @@ export function resolver(preset: Preset, de?: string, ate?: string): Periodo {
         rotulo: "últimos 7 dias",
         dias: 7,
         anterior: { de: menos(13), ate: menos(7), rotulo: "7 dias anteriores", dias: 7 },
+      };
+
+    case "30":
+      return {
+        preset,
+        de: menos(29),
+        ate: hoje,
+        rotulo: "últimos 30 dias",
+        dias: 30,
+        anterior: { de: menos(59), ate: menos(30), rotulo: "30 dias anteriores", dias: 30 },
       };
 
     case "90":

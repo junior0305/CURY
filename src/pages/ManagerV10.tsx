@@ -28,7 +28,7 @@ import RoletaHoje from "@/components/manager-v10/RoletaHoje";
 import BiTab from "@/components/manager-v10/BiTab";
 import { RailV10 } from "@/components/manager-v10/RailV10";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
-import AchadosCury from "@/components/manager-v10/AchadosCury";
+import { Boundary } from "@/components/manager-v10/Boundary";
 import "@/styles/manager-v10.css";
 
 type View = "tempo" | "time" | "bi";
@@ -115,10 +115,10 @@ export default function ManagerV10() {
     const emNegociacao = noMes.filter((l) => ["IN_PROGRESS", "NEGOTIATING", "REACTIVATED"].includes(l.status || "")).length;
     // Visita e venda: a Cury é a fonte. O Comandra só sabe o que alguém digitou,
     // e ninguém digita — o degrau vinha zero e contradizia as outras abas.
-    const visitasCury = cruz
-      ? [...cruz.porProfile.values()].reduce((a, c) => a + c.visitas, 0) : null;
-    const vendasCury = cruz
-      ? [...cruz.porProfile.values()].reduce((a, c) => a + c.vendas, 0) : null;
+    const visitasCury = (cruz?.porProfile instanceof Map)
+      ? [...cruz.porProfile.values()].reduce((a, c) => a + (c.visitas || 0), 0) : null;
+    const vendasCury = (cruz?.porProfile instanceof Map)
+      ? [...cruz.porProfile.values()].reduce((a, c) => a + (c.vendas || 0), 0) : null;
     const visitasFunil = visitasCury ?? visitasMes;
     const vendasFunil = vendasCury ?? vendas;
 
@@ -227,7 +227,9 @@ export default function ManagerV10() {
       <main className="shell2">
         <MinhasTarefas donoId={userId} nome={userId !== session?.user?.id ? nome : undefined} />
         {view === "tempo" ? (
-          <CockpitGerenteV3 managerId={userId} quem={session?.user?.id ?? userId} />
+          <Boundary>
+            <CockpitGerenteV3 managerId={userId} quem={session?.user?.id ?? userId} />
+          </Boundary>
         ) : view === "time" ? (
           <TimeTab managerId={userId} />
         ) : (
