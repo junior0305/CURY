@@ -40,9 +40,10 @@ function lerCsv(texto: string): { nome: string; telefone: string; regiao: string
   });
 }
 
-export default function BaseContatos() {
+export default function BaseContatos({ donoId }: { donoId?: string | null }) {
   const { session, role } = useAuth();
-  const eu = session?.user?.id;
+  // "Ver como": admin/diretor vendo a tela de um líder sobe a lista em nome dele
+  const eu = donoId || session?.user?.id;
   const qc = useQueryClient();
   const [nome, setNome] = useState("");
   const [arquivo, setArquivo] = useState("");
@@ -59,7 +60,7 @@ export default function BaseContatos() {
     queryKey: ["base-equipe", eu, role],
     enabled: !!eu,
     queryFn: async () => {
-      const tudo = role === "ADMIN" || role === "DIRECTOR";
+      const tudo = !donoId && (role === "ADMIN" || role === "DIRECTOR");
       const arv = tudo ? null : (((await sb.rpc("ids_da_arvore", { p: eu })).data ?? []) as any[]).map((r) => (typeof r === "string" ? r : r.ids_da_arvore));
       let q = sb.from("profiles").select("id,first_name,last_name,role,manager_id").eq("is_active", true);
       if (arv) q = q.in("id", arv);
@@ -111,7 +112,7 @@ export default function BaseContatos() {
     setBusy(true);
     const { data, error } = await sb.rpc("subir_lista_contatos", {
       p_nome: nome.trim(), p_destino: destino, p_intervalo: intervalo, p_max_dia: porDia, p_para: para,
-      p_broker_ids: [...marc], p_lgpd: lgpd,
+      p_broker_ids: [...marc], p_lgpd: lgpd, p_dono: donoId && donoId !== session?.user?.id ? donoId : null,
       p_contatos: linhas.filter((l) => l.situacao === "ok").map((l) => ({ nome: l.nome, telefone: l.telefone, regiao: l.regiao })),
     });
     setBusy(false);

@@ -68,7 +68,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
       <section className="cfg-corpo">
         {secaoOk === "avisos" ? <ReguaEquipe nivel={nivel} donoId={donoId} />
           : secaoOk === "equipe" ? <Equipe nivel={nivel} donoId={donoId} />
-          : secaoOk === "base" ? <BaseContatos />
+          : secaoOk === "base" ? <BaseContatos donoId={donoId} />
           : secaoOk === "whatsapp" ? <MeuWhatsApp />
           : secaoOk === "fontes" ? <FontesDados />
           : secaoOk === "empresa" ? <DadosEmpresa />
