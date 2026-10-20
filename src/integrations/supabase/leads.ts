@@ -455,6 +455,8 @@ export const setLeadNegotiating = async (leadId: string) => {
       last_interaction_at: now,
       // o corretor confirmou que o cliente respondeu: mede resposta nos painéis e vira sinal de qualidade pro Facebook
       last_lead_response_at: now,
+      // ...e que ELE está na conversa. Sem isto o lead aparecia como "cliente esperando / ninguém voltou" (19/10)
+      last_broker_whatsapp_at: now,
     })
     .eq("id", leadId);
   if (error) throw error;

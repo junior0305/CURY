@@ -244,7 +244,7 @@ export function useLeads(managerId: string | undefined,
           return resp > toque ? "esperando" : "conversando";
         }
         if (resp && !toque) return "esperando";      // respondeu o disparo/robô, corretor mudo
-        if (toque) return "primeiro_toque";          // corretor falou, cliente ainda não
+        if (toque || (l.contact_attempts ?? 0) > 0 || (l.status && l.status !== "NEW")) return "primeiro_toque"; // corretor falou/tentou, cliente ainda não
         if (teveWelcome.has(l.id)) return "boas_vindas";  // só o robô falou
         return "parado";                             // ninguém falou
       };
@@ -285,7 +285,12 @@ export function useLeads(managerId: string | undefined,
       /* ── onde a conversa está ── */
       const respSemVolta = ativos.filter((l) => l.last_lead_response_at &&
         (!l.last_broker_whatsapp_at || l.last_broker_whatsapp_at < l.last_lead_response_at));
-      const nuncaFalaram = ativos.filter((l) => !l.last_broker_whatsapp_at && !l.contact_attempts);
+      // Mesma régua de "atendido" do cockpit e do super: WhatsApp do corretor, tentativa, mudança de
+      // fase ou interação depois de chegar. Antes só os 2 primeiros contavam e 649 leads já trabalhados
+      // (Respondeu, Já chamei, Negociação) apareciam como "ninguém nunca falou" (19/10).
+      const atendido = (l: any) => !!l.last_broker_whatsapp_at || (l.contact_attempts ?? 0) > 0 || (l.status && l.status !== "NEW")
+        || (l.last_interaction_at && new Date(l.last_interaction_at).getTime() > new Date(l.created_at).getTime() + 5 * 60e3);
+      const nuncaFalaram = ativos.filter((l) => !atendido(l));
       const falouSemResp = ativos.filter((l) => l.last_broker_whatsapp_at && !l.last_lead_response_at);
       const emAndamento = ativos.filter((l) => l.last_lead_response_at && l.last_broker_whatsapp_at &&
         l.last_broker_whatsapp_at >= l.last_lead_response_at);

@@ -216,6 +216,11 @@ const CorretorPainel = () => {
     if (!sel || !user || !noteDraft.trim()) return;
     try {
       await addLeadNote(sel.id, user.id, noteDraft.trim());
+      // anotar a conversa = o corretor falou com o cliente (conta como contato nos painéis do gestor)
+      const agora = new Date().toISOString();
+      await supabase.from("leads").update({ last_broker_whatsapp_at: agora, last_interaction_at: agora }).eq("id", sel.id);
+      if (sel.status === "NEW") await updateLeadStatus(sel.id, "IN_PROGRESS").catch(() => {});
+      qc.invalidateQueries({ queryKey: ["painelLeads"] });
       setNoteDraft("");
       qc.invalidateQueries({ queryKey: ["painelNotes", sel.id] });
       toast.success("Registro salvo");
