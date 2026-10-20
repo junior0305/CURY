@@ -80,12 +80,15 @@ export function useLeadsQueimaDisparo(managerId: string | undefined) {
       }
 
       // 2. Busca leads ativos com resposta registrada
-      const { data: leads } = await supabase
+      // Mesma base do Hoje: lead do gerente OU de corretor da equipe (20/10 — os dois alertas mostravam números diferentes)
+      const ids = (brokers ?? []).map((b: any) => b.id);
+      let qLeads = supabase
         .from("leads")
         .select("id,name,phone,broker_id,source,fb_campaign,tag,last_lead_response_at,last_broker_whatsapp_at,status")
-        .eq("manager_id", managerId!)
         .not("last_lead_response_at", "is", null)
         .not("status", "in", '("CONCLUDED","EXCLUDED","ABANDONED")');
+      qLeads = ids.length ? qLeads.or(`manager_id.eq.${managerId},broker_id.in.(${ids.join(",")})`) : qLeads.eq("manager_id", managerId!);
+      const { data: leads } = await qLeads;
 
       if (!leads) return [];
 
@@ -93,7 +96,8 @@ export function useLeadsQueimaDisparo(managerId: string | undefined) {
       const emRisco: LeadQueima[] = [];
 
       for (const l of leads) {
-        if (!ehLeadDisparo(l)) continue;
+        // todo cliente esperando (anúncio, disparo, etc.), menos pescado — a mesma regra do alerta do Hoje
+        if (l.source === "cold_pool") continue;
         if (!l.last_lead_response_at) continue;
 
         const respTime = new Date(l.last_lead_response_at).getTime();
@@ -113,7 +117,7 @@ export function useLeadsQueimaDisparo(managerId: string | undefined) {
             brokerId: l.broker_id,
             brokerNome: l.broker_id ? brokerMap.get(l.broker_id) || "Corretor" : "Sem Corretor (Órfão)",
             source: l.source,
-            campanha: l.fb_campaign || "Disparo Oficial",
+            campanha: l.fb_campaign || (ehLeadDisparo(l) ? "Disparo" : "Anúncio"),
             respondidoEm: l.last_lead_response_at,
             minutosEspera: minutos,
           });
@@ -242,13 +246,13 @@ export default function AlertaDisparoQueima({ managerId, quem = "Gerente", compa
 
           <div className="alerta-queima-texto">
             <div className="alerta-queima-titulo">
-              <span className="badge-risco-financeiro">RISCO FINANCEIRO · DISPAROS</span>
+              <span className="badge-risco-financeiro">CLIENTE ESPERANDO</span>
               <strong>
-                {leadsQueima.length} cliente{leadsQueima.length === 1 ? "" : "s"} {leadsQueima.length === 1 ? "respondeu" : "responderam"} a disparos e {leadsQueima.length === 1 ? "está" : "estão"} no vácuo há +30min!
+                {leadsQueima.length} cliente{leadsQueima.length === 1 ? " respondeu e está" : "s responderam e estão"} sem resposta há +30min
               </strong>
             </div>
             <p className="alerta-queima-sub">
-              Mensagens pagas com janela ativa. O maior atraso atual é de{" "}
+              O maior atraso atual é de{" "}
               <span className="mono highlight">{tempoFormatado(leadsQueima[0].minutosEspera)}</span> com{" "}
               <b style={{ color: "var(--cv-text-main)" }}>{leadsQueima[0].brokerNome}</b>.
             </p>
