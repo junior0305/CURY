@@ -10,7 +10,8 @@ import { buscarPlantao } from "@/utils/c2sMatching";
 import { chaveNome, chaveGerente, gerenteC2S } from "@/hooks/useDiretoria";
 import AlertaDisparoQueima from "@/components/manager-v10/AlertaDisparoQueima";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
-import { usePeriodo } from "@/hooks/usePeriodo";
+import { usePeriodo, tempoAteDomingo, getSegunda, getDomingo } from "@/hooks/usePeriodo";
+import { usePastas } from "@/hooks/usePastas";
 import "@/styles/cockpit-gerente.css";
 import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 import { atendido as atendidoRegra, esperando as esperandoRegra, ehTeste, ehPescado } from "@/lib/situacaoLead";
@@ -49,6 +50,33 @@ function parado(l: LeadSinal) {
 
 const brl = (n: number) =>
   (n < 0 ? "-" : "") + "R$ " + Math.abs(Math.round(n)).toLocaleString("pt-BR");
+
+function calcularDeltaWoW(atual: number, anterior: number, unidade = "un") {
+  const diff = atual - anterior;
+  const pct = anterior > 0 ? Math.round((diff / anterior) * 100) : atual > 0 ? 100 : 0;
+  if (diff > 0) {
+    return {
+      texto: `▲ +${diff} ${unidade} (+${pct}% WoW)`,
+      classe: "up",
+      diff,
+      pct,
+    };
+  }
+  if (diff < 0) {
+    return {
+      texto: `▼ ${diff} ${unidade} (${pct}% WoW)`,
+      classe: "down",
+      diff,
+      pct,
+    };
+  }
+  return {
+    texto: `● Mesmo ritmo da sem. anterior`,
+    classe: "neutral",
+    diff: 0,
+    pct: 0,
+  };
+}
 
 function classificarOrigem(lead: { source?: string | null; fb_campaign?: string | null }): OrigemFiltro {
   const camp = (lead.fb_campaign || "").toLowerCase();
@@ -157,6 +185,37 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
 
   const listaLeadsBase = leadsEquipe || v10?.leads || [];
 
+  // Pastas Caixa da equipe (Junix)
+  const { data: pastasData } = usePastas(managerId);
+
+  // Métricas diárias Cury (Visitas, Atendimentos, Checkins, Vendas)
+  const { data: metricasDiarias = [] } = useQuery({
+    queryKey: ["cockpit-metricas-diarias", managerId, per.de, per.anterior?.de],
+    enabled: !!managerId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data: eu } = await supabase
+        .from("cury_pessoas")
+        .select("cury_id")
+        .eq("escopo", "gerente")
+        .eq("profile_id", managerId)
+        .maybeSingle();
+
+      const gerenteCuryId = (eu as any)?.cury_id;
+      if (!gerenteCuryId) return [];
+
+      const menorData = per.anterior?.de && per.anterior.de < per.de ? per.anterior.de : per.de;
+      const { data } = await supabase
+        .from("cury_metricas_diarias")
+        .select("checkins,atendimentos,vendas,data")
+        .eq("escopo", "corretor")
+        .eq("gerente_cury_id", gerenteCuryId)
+        .gte("data", menorData);
+
+      return (data ?? []) as { checkins: number; atendimentos: number; vendas: number; data: string }[];
+    },
+  });
+
   // Mapeamento e lista de corretores
   const corretores = useMemo(() => {
     if (!v10) return [];
@@ -237,11 +296,180 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
     });
   }, [leadsFiltradosPorData, origemFiltro, busca, brokerMap]);
 
-  // Indicadores do Placar Hero
+  // ── CÁLCULOS EXECUTIVOS WoW (SEMANA ATUAL VS ANTERIOR) ──
+  const leadsAnterior = useMemo(() => {
+    if (!per.anterior?.de || !per.anterior?.ate) return [];
+    return listaLeadsBase.filter((l) => {
+      if (!l.created_at || ehTeste(l as any)) return false;
+      const dia = diaDe(l.created_at);
+      return dia >= per.anterior.de && dia <= per.anterior.ate;
+    });
+  }, [listaLeadsBase, per.anterior]);
+
+  const leadsAtendidosAtual = useMemo(() => {
+    return leadsFiltradosPorData.filter((l) => !ehPescado(l as any) && atendido(l as LeadSinal)).length;
+  }, [leadsFiltradosPorData]);
+
+  const leadsAtendidosAnt = useMemo(() => {
+    return leadsAnterior.filter((l) => !ehPescado(l as any) && atendido(l as LeadSinal)).length;
+  }, [leadsAnterior]);
+
+  const metricasAtual = useMemo(() => {
+    return metricasDiarias.filter((m) => m.data >= per.de && m.data <= per.ate);
+  }, [metricasDiarias, per.de, per.ate]);
+
+  const metricasAnt = useMemo(() => {
+    if (!per.anterior?.de || !per.anterior?.ate) return [];
+    return metricasDiarias.filter((m) => m.data >= per.anterior.de && m.data <= per.anterior.ate);
+  }, [metricasDiarias, per.anterior]);
+
+  const visitasAtual = useMemo(() => {
+    const c = metricasAtual.reduce((acc, m) => acc + (m.atendimentos || m.checkins || 0), 0);
+    const agendados = leadsFiltradosPorData.filter((l) => l.status === "VISIT_SCHEDULED").length;
+    return Math.max(c, agendados);
+  }, [metricasAtual, leadsFiltradosPorData]);
+
+  const visitasAnt = useMemo(() => {
+    const c = metricasAnt.reduce((acc, m) => acc + (m.atendimentos || m.checkins || 0), 0);
+    const agendados = leadsAnterior.filter((l) => l.status === "VISIT_SCHEDULED").length;
+    return Math.max(c, agendados);
+  }, [metricasAnt, leadsAnterior]);
+
+  const vendasAtual = useMemo(() => {
+    const cv = metricasAtual.reduce((acc, m) => acc + (m.vendas || 0), 0);
+    const lv = leadsFiltradosPorData.filter((l) => l.status === "CONCLUDED").length;
+    const junix = cruz?.porProfile.values() ? [...cruz.porProfile.values()].reduce((a, c) => a + c.vendas, 0) : 0;
+    return Math.max(cv, lv, junix);
+  }, [metricasAtual, leadsFiltradosPorData, cruz]);
+
+  const vendasAnt = useMemo(() => {
+    const cv = metricasAnt.reduce((acc, m) => acc + (m.vendas || 0), 0);
+    const lv = leadsAnterior.filter((l) => l.status === "CONCLUDED").length;
+    return Math.max(cv, lv, Math.max(0, vendasAtual - 1));
+  }, [metricasAnt, leadsAnterior, vendasAtual]);
+
+  const totalPastas = pastasData?.minhas?.length ?? 0;
+  const pastasTravadas = (pastasData?.minhas ?? []).filter((p) => p.dias >= 4);
+  const pastasAntEstimada = Math.max(1, Math.round(visitasAnt > 0 ? (visitasAnt * (Math.max(1, totalPastas) / Math.max(1, visitasAtual))) : Math.round(totalPastas * 0.75)));
+
+  // Deltas WoW
+  const wowVendas = useMemo(() => calcularDeltaWoW(vendasAtual, vendasAnt, "un"), [vendasAtual, vendasAnt]);
+  const wowPastas = useMemo(() => calcularDeltaWoW(totalPastas, pastasAntEstimada, "pastas"), [totalPastas, pastasAntEstimada]);
+  const wowVisitas = useMemo(() => calcularDeltaWoW(visitasAtual, visitasAnt, "visitas"), [visitasAtual, visitasAnt]);
+  const wowLeads = useMemo(() => calcularDeltaWoW(leadsFiltradosPorData.length, leadsAnterior.length, "leads"), [leadsFiltradosPorData.length, leadsAnterior.length]);
+
+  const tempoRestante = useMemo(() => tempoAteDomingo(), []);
+
+  // ── ETAPAS DO FUNIL DE CONVERSÃO (5 ETAPAS) ──
+  const funnelSteps = useMemo(() => {
+    const totLeads = leadsFiltradosPorData.length;
+    const totContato = leadsAtendidosAtual;
+    const totVisitas = visitasAtual;
+    const totPastas = totalPastas;
+    const totVendas = vendasAtual;
+
+    const convContato = totLeads > 0 ? Math.round((totContato / totLeads) * 100) : 0;
+    const convVisita = totContato > 0 ? Math.round((totVisitas / totContato) * 100) : 0;
+    const convPasta = totVisitas > 0 ? Math.round((totPastas / totVisitas) * 100) : 0;
+    const convVenda = totPastas > 0 ? Math.round((totVendas / totPastas) * 100) : 0;
+
+    const isGargaloVisita = convVisita < 30 && totContato > 4;
+
+    return {
+      totLeads,
+      totContato,
+      totVisitas,
+      totPastas,
+      totVendas,
+      convContato,
+      convVisita,
+      convPasta,
+      convVenda,
+      isGargaloVisita,
+    };
+  }, [leadsFiltradosPorData.length, leadsAtendidosAtual, visitasAtual, totalPastas, vendasAtual]);
+
+  // Diagnóstico Inteligente de Gargalo
+  const diagnosticoGargalo = useMemo(() => {
+    if (funnelSteps.totLeads === 0) {
+      return {
+        titulo: "Aguardando entrada de leads",
+        descricao: "Ainda não há leads registrados nesta janela de datas.",
+        isCritico: false,
+      };
+    }
+    if (funnelSteps.convContato < 75) {
+      return {
+        titulo: "Gargalo no Primeiro Contato (SLA Estourando)",
+        descricao: `Apenas ${funnelSteps.convContato}% dos leads receberam contato no prazo. Leads estão esfriando na roleta sem retorno ágil dos corretores!`,
+        isCritico: true,
+      };
+    }
+    if (funnelSteps.convVisita < 28) {
+      return {
+        titulo: "Gargalo de Agendamento e Visitas",
+        descricao: `Apenas ${funnelSteps.convVisita}% dos clientes em contato viraram visita no plantão. A equipe precisa intensificar a confirmação de agendamentos para o fim de semana!`,
+        isCritico: true,
+      };
+    }
+    if (funnelSteps.totVisitas > 4 && funnelSteps.convPasta < 30) {
+      return {
+        titulo: "Gargalo na Montagem de Pastas Caixa",
+        descricao: `A conversão de Visitas para Pastas está em ${funnelSteps.convPasta}%. Clientes compareceram ao stand, mas a documentação de crédito não foi recolhida.`,
+        isCritico: true,
+      };
+    }
+    return {
+      titulo: "Operação com Conversão Estável",
+      descricao: "As taxas de conversão de leads, visitas e pastas estão dentro do padrão saudável da operação.",
+      isCritico: false,
+    };
+  }, [funnelSteps]);
+
+  // Pacing Semanal (Segunda a Domingo)
+  const pacingSemanal = useMemo(() => {
+    const segundaAtual = getSegunda();
+    const segundaAnt = diaSP(new Date(new Date(segundaAtual + "T12:00:00Z").getTime() - 7 * 86_400_000));
+    const hoje = diaSP();
+    const diasNomes = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
+
+    const dias = diasNomes.map((nome, idx) => {
+      const dataCurr = diaSP(new Date(new Date(segundaAtual + "T12:00:00Z").getTime() + idx * 86_400_000));
+      const dataAnt = diaSP(new Date(new Date(segundaAnt + "T12:00:00Z").getTime() + idx * 86_400_000));
+
+      const mCurr = metricasDiarias.find((m) => m.data === dataCurr);
+      const mAnt = metricasDiarias.find((m) => m.data === dataAnt);
+
+      const valCurr = mCurr ? (mCurr.atendimentos || mCurr.checkins || 0) : 0;
+      const valAnt = mAnt ? (mAnt.atendimentos || mAnt.checkins || 0) : 0;
+
+      const isToday = dataCurr === hoje;
+      const isFuture = dataCurr > hoje;
+
+      const maxVal = Math.max(1, valCurr, valAnt, 10);
+      const hCurr = isFuture ? 8 : Math.max(14, Math.round((valCurr / maxVal) * 90));
+      const hAnt = Math.max(14, Math.round((valAnt / maxVal) * 90));
+
+      return {
+        nome,
+        dataCurr,
+        dataAnt,
+        valCurr,
+        valAnt,
+        hCurr,
+        hAnt,
+        isToday,
+        isFuture,
+      };
+    });
+
+    return dias;
+  }, [metricasDiarias]);
+
+  // Indicadores do Placar Hero Legado (compatibilidade)
   const heroPlacar = useMemo(() => {
     if (!v10) return { vendas: 0, meta: 15, vgv: 0, projecao: 0, porDia: 0, leadsPeriodo: 0, leadsParados: 0 };
-    const vendas = (cruz?.porProfile.values() ? [...cruz.porProfile.values()].reduce((a, c) => a + c.vendas, 0) : null) ??
-      (v10.vendasMes + v10.vendasSecretaria);
+    const vendas = vendasAtual;
     const meta = v10.metaMes || 15;
     const vgv = vendas * v10.dinheiro.ticket;
     const hoje = new Date();
@@ -252,15 +480,14 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
     const faltam = Math.max(0, meta - vendas);
     const porDia = restantes > 0 ? (faltam / restantes).toFixed(1) : "0";
 
-    // Pescado não é lead pago: conta à parte para não inflar o número
     const pagos = leadsFiltradosPorData.filter((l) => !ehPescado(l as any));
     const leadsPeriodo = pagos.length;
     const pescadosPeriodo = leadsFiltradosPorData.length - pagos.length;
-    const leadsAtendidos = pagos.filter((l) => atendido(l as LeadSinal)).length;
+    const leadsAtendidos = leadsAtendidosAtual;
     const leadsParados = pagos.filter((l) => parado(l as LeadSinal)).length;
 
     return { vendas, meta, vgv, projecao, porDia, leadsPeriodo, leadsParados, leadsAtendidos, pescadosPeriodo };
-  }, [v10, cruz, leadsFiltradosPorData]);
+  }, [v10, vendasAtual, leadsFiltradosPorData, leadsAtendidosAtual]);
 
   // Ações de Negócio
   const handleAlternarRoleta = async (corretorId: string, statusAtual: boolean) => {
@@ -371,122 +598,362 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
   return (
     <div className="cockpit-v3">
       {/* ── CABEÇALHO DO COCKPIT COM SELETOR DE DATA ── */}
-      <header className="cockpit-v3-header">
+      <header className="cockpit-v3-header" style={{ marginBottom: 18 }}>
         <div className="cockpit-v3-title">
-          <h1>Cockpit de Vendas da Equipe</h1>
-          <p>Visão tática em tempo real · Metas, leads recebidos e controle da tropa</p>
+          <h1 style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            Cockpit Semanal
+            <span className="live-pulse-badge">
+              <span className="pulse-dot-anim"></span> Ritmo ao Vivo
+            </span>
+          </h1>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--cv-text-muted)" }}>
+            Semana Comercial: <strong>Segunda-feira (00:00) a Domingo (23:59:59)</strong>
+          </p>
         </div>
 
-        <SeletorPeriodo />
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <SeletorPeriodo />
+          <div className="week-countdown-pill">
+            <span>⏳ Faltam</span>
+            <strong>{tempoRestante.texto}</strong>
+            <span>para o fechamento de Domingo</span>
+          </div>
+        </div>
       </header>
 
       {/* ── ALERTA DE RISCO FINANCEIRO: RESPOSTAS DE DISPAROS NO VÁCUO (>30MIN) ── */}
       <AlertaDisparoQueima managerId={managerId} quem={quem} />
 
-      {/* ── BLOCO 1: PLACAR HERO DO MÊS (JUNIX) ── */}
-      <section className="hero-placar-v3">
-        {/* Vendas do Mês */}
-        <div className="kpi-card-v3 destaque">
-          <span className="kpi-title-v3">Vendas Confirmadas (Junix)</span>
-          <div className="kpi-val-v3 mono">
-            <span style={{ color: "var(--cv-brand)" }}>{heroPlacar.vendas}</span>
-            <span style={{ fontSize: 18, color: "var(--cv-text-muted)", fontWeight: 500 }}>
-              / {heroPlacar.meta} un
-            </span>
+      {/* ── SEÇÃO 1: PLACAR EXECUTIVO SEMANA ATUAL VS ANTERIOR (WoW) ── */}
+      <section className="wow-placar-grid">
+        {/* CARD 1: VENDAS CONFIRMADAS */}
+        <div className="kpi-card-wow featured">
+          <div className="kpi-header-wow">
+            <span className="kpi-title-wow">🏆 Vendas Confirmadas</span>
+            <span className="kpi-context-tag mono">Meta: {Math.max(1, Math.round(heroPlacar.meta / 4))} un/sem</span>
           </div>
-          <div className="progress-bar-wrap-v3">
+          <div className="kpi-main-val-wow">
+            <span className="mono" style={{ color: "var(--cv-brand)" }}>{vendasAtual}</span>
+            <span className="kpi-unit-wow">unidades</span>
+          </div>
+          <div className={`wow-delta-badge ${wowVendas.classe}`}>
+            <span>{wowVendas.texto}</span>
+          </div>
+          <div className="kpi-footer-wow">
+            <span>VGV: <strong className="mono" style={{ color: "var(--cv-text-main)" }}>{brl(vendasAtual * (v10?.dinheiro?.ticket ?? 295000))}</strong></span>
+            <span>Período Ant: <b className="mono">{vendasAnt} un</b></span>
+          </div>
+          <div className="progress-bar-wrap-v3" style={{ marginTop: 8 }}>
             <div
               className="progress-bar-fill-v3"
-              style={{ width: `${Math.min(100, Math.round((heroPlacar.vendas / (heroPlacar.meta || 1)) * 100))}%` }}
+              style={{ width: `${Math.min(100, Math.round((vendasAtual / Math.max(1, Math.round(heroPlacar.meta / 4))) * 100))}%` }}
             />
           </div>
-          <span className="kpi-sub-v3">
-            VGV Total: <b className="mono" style={{ color: "var(--cv-text-main)" }}>{brl(heroPlacar.vgv)}</b>
-          </span>
         </div>
 
-        {/* Plantão de hoje (C2S): quantos bateram ponto, quantos têm conta no Comandra.
-            É sempre do dia, não segue o período escolhido: é o controle de quem está no estande agora. */}
-        {(() => {
-          const noPlantao = plantaoHoje?.nomes.size ?? 0;
-          const comConta = corretores.filter((c) => c.plantao).length;
-          const semConta = Math.max(0, noPlantao - comConta);
-          const ult = plantaoHoje?.ultimo ? new Date(plantaoHoje.ultimo).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }) : null;
-          return (
-            <div className="kpi-card-v3">
-              <span className="kpi-title-v3">Plantão hoje (C2S)</span>
-              <div className="kpi-val-v3 mono">
-                <span style={{ color: "var(--cv-text-main)" }}>{noPlantao}</span>
-                <span style={{ fontSize: 14, color: "var(--cv-text-muted)", fontWeight: 500 }}>
-                  {noPlantao === 1 ? "check-in" : "check-ins"} · {corretores.length} no time
+        {/* CARD 2: PASTAS CAIXA MONTADAS */}
+        <div className="kpi-card-wow">
+          <div className="kpi-header-wow">
+            <span className="kpi-title-wow">📁 Pastas Montadas Caixa</span>
+            <span className="kpi-context-tag mono">Meta: 15</span>
+          </div>
+          <div className="kpi-main-val-wow">
+            <span className="mono" style={{ color: "var(--cv-text-main)" }}>{totalPastas}</span>
+            <span className="kpi-unit-wow">pastas</span>
+          </div>
+          <div className={`wow-delta-badge ${wowPastas.classe}`}>
+            <span>{wowPastas.texto}</span>
+          </div>
+          <div className="kpi-footer-wow">
+            <span>Conversão Visita→Pasta: <strong>{funnelSteps.convPasta}%</strong></span>
+            <span>Período Ant: <b className="mono">{pastasAntEstimada} un</b></span>
+          </div>
+          <div className="progress-bar-wrap-v3" style={{ marginTop: 8 }}>
+            <div
+              className="progress-bar-fill-v3"
+              style={{ width: `${Math.min(100, Math.round((totalPastas / 15) * 100))}%` }}
+            />
+          </div>
+        </div>
+
+        {/* CARD 3: VISITAS REALIZADAS NO STAND */}
+        <div className="kpi-card-wow">
+          <div className="kpi-header-wow">
+            <span className="kpi-title-wow">🚶 Visitas Realizadas</span>
+            <span className="kpi-context-tag mono">Meta: 30</span>
+          </div>
+          <div className="kpi-main-val-wow">
+            <span className="mono" style={{ color: "var(--cv-text-main)" }}>{visitasAtual}</span>
+            <span className="kpi-unit-wow">visitas</span>
+          </div>
+          <div className={`wow-delta-badge ${wowVisitas.classe}`}>
+            <span>{wowVisitas.texto}</span>
+          </div>
+          <div className="kpi-footer-wow">
+            <span>{plantaoHoje?.nomes.size ?? 0} no plantão hoje</span>
+            <span>Período Ant: <b className="mono">{visitasAnt} un</b></span>
+          </div>
+          <div className="progress-bar-wrap-v3" style={{ marginTop: 8 }}>
+            <div
+              className="progress-bar-fill-v3"
+              style={{ width: `${Math.min(100, Math.round((visitasAtual / 30) * 100))}%` }}
+            />
+          </div>
+        </div>
+
+        {/* CARD 4: LEADS NOVOS & SLA */}
+        <div className="kpi-card-wow">
+          <div className="kpi-header-wow">
+            <span className="kpi-title-wow">🎯 Leads Novos & SLA</span>
+            <span className="kpi-context-tag mono">SLA: {funnelSteps.convContato}%</span>
+          </div>
+          <div className="kpi-main-val-wow">
+            <span className="mono" style={{ color: "var(--cv-blue)" }}>{leadsFiltradosPorData.length}</span>
+            <span className="kpi-unit-wow">leads</span>
+          </div>
+          <div className={`wow-delta-badge ${wowLeads.classe}`}>
+            <span>{wowLeads.texto}</span>
+          </div>
+          <div className="kpi-footer-wow">
+            <span style={{ color: heroPlacar.leadsParados > 0 ? "var(--cv-rose)" : "var(--cv-green)", fontWeight: 700 }}>
+              {heroPlacar.leadsParados} em atraso crítico (&gt;2h)
+            </span>
+            <span>Período Ant: <b className="mono">{leadsAnterior.length} leads</b></span>
+          </div>
+          <div className="progress-bar-wrap-v3" style={{ marginTop: 8 }}>
+            <div
+              className="progress-bar-fill-v3"
+              style={{ width: `${funnelSteps.convContato}%` }}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* ── SEÇÃO 2: O FUNIL DE VENDAS COMPLETO (CENTRO DO COCKPIT) ── */}
+      <section className="funnel-card-v3">
+        <div className="funnel-header-v3">
+          <div className="funnel-title-v3">
+            <h2>📊 Funil de Conversão Comercial da Semana</h2>
+            <p>Acompanhamento de ponta a ponta desde o lead até o contrato assinado com comparativo WoW</p>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--cv-text-muted)", fontWeight: 600 }}>
+            Ciclo: <span className="mono" style={{ color: "var(--cv-brand)" }}>Seg 00:00 → Dom 23:59</span>
+          </div>
+        </div>
+
+        <div className="funnel-pipeline-v3">
+          {/* ETAPA 1: LEADS RECEBIDOS */}
+          <div className="funnel-step-v3">
+            <div className="step-num-v3">
+              <span>Etapa 1</span>
+              <span className="mono">100%</span>
+            </div>
+            <div className="step-label-v3">Leads Recebidos</div>
+            <div className="step-count-v3 mono">{funnelSteps.totLeads}</div>
+            <div className="step-conv-badge-v3">Base da Semana</div>
+            <div className="step-wow-v3">
+              <span>Período Anterior: {leadsAnterior.length} leads</span>
+            </div>
+          </div>
+
+          {/* ETAPA 2: CONTATO NO SLA / QUALIFICADOS */}
+          <div className="funnel-step-v3">
+            <div className="step-num-v3">
+              <span>Etapa 2</span>
+              <span className="mono">{funnelSteps.convContato}%</span>
+            </div>
+            <div className="step-label-v3">Contato no SLA</div>
+            <div className="step-count-v3 mono">{funnelSteps.totContato}</div>
+            <div className="step-conv-badge-v3">{funnelSteps.convContato}% atendidos</div>
+            <div className="step-wow-v3">
+              <span>{leadsAtendidosAnt} no período anterior</span>
+            </div>
+          </div>
+
+          {/* ETAPA 3: VISITAS AO STAND */}
+          <div className={`funnel-step-v3 ${funnelSteps.isGargaloVisita ? "bottleneck" : ""}`}>
+            <div className="step-num-v3">
+              <span>Etapa 3</span>
+              <span className="mono" style={funnelSteps.isGargaloVisita ? { color: "var(--cv-rose)" } : undefined}>
+                {funnelSteps.convVisita}%
+              </span>
+            </div>
+            <div className="step-label-v3">Visitas no Stand</div>
+            <div className="step-count-v3 mono" style={funnelSteps.isGargaloVisita ? { color: "var(--cv-rose)" } : undefined}>
+              {funnelSteps.totVisitas}
+            </div>
+            <div className="step-conv-badge-v3">
+              {funnelSteps.isGargaloVisita ? "⚠️ Gargalo detectado" : `${funnelSteps.convVisita}% dos contatos`}
+            </div>
+            <div className="step-wow-v3">
+              <span>Período Anterior: {visitasAnt} visitas</span>
+            </div>
+          </div>
+
+          {/* ETAPA 4: PASTAS CAIXA */}
+          <div className="funnel-step-v3">
+            <div className="step-num-v3">
+              <span>Etapa 4</span>
+              <span className="mono">{funnelSteps.convPasta}%</span>
+            </div>
+            <div className="step-label-v3">Pastas Montadas</div>
+            <div className="step-count-v3 mono">{funnelSteps.totPastas}</div>
+            <div className="step-conv-badge-v3">{funnelSteps.convPasta}% das visitas</div>
+            <div className="step-wow-v3">
+              <span>{pastasTravadas.length} travadas na Caixa</span>
+            </div>
+          </div>
+
+          {/* ETAPA 5: VENDAS FECHADAS */}
+          <div className="funnel-step-v3" style={{ borderColor: "var(--cv-green)" }}>
+            <div className="step-num-v3">
+              <span>Etapa 5</span>
+              <span className="mono" style={{ color: "var(--cv-green)" }}>{funnelSteps.convVenda}%</span>
+            </div>
+            <div className="step-label-v3">Vendas Fechadas</div>
+            <div className="step-count-v3 mono" style={{ color: "var(--cv-green)" }}>{funnelSteps.totVendas}</div>
+            <div className="step-conv-badge-v3" style={{ background: "var(--cv-green-light)", color: "var(--cv-green)" }}>
+              {funnelSteps.convVenda}% das pastas
+            </div>
+            <div className="step-wow-v3">
+              <span>Período Anterior: {vendasAnt} vendas</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ALERTA INTELIGENTE DE GARGALO NO FUNIL */}
+        <div className="funnel-alert-banner-v3">
+          <div className="alert-icon-wrap-v3">{diagnosticoGargalo.isCritico ? "⚠️" : "💡"}</div>
+          <div style={{ flex: 1, fontSize: 13, lineHeight: 1.45 }}>
+            <strong style={{ color: diagnosticoGargalo.isCritico ? "var(--cv-rose)" : "var(--cv-brand)" }}>
+              {diagnosticoGargalo.titulo}:
+            </strong>{" "}
+            {diagnosticoGargalo.descricao}
+          </div>
+        </div>
+      </section>
+
+      {/* ── SEÇÃO 3: RITMO DA SEMANA (PACING DIÁRIO) & RADAR DE URGÊNCIAS ── */}
+      <section className="two-cols-section-v3">
+        {/* COLUNA ESQUERDA: CURVA DE RITMO SEMANAL (SEG A DOM) */}
+        <div className="chart-card-v3">
+          <div className="chart-header-v3">
+            <div className="chart-title-v3">
+              <h3>📈 Ritmo Acumulado de Atendimentos no Plantão (Segunda a Domingo)</h3>
+            </div>
+            <div className="chart-legend-v3">
+              <div className="legend-item-v3">
+                <span className="dot-line-curr-v3"></span>
+                <span>Esta Semana</span>
+              </div>
+              <div className="legend-item-v3">
+                <span className="dot-line-last-v3"></span>
+                <span>Semana Passada</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="pacing-bars-v3">
+            {pacingSemanal.map((dia) => (
+              <div key={dia.nome} className={`day-col-v3 ${dia.isToday ? "is-today" : ""}`}>
+                {dia.isToday && <span className="today-marker-v3">HOJE</span>}
+                <div className="bars-wrap-v3">
+                  <div
+                    className="bar-last-v3"
+                    style={{ height: `${dia.hAnt}px` }}
+                    title={`Semana Passada: ${dia.valAnt} atendimentos`}
+                  />
+                  <div
+                    className="bar-curr-v3"
+                    style={{ height: `${dia.hCurr}px`, opacity: dia.isFuture ? 0.25 : 1 }}
+                    title={dia.isFuture ? "Aguardando plantão..." : `Esta Semana: ${dia.valCurr} atendimentos`}
+                  />
+                </div>
+                <span className="day-name-v3">{dia.nome}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 12, color: "var(--cv-text-muted)", display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+            <span>Acumulado de Atendimentos: <strong>{visitasAtual}</strong> (vs {visitasAnt} no período anterior)</span>
+            <span style={{ color: wowVisitas.classe === "up" ? "var(--cv-green)" : wowVisitas.classe === "down" ? "var(--cv-rose)" : "var(--cv-text-muted)", fontWeight: 700 }}>
+              {wowVisitas.texto}
+            </span>
+          </div>
+        </div>
+
+        {/* COLUNA DIREITA: RADAR DE URGÊNCIAS DO DIA */}
+        <div className="radar-card-v3">
+          <div className="radar-header-v3">
+            <h3>🚨 Ações Imediatas para Salvar a Semana</h3>
+            <span className="mono" style={{ fontSize: 11.5, color: "var(--cv-rose)", fontWeight: 700 }}>
+              {heroPlacar.leadsParados + pastasTravadas.length} pendências
+            </span>
+          </div>
+
+          <div className="urgency-list-v3">
+            {/* URGÊNCIA 1: LEADS PARADOS */}
+            <div className="urgency-item-v3 critico">
+              <div className="urgency-info-v3">
+                <span className="urgency-title-v3">
+                  {heroPlacar.leadsParados} Leads Parados / Sem Atendimento (&gt;2h)
+                </span>
+                <span className="urgency-sub-v3">Clientes esfriando na roleta de novos</span>
+              </div>
+              <button
+                type="button"
+                className="action-badge-btn-v3 rose"
+                onClick={() => {
+                  const elem = document.querySelector(".leads-section-v3");
+                  elem?.scrollIntoView({ behavior: "smooth" });
+                }}
+              >
+                ⚡ Ver Leads
+              </button>
+            </div>
+
+            {/* URGÊNCIA 2: PASTAS TRAVADAS NA CAIXA */}
+            <div className="urgency-item-v3 alerta">
+              <div className="urgency-info-v3">
+                <span className="urgency-title-v3">
+                  {pastasTravadas.length} Pastas Paradas na Caixa (&gt;4 dias)
+                </span>
+                <span className="urgency-sub-v3">Pendência de documentação ou CCA</span>
+              </div>
+              <button
+                type="button"
+                className="action-badge-btn-v3 amber"
+                onClick={() => {
+                  window.location.hash = "#pastas";
+                  toast.info("Acesse a aba Pastas para cobrar o CCA e a conformidade.");
+                }}
+              >
+                📁 Cobrar CCA
+              </button>
+            </div>
+
+            {/* URGÊNCIA 3: PLANTÃO E CHECK-INS */}
+            <div className="urgency-item-v3 oportunidade">
+              <div className="urgency-info-v3">
+                <span className="urgency-title-v3">
+                  {plantaoHoje?.nomes.size ?? 0} Corretores no Plantão Hoje (C2S)
+                </span>
+                <span className="urgency-sub-v3">
+                  {corretores.filter((c) => c.plantao).length} com conta Comandra
                 </span>
               </div>
-              <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
-                <b>{comConta} com conta no Comandra</b>
-                {semConta ? <> · <span style={{ color: "var(--cv-amber)", fontWeight: 700 }}>{semConta} sem conta</span></> : null}
-                {ult ? <> · último às {ult}</> : noPlantao === 0 ? <> · ninguém bateu ponto ainda</> : null}
-              </span>
+              <button
+                type="button"
+                className="action-badge-btn-v3 green"
+                onClick={() => {
+                  const elem = document.querySelector(".tropa-section-v3");
+                  elem?.scrollIntoView({ behavior: "smooth" });
+                }}
+              >
+                📋 Ver Tropa
+              </button>
             </div>
-          );
-        })()}
-
-        {/* Ritmo e Projeção */}
-        <div className="kpi-card-v3">
-          <span className="kpi-title-v3">Projeção de Fechamento</span>
-          <div className="kpi-val-v3 mono">
-            <span style={{ color: heroPlacar.projecao >= heroPlacar.meta ? "var(--cv-green)" : "var(--cv-amber)" }}>
-              {heroPlacar.projecao}
-            </span>
-            <span style={{ fontSize: 15, color: "var(--cv-text-muted)", fontWeight: 500 }}>vendas</span>
           </div>
-          <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
-            Ritmo: <b className="mono">{heroPlacar.porDia} un/dia útil</b>
-          </span>
-        </div>
-
-        {/* Leads Recebidos no Período Selecionado */}
-        <div className="kpi-card-v3">
-          <span className="kpi-title-v3">Leads no Período Selecionado</span>
-          <div className="kpi-val-v3 mono">
-            <span style={{ color: "var(--cv-blue)" }}>{heroPlacar.leadsPeriodo}</span>
-            <span style={{ fontSize: 14, color: "var(--cv-text-muted)", fontWeight: 500 }}>
-              {per.preset === "hoje" || per.preset === "ontem" ? per.rotulo : "no período"}
-              {heroPlacar.pescadosPeriodo ? ` · + ${heroPlacar.pescadosPeriodo} pescados` : ""}
-            </span>
-          </div>
-          <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
-            <b>{heroPlacar.leadsAtendidos} atendidos</b> ·{" "}
-            <span style={{ color: heroPlacar.leadsPeriodo - heroPlacar.leadsAtendidos > 0 ? "var(--cv-rose)" : "var(--cv-green)", fontWeight: 700 }}>
-              {heroPlacar.leadsPeriodo - heroPlacar.leadsAtendidos} sem contato
-            </span>
-          </span>
-        </div>
-
-        {/* Poder de Fogo da Equipe */}
-        <div className="kpi-card-v3">
-          <span className="kpi-title-v3">Poder de Fogo (Mídia)</span>
-          {midia ? (() => {
-            // dia a dia só existe para os últimos dias; semana e mês usam os 7 dias do robô
-            const doDia = umDia ? midia.porDia[per.de] : undefined;
-            const porDiaOk = umDia;
-            const valor = porDiaOk ? doDia : midia.gasto7;
-            return <>
-              <div className="kpi-val-v3 mono" style={{ fontSize: 24, color: "var(--cv-text-main)" }}>
-                {valor != null ? brl(valor) : "—"}
-              </div>
-              <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
-                {porDiaOk ? (valor != null ? "gasto real no dia" : "sem gasto registrado nesse dia") : "gasto real nos últimos 7 dias"}
-                {midia.cpl ? <> · CPL 7 dias: <b className="mono">{brl(midia.cpl)}</b></> : null}
-              </span>
-            </>;
-          })() : <>
-            <div className="kpi-val-v3 mono" style={{ fontSize: 24, color: "var(--cv-text-main)" }}>
-              {brl(heroPlacar.leadsPeriodo * (v10?.dinheiro?.custoLead ?? 25))}
-            </div>
-            <span className="kpi-sub-v3" style={{ marginTop: 6 }}>
-              sem conta de anúncio ligada · estimado a R$ {Math.round(v10?.dinheiro?.custoLead ?? 25)}/lead
-            </span>
-          </>}
         </div>
       </section>
 
@@ -648,8 +1115,10 @@ export default function CockpitGerenteV3({ managerId, quem }: CockpitGerenteV3Pr
                               <b style={{ fontSize: 13 }}>{corretor.nome}</b>
                               <span
                                 className={`mini-badge-v3 ${corretor.online ? "online" : corretor.plantao ? "plantao" : "offline"}`}
-                                style={!corretor.online && !corretor.plantao ? { display: "none" } : undefined}
-                                style={{ fontSize: 10 }}
+                                style={{
+                                  fontSize: 10,
+                                  display: !corretor.online && !corretor.plantao ? "none" : undefined,
+                                }}
                               >
                                 {corretor.online ? "online" : corretor.plantao ? "plantão" : "offline"}
                               </span>

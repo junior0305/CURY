@@ -4,15 +4,16 @@
 // balãozinho flutuante some atrás do teclado quando o campo de data ganha foco.
 
 import { useState } from "react";
-import { usePeriodo, diaSP, type Preset } from "@/hooks/usePeriodo";
+import { usePeriodo, diaSP, tempoAteDomingo, type Preset } from "@/hooks/usePeriodo";
 
-// Mesmas opções em todas as telas de gestor (gerente, super e diretor), 15/10.
-// "Esta semana" e "90 dias" saíram da lista; quem tinha um deles salvo continua vendo o período certo.
+// Opções oficiais da operação comercial imobiliária:
+// A semana roda de segunda 00:00 a domingo 23:59.
 const OPCOES: { k: Preset; label: string }[] = [
   { k: "hoje", label: "Hoje" },
-  { k: "ontem", label: "Ontem" },
-  { k: "7", label: "7 dias" },
-  { k: "30", label: "30 dias" },
+  { k: "esta_semana", label: "Esta Semana" },
+  { k: "semana_passada", label: "Semana Passada" },
+  { k: "este_mes", label: "Este Mês" },
+  { k: "mes_passado", label: "Mês Passado" },
 ];
 
 export default function SeletorPeriodo() {
