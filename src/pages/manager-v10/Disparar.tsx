@@ -54,6 +54,10 @@ const brlUn = (n: number) =>
  *  0% diz que ninguem leu, "—" diz que nao houve o que ler. */
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) + "%" : "—");
 const ini = (s: string) => s.trim().slice(0, 2).toUpperCase();
+// Template aprovado com {{1}}, {{2}} guarda a variável como "1:nome", "2:projeto": o nome é o que vem depois
+// dos dois pontos. "nome" sempre sai da planilha/do lead — nunca é digitado (20/10).
+const chaveVar = (v: string) => String(v).replace(/^\d+:/, "");
+const ehNomeVar = (v: string) => chaveVar(v) === "nome";
 const hhmm = (iso: string) =>
   new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 const dia = (iso: string) => {
@@ -623,7 +627,7 @@ export default function Disparar() {
     // um, e o erro só aparece depois — com a campanha já criada e o gerente
     // achando que disparou.
     const vazias = (tplAtivo.variaveis ?? [])
-      .filter((v) => v !== "nome" && !String(valores[v] ?? "").trim());
+      .filter((v) => !ehNomeVar(v) && !String(valores[v] ?? "").trim());
     if (vazias.length) {
       toast.error(`Preencha ${vazias.map((v) => `{{${v}}}`).join(" e ")} antes de disparar — a Meta recusa variável em branco.`,
         { duration: 9000 });
@@ -665,7 +669,7 @@ export default function Disparar() {
       await dispararCampanha({
         managerId: userId, templateId: tplAtivo.id,
         nome: `${tplAtivo.nome} · ${new Date().toLocaleDateString("pt-BR")}`,
-        alvos: vai, vars: valores, brokerIds: brokers,
+        alvos: vai, vars: Object.fromEntries(Object.entries(valores).map(([k, val]) => [chaveVar(k), val])), brokerIds: brokers,
         // "escolher" = escolha manual: o motor manda para esses corretores sem
         // filtrar chip/roleta. "fila" segue o rodizio normal.
         manual: destino === "escolher",
@@ -686,7 +690,7 @@ export default function Disparar() {
           await dispararCampanha({
             managerId: userId, templateId: tplAtivo.id,
             nome: `${tplAtivo.nome} · ${new Date().toLocaleDateString("pt-BR")} · parte 2`,
-            alvos: vai2, vars: valores, brokerIds: brokers, manual: destino === "escolher", kind: tipoCampanha,
+            alvos: vai2, vars: Object.fromEntries(Object.entries(valores).map(([k, val]) => [chaveVar(k), val])), brokerIds: brokers, manual: destino === "escolher", kind: tipoCampanha,
             configId: cfg2.id, imagem: urlImagem,
             quando: resto === "amanha" ? amanha8 : (marcado ? marcado.toISOString() : null),
           });
@@ -732,7 +736,8 @@ export default function Disparar() {
     const corpo = txt.replace(/\{\{\s*([\wÀ-ÿ]+)\s*\}\}/g, (_, v) =>
       // `nome` vem do arquivo; o resto mostra o próprio nome entre colchetes
       // enquanto estiver vazio, para ficar claro que ali falta conteúdo.
-      v === "nome" ? nome : (valores[v]?.trim() || `[${v}]`));
+      { const k = /^\d+$/.test(v) ? ((tplAtivo?.variaveis ?? []).find((x) => x.startsWith(`${v}:`)) ?? v) : v;
+        return ehNomeVar(k) ? nome : (valores[k]?.trim() || `[${chaveVar(k)}]`); });
     return (
       <div className="fone">
         <div className="fone-top">
@@ -1631,7 +1636,7 @@ export default function Disparar() {
                       <span className="num">{i + 1}</span>
                       <input value={v} readOnly />
                       <span className="fixo">
-                        {v === "nome"
+                        {ehNomeVar(v)
                           ? <><s /> vem do arquivo, junto com o telefone</>
                           : "você preenche na hora do disparo"}
                       </span>
@@ -1893,7 +1898,7 @@ export default function Disparar() {
                     {tplAtivo.variaveis.map((v) => (
                       <div className="pv" key={v}>
                         <label>{v}</label>
-                        {v === "nome" ? (
+                        {ehNomeVar(v) ? (
                           <span className="trava">
                             <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
                             vem do arquivo — coluna <b className="mono">nome</b>
