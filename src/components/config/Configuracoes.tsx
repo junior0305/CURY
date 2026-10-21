@@ -72,7 +72,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
           : secaoOk === "whatsapp" ? <MeuWhatsApp />
           : secaoOk === "fontes" ? <FontesDados />
           : secaoOk === "empresa" ? <DadosEmpresa />
-          : <><ContasAnuncio /><GestorTrafego donoId={donoId} /><div className="integ-shell"><IntegracaoFacebook /></div></>}
+          : <><ContasAnuncio como={donoId} /><GestorTrafego donoId={donoId} /><div className="integ-shell"><IntegracaoFacebook /></div></>}
       </section>
     </div>
   );

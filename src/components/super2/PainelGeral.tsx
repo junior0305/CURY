@@ -63,7 +63,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
     queryKey: ["s2-fb-saude"],
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data } = await supabase.from("fb_saude" as any).select("account_id,dados,atualizado_em");
+      const { data } = await supabase.from("fb_saude" as any).select("account_id,dono_id,dados,atualizado_em");
       return (data ?? []) as any[];
     },
   });
@@ -140,8 +140,13 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
   }
 
   // Desperdício de DDD Errado / Fora da Região (fb_saude)
+  // só as contas da própria árvore (o super, os gerentes dele e os corretores deles): um super não vê a conta do outro (21/10)
+  const daArvore = new Set<string>([superId, ...supers.map((s: any) => s.id), ...gerentes.map((g) => g.id),
+    ...gerentes.flatMap((g: any) => (g.corretores ?? []).map((c: any) => c.id))]);
   for (const row of fbSaude ?? []) {
     const dadosRow = row.dados;
+    const donoRow = row.dono_id ?? dadosRow?.dono_id;
+    if (!donoRow || !daArvore.has(donoRow)) continue;
     const fora = dadosRow?.comandra?.fora_regiao ?? 0;
     if (fora >= 4) {
       decs.push({
