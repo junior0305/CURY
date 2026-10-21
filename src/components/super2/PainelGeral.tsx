@@ -142,7 +142,7 @@ export default function PainelGeral({ superId, superNome, onAbrir, irPara }: {
   // Desperdício de DDD Errado / Fora da Região (fb_saude)
   // só as contas da própria árvore (o super, os gerentes dele e os corretores deles): um super não vê a conta do outro (21/10)
   const daArvore = new Set<string>([superId, ...supers.map((s: any) => s.id), ...gerentes.map((g) => g.id),
-    ...gerentes.flatMap((g: any) => (g.corretores ?? []).map((c: any) => c.id))]);
+    ...gerentes.flatMap((g: any) => (Array.isArray(g.corretores) ? g.corretores : []).map((c: any) => c?.id).filter(Boolean))]);
   for (const row of fbSaude ?? []) {
     const dadosRow = row.dados;
     const donoRow = row.dono_id ?? dadosRow?.dono_id;
