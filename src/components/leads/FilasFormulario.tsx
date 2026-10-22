@@ -29,9 +29,12 @@ const ERROS: Record<string, string> = {
   sem_permissao: "Você não tem permissão para criar filas.",
 };
 
-export default function FilasFormulario() {
+/** `como`: id do super/gerente cuja tela está aberta. No "Ver como" (admin/diretor abrindo a tela de
+ *  outra pessoa) a lista fica igual à que essa pessoa vê, só com o que ela alcança (22/10). */
+export default function FilasFormulario({ como }: { como?: string | null } = {}) {
   const { session, role } = useAuth();
-  const eu = session?.user?.id;
+  const meuId = session?.user?.id;
+  const eu = como || meuId;
   const qc = useQueryClient();
   const [aberto, setAberto] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
@@ -40,10 +43,10 @@ export default function FilasFormulario() {
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
   const [gruposAbertos, setGruposAbertos] = useState<Set<string>>(new Set());
-  const tudo = role === "ADMIN" || role === "DIRECTOR";
+  const tudo = (role === "ADMIN" || role === "DIRECTOR") && (!como || como === meuId);
 
   const { data } = useQuery({
-    queryKey: ["filas-formulario", eu, role],
+    queryKey: ["filas-formulario", eu, role, tudo],
     enabled: !!eu,
     staleTime: 60_000,
     queryFn: async () => {

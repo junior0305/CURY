@@ -150,7 +150,7 @@ export default function Superintendente() {
           <PastasDoSuper superId={superId} />
         ) : aba === "leads" && superId ? (
           <>
-            <FilasFormulario />
+            <FilasFormulario como={verComo ?? undefined} />
             <LeadsSuper key="leads" superId={superId} inicial="leads" />
           </>
         ) : aba === "midia" && superId ? (

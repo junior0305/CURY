@@ -401,7 +401,7 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
             );
           })}
         </div>
-        <FilasFormulario />
+        <FilasFormulario como={managerId} />
       </section>
     </div>
   );

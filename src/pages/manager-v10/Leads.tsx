@@ -343,7 +343,7 @@ export default function Leads() {
           </div>
 
           {/* Fila de leads por formulário (19/10): o líder escolhe quem recebe cada formulário */}
-          <FilasFormulario />
+          <FilasFormulario como={userId} />
 
           {/* ══════════════════════════════════════════════════════════════════════
               ABA 1: FILAS DE AÇÃO IMEDIATA (PROBLEMAS)
