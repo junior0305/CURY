@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { donoJunix, type SuperDiretoria } from "@/hooks/useDiretoria";
 
-type Linha = { superintendente: string | null; gerente: string | null; regiao: string | null; motivo: string; recente: boolean; com_celular: boolean; buscado: boolean; n: number };
+type Linha = { superintendente: string | null; gerente: string | null; regiao: string | null; motivo: string; recente: boolean; parada: number; com_celular: boolean; buscado: boolean; n: number };
 type Lancamento = { nome: string; regiao: string };
 
 const MOTIVOS: { k: string; nome: string; dica: string }[] = [
@@ -29,6 +29,8 @@ const fmt = (n: number) => n.toLocaleString("pt-BR");
 export default function ResgateLancamentos({ supers }: { supers: SuperDiretoria[] }) {
   const { role } = useAuth();
   const [soRecentes, setSoRecentes] = useState(true);
+  // só pasta parada: sem mexer no Junix há pelo menos N dias — a que está sendo negociada agora fica de fora
+  const [parada, setParada] = useState(60);
   const diretoria = (role === "ADMIN" || role === "DIRECTOR") && supers.length > 1;
 
   const { data } = useQuery({
@@ -46,9 +48,10 @@ export default function ResgateLancamentos({ supers }: { supers: SuperDiretoria[
   const ids = useMemo(() => new Set(supers.map((s) => s.id)), [supers]);
   const linhas = useMemo(() => (data?.linhas ?? []).filter((x) => {
     if (soRecentes && !x.recente) return false;
+    if (Number(x.parada) < parada) return false;
     const dono = donoJunix(supers, x.superintendente, x.gerente).superId;
     return ids.has(dono) || (diretoria && dono === "fora");
-  }), [data?.linhas, supers, ids, diretoria, soRecentes]);
+  }), [data?.linhas, supers, ids, diretoria, soRecentes, parada]);
 
   const lancs = data?.lancamentos ?? [];
   const soma = (f: (x: Linha) => boolean) => linhas.filter(f).reduce((a, x) => a + Number(x.n), 0);
@@ -68,10 +71,17 @@ export default function ResgateLancamentos({ supers }: { supers: SuperDiretoria[
           <h3>Pastas que não compraram × lançamentos do mês</h3>
           <p>Quem já abriu pasta já quis comprar. Um lançamento novo na região dele é o motivo para voltar a chamar.</p>
         </div>
-        <label className="rsg-tg">
-          <input type="checkbox" checked={soRecentes} onChange={(e) => setSoRecentes(e.target.checked)} />
-          Só pastas dos últimos 2 anos
-        </label>
+        <div className="rsg-filtros">
+          <label className="rsg-sel">Parada há mais de
+            <select value={parada} onChange={(e) => setParada(Number(e.target.value))}>
+              {[30, 60, 90, 180, 365].map((d) => <option key={d} value={d}>{d === 365 ? "1 ano" : `${d} dias`}</option>)}
+            </select>
+          </label>
+          <label className="rsg-tg">
+            <input type="checkbox" checked={soRecentes} onChange={(e) => setSoRecentes(e.target.checked)} />
+            Só pastas abertas nos últimos 2 anos
+          </label>
+        </div>
       </div>
 
       {!data ? <div className="rsg-mut">Carregando as pastas do Junix…</div> : (
@@ -100,6 +110,7 @@ export default function ResgateLancamentos({ supers }: { supers: SuperDiretoria[
             })}
           </div>
           <div className="rsg-pe">
+            <span>Contando só pasta sem nenhuma mudança no Junix há mais de {parada === 365 ? "1 ano" : `${parada} dias`}: quem está negociando agora fica de fora.</span>
             <span><b>{fmt(total)}</b> pastas sem venda no total · <b>{fmt(fora)}</b> em outras regiões{semRegiao ? ` (${fmt(semRegiao)} de empreendimento sem região)` : ""}</span>
             <span>Celular: buscado em <b>{fmt(buscados)}</b> de {fmt(total)} ({fmt(comCel)} encontrados). O robô busca na ficha do Junix de madrugada, começando pelas regiões dos lançamentos.</span>
           </div>
@@ -115,6 +126,9 @@ const CSS = `
 .rsg-chip{display:inline-block;padding:3px 10px;border-radius:99px;background:rgba(14,124,123,.12);color:var(--teal,#0E7C7B);font-size:11.5px;font-weight:800}
 .rsg h3{margin:6px 0 4px;font-size:18px;font-weight:800;color:var(--ink,#0F1B2D)}
 .rsg p{margin:0;font-size:13px;color:var(--ink-3,#5B6B80)}
+.rsg-filtros{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.rsg-sel{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ink,#0F1B2D)}
+.rsg-sel select{min-height:40px;padding:0 10px;border-radius:10px;border:1px solid var(--line,#CFD7E3);background:var(--card,#fff);color:inherit;font:inherit}
 .rsg-tg{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ink,#0F1B2D);min-height:40px;cursor:pointer}
 .rsg-tg input{width:18px;height:18px}
 .rsg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
