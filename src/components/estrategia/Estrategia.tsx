@@ -15,6 +15,7 @@ import GastosPlano from "@/components/plano/GastosPlano";
 import Conselho from "./Conselho";
 import SalaDeGuerraCampanha from "./SalaDeGuerraCampanha";
 import MinhaEstrategia from "./MinhaEstrategia";
+import ResgateLancamentos from "./ResgateLancamentos";
 import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
 import { empresa } from "@/lib/empresa";
 
@@ -213,7 +214,10 @@ export default function Estrategia({ diretorId, supers, pastas, metaComSuperacao
           <Pergunta5 abrir={abrir} />
         </>
       ) : (
-        <MinhaEstrategia diretorId={diretorId} supers={supers} />
+        <>
+          <ResgateLancamentos supers={supers} />
+          <MinhaEstrategia diretorId={diretorId} supers={supers} />
+        </>
       )}
 
       {combinar && <CombinarAcao diretorId={diretorId} c={combinar} fechar={() => setCombinar(null)} />}
