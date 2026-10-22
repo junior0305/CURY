@@ -74,9 +74,11 @@ export default function FilasFormulario() {
   const pessoas = data?.pessoas ?? [];
   const porId = useMemo(() => new Map(pessoas.map((p) => [p.id, p])), [pessoas]);
   const filaDe = useMemo(() => new Map((data?.filas ?? []).map((f) => [f.match_value, f])), [data?.filas]);
-  // Em uso = anúncio rodando, lead nos últimos 7 dias ou fila criada. O resto fica escondido.
-  const ativos = (data?.forms ?? []).filter((f) => f.anuncio_ativo || f.leads_7d > 0 || filaDe.has(f.form_id));
-  const pausados = (data?.forms ?? []).filter((f) => !ativos.includes(f));
+  // Em uso = anúncio rodando ou lead nos últimos 7 dias. Gerente e super (Junior, 22/10) veem SÓ esses:
+  // formulário parado com nome igual ao de um ativo confundia na hora de criar a fila.
+  // Admin e diretor também veem os com fila criada e podem abrir os parados.
+  const ativos = (data?.forms ?? []).filter((f) => f.anuncio_ativo || f.leads_7d > 0 || (tudo && filaDe.has(f.form_id)));
+  const pausados = tudo ? (data?.forms ?? []).filter((f) => !ativos.includes(f)) : [];
   const lista = verPausados ? [...ativos, ...pausados] : ativos;
   const comFila = ativos.filter((f) => filaDe.has(f.form_id)).length;
 
@@ -148,8 +150,8 @@ export default function FilasFormulario() {
           <b>Fila de leads por formulário</b>
           <span>
             {ativos.length
-              ? `${ativos.length} formulário${ativos.length === 1 ? "" : "s"} em uso · ${comFila} com fila · ${ativos.length - comFila} seguem o plantão`
-              : "Nenhum formulário em uso nas suas contas de anúncio."}
+              ? `${ativos.length} formulário${ativos.length === 1 ? "" : "s"} ativo${ativos.length === 1 ? "" : "s"} · ${comFila} com fila · ${ativos.length - comFila} seguem o plantão`
+              : "Nenhum formulário ativo nas suas contas de anúncio."}
           </span>
         </div>
         <button type="button" className="ff-btn" onClick={() => setAberto(true)}>Gerenciar filas</button>
