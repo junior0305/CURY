@@ -29,8 +29,11 @@ export const ehPescado = (l: LeadCampos) => l.source === "cold_pool";
 /** Lead que caiu de uma lista da Base de contatos (gotejamento). Também não é lead pago. */
 export const ehLista = (l: LeadCampos) => l.source === "lista";
 
-/** Lead pago = veio de mídia (anúncio/disparo/outros); pescado e lista ficam fora. */
-export const ehPago = (l: LeadCampos) => !ehPescado(l) && !ehLista(l);
+/** Lead do Resgate para lançamentos (pasta antiga do Junix que voltou ao corretor). Também não é lead pago. */
+export const ehResgate = (l: LeadCampos) => l.source === "resgate";
+
+/** Lead pago = veio de mídia (anúncio/disparo/outros); pescado, lista e resgate ficam fora. */
+export const ehPago = (l: LeadCampos) => !ehPescado(l) && !ehLista(l) && !ehResgate(l);
 
 export const ativo = (l: LeadCampos) => !ENCERRADO.has(l.status ?? "");
 
