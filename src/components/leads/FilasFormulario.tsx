@@ -17,7 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 
 type Form = { form_id: string; page_id: string | null; nome: string | null; nome_fonte: string | null; anuncios: string | null;
-  owner_id: string | null; status: string | null; leads_7d: number; anuncio_ativo: boolean };
+  owner_id: string | null; status: string | null; leads_7d: number; anuncio_ativo: boolean; ad_account_id?: string | null };
 type Pessoa = { id: string; first_name: string | null; last_name: string | null; role: string; manager_id: string | null; lead_assignment_enabled: boolean | null };
 type Fila = { id: string; match_value: string; broker_ids: string[]; criado_por: string | null; last_assigned_index: number | null };
 
@@ -53,7 +53,7 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
       const arvore = tudo ? null : (((await supabase.rpc("ids_da_arvore" as any, { p: eu })).data ?? []) as any[]).map((r: any) => (typeof r === "string" ? r : r.ids_da_arvore));
       let qp = supabase.from("profiles").select("id,first_name,last_name,role,manager_id,lead_assignment_enabled").eq("is_active", true);
       if (arvore) qp = qp.in("id", arvore);
-      let qf = supabase.from("formularios_catalogo" as any).select("form_id,page_id,nome,nome_fonte,anuncios,owner_id,status,leads_7d,anuncio_ativo");
+      let qf = supabase.from("formularios_catalogo" as any).select("form_id,page_id,nome,nome_fonte,anuncios,owner_id,status,leads_7d,anuncio_ativo,ad_account_id");
       if (arvore) qf = qf.in("owner_id", arvore);
       const [pRes, fRes, qRes] = await Promise.all([
         qp,
@@ -70,7 +70,11 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
           for (const l of (ls ?? []) as any[]) freq.set(l.broker_id, (freq.get(l.broker_id) ?? 0) + 1);
         }
       }
-      return { pessoas: (pRes.data ?? []) as Pessoa[], forms: ((fRes.data ?? []) as unknown) as Form[], filas: ((qRes.data ?? []) as unknown) as Fila[], freq };
+      // nome da conta de anúncio (EV-GERENTE-ALBA…) vem da leitura de saúde dos anúncios
+      const contas = new Map<string, string>();
+      const { data: sa } = await supabase.from("fb_saude" as any).select("account_id,dados->>conta");
+      for (const r of (sa ?? []) as any[]) if (r.conta) contas.set(String(r.account_id), r.conta);
+      return { contas, pessoas: (pRes.data ?? []) as Pessoa[], forms: ((fRes.data ?? []) as unknown) as Form[], filas: ((qRes.data ?? []) as unknown) as Fila[], freq };
     },
   });
 
@@ -84,6 +88,17 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
   const pausados = tudo ? (data?.forms ?? []).filter((f) => !ativos.includes(f)) : [];
   const lista = verPausados ? [...ativos, ...pausados] : ativos;
   const comFila = ativos.filter((f) => filaDe.has(f.form_id)).length;
+  // Agrupado por conta de anúncio (22/10): o super vê "Dudu — formulários dele", "Alba — os dela"...
+  // Sem conta conhecida (formulário só da página) agrupa pelo dono.
+  const porConta = useMemo(() => {
+    const m = new Map<string, { chave: string; dono: string; conta: string | null; forms: Form[] }>();
+    for (const f of lista) {
+      const chave = f.ad_account_id ? `c:${f.ad_account_id}` : `d:${f.owner_id ?? "—"}`;
+      if (!m.has(chave)) m.set(chave, { chave, dono: nomeDe(porId.get(f.owner_id ?? "")), conta: f.ad_account_id ? (data?.contas.get(f.ad_account_id) ?? `conta ${f.ad_account_id}`) : null, forms: [] });
+      m.get(chave)!.forms.push(f);
+    }
+    return [...m.values()].sort((a, b) => a.dono.localeCompare(b.dono) || (a.conta ?? "").localeCompare(b.conta ?? ""));
+  }, [lista, porId, data?.contas]);
 
   // corretores da árvore, por líder direto
   const grupos = useMemo(() => {
@@ -171,7 +186,13 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
               <button type="button" className="ff-x" aria-label="Fechar" onClick={() => setAberto(false)}>×</button>
             </div>
 
-            {lista.map((f) => {
+            {porConta.map((g) => (
+              <section key={g.chave} className="ff-conta">
+                <div className="ff-conta-top">
+                  <b>{g.dono}</b>
+                  <small>{g.conta ?? "formulários da página"} · {g.forms.length} formulário{g.forms.length > 1 ? "s" : ""} · {g.forms.filter((f) => filaDe.has(f.form_id)).length} com fila</small>
+                </div>
+            {g.forms.map((f) => {
               const fila = filaDe.get(f.form_id);
               const on = sel === f.form_id;
               const meta = [f.anuncio_ativo ? "Anúncio rodando" : f.leads_7d ? "Recebendo lead" : "Sem anúncio ativo", f.leads_7d ? `${f.leads_7d} leads em 7 dias` : "ainda sem lead no Comandra",
@@ -243,6 +264,8 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
                 </div>
               );
             })}
+              </section>
+            ))}
 
             {pausados.length > 0 && (
               <button type="button" className="ff-mais" onClick={() => setVerPausados((v) => !v)}>
@@ -277,6 +300,10 @@ const CSS = `
 .ff-topo p{margin:4px 0 0;font-size:13px;color:var(--cv-text-muted,#3C4B5F)}
 .ff-x{min-width:42px;min-height:42px;border-radius:10px !important;border:1px solid var(--cv-border,#CFD7E3) !important;background:transparent !important;color:inherit;font-size:18px;cursor:pointer}
 .ff-gaveta > *{flex-shrink:0}
+.ff-conta{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.ff-conta-top{display:flex;flex-direction:column;gap:2px;padding:6px 2px;border-bottom:2px solid var(--cv-border,#E1E6EE)}
+.ff-conta-top b{font-size:15px;font-weight:800}
+.ff-conta-top small{font-size:12px;color:var(--cv-text-muted,#5B6B80)}
 .ff-form{border:1px solid var(--cv-border,#E1E6EE);border-radius:10px;overflow:hidden;flex-shrink:0}
 .ff-form.on{border:2px solid #0E7C7B}
 .ff-linha{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;min-height:56px;padding:10px 12px;background:transparent;border:0;color:inherit;cursor:pointer;text-align:left}
