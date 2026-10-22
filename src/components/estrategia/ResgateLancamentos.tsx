@@ -426,6 +426,23 @@ function Distribuir({ lanc, supers, diretoria, paradaIni, fechar, salvo }: { lan
     if (quentes) out.sort((a, b) => ORDEM_QUENTE.indexOf(a.motivo) - ORDEM_QUENTE.indexOf(b.motivo) || a.quando - b.quando);
     return out;
   }, [pastas, leads, cats, jaEnviados, soCelular, so2anos, parada, supers, ids, diretoria, porChave, quentes]);
+  // pastas que passam nos filtros mas ainda esperam o celular (o robô busca de madrugada)
+  const semCelular = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!soCelular) return m;
+    const hoje = Date.now();
+    const dias = (d: string | null) => (d ? (hoje - new Date(d + "T12:00:00").getTime()) / 864e5 : 9999);
+    for (const p of pastas ?? []) {
+      if (p.celular || jaEnviados?.has(p.proposta_id)) continue;
+      if (so2anos && dias(p.cadastrada_em) > 730) continue;
+      if (dias(p.alterada_em ?? p.cadastrada_em) < parada) continue;
+      const d = donoJunix(supers, p.superintendente, p.gerente).superId;
+      if (!(ids.has(d) || (diretoria && d === "fora"))) continue;
+      m.set(p.motivo, (m.get(p.motivo) ?? 0) + 1);
+    }
+    return m;
+  }, [pastas, jaEnviados, soCelular, so2anos, parada, supers, ids, diretoria]);
+  const totalSemCel = [...semCelular.values()].reduce((a, b) => a + b, 0);
 
   const contaCat = (k: string) => candidatos.filter((c) => c.motivo === k).length;
   const escolhidos = todosCor.filter((c) => marc.has(c.id));
@@ -473,13 +490,15 @@ function Distribuir({ lanc, supers, diretoria, paradaIni, fechar, salvo }: { lan
           <div className="rsg-lista">
             {MOTIVOS.map((m) => (
               <label key={m.k}><input type="checkbox" checked={cats.has(m.k)} onChange={() => toggleCat(m.k)} />
-                <span><b>{m.nome}</b><small>{m.dica}</small></span><b>{cats.has(m.k) ? fmt(contaCat(m.k)) : "—"}</b></label>
+                <span><b>{m.nome}</b><small>{m.dica}{semCelular.get(m.k) ? ` · ${fmt(semCelular.get(m.k)!)} esperando celular` : ""}</small></span>
+                <b>{cats.has(m.k) ? fmt(contaCat(m.k)) : "—"}</b></label>
             ))}
             <label><input type="checkbox" checked={cats.has("lead")} onChange={() => toggleCat("lead")} />
               <span><b>Leads parados há +{diasTxt(parada)}</b><small>interesse na {regiaoTxt(lanc.regiao)}{diretoria ? " (inclui a base sem corretor)" : ""}</small></span>
               <b>{cats.has("lead") ? fmt(contaCat("lead")) : "—"}</b></label>
           </div>
         )}
+        {totalSemCel > 0 && <div className="rsg-aviso">{fmt(totalSemCel)} pastas desta região ainda estão sem celular: o robô busca na ficha do Junix toda noite (20h às 7h). Elas entram aqui sozinhas conforme o telefone chega. Os leads parados já têm telefone e podem ser distribuídos agora.</div>}
         <div className="rsg-chips">
           <label className="rsg-sel">Parada há mais de
             <select value={parada} onChange={(e) => setParada(Number(e.target.value))}>{[30, 60, 90, 180, 365].map((d) => <option key={d} value={d}>{diasTxt(d)}</option>)}</select>
@@ -690,6 +709,7 @@ const CSS = `
 .rsg-op span{display:flex;flex-direction:column}
 .rsg-campo{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:700;color:var(--ink-3,#3C4B5F)}
 .rsg-campo select,.rsg-campo textarea{font-weight:400}
+.rsg-aviso{background:#FDF0E6;color:#6B3A08;border-radius:10px;padding:10px 12px;font-size:13px}
 .rsg-msg{background:var(--bg,#F4F6F9);border-radius:12px;padding:12px 14px;font-size:13.5px;line-height:1.5}
 .rsg-resumo{margin-top:auto;border-top:2px solid var(--line,#DCE2EA);padding-top:14px;display:flex;flex-direction:column;gap:10px}
 .rsg-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
