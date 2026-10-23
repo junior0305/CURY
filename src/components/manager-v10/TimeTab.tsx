@@ -17,6 +17,7 @@ import Briefing from "@/components/manager-v10/Briefing";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
+import QuemParado from "@/components/manager-v10/QuemParado";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { useLeadsQueimaDisparo } from "@/components/manager-v10/AlertaDisparoQueima";
 import RaioXCorretorDrawer from "@/components/manager-v10/RaioXCorretorDrawer";
@@ -277,6 +278,9 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
           </button>
         </div>
       </div>
+
+      {/* ── QUEM ESTÁ SEM GERAR RESULTADO (24/10) ── */}
+      <QuemParado donoId={managerId} modo="gerente" />
 
       {/* ── ALERTA DE VÍNCULOS PENDENTES C2S / JUNIX (SE HOUVER) ── */}
       <VincularNomes managerId={managerId} />

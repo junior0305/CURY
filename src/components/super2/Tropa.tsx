@@ -1,3 +1,4 @@
+import QuemParado from "@/components/manager-v10/QuemParado";
 // Gestão de Equipes da Superintendência — 100% no Design System do Cockpit do Gerente
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -131,6 +132,9 @@ export default function Tropa({ superId }: { superId: string }) {
           )}
         </div>
       </header>
+
+      {/* ── QUEM ESTÁ SEM GERAR RESULTADO (24/10) ── */}
+      <QuemParado donoId={superId} modo="super" />
 
       {/* ── SELETOR DE EQUIPE EM PÍLULAS ── */}
       <div className="origem-pills-bar-v3">
