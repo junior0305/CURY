@@ -284,7 +284,24 @@ function MeuWhatsApp() {
   const [qr, setQr] = useState<string | null>(null);
   const [estado, setEstado] = useState<"parado" | "gerando" | "esperando" | "conectado" | "erro">("parado");
   const [erro, setErro] = useState<string | null>(null);
-  const conectado = chip?.real_state === "open" || estado === "conectado";
+  // enquanto gera/mostra QR (inclusive depois de "Desconectar"), não vale o "open" que ainda está no banco
+  const conectado = estado === "conectado" || (chip?.real_state === "open" && estado !== "gerando" && estado !== "esperando");
+  const [verificando, setVerificando] = useState(false);
+  const [confirmaReset, setConfirmaReset] = useState(false);
+
+  // O banco só é corrigido pelo check-bot-health de hora em hora: confere no servidor ao abrir e no botão (caso Alba, 26/10)
+  const verificar = async () => {
+    if (!chip?.id) return;
+    setVerificando(true); setErro(null);
+    try {
+      const { data } = await supabase.functions.invoke("get-whatsapp-qr", { body: { botInstanceId: chip.id, method: "check" } });
+      const d = data as any;
+      if (d?.error) setErro(d.error_detail || d.error);
+      setEstado(d?.connected ? "conectado" : "parado");
+      await refetch();
+    } finally { setVerificando(false); }
+  };
+  useEffect(() => { if (chip?.id) verificar(); }, [chip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // enquanto o QR está na tela, confere a cada 5 s se já leu
   useEffect(() => {
@@ -300,7 +317,9 @@ function MeuWhatsApp() {
   const gerarQr = async () => {
     if (!chip?.id) return;
     setEstado("gerando"); setErro(null);
-    const { data, error } = await supabase.functions.invoke("get-whatsapp-qr", { body: { botInstanceId: chip.id, forceQR: true } });
+    const reset = confirmaReset;
+    setConfirmaReset(false);
+    const { data, error } = await supabase.functions.invoke("get-whatsapp-qr", { body: { botInstanceId: chip.id, forceQR: true, ...(reset ? { reset: true } : {}) } });
     const d = data as any;
     if (d?.connected) { setEstado("conectado"); refetch(); return; }
     if (d?.base64) { setQr(d.base64); setEstado("esperando"); return; }
@@ -325,7 +344,21 @@ function MeuWhatsApp() {
             : "Sem o chip, as mensagens assinadas por você ficam prontas em Avisos e cobranças, e as cobranças da equipe saem pelo número do superintendente ou do Junior."}</p>
         </div>
       </div>
-      {!conectado ? (
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+        <button className="cfg-btn" onClick={verificar} disabled={verificando || estado === "gerando"}>
+          {verificando ? "Verificando…" : "Verificar agora"}
+        </button>
+        {conectado && !confirmaReset ? (
+          <button className="cfg-btn" onClick={() => setConfirmaReset(true)}>Desconectar e gerar novo QR</button>
+        ) : null}
+        {conectado && confirmaReset ? (
+          <>
+            <button className="cfg-btn prim" onClick={() => { setEstado("parado"); gerarQr(); }}>Sim, desconectar e mostrar o QR</button>
+            <button className="cfg-btn" onClick={() => setConfirmaReset(false)}>Cancelar</button>
+          </>
+        ) : null}
+      </div>
+      {!conectado || qr ? (
         <div className="cfg-qr">
           {qr ? (
             <>
