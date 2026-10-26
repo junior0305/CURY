@@ -40,6 +40,7 @@ import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import "@/styles/manager-v10.css";
 import "@/styles/cockpit-gerente.css";
 import "@/styles/disparar.css";
+import DisparoAgora from "@/components/disparo/DisparoAgora";
 import { empresa } from "@/lib/empresa";
 
 type Etapa = "bm" | "tpl" | "disp" | "conv" | "corretores";
@@ -777,6 +778,8 @@ export default function Disparar() {
             </span>
           </div>
         ) : null}
+        {/* "Meu disparo agora": foi? parou? terminou? (26/10) */}
+        <DisparoAgora userId={userId} />
         {/* Scorecards Executivos para Disparo */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
           <div style={{ background: "var(--cv-surface, #fff)", border: "1px solid var(--cv-border, #e2e8f0)", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", cursor: "pointer" }} onClick={() => setEtapa("bm")}>
@@ -2070,6 +2073,11 @@ export default function Disparar() {
                        : cfgEnvio.ownerId
                          ? "número de alguém da sua equipe — a conta é dele"
                          : "número compartilhado da empresa — quem paga é a empresa"}</i>
+                  {cfgEnvio?.bloqueadaEm ? (
+                    <i style={{ color: "#b91c1c", fontWeight: 700, fontStyle: "normal" }}>
+                      🔒 A Meta bloqueou a conta deste número em {new Date(cfgEnvio.bloqueadaEm).toLocaleDateString("pt-BR")}. Nada sai por ele até liberar no Gerenciador do WhatsApp — escolha outro número.
+                    </i>
+                  ) : null}
                 </div>
 
                 <div className="conta">
