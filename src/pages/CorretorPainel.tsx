@@ -494,7 +494,13 @@ const CorretorPainel = () => {
         if (/already_claimed/i.test(String(e1.message || ""))) { toast.info("Outro corretor pegou esse agora. Aqui vai o próximo."); proximoCard(); return; }
         toast.error((e1 as any).details || e1.message || "Não consegui pegar."); return;
       }
-      await supabase.rpc("promote_cold_to_lead", { p_contact_id: atual.id });
+      // Se o lead não for criado, não pode dizer "é seu": antes o erro era ignorado e o contato sumia (Fafa, 26/10).
+      const { data: leadId, error: e2 } = await supabase.rpc("promote_cold_to_lead", { p_contact_id: atual.id });
+      if (e2 || !leadId) {
+        toast.error((e2 as any)?.details || (e2 as any)?.hint || e2?.message || "Não consegui criar o lead. Avise seu gerente.");
+        qc.invalidateQueries({ queryKey: ["pescaHoje"] });
+        return;
+      }
       toast.success(`✅ ${firstName(atual.name || "Lead")} é seu! Já está nas suas fichas.`);
       qc.invalidateQueries({ queryKey: ["pescaHoje"] });
       qc.invalidateQueries({ queryKey: ["painelLeads"] });
