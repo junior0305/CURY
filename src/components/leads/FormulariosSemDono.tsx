@@ -13,12 +13,14 @@ import { useAuth } from "@/components/AuthProvider";
 
 const sb = supabase as any;
 type Linha = { form_id: string; page_id: string | null; nome: string; parados: number; leads_14d: number; ultimo: string | null;
-  sugestao: string | null; sugestao_nome: string | null; recrutamento: boolean };
+  sugestao: string | null; sugestao_nome: string | null; recrutamento: boolean;
+  conta: string | null; conta_dono: string | null; pagina_dono: string | null; anuncios: string | null };
 
 const CSS = `.fsd{border:1px solid #fdba74;background:#fff7ed;border-radius:12px;padding:14px 16px;margin-bottom:16px;color:#0f172a}
 .fsd h3{margin:0 0 4px;font-size:16px;font-weight:800;color:#9a3412}.fsd p{margin:0 0 10px;font-size:13.5px;color:#7c2d12}
 .fsd-i{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#fff;border:1px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-top:8px}
-.fsd-n{flex:1;min-width:220px}.fsd-n b{display:block;font-size:14px}.fsd-n i{font-style:normal;font-size:12.5px;color:#64748b}
+.fsd-n{flex:1;min-width:220px}.fsd-n b{display:block;font-size:14px}.fsd-n i{display:block;font-style:normal;font-size:12.5px;color:#64748b}
+.fsd-n .fsd-o{color:#334155;margin-top:2px}.fsd-n a{color:#1d4ed8}
 .fsd select{font-size:13.5px;padding:7px 8px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#0f172a;max-width:260px}
 .fsd button{font-size:13.5px;font-weight:700;padding:7px 14px;border-radius:8px;border:1px solid #c2410c;background:#c2410c;color:#fff;cursor:pointer}
 .fsd button:disabled{opacity:.5;cursor:default}.fsd-link{background:none!important;border:none!important;color:#9a3412!important;text-decoration:underline;padding:0!important}`;
@@ -79,8 +81,14 @@ export default function FormulariosSemDono({ como, compacto, onAbrir }: { como?:
         <div className="fsd-i" key={l.form_id}>
           <div className="fsd-n">
             <b>{l.nome}</b>
+            <i className="fsd-o">
+              {/* De onde vem: a conta de anúncio diz quem paga; a página abre no Facebook (o nome não vem pela API) */}
+              {l.page_id ? <>Página {l.pagina_dono ? `da ${l.pagina_dono}` : ""} (<a href={`https://www.facebook.com/${l.page_id}`} target="_blank" rel="noreferrer">abrir no Facebook</a>)</> : "Página desconhecida"}
+              {l.conta ? <> · anúncio pago pela conta <b style={{ display: "inline", fontSize: 12.5 }}>{l.conta}</b>{l.conta_dono ? ` (${l.conta_dono})` : ""}</> : null}
+            </i>
             <i>{l.parados ? `${l.parados} esperando · ` : ""}{l.leads_14d} leads em 14 dias
               {l.recrutamento ? " · parece recrutamento (candidato a corretor, não cliente)" : l.sugestao_nome ? ` · pelo nome da campanha, parece ser da ${l.sugestao_nome}` : ""}</i>
+            {l.anuncios ? <i title={l.anuncios}>Anúncios: {l.anuncios.length > 90 ? l.anuncios.slice(0, 90) + "…" : l.anuncios}</i> : null}
           </div>
           <select value={valorPadrao(l)} onChange={(e) => setEscolha((s) => ({ ...s, [l.form_id]: e.target.value }))} aria-label={`De quem é ${l.nome}`}>
             <option value="" disabled>É de…</option>
