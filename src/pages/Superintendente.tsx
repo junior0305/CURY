@@ -43,6 +43,7 @@ import PastasDoSuper from "@/components/super2/Pastas";
 import LeadsSuper from "@/components/super2/LeadsSuper";
 import VerComo from "@/components/manager-v10/VerComo";
 import FilasFormulario from "@/components/leads/FilasFormulario";
+import FormulariosSemDono from "@/components/leads/FormulariosSemDono";
 import TelaSuper from "@/components/super2/Tela";
 import Tropa from "@/components/super2/Tropa";
 import PainelGeral from "@/components/super2/PainelGeral";
@@ -139,6 +140,7 @@ export default function Superintendente() {
       />
       <main className="shell2">
         <VerComo />
+        {aba === "consolidado" ? <FormulariosSemDono como={verComo ?? undefined} compacto onAbrir={() => setAba("leads")} /> : null}
         {!ehDiretoria && aba === "consolidado" ? <MinhasTarefas donoId={superId ?? undefined} /> : null}
         {aba === "estrategia" && superId ? (
           <EstrategiaSuper
@@ -150,6 +152,7 @@ export default function Superintendente() {
           <PastasDoSuper superId={superId} />
         ) : aba === "leads" && superId ? (
           <>
+            <FormulariosSemDono como={verComo ?? undefined} />
             <FilasFormulario como={verComo ?? undefined} />
             <LeadsSuper key="leads" superId={superId} inicial="leads" />
           </>
