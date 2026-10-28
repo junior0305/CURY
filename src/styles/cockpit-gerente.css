@@ -924,7 +924,9 @@ html[data-theme="dark"] .cockpit-v3 {
   flex-wrap: wrap;
 }
 
-.btn-queima-primario {
+/* .mgr10 button{color:inherit;background:none} vencia esta classe (texto escuro no botão escuro) */
+.btn-queima-primario,
+.mgr10 .btn-queima-primario {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -940,12 +942,14 @@ html[data-theme="dark"] .cockpit-v3 {
   box-shadow: 0 2px 4px rgba(168, 50, 42, 0.2);
 }
 
-.btn-queima-primario:hover {
+.btn-queima-primario:hover,
+.mgr10 .btn-queima-primario:hover {
   background: #BE123C;
   transform: translateY(-1px);
 }
 
-.btn-queima-secundario {
+.btn-queima-secundario,
+.mgr10 .btn-queima-secundario {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -960,7 +964,8 @@ html[data-theme="dark"] .cockpit-v3 {
   transition: all 0.15s ease;
 }
 
-.btn-queima-secundario:hover {
+.btn-queima-secundario:hover,
+.mgr10 .btn-queima-secundario:hover {
   background: var(--cv-surface-subtle, #F1F5F9);
 }
 
