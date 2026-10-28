@@ -23,6 +23,7 @@ import CadastrarLider from "@/components/config/CadastrarLider";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
 import IntegracaoFacebook from "@/pages/admin/IntegracaoFacebook";
+import FacebookLeads from "@/components/config/FacebookLeads";
 import "@/styles/manager-v10.css";
 
 type Nivel = "diretor" | "super" | "gerente";
@@ -72,7 +73,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
           : secaoOk === "whatsapp" ? <MeuWhatsApp />
           : secaoOk === "fontes" ? <FontesDados />
           : secaoOk === "empresa" ? <DadosEmpresa />
-          : <><ContasAnuncio como={donoId} /><GestorTrafego donoId={donoId} /><div className="integ-shell"><IntegracaoFacebook /></div></>}
+          : <FacebookLeads como={donoId} avancado={<><ContasAnuncio como={donoId} /><GestorTrafego donoId={donoId} /><div className="integ-shell"><IntegracaoFacebook /></div></>} />}
       </section>
     </div>
   );

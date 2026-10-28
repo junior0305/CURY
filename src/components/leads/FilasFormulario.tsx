@@ -51,6 +51,8 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
     staleTime: 60_000,
     queryFn: async () => {
       const arvore = tudo ? null : (((await supabase.rpc("ids_da_arvore" as any, { p: eu })).data ?? []) as any[]).map((r: any) => (typeof r === "string" ? r : r.ids_da_arvore));
+      // quem está acima de mim: formulário de um chefe só é meu se trouxer o nome de alguém da minha árvore (caso Alba na conta da Liliane)
+      const acima = tudo ? [] : (((await supabase.rpc("ids_acima" as any, { p: eu })).data ?? []) as any[]).map((r: any) => (typeof r === "string" ? r : r.ids_acima));
       let qp = supabase.from("profiles").select("id,first_name,last_name,role,manager_id,lead_assignment_enabled").eq("is_active", true);
       if (arvore) qp = qp.in("id", arvore);
       const qf = supabase.from("formularios_catalogo" as any).select("form_id,page_id,nome,nome_fonte,anuncios,owner_id,status,leads_7d,anuncio_ativo,ad_account_id");
@@ -59,18 +61,19 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
         qf.order("leads_7d", { ascending: false }),
         supabase.from("distribution_queues").select("id,match_value,broker_ids,criado_por,last_assigned_index").eq("match_field", "form_id").eq("is_active", true),
       ]);
-      // O formulário é da pessoa quando: a conta de anúncio é da árvore dela; OU já tem fila com corretor dela;
-      // OU o nome do formulário traz o nome de um gerente da árvore (23/10: os formulários "ALBA - Vila Ema" rodam
-      // na conta da Liliane e a Alba não os via para cuidar da fila).
+      // O formulário é da pessoa quando: a conta de anúncio é da árvore dela; OU (formulário sem dono ou de um chefe dela)
+      // o nome traz o nome de um gerente da árvore (23/10: "ALBA - Vila Ema" roda na conta da Liliane).
+      // 28/10 (Junior): ter corretor na fila NÃO torna o formulário visível — os Datti do diretor apareciam para
+      // Liliane, Silva e Adajes só porque o diretor pôs corretores delas na fila.
       let fRes = fResTodos;
       if (arvore) {
         const set = new Set(arvore);
         const semAc = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
         const lideres = ((pRes.data ?? []) as Pessoa[]).filter((p) => p.role === "MANAGER" && (p.first_name ?? "").trim().length >= 3)
           .map((p) => new RegExp(`\\b${semAc(p.first_name!.trim()).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`));
-        const filaMinha = new Set(((qRes.data ?? []) as any[]).filter((q) => (q.broker_ids ?? []).some((b: string) => set.has(b))).map((q) => q.match_value));
+        const chefes = new Set(acima);
         fRes = { ...fResTodos, data: ((fResTodos.data ?? []) as any[]).filter((f) =>
-          set.has(f.owner_id) || filaMinha.has(f.form_id) || lideres.some((r) => r.test(semAc(f.nome ?? "")))) } as typeof fResTodos;
+          set.has(f.owner_id) || ((!f.owner_id || chefes.has(f.owner_id)) && lideres.some((r) => r.test(semAc(f.nome ?? ""))))) } as typeof fResTodos;
       }
       // "Mais frequentes": quem mais recebeu lead nos últimos 30 dias (atalho no topo da escolha)
       const corretoresIds = ((pRes.data ?? []) as Pessoa[]).filter((p) => p.role === "BROKER").map((p) => p.id);
