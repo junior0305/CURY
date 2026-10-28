@@ -19,9 +19,12 @@ type Lead = {
   formulario: string | null; form_id: string | null; anuncio: string | null; corretor: string | null; corretor_nome: string | null;
   equipe: string | null; equipe_nome: string | null; tipo: string; como: string; trocas: number; ultimo_contato: string | null;
   tocado: boolean; parado: boolean; tentativas: number; atribuido_em: string; sem_atendimento: boolean;
+  dest: string | null; dest_ok: boolean | null; dest_motivo: string | null;
 };
 type Equipe = { id: string; nome: string; corretores: { id: string; nome: string }[] };
-type Painel = { eu: { id: string; role: string }; equipes: Equipe[]; leads: Lead[] };
+type Dest = { tipo: "fila" | "roleta" | "pagina" | "plantao"; fila_id?: string; form_id?: string | null; roleta_de?: string | null;
+  corretores?: { id: string; nome: string }[]; fora_plantao?: boolean; sugestao?: { form_id: string; nome: string; quem: string | null } | null };
+type Painel = { eu: { id: string; role: string }; equipes: Equipe[]; leads: Lead[]; destinos?: Record<string, Dest> };
 type Passo = { quando: string; de: string | null; para: string | null; por: string | null; motivo: string };
 
 const SIT: Record<string, [string, string]> = {
@@ -82,6 +85,26 @@ const CSS = `.lo{display:grid;gap:16px;color:var(--ink)}
 .lo-tabs button.on{background:var(--ink);border-color:var(--ink);color:var(--card)}
 .lo-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--sunk);border-radius:10px;padding:10px 12px}
 .lo-pick{display:flex;gap:6px;flex-wrap:wrap}.lo-pick label{display:flex;gap:4px;align-items:center;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer}
+.lo-seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:3px}
+.lo-seg button{font:inherit;font-size:13px;font-weight:600;border:0;background:none;color:var(--ink-2,#475569);padding:5px 12px;border-radius:99px;cursor:pointer}
+.lo-seg button.on{background:var(--ink);color:var(--card)}
+.lo-k{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.lo-kp{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:2px;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.lo-kp:hover{border-color:var(--blue,#0d9488)}.lo-kp.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.lo-kp .k{font-size:12px;font-weight:600;color:var(--ink-3,#64748b)}.lo-kp .v{font-size:26px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.lo-kp .h{font-size:12.5px;color:var(--ink-2,#475569)}.lo-kp.al .v{color:#dc2626}.lo-kp.wa .v{color:#b45309}
+.lo-leg{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--ink-3,#64748b)}.lo-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.lo-sb{display:flex;height:10px;border-radius:99px;overflow:hidden;background:var(--sunk);min-width:150px}.lo-sb span{display:block;height:100%}
+.lo-sbx{display:grid;gap:4px}.lo-sbx small{font-size:11.5px;color:var(--ink-3,#64748b);white-space:nowrap}
+.lo td.sem{color:#dc2626;font-weight:800}
+.lo-av{display:flex;align-items:center}.lo-av b{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:10.5px;font-weight:800;color:#fff;border:2px solid var(--card);margin-left:-6px}
+.lo-av b:first-child{margin-left:0}.lo-av em{font-style:normal;font-size:12px;color:var(--ink-3,#64748b);margin-left:6px;white-space:nowrap}
+.lo-dest{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.lo-box{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:5px;min-width:0}
+.lo-box .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3,#64748b)}
+.lo-names{display:flex;flex-wrap:wrap;gap:5px}.lo-names span{font-size:12.5px;background:var(--sunk);border:1px solid var(--line);border-radius:99px;padding:2px 8px}
+.lo-why{font-size:12.5px;color:#b45309;background:color-mix(in srgb,#d97706 12%,var(--card));border-radius:8px;padding:5px 9px;margin-top:5px}
+.lo tbody tr.clk{cursor:pointer}.lo tbody tr.clk:hover td{background:color-mix(in srgb,var(--blue,#0d9488) 6%,var(--card))}
 .lo-hist{font-size:12.5px;color:var(--ink-2,#475569);display:grid;gap:3px;border-left:2px solid var(--line);padding-left:10px}`;
 
 export default function LeadsOrigem({ como }: { como?: string | null }) {
@@ -102,6 +125,7 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
   const [alvos, setAlvos] = useState<string[]>([]);
   const [confirmar, setConfirmar] = useState<string | null>(null); // lead (ou "lote") esperando o "sim" de motivo sensível
   const [verCorretores, setVerCorretores] = useState(false);
+  const [soAtencao, setSoAtencao] = useState(false);
 
   const janela = useMemo(() => {
     const h = hojeSP();
@@ -178,6 +202,28 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
     } catch (e: any) { toast.error(e?.details || e?.message || "Não consegui redistribuir agora."); }
     finally { setOcupado(null); }
   };
+  const mandarFila = async (l: Lead) => {
+    const p = para[l.id];
+    if (!p) { toast.error("Escolha um corretor da fila."); return; }
+    setOcupado(l.id);
+    try {
+      const { data: nome, error } = await sb.rpc("mandar_para_fila", { p_lead: l.id, p_para: p, p_como: como || null });
+      if (error) throw error;
+      toast.success(`Lead mandado para ${nome}, da fila do formulário.`);
+      qc.invalidateQueries({ queryKey: ["leads-origem"] });
+    } catch (e: any) { toast.error(e?.details || e?.message || "Não consegui mandar agora."); }
+    finally { setOcupado(null); }
+  };
+  const copiarFila = async (form: string, origem: string, nome: string) => {
+    setOcupado("fila");
+    try {
+      const { data: n, error } = await sb.rpc("copiar_fila_formulario", { p_form: form, p_origem: origem, p_como: como || null });
+      if (error) throw error;
+      toast.success(`Pronto: este formulário agora vai para os mesmos corretores de "${nome}".${n ? ` ${n} lead(s) parado(s) foram entregues.` : ""}`);
+      qc.invalidateQueries({ queryKey: ["leads-origem"] });
+    } catch (e: any) { toast.error(e?.details || e?.message || "Não consegui ligar agora."); }
+    finally { setOcupado(null); }
+  };
   const baixarCsv = async (ls: Lead[], rotulo: string) => {
     if (!ls.length) { toast.error("Nada para baixar com esses filtros."); return; }
     const cab = ["data de entrada", "nome", "telefone", "email", "região", "renda", "tipo de origem", "página", "campanha", "formulário", "anúncio",
@@ -196,77 +242,165 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
   const camp: [string, Lead[]] | null = aberta ? [aberta.titulo, (data.leads ?? []).filter((l) => aberta.ids.includes(l.id))] : null;
 
   // 28/10 (Junior): linhas em vez de cartões; Pescar, listas e disparos viram UMA linha (com as partes dentro)
+  // 29/10 (Junior, mockup https://claude.ai/artifact/SFq3T3NS5nQ2ATjJXWNj4X): barra de situação, "Vai para" e "Foi certo?"
   const grupoDe = (l: Lead) => l.tipo === "Pescar" ? "Pescar" : l.tipo === "Lista" ? "Listas" : l.tipo === "Disparo de WhatsApp" ? "Disparos de WhatsApp"
     : l.tipo === "Resgate" ? "Resgate" : l.campanha;
-  const colunas = (ls: Lead[]) => [ls.length, conta(ls, (l) => sit(l.status)[0] === "Em atendimento"), conta(ls, (l) => sit(l.status)[0].startsWith("Visita")),
-    conta(ls, (l) => sit(l.status)[0] === "Venda"), conta(ls, (l) => sit(l.status)[0] === "Descartado"), conta(ls, (l) => l.sem_atendimento)];
-  const celulas = (ls: Lead[]) => colunas(ls).map((v, i) => <td key={i} className="n" style={i === 5 && v ? { color: "#b45309", fontWeight: 700 } : undefined}>{v}</td>);
-  const cabecalho = (primeira: string) => <thead><tr><th>{primeira}</th>{["Leads", "Atendendo", "Visita", "Venda", "Descartado", "Sem atendimento"].map((h) => <th key={h} style={{ textAlign: "right" }}>{h}</th>)}</tr></thead>;
-  const abrirGaveta = (titulo: string, ls: Lead[]) => { setAberta({ titulo, ids: ls.map((l) => l.id) }); setFiltroG("todos"); setMarcados([]); setAlvos([]); setConfirmar(null); };
-  const tabelaCampanhas = (ls: Lead[], chave: string) => {
+  const destinos = data.destinos ?? {};
+  const destDe = (ls: Lead[]) => {
+    const n = new Map<string, number>();
+    for (const l of ls) if (l.dest) n.set(l.dest, (n.get(l.dest) ?? 0) + 1);
+    const k = [...n.entries()].sort((x, y) => y[1] - x[1])[0]?.[0];
+    return k ? { chave: k, d: destinos[k] } : null;
+  };
+  const conferir = (ls: Lead[]) => {
+    const vistos = ls.filter((l) => l.dest_ok !== null);
+    const fora = vistos.filter((l) => l.dest_ok === false).length;
+    const semFila = destDe(ls)?.d?.tipo === "plantao";
+    return { vistos: vistos.length, fora, semFila, atencao: semFila || fora > 0 };
+  };
+  const situacao = (ls: Lead[]) => {
+    const sv = conta(ls, (l) => { const t = sit(l.status)[0]; return t.startsWith("Visita") || t === "Venda"; });
+    const sem = conta(ls, (l) => l.sem_atendimento);
+    const at = conta(ls, (l) => sit(l.status)[1] === "i" && !l.sem_atendimento);
+    const de = conta(ls, (l) => sit(l.status)[0] === "Descartado");
+    return { sv, at, de, sem };
+  };
+  const barra = (ls: Lead[]) => {
+    const x = situacao(ls), t = ls.length || 1;
+    const seg: [number, string, string][] = [[x.sv, "#1d4ed8", "visita/venda"], [x.at, "#60a5fa", "atendendo"],
+      [x.de, "color-mix(in srgb,var(--ink) 22%,var(--card))", "descartado"], [x.sem, "#dc2626", "sem atendimento"]];
+    return <div className="lo-sbx"><div className="lo-sb" role="img" aria-label={seg.map((g) => `${g[2]} ${g[0]}`).join(", ")}>
+      {seg.map((g, i) => g[0] ? <span key={i} style={{ width: `${(100 * g[0]) / t}%`, background: g[1] }} /> : null)}</div>
+      <small>{Math.round((100 * (x.sv + x.at)) / t)}% atendidos · {x.de} descartado{x.de === 1 ? "" : "s"}</small></div>;
+  };
+  const CORES = ["#1d4ed8", "#0e7c7b", "#7c3aed", "#db2777", "#ea580c", "#0891b2", "#4f46e5", "#a16207", "#be185d", "#15803d"];
+  const corDe = (n: string) => CORES[[...n].reduce((a2, c) => a2 + c.charCodeAt(0), 0) % CORES.length];
+  const vaiPara = (ls: Lead[]) => {
+    const t = ls[0]?.tipo;
+    if (t === "Pescar") return <span className="lo-m">quem pescou</span>;
+    if (t !== "Anúncio") return <span className="lo-m">—</span>;
+    const dd = destDe(ls)?.d;
+    if (!dd) return <span className="lo-m">não dá para conferir</span>;
+    if (dd.tipo === "plantao") return <span style={{ color: "#b45309", fontWeight: 700 }}>Plantão da equipe</span>;
+    if (dd.tipo === "roleta") return <span>Plantão de {dd.roleta_de}</span>;
+    const cs = dd.corretores ?? [];
+    return <div className="lo-av" title={cs.map((c) => c.nome).join(", ")}>
+      {cs.slice(0, 4).map((c) => <b key={c.id} style={{ background: corDe(c.nome) }}>{c.nome.slice(0, 2).toUpperCase()}</b>)}
+      <em>{cs.length > 4 ? `+${cs.length - 4} · ` : ""}{cs.length} corretor{cs.length === 1 ? "" : "es"}{dd.tipo === "pagina" ? " (página)" : ""}</em></div>;
+  };
+  const foiCerto = (ls: Lead[]) => {
+    if (ls[0]?.tipo !== "Anúncio") return <span className="lo-ch">—</span>;
+    const c = conferir(ls);
+    if (c.semFila) return <span className="lo-ch w">⚠ sem corretores escolhidos</span>;
+    if (c.fora) return <span className="lo-ch w">⚠ {c.fora} {c.fora === 1 ? "foi" : "foram"} para outra pessoa</span>;
+    if (c.vistos) return <span className="lo-ch ok">✓ {c.vistos} de {c.vistos}</span>;
+    return <span className="lo-ch">—</span>;
+  };
+  const gruposDe = (ls: Lead[]) => {
     const grupos = new Map<string, Lead[]>();
     for (const l of ls) grupos.set(grupoDe(l), [...(grupos.get(grupoDe(l)) ?? []), l]);
-    const ordem = [...grupos.entries()].sort((a, b) => b[1].length - a[1].length);
-    return (
-      <div className="lo-t"><table>{cabecalho("Campanha / origem")}<tbody>
-        {ordem.map(([g, gl]) => {
-          const partes = new Map<string, Lead[]>();
-          for (const l of gl) partes.set(l.campanha, [...(partes.get(l.campanha) ?? []), l]);
-          const temPartes = partes.size > 1 && g !== gl[0].campanha;
-          const kg = chave + "|" + g, aberto = grupoAberto === kg;
-          return [
-            <tr key={kg} style={{ cursor: "pointer" }} onClick={() => temPartes ? setGrupoAberto(aberto ? null : kg) : abrirGaveta(g, gl)}>
-              <td><b>{temPartes ? (aberto ? "▾ " : "▸ ") : ""}{g}</b>
-                <div className="lo-m">{gl[0].tipo}{gl[0].tipo === "Anúncio" && gl[0].pagina_nome ? ` · ${gl[0].pagina_nome}` : ""}{temPartes ? ` · ${partes.size} ${g === "Pescar" ? "regiões" : "partes"}` : ""}</div></td>
-              {celulas(gl)}
-            </tr>,
-            ...(temPartes && aberto ? [...partes.entries()].sort((a, b) => b[1].length - a[1].length).map(([pn, pl]) => (
-              <tr key={kg + "|" + pn} style={{ cursor: "pointer", background: "var(--sunk)" }} onClick={() => abrirGaveta(pn, pl)}>
-                <td style={{ paddingLeft: 28 }}>{pn.replace(/^Pescar · /, "")}</td>{celulas(pl)}</tr>
-            )) : []),
-          ];
-        })}
-      </tbody></table></div>
-    );
+    return [...grupos.entries()].sort((x, y) => y[1].length - x[1].length);
   };
+  const precisaAtencao = (ls: Lead[]) => ls.some((l) => l.sem_atendimento) || gruposDe(ls).some(([, gl]) => gl[0].tipo === "Anúncio" && conferir(gl).atencao);
+  const celulas = (ls: Lead[], vai: JSX.Element, certo: JSX.Element) => <>
+    <td className="n">{ls.length}</td><td>{barra(ls)}</td><td className={`n${situacao(ls).sem ? " sem" : ""}`}>{situacao(ls).sem || ""}</td><td>{vai}</td><td>{certo}</td></>;
+  const cabecalho = (primeira: string) => <thead><tr><th>{primeira}</th><th style={{ textAlign: "right" }}>Leads</th><th>Situação</th>
+    <th style={{ textAlign: "right" }}>Sem atend.</th><th>Vai para</th><th>Foi certo?</th></tr></thead>;
+  const abrirGaveta = (titulo: string, ls: Lead[]) => { setAberta({ titulo, ids: ls.map((l) => l.id) }); setFiltroG("todos"); setMarcados([]); setAlvos([]); setConfirmar(null); };
+  const linhasCampanhas = (ls: Lead[], chave: string, recuo: boolean) => gruposDe(ls)
+    .filter(([, gl]) => !soAtencao || gl.some((l) => l.sem_atendimento) || (gl[0].tipo === "Anúncio" && conferir(gl).atencao))
+    .flatMap(([g, gl]) => {
+      const partes = new Map<string, Lead[]>();
+      for (const l of gl) partes.set(l.campanha, [...(partes.get(l.campanha) ?? []), l]);
+      const temPartes = partes.size > 1 && g !== gl[0].campanha;
+      const kg = chave + "|" + g, aberto = grupoAberto === kg;
+      const pad = recuo ? 34 : 12;
+      return [
+        <tr key={kg} className="clk" style={recuo ? { background: "var(--sunk)" } : undefined} tabIndex={0}
+          onKeyDown={(e) => { if (e.key === "Enter") (e.currentTarget as HTMLElement).click(); }}
+          onClick={() => temPartes ? setGrupoAberto(aberto ? null : kg) : abrirGaveta(g, gl)}>
+          <td style={{ paddingLeft: pad }}><b>{temPartes ? (aberto ? "▾ " : "▸ ") : ""}{g}</b>
+            <div className="lo-m">{gl[0].tipo}{gl[0].tipo === "Anúncio" && gl[0].pagina_nome ? ` · ${gl[0].pagina_nome}` : ""}{temPartes ? ` · ${partes.size} ${g === "Pescar" ? "regiões" : "partes"}` : ""}</div></td>
+          {celulas(gl, vaiPara(gl), foiCerto(gl))}
+        </tr>,
+        ...(temPartes && aberto ? [...partes.entries()].sort((x, y) => y[1].length - x[1].length).map(([pn, pl]) => (
+          <tr key={kg + "|" + pn} className="clk" style={{ background: "var(--sunk)" }} onClick={() => abrirGaveta(pn, pl)}>
+            <td style={{ paddingLeft: pad + 18 }}>{pn.replace(/^Pescar · /, "")}</td>{celulas(pl, vaiPara(pl), foiCerto(pl))}</tr>
+        )) : []),
+      ];
+    });
+  const leg = <div className="lo-leg"><span><i style={{ background: "#1d4ed8" }} />Visita/venda</span><span><i style={{ background: "#60a5fa" }} />Atendendo</span>
+    <span><i style={{ background: "color-mix(in srgb,var(--ink) 22%,var(--card))" }} />Descartado</span><span><i style={{ background: "#dc2626" }} />Sem atendimento</span></div>;
+
+  // resumo do alto
+  const sTot = situacao(leads);
+  const anuncios = gruposDe(leads.filter((l) => l.tipo === "Anúncio"));
+  const paraConferir = anuncios.filter(([, gl]) => conferir(gl).atencao);
+  const nSemFila = paraConferir.filter(([, gl]) => conferir(gl).semFila).length;
+  const porTipo = (t: string) => conta(leads, (l) => l.tipo === t);
+  const eqVisiveis = porEquipe.filter((e) => !soAtencao || precisaAtencao(e.ls));
 
   return (
     <div className="lo"><style>{CSS}</style>
       <div className="lo-f" role="search">
-        <label>Período (entrada)
-          <select value={per} onChange={(e) => setPer(e.target.value as any)}>
-            <option value="7">Últimos 7 dias</option><option value="hoje">Hoje</option><option value="30">Últimos 30 dias</option><option value="datas">Escolher datas…</option>
-          </select></label>
+        <div className="lo-seg" role="tablist" aria-label="Período">
+          {([["hoje", "Hoje"], ["7", "7 dias"], ["30", "30 dias"], ["datas", "Datas"]] as const).map(([k, t]) =>
+            <button key={k} type="button" className={per === k ? "on" : ""} onClick={() => setPer(k)}>{t}</button>)}
+        </div>
         {per === "datas" ? <><label>De<input type="date" value={de} max={ate} onChange={(e) => setDe(e.target.value)} /></label>
           <label>Até<input type="date" value={ate} min={de} onChange={(e) => setAte(e.target.value)} /></label></> : null}
         {!ehGerente ? <label>Equipe<select value={fEq} onChange={(e) => setFEq(e.target.value)}><option value="">Todas</option>
           {data.equipes.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}</select></label> : null}
-        <label>Campanha<select value={fCamp} onChange={(e) => setFCamp(e.target.value)} style={{ maxWidth: 260 }}><option value="">Todas</option>
+        <label>Campanha<select value={fCamp} onChange={(e) => setFCamp(e.target.value)} style={{ maxWidth: 220 }}><option value="">Todas</option>
           {campsTodas.map((c) => <option key={c} value={c}>{c.slice(0, 60)}</option>)}</select></label>
-        <label>Tipo de origem<select value={fTipo} onChange={(e) => setFTipo(e.target.value)}><option value="">Todas</option>
+        <label>Origem<select value={fTipo} onChange={(e) => setFTipo(e.target.value)}><option value="">Todas</option>
           {tiposPresentes.map((t) => <option key={t}>{t}</option>)}</select></label>
         <label>Situação<select value={fSit} onChange={(e) => setFSit(e.target.value)}><option value="">Todas</option>
-          {["Novo", "Em atendimento", "Visita marcada", "Visita feita", "Venda", "Descartado"].map((s) => <option key={s}>{s}</option>)}</select></label>
+          {["Novo", "Em atendimento", "Visita marcada", "Visita feita", "Venda", "Descartado"].map((s2) => <option key={s2}>{s2}</option>)}</select></label>
+        <label>Mostrar<select value={soAtencao ? "a" : ""} onChange={(e) => setSoAtencao(e.target.value === "a")}><option value="">Tudo</option><option value="a">Só o que precisa de atenção</option></select></label>
         <span style={{ flex: 1 }} />
-        <button className="lo-btn pri" onClick={() => baixarCsv(leads, "")}>⬇ Baixar CSV ({leads.length})</button>
+        <button className="lo-btn pri" onClick={() => baixarCsv(leads, "")}>⬇ CSV ({leads.length})</button>
       </div>
       {(data.leads ?? []).length >= 5000 ? <p className="lo-m">Mostrando os 5.000 mais recentes do período. Para ver todos, diminua o período.</p> : null}
 
+      <div className="lo-k">
+        <button type="button" className={`lo-kp${!fTipo && !soAtencao ? " on" : ""}`} onClick={() => { setFTipo(""); setSoAtencao(false); }}>
+          <span className="k">Leads no período</span><span className="v">{leads.length}</span>
+          <span className="h">{[["Anúncio", "anúncio"], ["Pescar", "Pescar"]].map(([t, r]) => `${r} ${porTipo(t)}`).join(" · ")}{leads.length - porTipo("Anúncio") - porTipo("Pescar") ? ` · outros ${leads.length - porTipo("Anúncio") - porTipo("Pescar")}` : ""}</span></button>
+        <div className="lo-kp" style={{ cursor: "default" }}><span className="k">Atendidos</span><span className="v">{sTot.at + sTot.sv}</span>
+          <span className="h">{leads.length ? Math.round((100 * (sTot.at + sTot.sv)) / leads.length) : 0}% · visita/venda {sTot.sv}</span></div>
+        <button type="button" className={`lo-kp al${soAtencao ? " on" : ""}`} onClick={() => setSoAtencao(true)}>
+          <span className="k">Sem atendimento agora</span><span className="v">{sTot.sem}</span><span className="h">toque para ver e passar</span></button>
+        <button type="button" className="lo-kp wa" onClick={() => { setFTipo("Anúncio"); setSoAtencao(true); }}>
+          <span className="k">Formulários para conferir</span><span className="v">{paraConferir.length}</span>
+          <span className="h">{paraConferir.length ? `${nSemFila ? `${nSemFila} sem corretores` : ""}${nSemFila && paraConferir.length - nSemFila ? " · " : ""}${paraConferir.length - nSemFila ? `${paraConferir.length - nSemFila} com lead fora da fila` : ""}` : "todos foram para quem devia"}</span></button>
+      </div>
+
       {!ehGerente ? (
         <section style={{ display: "grid", gap: 8 }}>
-          <div className="lo-h"><h3>Por equipe</h3><span className="lo-m">{leads.length} leads no período · toque na equipe para ver as campanhas dela</span></div>
-          <div className="lo-t"><table>{cabecalho("Equipe")}<tbody>
-            {porEquipe.map((e) => [
-              <tr key={e.id} style={{ cursor: "pointer" }} onClick={() => setEqAberta(eqAberta === e.id ? null : e.id)}>
-                <td><b>{eqAberta === e.id ? "▾ " : "▸ "}{e.nome}</b></td>{celulas(e.ls)}</tr>,
-              eqAberta === e.id ? <tr key={e.id + "-c"}><td colSpan={7} style={{ padding: "8px 8px 14px", background: "var(--sunk)" }}>{tabelaCampanhas(e.ls, e.id)}</td></tr> : null,
-            ])}
+          <div className="lo-h"><h3>Por equipe</h3>{leg}</div>
+          <div className="lo-t"><table>{cabecalho("Equipe / campanha")}<tbody>
+            {eqVisiveis.map((e) => {
+              const gs = gruposDe(e.ls), conf = gs.filter(([, gl]) => gl[0].tipo === "Anúncio" && conferir(gl).atencao).length;
+              const ab = eqAberta === e.id || (soAtencao && eqVisiveis.length <= 3);
+              return [
+                <tr key={e.id} className="clk" tabIndex={0} aria-expanded={ab} onKeyDown={(ev) => { if (ev.key === "Enter") setEqAberta(eqAberta === e.id ? null : e.id); }}
+                  onClick={() => setEqAberta(eqAberta === e.id ? null : e.id)}>
+                  <td><b>{ab ? "▾ " : "▸ "}{e.nome}</b></td>
+                  {celulas(e.ls, <span className="lo-m">{gs.length} origem{gs.length === 1 ? "" : "s"}</span>,
+                    conf ? <span className="lo-ch w">⚠ {conf} para conferir</span> : gs.some(([, gl]) => gl[0].tipo === "Anúncio") ? <span className="lo-ch ok">✓ tudo certo</span> : <span className="lo-ch">—</span>)}
+                </tr>,
+                ...(ab ? linhasCampanhas(e.ls, e.id, true) : []),
+              ];
+            })}
           </tbody></table></div>
+          {!eqVisiveis.length ? <p className="lo-m">{soAtencao ? "Nada precisando de atenção com esses filtros." : "Nenhum lead com esses filtros."}</p> : null}
         </section>
       ) : (
         <section style={{ display: "grid", gap: 8 }}>
-          <div className="lo-h"><h3>Por campanha</h3><span className="lo-m">{leads.length} leads no período · toque na linha para ver lead a lead</span></div>
-          {!leads.length ? <p className="lo-m">Nenhum lead com esses filtros.</p> : tabelaCampanhas(leads, "eu")}
+          <div className="lo-h"><h3>Por campanha</h3>{leg}</div>
+          {!leads.length ? <p className="lo-m">Nenhum lead com esses filtros.</p>
+            : <div className="lo-t"><table>{cabecalho("Campanha / origem")}<tbody>{linhasCampanhas(leads, "eu", false)}</tbody></table></div>}
         </section>
       )}
 
@@ -303,6 +437,27 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
               <div className="lo-m">{camp[1][0].tipo}{camp[1][0].pagina_nome ? ` · ${camp[1][0].pagina_nome}` : ""}{camp[1][0].formulario ? ` · formulário ${camp[1][0].formulario}` : ""}</div></div>
               <span style={{ display: "flex", gap: 6 }}><button className="lo-btn" onClick={() => baixarCsv(camp[1], camp[0])}>⬇ CSV desta campanha</button>
                 <button className="lo-btn gh" onClick={() => setAberta(null)}>Fechar ✕</button></span></div>
+            {camp[1][0]?.tipo === "Anúncio" ? (() => {
+              const dd = destDe(camp[1]), c = conferir(camp[1]);
+              const form = camp[1].find((l) => l.form_id)?.form_id ?? null;
+              const sug = dd?.d?.sugestao;
+              return <div className="lo-dest">
+                <div className="lo-box"><span className="k">Vai para</span>
+                  {!dd?.d ? <span className="lo-m">Não dá para conferir: estes leads chegaram sem o formulário registrado.</span>
+                    : dd.d.tipo === "plantao" ? <>
+                      <b style={{ color: "#b45309" }}>Plantão da equipe</b>
+                      <span className="lo-m">Este formulário não tem corretores escolhidos.</span>
+                      {sug && form ? <div><button className="lo-btn pri" disabled={ocupado === "fila"} onClick={() => copiarFila(form, sug.form_id, sug.nome)}>
+                        Usar os mesmos de "{sug.nome.slice(0, 40)}"</button><div className="lo-m" style={{ marginTop: 4 }}>{sug.quem}</div></div>
+                        : <span className="lo-m">Escolha em Configurar → Facebook e leads.</span>}</>
+                    : dd.d.tipo === "roleta" ? <><b>Plantão de {dd.d.roleta_de}</b><span className="lo-m">quem estiver na roleta na hora</span></>
+                    : <><div className="lo-names">{(dd.d.corretores ?? []).map((x) => <span key={x.id}>{x.nome}</span>)}</div>
+                      <span className="lo-m">{dd.d.tipo === "pagina" ? "Fila da página · " : ""}{dd.d.fora_plantao ? "recebem mesmo fora do plantão" : "só quem está de plantão"}</span></>}
+                </div>
+                <div className="lo-box"><span className="k">Foi certo?</span>{foiCerto(camp[1])}
+                  <span className="lo-m">{c.semFila ? "Os leads foram para o plantão da equipe." : c.fora ? "Veja os leads marcados abaixo." : c.vistos ? "Todos os leads foram para essas pessoas." : ""}</span></div>
+              </div>;
+            })() : null}
             {(() => {
               const todos = camp[1];
               const nSem = todos.filter((l) => l.sem_atendimento).length, nDesc = todos.filter(descartado).length;
@@ -350,10 +505,19 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
                         <td><b>{l.nome ?? "—"}</b><div className="lo-m" style={{ fontFamily: "JetBrains Mono, monospace" }}>{l.telefone}</div>
                           <div className="lo-m">{l.como}{l.trocas ? ` · ${l.trocas} troca(s) de corretor` : ""}</div></td>
                         <td><b>{l.corretor_nome ?? "Sem dono"}</b><div className="lo-m">{l.equipe_nome ? `equipe ${l.equipe_nome}` : ""}</div></td>
-                        <td>{atend}</td>
+                        <td>{atend}{l.dest_ok === false && l.dest_motivo ? <div className="lo-why">⚠ {l.dest_motivo}</div> : null}</td>
                         <td><span className={`lo-ch ${s[1]}`}>{s[0]}</span>{desc || l.status === "ABANDONED" || l.status === "LOST" ? <div className="lo-m">{mot(l.motivo_descarte)}</div> : null}</td>
                         <td><div className="lo-ac">
-                          {(l.sem_atendimento || desc) && outros.length ? <>
+                          {(() => {
+                            const dd = l.dest ? destinos[l.dest] : null;
+                            const daFila = (dd?.corretores ?? []).filter((x) => x.id !== l.corretor);
+                            if (!(l.dest_ok === false && l.sem_atendimento && dd && dd.tipo !== "plantao" && daFila.length)) return null;
+                            return <>
+                              <select className="lo-sel" aria-label="Mandar para a fila" value={para[l.id] ?? ""} onChange={(e) => setPara((p) => ({ ...p, [l.id]: e.target.value }))}>
+                                <option value="">Mandar para a fila…</option>{daFila.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
+                              <button className="lo-btn pri" style={{ padding: "4px 10px", fontSize: 12.5 }} disabled={ocupado === l.id || !para[l.id]} onClick={() => mandarFila(l)}>Mandar</button></>;
+                          })()}
+                          {(l.sem_atendimento || desc) && outros.length && !(l.dest_ok === false && l.sem_atendimento && l.dest && destinos[l.dest]?.tipo !== "plantao") ? <>
                             <select className="lo-sel" aria-label={desc ? "Redistribuir para" : "Passar para"} value={para[l.id] ?? ""}
                               onChange={(e) => setPara((p) => ({ ...p, [l.id]: e.target.value }))}>
                               <option value="">{desc ? "Redistribuir para…" : "Passar para…"}</option>{outros.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
