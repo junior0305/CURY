@@ -91,12 +91,12 @@ export default function FormulariosSemDono({ como, compacto, onAbrir }: { como?:
             {l.anuncios ? <i title={l.anuncios}>Anúncios: {l.anuncios.length > 90 ? l.anuncios.slice(0, 90) + "…" : l.anuncios}</i> : null}
           </div>
           <select value={valorPadrao(l)} onChange={(e) => setEscolha((s) => ({ ...s, [l.form_id]: e.target.value }))} aria-label={`De quem é ${l.nome}`}>
-            <option value="" disabled>É de…</option>
+            <option value="">É de… (escolha)</option>
             {(data?.gerentes ?? []).map((g) => <option key={g.id} value={`equipe:${g.id}`}>Equipe {g.nome}</option>)}
             <option value="todas">Todas as minhas equipes (roleta geral)</option>
             <option value="eu">Eu mesma(o) atendo{l.recrutamento ? " — recrutamento" : ""}</option>
           </select>
-          <button disabled={ligando === l.form_id} onClick={() => ligar(l)}>{ligando === l.form_id ? "Ligando…" : "Ligar"}</button>
+          <button disabled={ligando === l.form_id || !valorPadrao(l)} onClick={() => ligar(l)}>{ligando === l.form_id ? "Ligando…" : "Ligar"}</button>
         </div>
       ))}
     </div>
