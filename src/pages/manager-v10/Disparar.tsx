@@ -43,7 +43,7 @@ import "@/styles/disparar.css";
 import DisparoAgora from "@/components/disparo/DisparoAgora";
 import { empresa } from "@/lib/empresa";
 
-type Etapa = "bm" | "tpl" | "disp" | "conv" | "corretores";
+type Etapa = "agora" | "bm" | "tpl" | "disp" | "conv" | "corretores";
 type Destino = "fila" | "escolher";
 
 const brl = (n: number) => "R$ " + n.toFixed(2).replace(".", ",");
@@ -165,7 +165,9 @@ export default function Disparar() {
   // Vindo da aba Leads ("Disparar reativação"): abre direto no disparo com a fila marcada.
   const [params] = useSearchParams();
   const publicoInicial = params.get("publico");
-  const [etapa, setEtapa] = useState<Etapa>(publicoInicial ? "disp" : "bm");
+  const [etapa, setEtapa] = useState<Etapa>(publicoInicial ? "disp" : "agora");
+  // painel "+ Novo número" (sempre cria conta de WhatsApp NOVA, regra do Junior 28/10)
+  const [novoNum, setNovoNum] = useState(false);
   loadFonts();
 
   /* ── etapa 1 ── */
@@ -564,9 +566,23 @@ export default function Disparar() {
   // Com mais de um número (ex.: o Dudu), a pessoa ESCOLHE por qual sai — nada de pegar o primeiro calado.
   const cfgEnvio = useMemo(() => {
     const lista = data?.meusNumeros ?? [];
-    if (lista.length > 1) return lista.find((n) => n.id === numEnvio) ?? null;
-    return lista[0] ?? data?.config ?? null;
+    // A conta escolhida no topo manda na tela inteira (28/10). Sem escolha, a primeira da lista (a própria vem primeiro).
+    return lista.find((n) => n.id === numEnvio) ?? lista[0] ?? data?.config ?? null;
   }, [numEnvio, data?.meusNumeros, data?.config]);
+
+  // Aba Mensagens: só as da conta escolhida no topo (antes: 27 modelos de 5 contas misturados). Recusadas primeiro.
+  const tplsDaConta = useMemo(() => {
+    const ordem: Record<string, number> = { REJECTED: 0, APPROVED: 1, PENDING: 2 };
+    return (data?.templates ?? []).filter((t) => !!cfgEnvio?.wabaId && t.waba === cfgEnvio.wabaId)
+      .sort((a, b) => (ordem[(a.status ?? "").toUpperCase()] ?? 3) - (ordem[(b.status ?? "").toUpperCase()] ?? 3));
+  }, [data?.templates, cfgEnvio?.wabaId]);
+  async function conferirCartao() {
+    if (!cfgEnvio?.id) return;
+    const { data: r } = await supabase.functions.invoke("wa-onboard", { body: { action: "cartao", config_id: cfgEnvio.id } });
+    if ((r as any)?.cartao_ok) toast.success("Anotado. O Disparar está liberado. Se a Meta recusar por falta de pagamento, o disparo para e o aviso volta.");
+    else toast.error((r as any)?.error || "A Meta ainda mostra esta conta sem forma de pagamento. Confira em Pagamentos.");
+    qc.invalidateQueries({ queryKey: ["disparar"] });
+  }
 
   // Mensagens que este número pode mandar: aprovadas na conta (WABA) dele. Nada de outra conta.
   const tplsDoNumero = useMemo(() => (data?.templates ?? []).filter((t) =>
@@ -638,6 +654,10 @@ export default function Disparar() {
     if (problemaDaHora) { toast.error(problemaDaHora); return; }
     if (!cfgEnvio) {
       toast.error((data.meusNumeros?.length ?? 0) > 1 ? "Escolha por qual número o disparo vai sair." : "Você ainda não tem um número de WhatsApp conectado.");
+      return;
+    }
+    if (cfgEnvio.cartaoOk === false) {
+      toast.error("Falta o cartão de crédito nesta conta de WhatsApp. A Meta só deixa disparar depois que o cartão é incluído.", { duration: 9000 });
       return;
     }
     if (cfgEnvio.bloqueadaEm) {
@@ -765,108 +785,85 @@ export default function Disparar() {
     if (!data) return null;
     const d = data;
     const cfg = d.config;
+    // Respostas só da conta escolhida: conversa de disparo desta conta (ou sem disparo, que não dá para saber a conta)
+    const campDaConta = new Set(d.campanhas.filter((c) => c.waConfigId && c.waConfigId === cfgEnvio?.id).map((c) => c.id));
+    const convDaConta = d.conversas.filter((c) => !c.campanhaId || campDaConta.has(c.campanhaId) || !cfgEnvio);
 
     return (
       <>
-        {ehGestorAcima ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap",
-            padding: "10px 12px", borderRadius: 10, background: "var(--sunk)", border: "1px solid var(--line)" }}>
-            <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
-              Você dispara <b style={{ color: "var(--ink)" }}>pela sua conta de WhatsApp</b>. No passo
-              “Disparar”, em <b style={{ color: "var(--ink)" }}>“Corretores que eu escolher”</b>, marque
-              quem recebe as respostas — pode ser um corretor ou o <b style={{ color: "var(--ink)" }}>próprio gerente</b>, de qualquer equipe.
-            </span>
+        {/* ══ A conta que envia (28/10): tudo abaixo é só desta conta ══ */}
+        {!(d.meusNumeros ?? []).length ? (
+          <div className="box" style={{ textAlign: "center", padding: 24, display: "grid", gap: 10, justifyItems: "center", marginBottom: 16 }}>
+            <b style={{ fontSize: 17 }}>Você ainda não tem um número de WhatsApp oficial</b>
+            <p className="vars-n" style={{ maxWidth: "58ch", margin: 0 }}>O Comandra cria uma <b>conta de WhatsApp nova</b> só para você, na sua própria BM do Facebook, com o seu número. Leva uns 10 minutos.</p>
+            <button className="btn pri" onClick={() => setNovoNum(true)}>Conectar meu número</button>
           </div>
-        ) : null}
-        {/* "Meu disparo agora": foi? parou? terminou? (26/10) */}
-        <DisparoAgora userId={userId} />
-        {/* Scorecards Executivos para Disparo */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
-          <div style={{ background: "var(--cv-surface, #fff)", border: "1px solid var(--cv-border, #e2e8f0)", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", cursor: "pointer" }} onClick={() => setEtapa("bm")}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cv-text-muted, #64748b)", textTransform: "uppercase" }}>Número WhatsApp</span>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 9999, background: cfg ? "var(--cv-green-light, #d1fae5)" : "var(--cv-rose-light, #ffe4e6)", color: cfg ? "var(--cv-green, #059669)" : "var(--cv-rose, #e11d48)" }}>
-                {cfg ? "Conectado" : "Pendente"}
-              </span>
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4, color: "var(--cv-text-main, #0f172a)", fontFamily: "JetBrains Mono" }}>
-              {cfg?.displayNumber ?? "Não configurado"}
-            </div>
-            <div style={{ fontSize: 12, color: "var(--cv-text-muted, #64748b)", marginTop: 2 }}>
-              Limite: {cfg?.tetoHoje ?? 250} msgs/dia
-            </div>
-          </div>
-
-          <div style={{ background: "var(--cv-surface, #fff)", border: "1px solid var(--cv-border, #e2e8f0)", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", cursor: "pointer" }} onClick={() => setEtapa("tpl")}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cv-text-muted, #64748b)", textTransform: "uppercase" }}>Modelos Aprovados</span>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 9999, background: "var(--cv-brand-light, #ccfbf1)", color: "var(--cv-brand, #0d9488)" }}>
-                Meta Cloud
-              </span>
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--cv-text-main, #0f172a)", fontFamily: "JetBrains Mono" }}>
-              {d.templates.filter((t) => t.status === "APPROVED").length}
-            </div>
-            <div style={{ fontSize: 12, color: "var(--cv-text-muted, #64748b)", marginTop: 2 }}>
-              {d.templates.filter((t) => t.status === "PENDING").length} em análise na Meta
-            </div>
-          </div>
-
-          <div style={{ background: "var(--cv-surface, #fff)", border: "1px solid var(--cv-border, #e2e8f0)", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", cursor: "pointer" }} onClick={() => setEtapa("disp")}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cv-text-muted, #64748b)", textTransform: "uppercase" }}>Disparos Realizados</span>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 9999, background: "var(--cv-blue-light, #eff6ff)", color: "var(--cv-blue, #2563eb)" }}>
-                Campanhas
-              </span>
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--cv-text-main, #0f172a)", fontFamily: "JetBrains Mono" }}>
-              {d.campanhas.reduce((a, c) => a + c.enviadas, 0)}
-            </div>
-            <div style={{ fontSize: 12, color: "var(--cv-text-muted, #64748b)", marginTop: 2 }}>
-              {d.campanhas.length} campanhas criadas
-            </div>
-          </div>
-
-          <div style={{ background: "var(--cv-surface, #fff)", border: "1px solid var(--cv-border, #e2e8f0)", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 2px rgba(0,0,0,0.05)", cursor: "pointer" }} onClick={() => setEtapa("conv")}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cv-text-muted, #64748b)", textTransform: "uppercase" }}>Respostas de Clientes</span>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 9999, background: "var(--cv-green-light, #d1fae5)", color: "var(--cv-green, #059669)" }}>
-                {d.conversas.filter((c) => c.esperando).length > 0 ? "Atenção" : "Em dia"}
-              </span>
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--cv-green, #059669)", fontFamily: "JetBrains Mono" }}>
-              {d.campanhas.reduce((a, c) => a + c.respostas, 0)}
-            </div>
-            <div style={{ fontSize: 12, color: "var(--cv-text-muted, #64748b)", marginTop: 2 }}>
-              {d.conversas.filter((c) => c.esperando).length > 0 ? (
-                <span style={{ color: "var(--cv-rose, #e11d48)", fontWeight: 700 }}>
-                  {d.conversas.filter((c) => c.esperando).length} aguardando retorno
-                </span>
-              ) : (
-                "todas respondidas pelo time"
-              )}
-            </div>
-          </div>
-        </div>
+        ) : (() => {
+          const c = cfgEnvio ?? d.meusNumeros[0];
+          const lista = d.meusNumeros;
+          const nome = (n: typeof c) => `${n.label ?? "Número"} · ${n.displayNumber ?? ""}`;
+          return (
+            <>
+              <div className="box" style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", marginBottom: 12, padding: "12px 16px" }}>
+                <div style={{ flex: 1, minWidth: 240 }}>
+                  <div style={{ fontSize: 11.5, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--ink-3)", fontWeight: 700 }}>Conta que envia</div>
+                  {lista.length > 1 ? (
+                    <select aria-label="Trocar de conta" value={c.id} onChange={(e) => { setNumEnvio(e.target.value); setTplSel(""); }}
+                      style={{ font: "inherit", fontWeight: 800, fontSize: 17, border: "none", background: "none", color: "var(--ink)", padding: 0, maxWidth: "100%", cursor: "pointer" }}>
+                      {lista.map((n) => <option key={n.id} value={n.id}>{n.bloqueadaEm ? "🔒 " : ""}{nome(n)}</option>)}
+                    </select>
+                  ) : <b style={{ fontSize: 17 }}>{nome(c)}</b>}
+                  <div style={{ fontSize: 12.5, color: "var(--ink-3)" }}>
+                    {c.ownerId === userId ? "Conta sua: quem paga é você." : c.ownerId ? "Conta de alguém da sua equipe." : "Número da empresa."} Tudo abaixo é só desta conta.
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {c.bloqueadaEm ? <span className="st rej">Restrita pela Meta</span> : <span className="st">Liberada para enviar</span>}
+                  {c.quality ? <span className="st rasc">Qualidade {c.quality === "GREEN" ? "verde" : c.quality === "YELLOW" ? "amarela" : c.quality === "RED" ? "vermelha" : c.quality.toLowerCase()}</span> : null}
+                  <span className="st rasc">Limite {c.tetoHoje ?? 250}/dia</span>
+                </div>
+                <button className="btn sm" onClick={() => setEtapa("bm")}>⚙ Número</button>
+                <button className="btn sm pri" onClick={() => setNovoNum(true)}>+ Novo número</button>
+              </div>
+              {c.cartaoOk === false ? (
+                <div role="alert" className="box" style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 12, background: "color-mix(in srgb,#d97706 12%,var(--card))" }}>
+                  <span style={{ fontSize: 22 }} aria-hidden="true">💳</span>
+                  <div style={{ flex: 1, minWidth: 220 }}><b style={{ color: "#b45309" }}>Falta o cartão de crédito.</b> A Meta só deixa disparar depois que um cartão é cadastrado nesta conta de WhatsApp.
+                    Inclua o cartão na sua conta (na Meta, em Pagamentos) e depois toque em <b>Já incluí o cartão</b> para liberar o Disparar.
+                    Se a Meta recusar por falta de pagamento, o disparo para sozinho e este aviso volta.</div>
+                  <a className="btn sm" href="https://business.facebook.com/billing_hub/payment_settings" target="_blank" rel="noreferrer">Abrir pagamento na Meta</a>
+                  <button className="btn sm pri" onClick={conferirCartao}>Já incluí o cartão</button>
+                </div>
+              ) : null}
+            </>
+          );
+        })()}
 
         <div className="etapas" role="tablist">
-          {([
-            ["bm", "Seu número", !!cfg],
-            ["tpl", "Mensagens", d.templates.some((t) => t.status === "APPROVED")],
-            ["disp", "Disparar", false],
-            ["conv", "Respostas", false],
-            ["corretores", "Corretores", false],
-          ] as [Etapa, string, boolean][]).map(([k, rot, feito], i) => (
+          {(d.meusNumeros ?? []).length ? ([
+            ["agora", "Agora"],
+            ["disp", "Disparar"],
+            ["tpl", "Mensagens"],
+            ["conv", "Respostas"],
+          ] as [Etapa, string][]).map(([k, rot]) => (
             <button key={k} role="tab" aria-selected={etapa === k}
-              className={`et${etapa === k ? " on" : ""}${feito ? " feito" : ""}`}
+              className={`et${etapa === k ? " on" : ""}`}
               onClick={() => setEtapa(k)}>
-              <i>{feito ? "✓" : i + 1}</i>{rot}
+              {rot}
             </button>
-          ))}
+          )) : null}
         </div>
 
-        {/* ══ 1 · o número ══ */}
+        {/* ══ Agora: o que está saindo / parou / terminou — só desta conta ══ */}
+        <div className={`pane${etapa === "agora" ? " on" : ""}`}>
+          <DisparoAgora userId={userId} configId={cfgEnvio?.id ?? null} />
+          {!cfgEnvio ? null : <p className="vars-n">Para fazer um disparo novo, vá em <button className="btn sm" onClick={() => setEtapa("disp")}>Disparar</button>.</p>}
+        </div>
+
+        {/* ══ 1 · o número (⚙ Número) ══ */}
         <div className={`pane${etapa === "bm" ? " on" : ""}`}>
+          <p style={{ margin: "0 0 10px" }}><button className="btn sm" onClick={() => setEtapa("agora")}>← Voltar</button>
+            {" "}<button className="btn sm" onClick={() => setEtapa("corretores")}>Números dos corretores</button></p>
           <div className="sec">
             <div className="sec-h"><h2>O número que envia</h2></div>
             <div className="box bm">
@@ -1105,7 +1102,8 @@ export default function Disparar() {
                     para adicionar número e a empresa já é verificada, então não há
                     CNPJ nem documento no caminho. É um caminho de uma vez na vida —
                     aberto quando falta número, fechado depois. */}
-                <details className="dobra" open={!cfg || passo === "codigo"}>
+                {/* 28/10 (Junior): número novo nunca entra numa conta existente — só pelo "+ Novo número" (conta nova) */}
+                <details className="dobra" hidden open={!cfg || passo === "codigo"}>
                   <summary>Cadastrar um número novo</summary>
 
                   {passo === "numero" ? (
@@ -1425,11 +1423,11 @@ export default function Disparar() {
         {/* ══ 2 · mensagens ══ */}
         <div className={`pane${etapa === "tpl" ? " on" : ""}`}>
           <div className="sec">
-            <div className="sec-h"><h2>Mensagens aprovadas</h2>
-              <span>a Meta precisa aprovar antes de você poder disparar</span></div>
+            <div className="sec-h"><h2>Mensagens desta conta</h2>
+              <span>cada conta tem as suas: a Meta aprova por conta. Recusadas aparecem primeiro</span></div>
             <div className="box">
               <div className="tpl">
-                {d.templates.length ? d.templates.map((t) => {
+                {tplsDaConta.length ? tplsDaConta.map((t) => {
                   const st = (t.status ?? "").toUpperCase();
                   const cls = st === "APPROVED" ? "" : st === "REJECTED" ? " rej"
                     : st === "PENDING" ? " pend" : " rasc";
@@ -1465,7 +1463,7 @@ export default function Disparar() {
                       </span>
                     </div>
                   );
-                }) : <p className="vars-n" style={{ margin: 0 }}>Nenhuma mensagem ainda. Crie a primeira abaixo.</p>}
+                }) : <p className="vars-n" style={{ margin: 0 }}>Nenhuma mensagem nesta conta ainda. Crie a primeira abaixo.</p>}
               </div>
             </div>
           </div>
@@ -1475,11 +1473,8 @@ export default function Disparar() {
             que faz querer copiar, não a lista. Copiar, e não compartilhar:
             template vive DENTRO de uma conta, e o aprovado na conta do Dudu
             não existe na da Liliane; a Meta recusa o envio. */}
-          <div className="sec">
-            <div className="sec-h">
-            <h2>Mensagens da equipe</h2>
-            <span>o que está funcionando com os outros gerentes</span>
-            </div>
+          <details className="sec dobra">
+            <summary>Ideias: mensagens que estão funcionando em outras contas (para copiar)</summary>
             <div className="box">
             {!tplCasa?.length ? (
               <p className="vars-n" style={{ margin: 0 }}>
@@ -1538,7 +1533,7 @@ export default function Disparar() {
               </div>
             )}
             </div>
-          </div>
+          </details>
 
           <div className="sec">
             <div className="sec-h">
@@ -2223,11 +2218,11 @@ export default function Disparar() {
         <div className={`pane${etapa === "conv" ? " on" : ""}`}>
           <div className="sec">
             <div className="sec-h"><h2>Quem respondeu</h2>
-              <span>{d.conversas.length} pessoas · {d.conversas.filter((c) => c.esperando).length} ainda sem retorno do corretor</span></div>
-            {d.conversas.length ? (
+              <span>{convDaConta.length} pessoas · {convDaConta.filter((c) => c.esperando).length} ainda sem retorno do corretor</span></div>
+            {convDaConta.length ? (
               <div className="chat">
                 <div className="chat-l">
-                  {d.conversas.map((c) => (
+                  {convDaConta.map((c) => (
                     <div key={c.id} className={`th${thread === c.id ? " on" : ""}${c.esperando ? " nova" : ""}`}
                       role="button" onClick={() => setThread(c.id)}>
                       <span className="av">{ini(c.cliente ?? c.telefone.slice(-2))}</span>
@@ -2246,7 +2241,7 @@ export default function Disparar() {
                 </div>
                 <div className="chat-r">
                   {(() => {
-                    const c = d.conversas.find((x) => x.id === thread);
+                    const c = convDaConta.find((x) => x.id === thread);
                     if (!c) return (
                       <div style={{ margin: "auto", padding: 30, textAlign: "center", color: "var(--ink-3)", fontSize: 13.5 }}>
                         Escolha uma conversa à esquerda.
@@ -2316,6 +2311,37 @@ export default function Disparar() {
             )}
           </div>
         </div>
+
+        {/* ══ + Novo número: sempre uma conta de WhatsApp NOVA, na BM da própria pessoa (Junior 28/10) ══ */}
+        {novoNum ? (
+          <div role="dialog" aria-label="Cadastrar um número novo" onClick={(e) => { if (e.target === e.currentTarget) setNovoNum(false); }}
+            style={{ position: "fixed", inset: 0, background: "rgba(15,27,45,.5)", zIndex: 60, display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ width: "min(520px,100%)", height: "100%", overflow: "auto", background: "var(--card)", color: "var(--ink)", padding: 20, display: "grid", gap: 12, alignContent: "start" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <b style={{ fontSize: 17 }}>Cadastrar um número novo</b>
+                <button className="btn sm" onClick={() => setNovoNum(false)}>Fechar ✕</button>
+              </div>
+              <p className="vars-n" style={{ margin: 0 }}>O Comandra cria uma <b>conta de WhatsApp nova</b> para este número, na <b>sua própria BM</b> do Facebook. Ele não entra em nenhuma conta que já existe.</p>
+              <div className="box"><b>Tenha em mãos:</b>
+                <ul style={{ margin: "6px 0 0", paddingLeft: 18, display: "grid", gap: 4, fontSize: 13.5 }}>
+                  <li>Um <b>número novo</b>, que não esteja no WhatsApp de celular nem em outra conta oficial (chip novo é o mais fácil).</li>
+                  <li>O celular desse número por perto, para receber o código por SMS ou ligação.</li>
+                  <li>Uma forma de pagamento: depois de criar, você inclui o <b>cartão de crédito</b> na conta nova. Sem cartão a Meta não deixa disparar.</li>
+                </ul></div>
+              <div className="box"><b>Na janela do Facebook:</b>
+                <ul style={{ margin: "6px 0 0", paddingLeft: 18, display: "grid", gap: 4, fontSize: 13.5 }}>
+                  <li>Entre com o <b>seu</b> Facebook.</li>
+                  <li>Escolha <b>“Criar uma nova conta do WhatsApp”</b>. Conta que já existe não é aceita: o Comandra confere e recusa.</li>
+                  <li>Conta nova em BM que ainda não foi verificada pela Meta começa podendo falar com <b>250 pessoas por dia</b>. O limite sobe sozinho com o uso.</li>
+                </ul></div>
+              <div className="f"><label htmlFor="novo-nome-exib">Nome que o cliente vai ver</label>
+                <input id="novo-nome-exib" value={nomeExib} onChange={(e) => setNomeExib(e.target.value)} placeholder="ex.: Adajes · Imóveis MCMV" />
+                {nomeCheck && !nomeCheck.ok ? <span style={{ color: "#b91c1c", fontSize: 12.5 }}>A Meta costuma recusar esse nome. Ajuste antes de seguir.</span> : null}</div>
+              <button className="btn pri" disabled={conectando || !nomeExib.trim()} onClick={async () => { await conectar(); setNovoNum(false); }}>
+                {conectando ? "Abrindo o Facebook…" : "Abrir a janela do Facebook"}</button>
+            </div>
+          </div>
+        ) : null}
 
         {/* ══ Corretores — habilitar disparo + cota ══ */}
         <div className={`pane${etapa === "corretores" ? " on" : ""}`}>

@@ -25,6 +25,8 @@ type Alvo = { name: string | null; phone: string; status: string; error: string 
 const META: Record<string, { o: string; f: string }> = {
   "131048": { o: "a Meta limitou o envio deste número porque muita gente bloqueou ou denunciou as mensagens (spam)",
               f: "Espere pelo menos 24 horas. Depois dispare para menos gente e só para quem já é cliente ou pediu contato." },
+  "131042": { o: "falta a forma de pagamento (cartão de crédito) nesta conta de WhatsApp",
+              f: "Inclua o cartão na conta, na Meta, em Pagamentos. Depois toque em “Já incluí o cartão” no topo e em Retomar." },
   "131031": { o: "a Meta bloqueou a conta deste número", f: "Nada sai até a Meta liberar. Veja o aviso no Gerenciador do WhatsApp (business.facebook.com/wa/manage)." },
   "132015": { o: "a Meta pausou o modelo de mensagem usado, porque muita gente reclamou dele", f: "Use outro modelo de mensagem." },
   "132016": { o: "a Meta desativou o modelo de mensagem usado", f: "Use outro modelo de mensagem." },
@@ -57,19 +59,21 @@ function porQueParou(c: Camp, r?: Resumo): { o: string; f: string } {
   return { o: "o motivo não foi registrado (o disparo é de antes de 26/10)", f: "Se não vai mais usar, cancele." };
 }
 
-export default function DisparoAgora({ userId }: { userId: string | null | undefined }) {
+// configId (28/10): a conta escolhida no topo do Disparar — mostra só os disparos daquele número
+export default function DisparoAgora({ userId, configId }: { userId: string | null | undefined; configId?: string | null }) {
   const qc = useQueryClient();
   const [aberto, setAberto] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [verAntigos, setVerAntigos] = useState(false);
 
   const { data } = useQuery({
-    queryKey: ["disparo-agora", userId], enabled: !!userId, refetchInterval: 20_000,
+    queryKey: ["disparo-agora", userId, configId ?? ""], enabled: !!userId, refetchInterval: 20_000,
     queryFn: async () => {
       const desde = new Date(Date.now() - 24 * 3600_000).toISOString();
-      const { data: camps } = await sb.from("whatsapp_campaigns")
-        .select("id,name,status,audience_count,sent_count,delivered_count,read_count,reply_count,failed_count,throttle_per_min,pausa_motivo,pausada_em,scheduled_at,finished_at,created_at,wa_config_id")
-        .or(`owner_id.eq.${userId},created_by.eq.${userId}`)
+      let base = sb.from("whatsapp_campaigns")
+        .select("id,name,status,audience_count,sent_count,delivered_count,read_count,reply_count,failed_count,throttle_per_min,pausa_motivo,pausada_em,scheduled_at,finished_at,created_at,wa_config_id");
+      base = configId ? base.eq("wa_config_id", configId) : base.or(`owner_id.eq.${userId},created_by.eq.${userId}`);
+      const { data: camps } = await base
         .or(`status.in.(sending,paused,scheduled),created_at.gte.${desde}`)
         .neq("status", "draft")
         .order("created_at", { ascending: false }).limit(40);
@@ -89,7 +93,7 @@ export default function DisparoAgora({ userId }: { userId: string | null | undef
     },
   });
 
-  if (!data?.camps.length) return null;
+  if (!data?.camps.length) return configId ? <p className="vars-n" style={{ margin: "4px 0 14px" }}>Nenhum disparo desta conta nas últimas 24 horas, nem parado.</p> : null;
 
   const quando = (c: Camp) => new Date(c.pausada_em || data.res[c.id]?.ultima_msg || c.created_at).getTime();
   const antigo = (c: Camp) => c.status === "paused" && Date.now() - quando(c) > TRES_DIAS;

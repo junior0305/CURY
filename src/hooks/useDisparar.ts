@@ -31,6 +31,8 @@ export interface ConfigWA {
   tetoHoje: number;
   /** conta (WABA) bloqueada pela Meta: desde quando. null = enviando normal */
   bloqueadaEm: string | null;
+  /** a conta tem forma de pagamento na Meta? null = não sabemos (conta antiga) */
+  cartaoOk: boolean | null;
 }
 
 export interface Template {
@@ -64,6 +66,8 @@ export interface Campanha {
   criadaEm: string | null;
   /** hora marcada, quando a campanha está agendada */
   marcadaPara: string | null;
+  /** conta (número) que disparou — a tela mostra só a conta escolhida no topo (28/10) */
+  waConfigId: string | null;
 }
 
 export interface Conversa {
@@ -79,6 +83,8 @@ export interface Conversa {
   esperando: boolean;
   /** dá para escrever livremente (24h da última mensagem dele) */
   janelaAberta: boolean;
+  /** disparo que originou a conversa (para saber de qual conta é) */
+  campanhaId: string | null;
   naoLidas: number;
 }
 
@@ -176,7 +182,7 @@ export function useDisparar(managerId: string | undefined, teamManagerIds?: stri
               .eq("manager_id", managerId!).eq("role", "BROKER"),
         supabase.from("whatsapp_templates").select("*").order("created_at", { ascending: false }),
         supabase.from("whatsapp_campaigns")
-          .select("id,name,status,audience_count,sent_count,delivered_count,read_count,reply_count,failed_count,cost_total,created_at,scheduled_at")
+          .select("id,name,status,audience_count,sent_count,delivered_count,read_count,reply_count,failed_count,cost_total,created_at,scheduled_at,wa_config_id")
           .in("id", campIdsSafe)
           .order("created_at", { ascending: false }).limit(15),
         // `select("*")` de propósito: o esquema do disparador foi crescendo por
@@ -228,6 +234,7 @@ export function useDisparar(managerId: string | undefined, teamManagerIds?: stri
           && (c.onboarded_at ? horas(c.onboarded_at) / 24 < 30 : false),
         tetoHoje: tetoDoDia(c.onboarded_at, c.tier),
         bloqueadaEm: c.bloqueada_em ?? null,
+        cartaoOk: c.cartao_ok ?? null,
       });
       // A minha: a que eu conectei E que está ativa. Sem o `is_active` a tela
       // dizia "conectado e liberado para enviar" mostrando uma configuração
@@ -268,6 +275,7 @@ export function useDisparar(managerId: string | undefined, teamManagerIds?: stri
         entregues: c.delivered_count ?? 0, lidas: c.read_count ?? 0,
         respostas: c.reply_count ?? 0, falhas: c.failed_count ?? 0,
         custo: c.cost_total, criadaEm: c.created_at, marcadaPara: c.scheduled_at,
+        waConfigId: c.wa_config_id ?? null,
       }));
 
       /* ── conversas ── */
@@ -287,6 +295,7 @@ export function useDisparar(managerId: string | undefined, teamManagerIds?: stri
             ? new Date(t.window_open_until) > new Date()
             : horas(t.last_inbound_at) < 24,
           naoLidas: t.unread ?? 0,
+          campanhaId: t.campaign_id ?? null,
         }));
 
       /* ── públicos, iguais aos da aba Leads ── */
