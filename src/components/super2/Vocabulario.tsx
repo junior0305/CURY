@@ -13,7 +13,10 @@ const TROCA: Record<string, string> = {
   diretores: "superintendentes", diretor: "superintendente", Diretor: "Superintendente", DIRETOR: "SUPERINTENDENTE",
 };
 // uma passada só (a saída "superintendência" não volta a ser trocada)
-const RE = new RegExp(`(?<![\\p{L}])(${Object.keys(TROCA).sort((a, b) => b.length - a.length).join("|")})(?![\\p{L}])`, "gu");
+// Sem "olhar para trás" (?<!…): iPhone com iOS anterior ao 16.4 não entende e o SITE INTEIRO quebrava ao abrir
+// (caso da corretora Duquesa, 28/10). A letra de antes vai no grupo 1 e é devolvida igual.
+const RE = new RegExp(`(^|[^\\p{L}])(${Object.keys(TROCA).sort((a, b) => b.length - a.length).join("|")})(?![\\p{L}])`, "gu");
+const trocar = (v: string) => v.replace(RE, (_m, antes: string, palavra: string) => antes + (TROCA[palavra] ?? palavra));
 const ATRIBUTOS = ["placeholder", "title", "aria-label"];
 
 export default function Vocabulario({ children }: { children: ReactNode }) {
@@ -25,14 +28,14 @@ export default function Vocabulario({ children }: { children: ReactNode }) {
     const texto = (n: Node) => {
       const v = n.nodeValue ?? "";
       if (feito.get(n) === v) return;
-      const novo = v.replace(RE, (m) => TROCA[m] ?? m);
+      const novo = trocar(v);
       feito.set(n, novo);
       if (novo !== v) n.nodeValue = novo;
     };
     const elemento = (el: Element) => {
       for (const a of ATRIBUTOS) {
         const v = el.getAttribute(a);
-        if (v && RE.test(v)) { RE.lastIndex = 0; const novo = v.replace(RE, (m) => TROCA[m] ?? m); if (novo !== v) el.setAttribute(a, novo); }
+        if (v && RE.test(v)) { RE.lastIndex = 0; const novo = trocar(v); if (novo !== v) el.setAttribute(a, novo); }
         RE.lastIndex = 0;
       }
     };
