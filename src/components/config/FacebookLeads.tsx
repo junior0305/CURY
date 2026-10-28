@@ -20,7 +20,8 @@ type Pagina = { page_id: string; nome: string; dono: string | null; dono_nome: s
   ultimo_lead: string | null; conf: { fb: number; cm: number; faltam: number; em: string } | null;
   acesso: { status: "ok" | "bloqueado" | "erro" | null; msg: string | null; em: string | null } | null; business_id: string | null };
 type Form = { form_id: string; page_id: string | null; nome: string; dono: string | null; dono_nome: string | null; ativo: boolean;
-  leads_7d: number; cm_7d: number; esperando: number; destino: Destino; recrutamento: boolean };
+  leads_7d: number; cm_7d: number; cm_14d: number; cm_total: number; esperando: number; destino: Destino; recrutamento: boolean;
+  conta: string | null; conta_dono: string | null; conta_gasto_7d: number | null; conta_form_7d: number | null };
 type Painel = { eu: { id: string; role: string; nome: string }; paginas: Pagina[]; formularios: Form[]; equipes: Equipe[];
   pessoas_dono: { id: string; nome: string; role: string }[] };
 type Rascunho = { modo: "roleta" | "escolhidos" | "eu"; equipe: string; pessoas: string[] };
@@ -79,7 +80,7 @@ const descreve = (d: Destino) => {
 export default function FacebookLeads({ como, avancado }: { como?: string | null; avancado?: React.ReactNode }) {
   const { session } = useAuth();
   const qc = useQueryClient();
-  const [filtro, setFiltro] = useState<"decidir" | "todos" | "parados">("decidir");
+  const [filtro, setFiltro] = useState<"decidir" | "todos" | "semlead">("decidir");
   const [rasc, setRasc] = useState<Record<string, Rascunho>>({});
   const [todaPagina, setTodaPagina] = useState<Record<string, boolean>>({});
   const [salvando, setSalvando] = useState<string | null>(null);
@@ -96,14 +97,15 @@ export default function FacebookLeads({ como, avancado }: { como?: string | null
   });
 
   const forms = data?.formularios ?? [];
-  const semDestino = (f: Form) => !f.destino;
+  // "Chegando lead" = entrou lead no Comandra nos últimos 14 dias ou há lead esperando dono. Status "ativo" do anúncio
+  // não basta: a conta pode estar sem gastar (caso Adajes 28/10: 13 formulários "ativos", R$ 0 em 7 dias, nenhum lead).
+  const chegando = (f: Form) => f.cm_14d > 0 || f.esperando > 0;
   const lista = useMemo(() => forms.filter((f) =>
-    filtro === "decidir" ? semDestino(f) && (f.ativo || f.leads_7d > 0 || f.esperando > 0)
-    : filtro === "parados" ? !f.ativo && f.leads_7d === 0 : f.ativo || f.leads_7d > 0), [forms, filtro]);
+    filtro === "decidir" ? !f.destino && chegando(f) : filtro === "semlead" ? !chegando(f) : chegando(f) || !!f.destino), [forms, filtro]);
   const n = {
-    decidir: forms.filter((f) => semDestino(f) && (f.ativo || f.leads_7d > 0 || f.esperando > 0)).length,
-    todos: forms.filter((f) => f.ativo || f.leads_7d > 0).length,
-    parados: forms.filter((f) => !f.ativo && f.leads_7d === 0).length,
+    decidir: forms.filter((f) => !f.destino && chegando(f)).length,
+    todos: forms.filter((f) => chegando(f) || !!f.destino).length,
+    semlead: forms.filter((f) => !chegando(f)).length,
   };
 
   if (isLoading) return <p className="cfg-dica">Carregando…</p>;
@@ -230,16 +232,23 @@ export default function FacebookLeads({ como, avancado }: { como?: string | null
         <div className="fbl-sh"><span className="fbl-n">2</span><div><h3>Para onde vai cada formulário</h3>
           <p className="sub">Escolha uma vez. Os próximos leads daquele formulário já caem certos.</p></div></div>
         <div className="fbl-tabs" role="tablist">
-          {([["decidir", "Para decidir"], ["todos", "Todos os ativos"], ["parados", "Sem anúncio rodando"]] as const).map(([k, t]) => (
+          {([["decidir", "Para decidir"], ["todos", "Recebendo lead"], ["semlead", "Sem lead chegando"]] as const).map(([k, t]) => (
             <button key={k} role="tab" aria-selected={filtro === k} className={`fbl-tab${filtro === k ? " on" : ""}`} onClick={() => setFiltro(k)}>{t} ({n[k]})</button>
           ))}
         </div>
-        {!lista.length ? <div className="fbl-now">{filtro === "decidir" ? "Tudo decidido. Quando um formulário novo começar a receber lead sem dono, ele aparece aqui." : "Nenhum formulário aqui."}</div> : null}
+        {!lista.length ? <div className="fbl-now">{filtro === "decidir" ? "Nada para decidir: todo formulário que está recebendo lead já tem destino. Quando um novo começar a receber lead sem destino, ele aparece aqui." : "Nenhum formulário aqui."}</div> : null}
+        {filtro === "semlead" && lista.length ? <div className="fbl-now">Estes formulários não receberam nenhum lead no Comandra nos últimos 14 dias. Você pode deixar o destino pronto, mas não há lead esperando.</div> : null}
         {lista.map((f) => {
           const r = rascunhoDe(f), p = pagina(f.page_id);
           return (
             <article key={f.form_id} className={`fbl-fm${!f.destino ? " alerta" : ""}`}>
-              <div><b>{f.nome}</b><i style={{ display: "block" }}>{p?.nome ?? "Página ?"} · {f.leads_7d} leads em 7 dias{f.recrutamento ? " · candidatos a corretor, não são clientes" : ""}</i></div>
+              <div><b>{f.nome}</b>
+                <i style={{ display: "block" }}>{p?.nome ?? "Página ?"}{f.conta ? ` · conta de anúncio ${f.conta}${f.conta_dono ? ` (paga: ${f.conta_dono})` : ""}` : ""}{f.recrutamento ? " · candidatos a corretor, não são clientes" : ""}</i>
+                <i style={{ display: "block" }}>
+                  {f.cm_14d > 0 ? `${f.cm_14d} lead(s) no Comandra em 14 dias` : f.cm_total > 0 ? `nenhum lead em 14 dias (${f.cm_total} desde o começo)` : "nunca chegou lead deste formulário"}
+                  {!chegando(f) && f.ativo && f.conta_gasto_7d !== null && Number(f.conta_gasto_7d) === 0 ? " · o anúncio está ligado, mas a conta não gastou nada em 7 dias (não está aparecendo para ninguém)" : ""}
+                  {!chegando(f) && !f.ativo ? " · anúncio desligado" : ""}
+                </i></div>
               <div className={`fbl-now${!f.destino ? " wait" : ""}`}>
                 {f.destino ? descreve(f.destino) : f.esperando ? `Sem dono · ${f.esperando} lead(s) esperando você decidir` : "Sem dono"}
               </div>
