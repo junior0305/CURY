@@ -45,6 +45,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Marca o "último acesso" real do usuário (abertura do app / login / refresh).
   // Fire-and-forget: nunca bloqueia nem quebra o fluxo de auth se a RPC falhar.
   const touchLastSeen = () => {
+    // "Entrar como": o diretor vendo a tela de alguém não faz essa pessoa aparecer online (o banco também confere)
+    try { if (localStorage.getItem("cmd_entrar_como")) return; } catch { /* segue */ }
     try {
       supabase.rpc('touch_last_seen').then(() => {}, () => {});
     } catch (e) {

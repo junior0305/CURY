@@ -1,10 +1,14 @@
-/* "Ver como" (20/10): o admin (e o diretor) abre a tela de qualquer superintendente ou gerente,
- * do jeito que ele vê, para ajustar sem precisar da senha dele.
+/* "Entrar como" (28/10, antes "Ver como" de 20/10): o admin/diretor abre uma sessão REAL do super, gerente ou corretor
+ * (src/lib/entrarComo.ts + edge entrar-como) e vê exatamente o que ele vê. Faixa no topo volta para o login dele.
+ * Os parâmetros antigos ?super= / ?manager= ainda funcionam nas telas, mas o seletor usa a sessão real.
  *  · super  → /super?super=<id>   (Superintendente.tsx usa o id no lugar do login)
  *  · gerente → /manager?manager=<id> (useEffectiveManagerId já aceitava)
  * Só leitura do ponto de vista de identidade: o que for salvo é salvo como admin.
  */
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { entrarComo } from "@/lib/entrarComo";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
@@ -23,13 +27,20 @@ export default function VerComo() {
     staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data } = await supabase.from("profiles").select("id,first_name,last_name,role,manager_id")
-        .in("role", ["SUPERINTENDENT", "MANAGER"]).eq("is_active", true).order("first_name");
+        .in("role", ["SUPERINTENDENT", "MANAGER", "BROKER"]).eq("is_active", true).order("first_name");
       return (data ?? []) as P[];
     },
   });
+  const [entrando, setEntrando] = useState(false);
   if (!pode) return null;
+  const entrar = async (id: string) => {
+    if (!id) return;
+    setEntrando(true);
+    try { await entrarComo(id); } catch (e: any) { toast.error(e?.message || "Não consegui entrar."); setEntrando(false); }
+  };
   const supers = lideres.filter((p) => p.role === "SUPERINTENDENT");
   const gerentes = lideres.filter((p) => p.role === "MANAGER");
+  const corretores = lideres.filter((p) => p.role === "BROKER");
   const atualSuper = params.get("super");
   const atualGer = params.get("manager");
   const atual = lideres.find((p) => p.id === (atualSuper || atualGer));
@@ -37,16 +48,23 @@ export default function VerComo() {
   return (
     <div className="vc">
       <style>{CSS}</style>
-      <span className="vc-lbl">Ver como</span>
-      <select aria-label="Ver como superintendente" value={atualSuper ?? ""} onChange={(e) => e.target.value && nav(`/super?super=${e.target.value}`)}>
+      <span className="vc-lbl">{entrando ? "Entrando…" : "Entrar como"}</span>
+      <select aria-label="Entrar como superintendente" disabled={entrando} value={atualSuper ?? ""} onChange={(e) => entrar(e.target.value)}>
         <option value="">superintendente…</option>
         {supers.map((p) => <option key={p.id} value={p.id}>{nome(p)}</option>)}
       </select>
-      <select aria-label="Ver como gerente" value={atualGer ?? ""} onChange={(e) => e.target.value && nav(`/manager?manager=${e.target.value}`)}>
+      <select aria-label="Entrar como gerente" disabled={entrando} value={atualGer ?? ""} onChange={(e) => entrar(e.target.value)}>
         <option value="">gerente…</option>
         {gerentes.map((p) => {
           const sup = lideres.find((s) => s.id === p.manager_id && s.role === "SUPERINTENDENT");
           return <option key={p.id} value={p.id}>{nome(p)}{sup ? ` · ${sup.first_name}` : ""}</option>;
+        })}
+      </select>
+      <select aria-label="Entrar como corretor" disabled={entrando} value="" onChange={(e) => entrar(e.target.value)}>
+        <option value="">corretor…</option>
+        {corretores.map((p) => {
+          const ger = lideres.find((g) => g.id === p.manager_id && g.role === "MANAGER");
+          return <option key={p.id} value={p.id}>{nome(p)}{ger ? ` · ${ger.first_name}` : ""}</option>;
         })}
       </select>
       {atual && (

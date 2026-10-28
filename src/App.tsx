@@ -11,6 +11,11 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { syncAudioSettings } from "@/hooks/use-audio-arena";
 import { supabase } from "@/integrations/supabase/client";
+import EntrarComoBarra from "@/components/EntrarComoBarra";
+import { instalarBloqueioEntrarComo } from "@/lib/entrarComo";
+
+// "Entrar como" (28/10): mensagens/disparos bloqueados desde a primeira chamada
+instalarBloqueioEntrarComo();
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
@@ -188,6 +193,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <BrowserRouter>
+          <EntrarComoBarra />
         <AuthProvider>
           <ThemeProvider>
           <AudioSyncOnLoad />
