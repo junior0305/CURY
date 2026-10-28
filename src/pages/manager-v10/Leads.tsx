@@ -21,6 +21,7 @@ import {
   type Cobranca,
 } from "@/hooks/useLeads";
 import OrigemDrawer from "@/components/manager-v10/OrigemDrawer";
+import LeadsOrigem from "@/components/leads/LeadsOrigem";
 import FilasFormulario from "@/components/leads/FilasFormulario";
 import AlertaDisparoQueima from "@/components/manager-v10/AlertaDisparoQueima";
 import { usePeriodo } from "@/hooks/usePeriodo";
@@ -320,7 +321,7 @@ export default function Leads() {
               onClick={() => setSubAba("origens")}
             >
               <Inbox size={15} />
-              Origens & Canais
+              De onde vieram e para onde foram
               <span className="leads-tab-pill">{d.chegaram}</span>
             </button>
 
@@ -550,7 +551,10 @@ export default function Leads() {
           {/* ══════════════════════════════════════════════════════════════════════
               ABA 2: ORIGENS & CANAIS (DE ONDE VIERAM)
               ══════════════════════════════════════════════════════════════════════ */}
-          {subAba === "origens" && (
+          {/* 28/10: "De onde vieram e para onde foram" — a mesma tela do super e do diretor (LeadsOrigem) */}
+          {subAba === "origens" && <LeadsOrigem como={userId} />}
+          {/* versão anterior dos cartões de origem (sem uso, mantida para voltar se precisar) */}
+          {(subAba as string) === "origens_antiga" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               <div className="leads-origens-grid">
                 {/* Origem: Anúncio */}

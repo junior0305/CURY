@@ -3,6 +3,7 @@ import { useState } from "react";
 import { AbasInternas } from "./Tela";
 import Leads from "./Leads";
 import Midia from "./Midia";
+import LeadsOrigem from "@/components/leads/LeadsOrigem";
 import "@/styles/cockpit-gerente.css";
 
 export default function LeadsSuper({ superId, inicial }: { superId: string; inicial?: "leads" | "midia" }) {
@@ -19,14 +20,14 @@ export default function LeadsSuper({ superId, inicial }: { superId: string; inic
 
       <AbasInternas<"leads" | "midia">
         abas={[
-          ["leads", "Esteira de Leads por Canal"],
+          ["leads", "De onde vieram e para onde foram"],
           ["midia", "Saúde dos Anúncios Meta Ads"],
         ]}
         atual={sub}
         onTroca={(k) => setSub(k)}
       />
 
-      {sub === "leads" ? <Leads superId={superId} /> : <Midia superId={superId} />}
+      {sub === "leads" ? <LeadsOrigem como={superId} /> : <Midia superId={superId} />}
     </div>
   );
 }

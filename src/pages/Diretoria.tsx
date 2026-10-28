@@ -3,6 +3,7 @@
  * Equipes / Leads / Pastas: árvore que abre superintendência → gerente → corretor.
  * Gastos: anúncio real por equipe; plano e outros gastos chegam na próxima entrega. */
 import VerComo from "@/components/manager-v10/VerComo";
+import LeadsOrigem from "@/components/leads/LeadsOrigem";
 import FilasFormulario from "@/components/leads/FilasFormulario";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -181,6 +182,7 @@ export default function Diretoria() {
                 {aberto["tabela-equipes"] ? "▾ Esconder a tabela completa" : "▸ Tabela completa, corretor por corretor (login, online, plantão)"}</button>
               {aberto["tabela-equipes"] ? <Equipes supers={supers} linhasDoSuper={linhasDoSuper} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} /> : null}
             </>}
+            {aba === "leads" && <LeadsOrigem />}
             {aba === "leads" && <FilasFormulario />}
             {aba === "leads" && <AnunciosSaude diretorId={diretorId!} supers={supers} />}
             {aba === "leads" && <Leads dias={dias} deP={periodo.de} supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
