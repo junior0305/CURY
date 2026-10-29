@@ -16,7 +16,7 @@ import { useDiretorId, useDiretoria, useMetasDiretoria, donoJunix, chaveGerente,
   type SuperDiretoria, type PastaJunix } from "@/hooks/useDiretoria";
 import Estrategia from "@/components/estrategia/Estrategia";
 import EquipesCards from "@/components/diretoria/EquipesCards";
-import QuemParado from "@/components/manager-v10/QuemParado";
+import EquipeTopo from "@/components/equipe/EquipeTopo";
 import BiTab from "@/components/manager-v10/BiTab";
 import AnunciosSaude from "@/components/diretoria/AnunciosSaude";
 import PastasPainel from "@/components/diretoria/PastasPainel";
@@ -176,7 +176,7 @@ export default function Diretoria() {
               carregandoCons={carregandoCons} plantaoHojeTotal={dir.plantaoHojeTotal} cobrancas={dir.cobrancas} pastas={dir.pastas}
               irPara={(a, k) => { setAba(a); if (k) setAberto((v) => ({ ...v, [k]: true })); }} abrirPainel={abrirPainel} />}
             {aba === "equipes" && <>
-              <QuemParado donoId={diretorId ?? undefined} modo="diretor" />
+              <EquipeTopo donoId={diretorId ?? undefined} />
               <EquipesCards diretorId={diretorId!} supers={supers} linhasDoSuper={linhasDoSuper} dias={dias} carregandoCons={carregandoCons} abrirPainel={abrirPainel} />
               <button className="dir-btn" style={{ alignSelf: "flex-start" }} onClick={() => tog("tabela-equipes")}>
                 {aberto["tabela-equipes"] ? "▾ Esconder a tabela completa" : "▸ Tabela completa, corretor por corretor (login, online, plantão)"}</button>

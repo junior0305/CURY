@@ -17,7 +17,8 @@ import Briefing from "@/components/manager-v10/Briefing";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
-import QuemParado from "@/components/manager-v10/QuemParado";
+import AgendaEquipe from "@/components/equipe/AgendaEquipe";
+import RendimentoEquipe from "@/components/equipe/RendimentoEquipe";
 import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { useLeadsQueimaDisparo } from "@/components/manager-v10/AlertaDisparoQueima";
 import RaioXCorretorDrawer from "@/components/manager-v10/RaioXCorretorDrawer";
@@ -43,6 +44,7 @@ import {
   RefreshCw,
   X,
   ShieldAlert,
+  CalendarDays,
 } from "lucide-react";
 import "@/styles/cockpit-gerente.css";
 import "@/styles/time-gerente.css";
@@ -70,7 +72,7 @@ const nomeMes = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString(
 type PessoaMeta = { id: string; nome: string; papel: string; meta: number | null; realizado: number; pode_editar: boolean };
 type PainelMetas = { mes: string; dono: PessoaMeta; filhos: PessoaMeta[] };
 
-type SubAba = "urgencias" | "tropa" | "novos";
+type SubAba = "hoje" | "rendimento" | "urgencias" | "tropa" | "novos";
 
 export default function TimeTab({ managerId }: { managerId: string | undefined }) {
   const { session } = useAuth();
@@ -78,7 +80,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
   const { periodo } = usePeriodo();
   const { data, isLoading } = useTime(managerId, periodo.dias);
 
-  const [subAba, setSubAba] = useState<SubAba>("urgencias");
+  const [subAba, setSubAba] = useState<SubAba>("hoje");
   const [brief, setBrief] = useState<PessoaTime | null>(null);
   const [cadastrar, setCadastrar] = useState<string | false>(false);
   const [desligar, setDesligar] = useState<string | null>(null);
@@ -279,8 +281,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
         </div>
       </div>
 
-      {/* ── QUEM ESTÁ SEM GERAR RESULTADO (24/10) ── */}
-      <QuemParado donoId={managerId} modo="gerente" />
+      {/* 29/10: o "Quem está sem gerar resultado" virou a aba Rendimento da Equipe (RendimentoEquipe) */}
 
       {/* ── ALERTA DE VÍNCULOS PENDENTES C2S / JUNIX (SE HOUVER) ── */}
       <VincularNomes managerId={managerId} />
@@ -362,12 +363,20 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       {/* ── BARRA DE NAVEGAÇÃO: 3 VISÕES CLARAS ── */}
       <div id="secao-conteudo-time" className="time-tabs-bar">
         <button
-          className={`time-tab-btn ${subAba === "urgencias" ? "active" : ""}`}
-          onClick={() => setSubAba("urgencias")}
+          className={`time-tab-btn ${subAba === "hoje" || subAba === "urgencias" ? "active" : ""}`}
+          onClick={() => setSubAba("hoje")}
+        >
+          <CalendarDays size={15} />
+          Equipe hoje
+          {achados.length ? <span className={`time-tab-pill ${criticosCount > 0 ? "hot" : ""}`}>{achados.length}</span> : null}
+        </button>
+
+        <button
+          className={`time-tab-btn ${subAba === "rendimento" ? "active" : ""}`}
+          onClick={() => setSubAba("rendimento")}
         >
           <AlertTriangle size={15} />
-          Quem Cobrar Agora
-          <span className={`time-tab-pill ${criticosCount > 0 ? "hot" : ""}`}>{achados.length}</span>
+          Rendimento da Equipe
         </button>
 
         <button
@@ -392,6 +401,36 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       {/* ══════════════════════════════════════════════════════════════════════
           VISÃO 1: QUEM COBRAR AGORA (FOCO & URGÊNCIAS)
           ══════════════════════════════════════════════════════════════════════ */}
+      {/* 29/10 · EQUIPE HOJE: agenda de visitas + quem cobrar agora + pastas */}
+      {subAba === "hoje" && (
+        <AgendaEquipe donoId={managerId} lateral={
+          <section className="ae-box" aria-label="Quem cobrar agora">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+              <h3>Quem cobrar agora</h3><span className="ae-m">{achados.filter((a) => a.tom !== "good").length}</span></div>
+            {achados.filter((a) => a.tom !== "good").length === 0 ? <span className="ae-m">Ninguém para cobrar agora.</span> : null}
+            {achados.filter((a) => a.tom !== "good").slice(0, 3).map((a) => {
+              const tel = limparTel(equipeProfiles.find((ep) => ep.id === a.profileId)?.phone);
+              const msg = encodeURIComponent(`Olá ${a.nome}! Vi aqui no Comandra: "${a.fato}". Vamos alinhar rapidinho para destravar seus atendimentos?`);
+              return (
+                <div key={a.chave + a.profileId} style={{ border: "1px solid var(--cv-border)", borderLeft: `4px solid ${a.tom === "crit" ? "#dc2626" : "#d97706"}`, borderRadius: 12, padding: "10px 12px", display: "grid", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                    <b style={{ cursor: "pointer" }} onClick={() => setCorretorRaioX(a.profileId)}>{a.nome}</b>
+                    <span className={`time-kpi-badge ${a.tom === "crit" ? "rose" : "amber"}`}>{a.tom === "crit" ? "Crítico" : "Atenção"}</span></div>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{a.fato}</span>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {tel ? <a className="time-btn-action" href={`https://wa.me/${tel}?text=${msg}`} target="_blank" rel="noreferrer"><MessageCircle size={13} /> Cobrar</a> : null}
+                    <button type="button" className="time-btn-action" onClick={() => setCorretorRaioX(a.profileId)}><Eye size={13} /> Raio-X</button>
+                  </div>
+                </div>);
+            })}
+            {achados.filter((a) => a.tom !== "good").length > 3 || achados.some((a) => a.tom === "good") ? (
+              <button type="button" className="time-btn-action" onClick={() => setSubAba("urgencias")}>Ver todos ({achados.length})</button>) : null}
+          </section>
+        } />
+      )}
+
+      {subAba === "rendimento" && <RendimentoEquipe donoId={managerId} onRaioX={(id) => setCorretorRaioX(id)} />}
+
       {subAba === "urgencias" && (
         <div className="time-radar-section">
           {/* Filtros rápidos de severidade */}

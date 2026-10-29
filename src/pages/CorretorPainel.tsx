@@ -22,6 +22,7 @@ import type { Lead, LeadStatus, LostReason } from "@/types/lead";
 import { TIPO_TRABALHO_LABEL, LOST_REASON_LABEL } from "@/types/lead";
 import { useUnidadesFecha } from "@/hooks/useEstrategia";
 import { empresa } from "@/lib/empresa";
+import AgendarVisita from "@/components/broker/AgendarVisita";
 
 // ── stages do funil (iguais ao Atender atual) ───────────────────────────────
 const STAGES: [LeadStatus, string][] = [
@@ -113,6 +114,7 @@ const CorretorPainel = () => {
   const [noteDraft, setNoteDraft] = useState("");
   const [caixaOpen, setCaixaOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [agendarOpen, setAgendarOpen] = useState(false);
 
   // ── LEADS REAIS ───────────────────────────────────────────────────────────
   const { data: leads = [] } = useQuery<Lead[]>({
@@ -530,7 +532,10 @@ const CorretorPainel = () => {
 
   const badgeFor = (l: Lead) => {
     if (esperando(l)) return { cls: "l-badge wait", txt: "Cliente esperando" };
-    if (l.status === "VISIT_SCHEDULED") return { cls: "l-badge", txt: "Visita marcada" };
+    if (l.status === "VISIT_SCHEDULED") {
+      const va = (l as any).visit_scheduled_at as string | null;
+      return { cls: "l-badge", txt: va ? `Visita ${new Date(va).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}` : "Visita marcada" };
+    }
     if (l.status === "VISITA_REALIZADA") return { cls: "l-badge", txt: "Compareceu" };
     if (l.status === "DOCS_REQUESTED") return { cls: "l-badge", txt: "Docs" };
     const an = andamentoDe(l);
@@ -704,7 +709,7 @@ const CorretorPainel = () => {
                         const P: Record<string, { q: string; dica: string; b: B[] }> = {
                           NEW: { q: "Faça o primeiro contato", dica: "Chame no WhatsApp ou ligue. O clique já conta como tentativa.", b: [["Registrar tentativa", tentar, true], ["Respondeu", () => advance("NEGOTIATING"), false]] },
                           IN_PROGRESS: { q: "O cliente respondeu?", dica: "Respondeu: o lead sai da régua e é seu. Ainda não: registre a tentativa.", b: [["Respondeu", () => advance("NEGOTIATING"), true], ["Registrar tentativa", tentar, false]] },
-                          NEGOTIATING: { q: "Marcou a visita?", dica: "Combine dia e hora. Se o cliente pediu para esperar, use \"Combinado retorno em\" lá em cima.", b: [["Agendar visita", () => advance("VISIT_SCHEDULED"), true], ["Registrar conversa", focarNota, false], ["Registrar tentativa", tentar, false]] },
+                          NEGOTIATING: { q: "Marcou a visita?", dica: "Combine dia e hora. Se o cliente pediu para esperar, use \"Combinado retorno em\" lá em cima.", b: [["Agendar visita", () => setAgendarOpen(true), true], ["Registrar conversa", focarNota, false], ["Registrar tentativa", tentar, false]] },
                           VISIT_SCHEDULED: { q: "Ele veio à visita?", dica: "Depois da visita, peça os documentos no mesmo dia.", b: [["Compareceu", () => advance("VISITA_REALIZADA"), true], ["Não veio, remarcar", () => advance("NEGOTIATING"), false]] },
                           VISITA_REALIZADA: { q: "Pediu os documentos?", dica: "Marque o que já recebeu na aba Pasta, nas ferramentas abaixo.", b: [["Pedir documentos", () => advance("DOCS_REQUESTED"), true]] },
                           DOCS_REQUESTED: { q: "A pasta foi para a Caixa?", dica: "Quando a venda sair, marque aqui.", b: [["Venda feita", () => advance("CONCLUDED"), true]] },
@@ -970,6 +975,17 @@ const CorretorPainel = () => {
 
       {/* MODAL descartar (motivo obrigatório) */}
       <AnimatePresence>
+        {agendarOpen && sel && user ? (
+          <AgendarVisita key="agendar" leadId={sel.id} nome={sel.name} brokerId={user.id} onFechar={() => setAgendarOpen(false)}
+            onFeito={async (resumo) => {
+              setAgendarOpen(false);
+              await addLeadNote(sel.id, user.id, `Fase · Visita marcada para ${resumo}`).catch(() => {});
+              qc.invalidateQueries({ queryKey: ["painelLeads"] });
+              qc.invalidateQueries({ queryKey: ["painelNotes", sel.id] });
+              qc.invalidateQueries({ queryKey: ["painelNotasRegua"] });
+              toast.success(`Visita marcada para ${resumo}. Ela já aparece na agenda da equipe.`);
+            }} />
+        ) : null}
         {discardOpen && sel && (
           <motion.div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setDiscardOpen(false); }}
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduce ? 0 : 0.15 }}>
