@@ -250,9 +250,23 @@ export default function Disparar() {
   const [qwDia, setQwDia] = useState(() => new Date().toISOString().slice(0, 10));
   const [qwHora, setQwHora] = useState("09:00");
 
-  const [csv, setCsv] = useState<{ leadId: string; nome: string | null; telefone: string }[]>([]);
+  const [csvBase, setCsv] = useState<{ leadId: string; nome: string | null; telefone: string }[]>([]);
   const [csvNome, setCsvNome] = useState("");
   const [csvFora, setCsvFora] = useState(0);
+  // 29/10 (Junior): quem da lista já recebeu disparo (whatsapp_campaign_targets enviado ou na fila) sai por padrão
+  const [csvRepetidos, setCsvRepetidos] = useState(0);
+  const [jaRec, setJaRec] = useState<Map<string, { ultimo: string | null; na_fila: boolean }>>(new Map());
+  const [tirarJa, setTirarJa] = useState(true);
+  const [conferindoJa, setConferindoJa] = useState(false);
+  const [janelaJa, setJanelaJa] = useState<"todos" | "30" | "90">("todos");
+  const recebeuNaJanela = (tel: string) => {
+    const j = jaRec.get(tel);
+    if (!j) return false;
+    if (janelaJa === "todos" || j.na_fila || !j.ultimo) return true;
+    return Date.now() - new Date(j.ultimo).getTime() <= Number(janelaJa) * 864e5;
+  };
+  const csvJa = csvBase.filter((c) => recebeuNaJanela(c.telefone));
+  const csv = tirarJa ? csvBase.filter((c) => !recebeuNaJanela(c.telefone)) : csvBase;
   // Imagem DESTE disparo. Fica aqui e não no template porque a Meta trata o
   // topo como variável: o template declara que tem imagem, a foto muda a cada
   // envio. E porque voltar duas telas para trocar a foto é trabalho à toa.
@@ -338,7 +352,9 @@ export default function Disparar() {
   async function pegarCsv(f: File | undefined) {
     if (!f) return;
     try {
-      const linhas = lerCsv(await f.text());
+      const texto = await f.text();
+      const linhas = lerCsv(texto);
+      const comFone = texto.split(/\r?\n/).filter((l) => /\d{10,}/.test(l.replace(/[^\d;,]/g, "").split(/[;,]/).sort((a, b) => b.length - a.length)[0] ?? "")).length;
       if (!linhas.length) {
         toast.error("Não achei telefone nesse arquivo. Precisa de uma coluna com o número.");
         return;
@@ -349,7 +365,11 @@ export default function Disparar() {
       const bons = linhas.flatMap((l) => { const d = celular(l.telefone); return d ? [{ ...l, telefone: d }] : []; });
       const fora = linhas.length - bons.length;
       if (!bons.length) { toast.error(`Nenhum celular válido em ${f.name} (${fora} números fora do formato).`); return; }
-      setCsv(bons); setCsvNome(f.name); setCsvFora(fora);
+      setCsv(bons); setCsvNome(f.name); setCsvFora(fora); setCsvRepetidos(Math.max(0, comFone - linhas.length)); setJaRec(new Map()); setConferindoJa(true);
+      const { data: ja, error: eJa } = await (supabase as any).rpc("ja_disparados", { p_fones: bons.map((b) => b.telefone) });
+      setConferindoJa(false);
+      if (eJa) toast.error("Não consegui conferir quem já recebeu disparo. Confira antes de enviar.");
+      setJaRec(new Map(((ja ?? []) as { fone: string; ultimo: string | null; na_fila: boolean }[]).map((x) => [x.fone, { ultimo: x.ultimo, na_fila: x.na_fila }])));
       toast.success(fora
         ? `${bons.length} celulares válidos em ${f.name} · ${fora} descartados (não são celular).`
         : `${bons.length} pessoas lidas de ${f.name}.`, { duration: 8000 });
@@ -1819,8 +1839,8 @@ export default function Disparar() {
                   <label className={`up${csv.length ? " tem" : ""}`} style={{ display: "block" }}>
                     {csv.length ? (
                       <div style={{ padding: "10px 4px" }}>
-                        <b>{csv.length} celulares válidos</b>
-                        <span>{csvNome}{csvFora ? ` · ${csvFora} descartados (não são celular)` : ""} — clique para trocar</span>
+                        <b>{csvBase.length} celulares na lista{tirarJa && csvJa.length ? ` · ficam ${csv.length}` : ""}</b>
+                        <span>{csvNome}{csvFora ? ` · ${csvFora} descartados (não são celular)` : ""}{csvRepetidos ? ` · ${csvRepetidos} repetidos no arquivo` : ""} — clique para trocar</span>
                       </div>
                     ) : (
                       <>
@@ -1832,14 +1852,30 @@ export default function Disparar() {
                     <input type="file" accept=".csv,text/csv,text/plain" hidden
                       onChange={(e) => pegarCsv(e.target.files?.[0])} />
                   </label>
-                  {csv.length ? (
+                  {csvBase.length ? (() => {
+                    const ult = csvJa.map((c) => jaRec.get(c.telefone)?.ultimo).filter(Boolean).sort().pop() as string | undefined;
+                    const dias = ult ? Math.max(0, Math.round((Date.now() - new Date(ult).getTime()) / 864e5)) : null;
+                    return <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--line)", background: csvJa.length ? "color-mix(in srgb,#d97706 10%,var(--card))" : "var(--sunk)", display: "grid", gap: 6 }}>
+                      {conferindoJa ? <span style={{ fontSize: 13 }}>Conferindo quem já recebeu disparo…</span> : csvJa.length ? <>
+                        <span><b>{csvJa.length} já receberam disparo</b>{dias !== null ? ` (o último há ${dias === 0 ? "menos de 1 dia" : `${dias} dia${dias > 1 ? "s" : ""}`})` : ""}{csvJa.some((c) => jaRec.get(c.telefone)?.na_fila) ? " · alguns estão na fila de um disparo agora" : ""}</span>
+                        <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 600, cursor: "pointer" }}>
+                          <input type="checkbox" checked={tirarJa} onChange={(e) => setTirarJa(e.target.checked)} />
+                          Tirar quem já recebeu
+                          <select value={janelaJa} onChange={(e) => setJanelaJa(e.target.value as any)} aria-label="Período" style={{ font: "inherit", fontSize: 13, padding: "2px 6px", borderRadius: 6, border: "1px solid var(--line)", background: "var(--card)", color: "var(--ink)" }}>
+                            <option value="todos">em qualquer data</option><option value="90">nos últimos 90 dias</option><option value="30">nos últimos 30 dias</option></select>
+                        </label>
+                        <span style={{ fontSize: 13 }}>{tirarJa ? <>Vão receber <b>{csv.length}</b> de {csvBase.length}.</> : <>Todos os {csvBase.length} vão receber, inclusive quem já recebeu.</>}</span>
+                      </> : jaRec.size === 0 && csvBase.length ? <span style={{ fontSize: 13 }}>Nenhum número desta lista recebeu disparo antes.</span> : null}
+                    </div>;
+                  })() : null}
+                  {csvBase.length ? (
                     <button className="btn sm" style={{ marginTop: 8, alignSelf: "flex-start" }}
                       onClick={() => { setCsv([]); setCsvNome(""); }}>
                       Tirar a lista
                     </button>
                   ) : (
-                    <small>Aceita vírgula ou ponto e vírgula, com ou sem cabeçalho.
-                      Repetidos e números que não são celular são descartados.
+                    <small>Aceita vírgula ou ponto e vírgula, com ou sem cabeçalho (no Excel: Salvar como → CSV).
+                      Repetidos e números que não são celular são descartados, e quem já recebeu disparo sai da lista.
                       Antes de cada lote, o sistema também confere quem tem WhatsApp.</small>
                   )}
                 </div>
