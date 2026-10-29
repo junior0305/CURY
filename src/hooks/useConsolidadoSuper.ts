@@ -167,7 +167,7 @@ export function useConsolidadoSuper(superId: string | undefined, dias: number, f
       const minhasContas = (((contas as any).data ?? []) as any[])
         .filter((c) => c.owner_id === superId || subIds.includes(c.owner_id) || ids.includes(c.owner_id));
       await Promise.all(minhasContas.map(async (c) => {
-        const { data: r, error } = await supabase.functions.invoke("fb-conta-gerente", { body: { owner_id: c.owner_id, de, ate } });
+        const { data: r, error } = await supabase.functions.invoke("fb-conta-gerente", { body: { owner_id: c.owner_id, account_id: (c as any).account_id, de, ate } });
         const l = c.owner_id === superId ? linha("super", "Direto com você")
           : subIds.includes(c.owner_id) ? linha(c.owner_id, "Direto com o super") : linhas.get(c.owner_id)!;
         const fb = (r ?? {}) as any;

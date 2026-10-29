@@ -1,6 +1,7 @@
 // Mídia e Anúncios da Superintendência — 100% no Design System do Cockpit do Gerente
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { lerContasDoDono } from "@/lib/fbContas";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useEscopoSuper } from "./escopo";
@@ -42,12 +43,10 @@ export default function Midia({ superId }: { superId: string }) {
       const { data: saudeRows } = await supabase.from("fb_saude" as any).select("account_id,dados");
       const saudeMap = new Map((saudeRows ?? []).map((r: any) => [r.account_id, r.dados]));
 
+      // 29/10: cada conta da pessoa vira um cartão (antes só a primeira — Alisson tem duas)
+      const porConta = (await Promise.all(donos.map(async (d) => (await lerContasDoDono(d.id, p.janela.de, p.janela.ate)).map((x) => ({ d, x }))))).flat();
       const r = await Promise.all(
-        donos.map(async (d) => {
-          const { data } = await supabase.functions.invoke("fb-conta-gerente", {
-            body: { owner_id: d.id, de: p.janela.de, ate: p.janela.ate },
-          });
-          const x = data as any;
+        porConta.map(async ({ d, x }) => {
           if (!x || x.semConta || x.error) return null;
           const campanhas = (x.campanhas ?? [])
             .map((c: any) => ({ ...c, resultado: Number(c.leads || 0) + Number(c.conversas || 0) }))

@@ -8,6 +8,7 @@
 //   Carteira sem toque (agora)  ← leads ativos sem nenhum contato, hoje
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { lerContasDoDono } from "@/lib/fbContas";
 import { supabase } from "@/integrations/supabase/client";
 import { chaveGerente, type SuperDiretoria, type PastaJunix } from "@/hooks/useDiretoria";
 
@@ -36,7 +37,6 @@ const AVANCOU = ["VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED", "CONCL
 // 29/10: o Facebook (uma chamada à edge por conta, que pode levar minutos) saiu da consulta principal — antes a tabela
 // inteira do Raio-X ficava em "—" esperando a conta mais lenta. Agora os números do Comandra aparecem na hora e o
 // gasto entra depois (cada conta com 25 s de limite; a que não responde fica sem gasto).
-const comLimite = <T,>(p: Promise<T>, ms: number) => Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))]);
 export function useNumerosSuper(supers: SuperDiretoria[], pastas: PastaJunix[], de: string, ate: string) {
   const gerentes = supers.flatMap((s) => s.gerentes).filter((g) => !/revisor/i.test(g.nome));
   const ids = gerentes.map((g) => g.id);
@@ -49,9 +49,10 @@ export function useNumerosSuper(supers: SuperDiretoria[], pastas: PastaJunix[], 
     queryFn: async () => {
       const out: Record<string, { gasto: number; leads: number; conv: number }> = {};
       await Promise.all([...supers.map((s) => s.id), ...ids].map(async (dono) => {
-        const res: any = await comLimite(supabase.functions.invoke("fb-conta-gerente", { body: { owner_id: dono, de, ate } }), 25_000);
-        const r = res?.data as any; if (!r || r.semConta || r.error) return;
-        out[dono] = { gasto: Number(r.gasto || 0), leads: Number(r.leads || 0), conv: (r.campanhas ?? []).reduce((a: number, c: any) => a + Number(c.conversas || 0), 0) };
+        const contas = await lerContasDoDono(dono, de, ate);
+        if (!contas.length) return;
+        out[dono] = contas.reduce((t, r) => ({ gasto: t.gasto + Number(r.gasto || 0), leads: t.leads + Number(r.leads || 0),
+          conv: t.conv + (r.campanhas ?? []).reduce((a: number, c: any) => a + Number(c.conversas || 0), 0) }), { gasto: 0, leads: 0, conv: 0 });
       }));
       return out;
     },

@@ -67,7 +67,7 @@ export default function AnunciosGerentes({ diasInicial = 30 }: { diasInicial?: n
       const { data: vs } = await supabase.from("junix_vendas" as any).select("gerente, superintendente, vgv, qtd")
         .eq("ativo", true).eq("fora_do_placar", false).gte("data_venda", de);
       const fb = await Promise.all(lista.map(async (c) => {
-        const { data: r, error: e } = await supabase.functions.invoke("fb-conta-gerente", { body: { owner_id: c.owner_id, de, ate } });
+        const { data: r, error: e } = await supabase.functions.invoke("fb-conta-gerente", { body: { owner_id: c.owner_id, account_id: (c as any).account_id, de, ate } });
         return (e ? { error: e.message } : r) as Fb;
       }));
       return { contas: lista.map((c, i) => ({ c, fb: fb[i] })), vendas: (vs || []) as Venda[] };
