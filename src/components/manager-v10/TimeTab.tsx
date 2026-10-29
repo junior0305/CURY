@@ -81,6 +81,19 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
   const { data, isLoading } = useTime(managerId, periodo.dias);
 
   const [subAba, setSubAba] = useState<SubAba>("hoje");
+  // 29/10: presença dos últimos 14 dias, pastas e os 5 passos da Rampa vêm do rendimento_equipe (raiox_parados.py + leads)
+  const { data: rend } = useQuery({
+    queryKey: ["rendimento-equipe", managerId ?? ""],
+    enabled: !!managerId,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("rendimento_equipe", { p_dono: managerId });
+      if (error) throw error;
+      return (data ?? []) as { id: string; presenca_14: string | null; plantao_dias: number | null; pastas: number; teve_atendimento: boolean;
+        teve_visita: boolean; teve_pasta: boolean; teve_venda: boolean; ultimo_plantao: string | null }[];
+    },
+  });
+  const rendDe = (id: string) => rend?.find((r) => r.id === id);
   const [brief, setBrief] = useState<PessoaTime | null>(null);
   const [cadastrar, setCadastrar] = useState<string | false>(false);
   const [desligar, setDesligar] = useState<string | null>(null);
@@ -661,6 +674,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                     <th style={{ textAlign: "center" }}>Roleta</th>
                     <th style={{ textAlign: "right" }}>Leads</th>
                     <th style={{ textAlign: "right" }}>Visitas</th>
+                    <th style={{ textAlign: "right" }}>Pastas</th>
                     <th style={{ textAlign: "right" }}>Vendas (Junix)</th>
                     <th style={{ textAlign: "center" }}>Meta do Mês</th>
                     <th style={{ textAlign: "right" }}>Ações</th>
@@ -697,11 +711,17 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                           </div>
                         </td>
 
-                        {/* Presença */}
+                        {/* Presença: plantão no C2S nos últimos 14 dias + se está no Comandra agora */}
                         <td>
-                          <span className={`time-kpi-badge ${online ? "green" : "subtle"}`}>
-                            {online ? "Online" : quandoAcesso(p.last_seen_at)}
-                          </span>
+                          {(() => {
+                            const pr = rendDe(p.id)?.presenca_14;
+                            const foi = pr ? [...pr].filter((c) => c === "1").length : null;
+                            return <div style={{ display: "grid", gap: 4 }}>
+                              {pr ? <div className="tt-pres" title={`Plantão em ${foi} dos últimos 14 dias`} aria-label={`Plantão em ${foi} dos últimos 14 dias`}>
+                                {[...pr].map((c, i) => <i key={i} className={c === "1" ? "y" : ""} />)}</div> : <span className="tt-sub">sem vínculo com o C2S</span>}
+                              <span className="tt-sub">{pr ? `${foi} de 14 dias · ` : ""}{online ? <b style={{ color: "var(--cv-green)" }}>online</b> : quandoAcesso(p.last_seen_at)}</span>
+                            </div>;
+                          })()}
                         </td>
 
                         {/* Roleta Switch */}
@@ -734,6 +754,11 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                           </span>
                         </td>
 
+                        {/* Pastas (Junix, 30 dias) */}
+                        <td style={{ textAlign: "right" }} className="mono">
+                          <span style={{ fontWeight: 600 }}>{rendDe(p.id)?.pastas ?? "—"}</span>
+                        </td>
+
                         {/* Vendas */}
                         <td style={{ textAlign: "right" }} className="mono">
                           <b style={{ color: realizado > 0 ? "var(--cv-green)" : "var(--cv-text-dim)" }}>
@@ -763,6 +788,7 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                               {metaAlvo ? `${pctMeta}%` : "—"}
                             </span>
                           </div>
+                          {metaAlvo ? <div className="tt-meta" title={`${realizado} de ${metaAlvo} vendas`}><i style={{ width: `${pctMeta}%` }} /></div> : null}
                         </td>
 
                         {/* Ações */}
@@ -893,20 +919,29 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                       </span>
                     </div>
 
-                    <div className="time-novo-milestones">
-                      <div className={`time-milestone-step ${bateuPonto ? "achieved" : "pending"}`}>
-                        <span>1º Ponto / Plantão:</span>
-                        <b>{bateuPonto ? `com ${n.primeiroPonto}d ✓` : "Pendente"}</b>
-                      </div>
-                      <div className={`time-milestone-step ${jaAtendeu ? "achieved" : "pending"}`}>
-                        <span>1º Atendimento:</span>
-                        <b>{jaAtendeu ? `com ${n.primeiroAtend}d ✓` : "Pendente"}</b>
-                      </div>
-                      <div className={`time-milestone-step ${jaVendeu ? "achieved" : "pending"}`}>
-                        <span>1ª Venda Confirmada:</span>
-                        <b>{jaVendeu ? `com ${n.primeiraVenda}d` : "Pendente"}</b>
-                      </div>
-                    </div>
+                    {(() => {
+                      // 5 primeiros passos; atrasado = passou do prazo sem fazer (plantão 3d, 1º atendimento 7d, visita 21d, pasta 45d, venda 90d)
+                      const rr = rendDe(n.profileId);
+                      const passos: [string, boolean, number, string | null][] = [
+                        ["1º plantão", bateuPonto || !!rr?.ultimo_plantao, 3, bateuPonto ? `${n.primeiroPonto}d` : null],
+                        ["1º lead atendido", jaAtendeu || !!rr?.teve_atendimento, 7, jaAtendeu ? `${n.primeiroAtend}d` : null],
+                        ["1ª visita", !!rr?.teve_visita, 21, null],
+                        ["1ª pasta", !!rr?.teve_pasta, 45, null],
+                        ["1ª venda", jaVendeu || !!rr?.teve_venda, 90, jaVendeu ? `${n.primeiraVenda}d` : null],
+                      ];
+                      const atrasados = passos.filter(([, feito, prazo]) => !feito && diasDeCasa > prazo).length;
+                      return <>
+                        <div className="tt-mk" role="list" aria-label={`Primeiros passos de ${n.apelido ?? n.nome}`}>
+                          {passos.map(([rot, feito, prazo, quando]) => {
+                            const cls = feito ? "y" : diasDeCasa > prazo ? "l" : "";
+                            return <span key={rot} role="listitem" className={cls} title={feito ? `${rot}${quando ? ` com ${quando}` : ""}` : diasDeCasa > prazo ? `${rot}: atrasado (prazo ${prazo} dias)` : `${rot}: até ${prazo} dias de casa`}>
+                              <i />{rot}{quando ? <small>{quando}</small> : null}</span>;
+                          })}
+                        </div>
+                        <span className={`time-kpi-badge ${atrasados ? "rose" : "green"}`} style={{ justifySelf: "start" }}>
+                          {atrasados ? `${atrasados} passo${atrasados > 1 ? "s" : ""} atrasado${atrasados > 1 ? "s" : ""}` : "no ritmo"}</span>
+                      </>;
+                    })()}
 
                     <div style={{ display: "flex", gap: "6px", marginTop: "auto", flexWrap: "wrap" }}>
                       {telLimpo && (

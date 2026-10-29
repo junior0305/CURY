@@ -1634,3 +1634,17 @@ html[data-theme="dark"] .cockpit-v3 {
   border: 1px solid var(--cv-green-border);
 }
 
+
+/* 29/10 · Tabela da Tropa e Rampa de Novos (mockup https://claude.ai/artifact/BEbxPA8Vq3qa4xwp8G95NY) */
+.time-v3 .tt-pres{display:flex;gap:3px}
+.time-v3 .tt-pres i{width:8px;height:18px;border-radius:3px;background:var(--cv-border,#e2e8f0)}
+.time-v3 .tt-pres i.y{background:var(--cv-green,#16a34a)}
+.time-v3 .tt-sub{font-size:11.5px;color:var(--cv-text-muted,#64748b)}
+.time-v3 .tt-meta{height:6px;border-radius:99px;background:var(--cv-border,#e2e8f0);overflow:hidden;margin-top:5px;max-width:110px;margin-inline:auto}
+.time-v3 .tt-meta i{display:block;height:100%;background:var(--cv-brand,#0f1b2d);border-radius:99px}
+.time-v3 .tt-mk{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}
+.time-v3 .tt-mk span{display:grid;gap:3px;text-align:center;font-size:10.5px;font-weight:600;color:var(--cv-text-muted,#64748b);line-height:1.2}
+.time-v3 .tt-mk span i{height:6px;border-radius:99px;background:var(--cv-border,#e2e8f0)}
+.time-v3 .tt-mk span small{font-size:10px;font-weight:500}
+.time-v3 .tt-mk span.y{color:var(--cv-green,#15803d)}.time-v3 .tt-mk span.y i{background:var(--cv-green,#16a34a)}
+.time-v3 .tt-mk span.l{color:var(--cv-rose,#b91c1c)}.time-v3 .tt-mk span.l i{background:var(--cv-rose,#dc2626)}
