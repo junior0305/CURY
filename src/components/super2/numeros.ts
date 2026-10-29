@@ -6,6 +6,7 @@
 //   Pastas novas                ← junix_pastas cadastradas no período (já ligadas pelo corretor em escopo.ts)
 //   Gasto / leads do Facebook   ← edge fb-conta-gerente (conta de cada gerente e a do próprio super)
 //   Carteira sem toque (agora)  ← leads ativos sem nenhum contato, hoje
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { chaveGerente, type SuperDiretoria, type PastaJunix } from "@/hooks/useDiretoria";
@@ -28,12 +29,48 @@ export function canalDe(l: any): Canal {
   return "outros";
 }
 // regra única de "atendido" para todas as telas: src/lib/situacaoLead.ts
-export { atendido } from "@/lib/situacaoLead";
+import { atendido } from "@/lib/situacaoLead";
+export { atendido };  // 29/10: só o export não trazia a função para este arquivo — a conta quebrava e o Raio-X ficava zerado desde 19/10
 const AVANCOU = ["VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED", "CONCLUDED"];
 
+// 29/10: o Facebook (uma chamada à edge por conta, que pode levar minutos) saiu da consulta principal — antes a tabela
+// inteira do Raio-X ficava em "—" esperando a conta mais lenta. Agora os números do Comandra aparecem na hora e o
+// gasto entra depois (cada conta com 25 s de limite; a que não responde fica sem gasto).
+const comLimite = <T,>(p: Promise<T>, ms: number) => Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))]);
 export function useNumerosSuper(supers: SuperDiretoria[], pastas: PastaJunix[], de: string, ate: string) {
   const gerentes = supers.flatMap((s) => s.gerentes).filter((g) => !/revisor/i.test(g.nome));
   const ids = gerentes.map((g) => g.id);
+  const base = useNumerosBase(supers, pastas, de, ate, gerentes, ids);
+  const fb = useQuery({
+    queryKey: ["s2-fb", [...supers.map((s) => s.id), ...ids].join(","), de, ate],
+    enabled: ids.length > 0,
+    staleTime: 10 * 60_000,
+    placeholderData: (ant: any) => ant,
+    queryFn: async () => {
+      const out: Record<string, { gasto: number; leads: number; conv: number }> = {};
+      await Promise.all([...supers.map((s) => s.id), ...ids].map(async (dono) => {
+        const res: any = await comLimite(supabase.functions.invoke("fb-conta-gerente", { body: { owner_id: dono, de, ate } }), 25_000);
+        const r = res?.data as any; if (!r || r.semConta || r.error) return;
+        out[dono] = { gasto: Number(r.gasto || 0), leads: Number(r.leads || 0), conv: (r.campanhas ?? []).reduce((a: number, c: any) => a + Number(c.conversas || 0), 0) };
+      }));
+      return out;
+    },
+  });
+  const data = useMemo(() => {
+    if (!base.data) return undefined;
+    const f = fb.data ?? {};
+    const linhas = base.data.linhas.map((x) => f[x.id] ? { ...x, gasto: f[x.id].gasto, leadsFb: f[x.id].leads, conversasFb: f[x.id].conv } : x);
+    const deSuper = supers.map((s) => f[s.id]).filter(Boolean);
+    const soma = (k: "gasto" | "leads" | "conv") => Object.entries(f).reduce((a, [, v]) => a + v[k], 0);
+    const total = fb.data ? { ...base.data.total, gasto: soma("gasto"), leadsFb: soma("leads"), conversasFb: soma("conv") } : { ...base.data.total, gasto: null as any, leadsFb: null as any };
+    void deSuper;
+    return { linhas, total };
+  }, [base.data, fb.data, supers]);
+  return { ...base, data, isFetching: base.isFetching || fb.isFetching };
+}
+
+function useNumerosBase(supers: SuperDiretoria[], pastas: PastaJunix[], de: string, ate: string,
+  gerentes: SuperDiretoria["gerentes"], ids: string[]) {
   return useQuery({
     queryKey: ["s2-numeros", ids.join(","), de, ate, pastas.length],
     enabled: ids.length > 0,
@@ -92,23 +129,13 @@ export function useNumerosSuper(supers: SuperDiretoria[], pastas: PastaJunix[], 
           .is("last_broker_whatsapp_at", null).or("contact_attempts.is.null,contact_attempts.eq.0").eq("status", "NEW");
         linhas.get(gid)!.carteiraSemToque = count ?? 0;
       }));
-      // Facebook: conta de cada gerente (a do super fica no total)
-      let gastoSuper = 0, leadsSuper = 0, convSuper = 0;
-      await Promise.all([...supers.map((s) => s.id), ...ids].map(async (dono) => {
-        const { data } = await supabase.functions.invoke("fb-conta-gerente", { body: { owner_id: dono, de, ate } });
-        const r = data as any; if (!r || r.semConta || r.error) return;
-        const conv = (r.campanhas ?? []).reduce((a: number, c: any) => a + Number(c.conversas || 0), 0);
-        const x = linhas.get(dono);
-        if (x) { x.gasto = Number(r.gasto || 0); x.leadsFb = Number(r.leads || 0); x.conversasFb = conv; }
-        else { gastoSuper += Number(r.gasto || 0); leadsSuper += Number(r.leads || 0); convSuper += conv; }
-      }));
       const lista = [...linhas.values()];
       const soma = (f: (x: LinhaSuper) => number) => lista.reduce((a, x) => a + f(x), 0);
       const total = {
         leadsTot: soma((x) => x.leadsTot), atendidos: soma((x) => x.atendidos), avancaram: soma((x) => x.avancaram),
         plantaoDias: soma((x) => x.plantaoDias), visitas: soma((x) => x.visitas), vendas: soma((x) => x.vendas), vgv: soma((x) => x.vgv),
         pastasNovas: soma((x) => x.pastasNovas), carteiraSemToque: soma((x) => x.carteiraSemToque),
-        gasto: soma((x) => x.gasto ?? 0) + gastoSuper, leadsFb: soma((x) => x.leadsFb ?? 0) + leadsSuper, conversasFb: soma((x) => x.conversasFb ?? 0) + convSuper,
+        gasto: null as number | null, leadsFb: null as number | null, conversasFb: null as number | null,
         leads: { anuncio: soma((x) => x.leads.anuncio), disparo: soma((x) => x.leads.disparo), pescados: soma((x) => x.leads.pescados), outros: soma((x) => x.leads.outros) },
       };
       return { linhas: lista, total };
