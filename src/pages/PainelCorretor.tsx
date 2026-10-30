@@ -18,6 +18,7 @@ import { DisparoCorretor } from "@/components/broker/DisparoCorretor";
 import AgendarVisita from "@/components/broker/AgendarVisita";
 import Ficha from "@/components/painel-corretor/Ficha";
 import Pescar from "@/components/painel-corretor/Pescar";
+import CorretorPainel from "@/pages/CorretorPainel";
 import {
   LeadPC, COLS, diaSP, horaSP, dataCurta, primeiroNome, comArtigo, linhaMeta, esperando, escudo, ultimoRegistro,
   diasUteis, MES, QUANDO, quandoISO, origem,
@@ -305,6 +306,10 @@ export default function PainelCorretor() {
         : ritmo != null ? `Seu ritmo: ${String(ritmo).replace(".", ",")} venda${ritmo === 1 ? "" : "s"} no mês. Cada pasta com documentos deixa a conta mais perto.` : "Comece pelos clientes de hoje."}</span>
     </div>
   );
+
+  // Notebook/desktop: o painel de sempre (CorretorPainel), no padrão do antigo — pedido do Junior (30/10).
+  // O painel novo é o do celular.
+  if (desk) return <CorretorPainel />;
 
   return (
     <div className={`pc${claro ? " claro" : ""}`}>

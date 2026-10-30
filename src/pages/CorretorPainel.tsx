@@ -7,7 +7,7 @@
  *
  * CSS: portado do mockup e ESCOPADO sob .cpv2 para não vazar no CSS global do app.
  */
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { MessageCircle, Send, Fish, Moon, ArrowLeft, LogOut } from "lucide-react";
@@ -23,6 +23,8 @@ import { TIPO_TRABALHO_LABEL, LOST_REASON_LABEL } from "@/types/lead";
 import { useUnidadesFecha } from "@/hooks/useEstrategia";
 import { empresa } from "@/lib/empresa";
 import AgendarVisita from "@/components/broker/AgendarVisita";
+import MetaMes from "@/components/painel-corretor/MetaMes";
+import { mascarar, formatarFone, comArtigo, quandoISO, dataCurta as dataCurtaSP, horaSP } from "@/components/painel-corretor/util";
 
 // ── stages do funil (iguais ao Atender atual) ───────────────────────────────
 const STAGES: [LeadStatus, string][] = [
@@ -116,6 +118,17 @@ const CorretorPainel = () => {
   const [caixaOpen, setCaixaOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [agendarOpen, setAgendarOpen] = useState(false);
+  // 30/10: número escondido até o toque em WhatsApp/Ligar e "Como foi?" na volta (igual ao painel do celular)
+  const [revelados, setRevelados] = useState<Set<string>>(new Set());
+  const [como, setComo] = useState<{ id: string; nome: string; status: string; canal: string } | null>(null);
+  const [comoOut, setComoOut] = useState("Conversamos");
+  const [comoQ, setComoQ] = useState("Amanhã 10h");
+  const voltarDe = useRef<{ id: string; nome: string; status: string; canal: string } | null>(null);
+  useEffect(() => {
+    const vis = () => { if (document.visibilityState === "visible" && voltarDe.current) { setComo(voltarDe.current); setComoOut("Conversamos"); setComoQ("Amanhã 10h"); voltarDe.current = null; } };
+    document.addEventListener("visibilitychange", vis); window.addEventListener("focus", vis);
+    return () => { document.removeEventListener("visibilitychange", vis); window.removeEventListener("focus", vis); };
+  }, []);
 
   // ── LEADS REAIS ───────────────────────────────────────────────────────────
   const { data: leads = [] } = useQuery<Lead[]>({
@@ -290,6 +303,35 @@ const CorretorPainel = () => {
       qc.invalidateQueries({ queryKey: ["painelNotes", sel.id] });
       toast.success(dia ? "Retorno combinado. A contagem fica pausada até lá." : "Retorno tirado.");
     } catch { toast.error("Não consegui salvar o retorno"); }
+  };
+  const chamarCom = (canal: "WhatsApp" | "Ligação") => {
+    if (!sel) return;
+    setRevelados((s) => new Set(s).add(sel.id));
+    voltarDe.current = { id: sel.id, nome: sel.name, status: sel.status, canal };
+    registrarTentativa(canal);
+  };
+  const salvarComo = async () => {
+    if (!como || !user) return;
+    try {
+      if (comoOut === "Número errado") {
+        await updateLeadStatus(como.id, "ABANDONED", null, "NUMERO_ERRADO");
+        toast.success(`${como.nome} descartado · número errado`); setSelId(null);
+      } else {
+        if (comoOut === "Conversamos") {
+          await addLeadNote(como.id, user.id, `Conversamos · ${como.canal}`);
+          const agora = new Date().toISOString();
+          await supabase.from("leads").update({ last_broker_whatsapp_at: agora, last_interaction_at: agora }).eq("id", como.id);
+          if (["NEW", "IN_PROGRESS", "FOLLOW_UP_AUTO", "REACTIVATED"].includes(como.status)) await setLeadNegotiating(como.id).catch(() => {});
+        }
+        if (comoQ === "Agendar visita") { setSelId(como.id); setComo(null); setAgendarOpen(true); qc.invalidateQueries({ queryKey: ["painelLeads"] }); return; }
+        const iso = quandoISO(comoQ);
+        await setLeadReturnDate(como.id, iso);
+        await addLeadNote(como.id, user.id, `Combinado retorno em ${dataCurtaSP(iso)} ${horaSP(iso)}`).catch(() => {});
+        toast.success(`Registrado: ${comoOut.toLowerCase()} · próximo passo ${comoQ.toLowerCase()}`);
+      }
+      setComo(null);
+      ["painelLeads", "painelNotes", "painelNotasRegua", "pcTrilha"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+    } catch { toast.error("Não consegui registrar. Tente de novo."); }
   };
   const focarNota = () => { const el = document.getElementById("cp-nota"); el?.scrollIntoView({ behavior: "smooth", block: "center" }); (el as HTMLInputElement | null)?.focus(); };
 
@@ -586,7 +628,7 @@ const CorretorPainel = () => {
                   <span className="roleta-tag">{counts.todos} fichas</span>
                 </div>
                 {/* meta do mês que o gerente definiu (some se não houver) */}
-                <div style={{ margin: "8px 0" }}><MetaCascata compacto /></div>
+                <div style={{ margin: "8px 0" }}><MetaMes uid={user?.id || ""} /></div>
                 <div className="filter-bar">
                   <button className={`f-pill${filter === "prio" ? " on" : ""}`} onClick={() => setFilter("prio")}>Prioridade ({counts.prio})</button>
                   <button className={`f-pill${filter === "pescados" ? " on" : ""}`} onClick={() => setFilter("pescados")}>🎣 Pescados ({counts.pescados})</button>
@@ -601,7 +643,7 @@ const CorretorPainel = () => {
                     <div key={l.id} className={`lead-row${sel?.id === l.id ? " selected" : ""}`} onClick={() => { setSelId(l.id); setMobileDetail(true); }}>
                       <div>
                         <div className="l-name">{l.name}{l.source === "cold_pool" && <span className="pescado-tag">🎣 Pescado</span>}</div>
-                        <div className="l-meta">{[l.tipoTrabalho && TIPO_TRABALHO_LABEL[l.tipoTrabalho], fmtRenda(l.rendaDeclarada) !== "—" ? fmtRenda(l.rendaDeclarada) : null, regiaoDe(l) || null].filter(Boolean).join(" · ") || l.phone}</div>
+                        <div className="l-meta">{[l.tipoTrabalho && TIPO_TRABALHO_LABEL[l.tipoTrabalho], fmtRenda(l.rendaDeclarada) !== "—" ? fmtRenda(l.rendaDeclarada) : null, regiaoDe(l) || null].filter(Boolean).join(" · ") || mascarar(l.phone)}</div>
                       </div>
                       <span className={b.cls}>{b.txt}</span>
                     </div>
@@ -644,11 +686,11 @@ const CorretorPainel = () => {
                       <div className="lead-header">
                         <div>
                           <h1 className="lead-title">{sel.name}</h1>
-                          <div className="lead-sub">{sel.phone}{sel.product ? <> • <span style={{ color: "var(--accent)", fontWeight: 600 }}>{sel.product}</span></> : null}</div>
+                          <div className="lead-sub">{revelados.has(sel.id) ? formatarFone(sel.phone) : <>{mascarar(sel.phone)} <span style={{ fontSize: 11.5, color: "var(--faint)" }}>· o número aparece ao chamar</span></>}{sel.product ? <> • <span style={{ color: "var(--accent)", fontWeight: 600 }}>{sel.product}</span></> : null}</div>
                         </div>
                         <div className="contato-btns">
-                          <a className="btn-primary" href={waLink(sel.phone)} target="_blank" rel="noreferrer" onClick={() => registrarTentativa("WhatsApp")}>🟢 Chamar no WhatsApp ↗</a>
-                          <a className="btn-ghost btn-ligar" href={`tel:${(sel.phone || "").replace(/\D/g, "")}`} onClick={() => registrarTentativa("Ligação")}>📞 Ligar</a>
+                          <a className="btn-primary" href={waLink(sel.phone)} target="_blank" rel="noreferrer" onClick={() => chamarCom("WhatsApp")}>🟢 Chamar no WhatsApp ↗</a>
+                          <a className="btn-ghost btn-ligar" href={`tel:${(sel.phone || "").replace(/\D/g, "")}`} onClick={() => chamarCom("Ligação")}>📞 Ligar</a>
                         </div>
                       </div>
                       <div className="tent-row">
@@ -993,12 +1035,41 @@ const CorretorPainel = () => {
             <motion.div className="discard-sheet" initial={{ scale: reduce ? 1 : 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: reduce ? 1 : 0.96, opacity: 0 }} transition={{ type: "spring", stiffness: 320, damping: 30 }}>
               <div className="discard-head">
                 <div className="discard-title">Descartar lead</div>
-                <div className="discard-sub">{sel.name} · {sel.phone} — escolha o motivo</div>
+                <div className="discard-sub">{sel.name} — escolha o motivo</div>
               </div>
               <div className="discard-grid">
                 {DISCARD_REASONS.map((r) => <button key={r} className="discard-reason" onClick={() => discard(r)}>{LOST_REASON_LABEL[r]}</button>)}
               </div>
               <div className="caixa-foot"><button className="btn-ghost" onClick={() => setDiscardOpen(false)}>Cancelar</button></div>
+            </motion.div>
+          </motion.div>
+        )}
+        {como && (
+          <motion.div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setComo(null); }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduce ? 0 : 0.15 }}>
+            <motion.div className="discard-sheet" role="dialog" aria-modal="true" aria-label="Como foi" initial={{ scale: reduce ? 1 : 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 320, damping: 30 }}>
+              <div className="discard-head">
+                <div className="discard-title">Como foi com {comArtigo(como.nome)}?</div>
+                <div className="discard-sub">Dois toques e fica registrado. O contato já contou como tentativa.</div>
+              </div>
+              <div className="discard-grid">
+                {[["✅", "Conversamos"], ["📵", "Não atendeu"], ["📭", "Caixa postal"], ["❌", "Número errado"]].map(([e, r]) => (
+                  <button key={r} className="discard-reason" onClick={() => setComoOut(r)}
+                    style={comoOut === r ? { borderColor: "#0d9488", background: "#f0fdfa", color: "#0f766e" } : undefined}>{e} {r}</button>))}
+              </div>
+              {comoOut !== "Número errado" && (
+                <div style={{ padding: "0 20px 14px" }}>
+                  <div className="discard-sub" style={{ marginBottom: 8 }}>E o próximo passo?</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {["Hoje 18h", "Amanhã 10h", "Em 2 dias", "Agendar visita"].map((q) => (
+                      <button key={q} className="discard-reason" style={{ padding: "7px 11px", ...(comoQ === q ? { borderColor: "#0d9488", background: "#f0fdfa", color: "#0f766e" } : {}) }} onClick={() => setComoQ(q)}>{q}</button>))}
+                  </div>
+                </div>
+              )}
+              <div className="caixa-foot">
+                <button className="btn-ghost" onClick={() => setComo(null)}>Agora não</button>
+                <button className="btn-primary" onClick={salvarComo}>Registrar</button>
+              </div>
             </motion.div>
           </motion.div>
         )}
