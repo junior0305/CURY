@@ -24,6 +24,13 @@ const ERROS: Record<string, string> = {
   sem_permissao: "Você não tem permissão para subir listas.",
 };
 
+// Excel salva CSV em Windows-1252: lido como UTF-8, "José" vira "Jos�". Tenta UTF-8 e cai para 1252.
+async function lerTexto(f: File): Promise<string> {
+  const buf = await f.arrayBuffer();
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(buf); }
+  catch { return new TextDecoder("windows-1252").decode(buf); }
+}
+
 function lerCsv(texto: string): { nome: string; telefone: string; regiao: string }[] {
   const linhas = texto.replace(/\r/g, "").split("\n").filter((l) => l.trim());
   if (!linhas.length) return [];
@@ -33,8 +40,16 @@ function lerCsv(texto: string): { nome: string; telefone: string; regiao: string
   const temCab = cab.some((c) => /nome|telefone|fone|celular|regi/.test(c));
   const iN = temCab ? cab.findIndex((c) => /nome/.test(c)) : 0;
   const iT = temCab ? cab.findIndex((c) => /telefone|fone|celular|whats/.test(c)) : 1;
-  const iR = temCab ? cab.findIndex((c) => /regi|bairro|zona/.test(c)) : 2;
-  return (temCab ? linhas.slice(1) : linhas).map((l) => {
+  let iR = temCab ? cab.findIndex((c) => /regi|bairro|zona/.test(c)) : 2;
+  const corpo = temCab ? linhas.slice(1) : linhas;
+  // 30/10 (planilha do Alisson sem cabeçalho: nome, telefone, e-mail): coluna que é e-mail ou telefone não é região.
+  // Sem região, a lista usa o próprio nome da lista (ex.: "Zona Sul").
+  if (iR >= 0) {
+    const amostra = corpo.slice(0, 200).map((l) => cols(l)[iR] ?? "").filter(Boolean);
+    const ruim = amostra.filter((v) => /@/.test(v) || /^\+?\d[\d\s()-]{6,}$/.test(v)).length;
+    if (amostra.length && ruim / amostra.length > 0.2) iR = -1;
+  }
+  return corpo.map((l) => {
     const c = cols(l);
     return { nome: c[iN] ?? "", telefone: c[iT] ?? "", regiao: iR >= 0 ? c[iR] ?? "" : "" };
   });
@@ -85,7 +100,7 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
     if (!f) return;
     setArquivo(f.name);
     if (!nome) setNome(f.name.replace(/\.(csv|txt)$/i, ""));
-    const brutas = lerCsv(await f.text());
+    const brutas = lerCsv(await lerTexto(f));
     const vistos = new Set<string>();
     const pre: Linha[] = brutas.map((r) => {
       const t = celular(r.telefone);
@@ -113,7 +128,7 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
     const { data, error } = await sb.rpc("subir_lista_contatos", {
       p_nome: nome.trim(), p_destino: destino, p_intervalo: intervalo, p_max_dia: porDia, p_para: para,
       p_broker_ids: [...marc], p_lgpd: lgpd, p_dono: donoId && donoId !== session?.user?.id ? donoId : null,
-      p_contatos: linhas.filter((l) => l.situacao === "ok").map((l) => ({ nome: l.nome, telefone: l.telefone, regiao: l.regiao })),
+      p_contatos: linhas.filter((l) => l.situacao === "ok").map((l) => ({ nome: l.nome, telefone: l.telefone, regiao: l.regiao || nome.trim() })),
     });
     setBusy(false);
     if (error) { toast.error(ERROS[(error.message || "").trim()] ?? `Não consegui subir: ${error.message}`); return; }
