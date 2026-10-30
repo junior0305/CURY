@@ -177,9 +177,10 @@ export function useDisparar(managerId: string | undefined, teamManagerIds?: stri
         supabase.from("whatsapp_config").select("*"),
         equipe
           ? supabase.from("profiles").select("id,first_name,last_name,last_seen_at,manager_id")
-              .in("manager_id", equipe).eq("role", "BROKER")
+              .in("manager_id", equipe).eq("role", "BROKER").eq("is_active", true)
           : supabase.from("profiles").select("id,first_name,last_name,last_seen_at,manager_id")
-              .eq("manager_id", managerId!).eq("role", "BROKER"),
+              // só cadastro ativo: corretor recadastrado aparecia duas vezes e o antigo (desligado) era marcado (Gianicchini, 30/10)
+              .eq("manager_id", managerId!).eq("role", "BROKER").eq("is_active", true),
         supabase.from("whatsapp_templates").select("*").order("created_at", { ascending: false }),
         supabase.from("whatsapp_campaigns")
           .select("id,name,status,audience_count,sent_count,delivered_count,read_count,reply_count,failed_count,cost_total,created_at,scheduled_at,wa_config_id")
