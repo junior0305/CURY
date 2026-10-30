@@ -25,6 +25,8 @@ import DashboardWolf from "./pages/DashboardWolf";
 import DashboardFoco from "./pages/DashboardFoco";
 import Atender from "./pages/Atender";
 import CorretorPainel from "./pages/CorretorPainel";
+import PainelCorretor from "./pages/PainelCorretor";
+import LinkLead from "./pages/LinkLead";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import ManagerV2 from "./pages/ManagerV2";
 import ManagerV3 from "./pages/ManagerV3";
@@ -205,8 +207,11 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             {/* Painel do corretor: o CorretorPainel (fiel ao mockup) é o principal.
                 O Atender antigo fica em /atender como rollback rápido. */}
-            <Route path="/dashboard" element={<ProtectedBrokerRoute><CorretorPainel /></ProtectedBrokerRoute>} />
-            <Route path="/painel" element={<ProtectedBrokerRoute><CorretorPainel /></ProtectedBrokerRoute>} />
+            {/* 30/10: painel novo do corretor (Hoje · Clientes · Pescar · Disparar · Eu). O anterior fica em /painel-completo. */}
+            <Route path="/dashboard" element={<ProtectedBrokerRoute><PainelCorretor /></ProtectedBrokerRoute>} />
+            <Route path="/painel" element={<ProtectedBrokerRoute><PainelCorretor /></ProtectedBrokerRoute>} />
+            <Route path="/painel-completo" element={<ProtectedBrokerRoute><CorretorPainel /></ProtectedBrokerRoute>} />
+            <Route path="/l/:codigo" element={<LinkLead />} />
             <Route path="/atender" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-classico" element={<ProtectedBrokerRoute><DashboardFoco /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-wolf" element={<ProtectedBrokerRoute><DashboardWolf /></ProtectedBrokerRoute>} />

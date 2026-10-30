@@ -775,8 +775,8 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
                               max={30}
                               className="time-meta-inline-input mono"
                               defaultValue={metaAlvo ?? ""}
-                              placeholder="0"
-                              title="Meta mensal de vendas"
+                              placeholder="1"
+                              title="Meta de vendas do mês. Sem meta, o corretor vê 1 (padrão). Aparece no painel dele."
                               onBlur={(e) => {
                                 const val = parseInt(e.target.value, 10);
                                 if (!isNaN(val) && val >= 0 && val !== metaAlvo) {

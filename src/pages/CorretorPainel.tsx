@@ -108,8 +108,9 @@ const CorretorPainel = () => {
 
   const [mode, setMode] = useState<"atender" | "disparar" | "pescar">("atender");
   const [filter, setFilter] = useState<"prio" | "pescados" | "visita" | "todos">("prio");
-  const [selId, setSelId] = useState<string | null>(null);
-  const [mobileDetail, setMobileDetail] = useState(false); // celular: lista vs ficha
+  // ?lead=<id> vem do painel novo ("Simulador e Fecha a Conta")
+  const [selId, setSelId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("lead"));
+  const [mobileDetail, setMobileDetail] = useState(() => !!new URLSearchParams(window.location.search).get("lead")); // celular: lista vs ficha
   const [tool, setTool] = useState<"sim" | "doc" | "msg">("sim");
   const [noteDraft, setNoteDraft] = useState("");
   const [caixaOpen, setCaixaOpen] = useState(false);
