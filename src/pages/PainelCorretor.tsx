@@ -57,6 +57,9 @@ export default function PainelCorretor() {
   const [fechaDia, setFechaDia] = useState(false);
   const [diaOk, setDiaOk] = useState<Set<string>>(new Set());
   const voltarDe = useRef<{ id: string; canal: string } | null>(null);
+  // notebook/desktop: menu na lateral, lista no meio e a ficha aberta ao lado (celular continua igual)
+  const [desk, setDesk] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches);
+  useEffect(() => { const m = window.matchMedia("(min-width: 1024px)"); const f = () => setDesk(m.matches); m.addEventListener("change", f); return () => m.removeEventListener("change", f); }, []);
 
   const trocarTema = () => setClaro((c) => { try { localStorage.setItem("pc_tema", c ? "escuro" : "claro"); } catch { /* sem storage */ } return !c; });
 
@@ -277,7 +280,7 @@ export default function PainelCorretor() {
   const card = (l: LeadPC, c: { t: Tipo; tag: string }) => {
     const esc = escudo(l, ultimoRegistro(l, porLead.get(l.id)?.ult));
     return (
-      <div key={l.id} className="card" role="button" tabIndex={0} aria-label={`Abrir ${l.name}`}
+      <div key={l.id} className={`card${desk && selId === l.id ? " sel" : ""}`} role="button" tabIndex={0} aria-label={`Abrir ${l.name}`}
         onPointerDown={(e) => pd(e, l.id)} onPointerMove={pm} onPointerUp={pu} onPointerCancel={pc}
         onKeyDown={(e) => { if (e.key === "Enter") setSelId(l.id); }}>
         <div className="row"><b>{l.name}</b><span className={`tag ${TAGC[c.t]}`}>{c.tag}</span></div>
@@ -305,7 +308,8 @@ export default function PainelCorretor() {
 
   return (
     <div className={`pc${claro ? " claro" : ""}`}>
-      <div className="pc-app">
+      <div className={`pc-app${desk ? " desk" : ""}`}>
+        <div className={`pc-col${desk && !["hoje", "cli"].includes(aba) ? " wide" : ""}`}>
         <header className="pc-top">
           <div><h1>{titulo[aba][0]}</h1><small>{titulo[aba][1]}</small></div>
           <div className="r">
@@ -323,7 +327,7 @@ export default function PainelCorretor() {
             </div>
             <div className="lbl">Agora{filtro ? " · filtrado" : ""}</div>
             {lista.length ? lista.slice(0, 40).map(({ l, c }) => card(l, c)) : <p className="hint vazio">Tudo em dia por aqui. 🎉</p>}
-            {lista.length > 0 && <p className="hint">Arraste o card → para chamar · ← para adiar</p>}
+            {lista.length > 0 && <p className="hint">{desk ? "Clique no card para abrir a ficha ao lado" : "Arraste o card → para chamar · ← para adiar"}</p>}
             <div className="lbl">Rumo ao apartamento do mês</div>
             {metaCard}
           </>}
@@ -334,7 +338,7 @@ export default function PainelCorretor() {
               <button type="button" key={k} className={cliFase === k ? "on" : ""} onClick={() => setCliFase(k)}>{r}</button>)}</div>
             {ativos.filter((l) => (!cliFase || l.status === cliFase || (cliFase === "NEW" && l.status === "IN_PROGRESS")) && (!busca || (l.name || "").toLowerCase().includes(busca.toLowerCase())))
               .slice(0, 200).map((l) => (
-                <button key={l.id} type="button" className="card" onClick={() => setSelId(l.id)}>
+                <button key={l.id} type="button" className={`card${desk && selId === l.id ? " sel" : ""}`} onClick={() => setSelId(l.id)}>
                   <div className="row"><b>{l.name}</b><span className={`tag ${esperando(l) ? "t-resp" : l.status === "NEW" ? "t-new" : l.status === "VISIT_SCHEDULED" ? "t-vis" : "t-mut"}`}>{esperando(l) ? "Respondeu" : STATUS_TXT[l.status] || l.status}</span></div>
                   <span className="meta">{linhaMeta(l) || origem(l) || "—"}</span>
                 </button>))}
@@ -374,6 +378,16 @@ export default function PainelCorretor() {
             <button className="btn" type="button" onClick={() => signOut()}>Sair da conta</button>
           </>}
         </main>
+        </div>
+
+        {desk && ["hoje", "cli"].includes(aba) && (
+          <aside className="pc-side" aria-label="Ficha do cliente">
+            {sel ? <Ficha inline lead={sel} userId={uid} revelado={revelados.has(sel.id)} onFechar={() => setSelId(null)}
+              onChamar={(canal) => chamar(sel, canal)} onAgendar={() => setAgendar(sel.id)} onComoFoi={() => { setComo({ id: sel.id, canal: "WhatsApp" }); setComoOut("Conversamos"); setComoQ("Amanhã 10h"); }} />
+              : <div className="pc-vazio"><div style={{ fontSize: 44 }}>👈</div><b>Escolha um cliente na lista</b>
+                  <span className="meta">A ficha abre aqui do lado. O número aparece quando você tocar em WhatsApp ou Ligar.</span></div>}
+          </aside>
+        )}
 
         <nav className="nav" aria-label="Seções">
           {([["hoje", "☀️", "Hoje"], ["cli", "👥", "Clientes"], ["pes", "🎣", "Pescar"], ["disp", "📣", "Disparar"], ["eu", "👤", "Eu"]] as [Aba, string, string][]).map(([k, i, r]) => (
@@ -382,7 +396,7 @@ export default function PainelCorretor() {
         </nav>
       </div>
 
-      {sel && <Ficha lead={sel} userId={uid} revelado={revelados.has(sel.id)} onFechar={() => setSelId(null)}
+      {sel && !(desk && ["hoje", "cli"].includes(aba)) && <Ficha lead={sel} userId={uid} revelado={revelados.has(sel.id)} onFechar={() => setSelId(null)}
         onChamar={(canal) => chamar(sel, canal)} onAgendar={() => setAgendar(sel.id)} onComoFoi={() => { setComo({ id: sel.id, canal: "WhatsApp" }); setComoOut("Conversamos"); setComoQ("Amanhã 10h"); }} />}
 
       {(como || adiar || fechaDia) && <div className="dim" onClick={() => { setComo(null); setAdiar(null); setFechaDia(false); }} />}

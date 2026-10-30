@@ -14,8 +14,8 @@ const DOCS = [{ key: "rg", t: "🪪 RG / CNH" }, { key: "fgts", t: "🏦 Extrato
 const MOTIVOS: NonNullable<LostReason>[] = ["SEM_PERFIL", "NUMERO_ERRADO", "DESISTIU", "SEM_RETORNO", "CLIENTE_BLOQUEOU", "JA_COMPROU", "RENDA_FORA_FAIXA",
   "JA_TEM_IMOVEL", "JA_USOU_PROGRAMA", "RESTRICAO_CPF", "NAO_COMPARECEU", "FOI_CONCORRENTE", "LOCALIZACAO"];
 
-export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAgendar, onComoFoi }: {
-  lead: LeadPC; userId: string; revelado: boolean; onFechar: () => void;
+export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAgendar, onComoFoi, inline }: {
+  lead: LeadPC; userId: string; revelado: boolean; onFechar: () => void; inline?: boolean;
   onChamar: (canal: "WhatsApp" | "Ligação") => void; onAgendar: () => void; onComoFoi: () => void;
 }) {
   const qc = useQueryClient();
@@ -75,7 +75,7 @@ export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAg
 
   const tl = [...(notas as any[])].reverse().map((n) => `${dataCurta(n.created_at ?? n.createdAt)} ${horaSP(n.created_at ?? n.createdAt)} · ${n.content}`);
   return (
-    <section className="over" aria-label={`Ficha de ${lead.name}`}>
+    <section className={inline ? "fi-inline" : "over"} aria-label={`Ficha de ${lead.name}`}>
       <div className="over-in">
         <div className="fi-top"><button className="x" type="button" onClick={onFechar} aria-label="Voltar">←</button>
           <div><b>{lead.name}</b><small>{linhaMeta(lead) || origem(lead)}</small></div></div>
