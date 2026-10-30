@@ -8,7 +8,7 @@ import { fetchLeadNotes, addLeadNote } from "@/integrations/supabase/atender";
 import { updateLeadStatus, setLeadNegotiating, setLeadReturnDate } from "@/integrations/supabase/leads";
 import { LOST_REASON_LABEL } from "@/types/lead";
 import type { LostReason } from "@/types/lead";
-import { LeadPC, mascarar, formatarFone, linhaMeta, escudo, ultimoRegistro, horaSP, dataCurta, FASES, QUANDO, quandoISO } from "./util";
+import { LeadPC, mascarar, formatarFone, linhaMeta, escudo, ultimoRegistro, horaSP, dataCurta, FASES, QUANDO, quandoISO, origem } from "./util";
 
 const DOCS = [{ key: "rg", t: "🪪 RG / CNH" }, { key: "fgts", t: "🏦 Extrato FGTS" }, { key: "holerite", t: "📄 Holerite" }, { key: "endereco", t: "🏠 Comprovante de endereço" }];
 const MOTIVOS: NonNullable<LostReason>[] = ["SEM_PERFIL", "NUMERO_ERRADO", "DESISTIU", "SEM_RETORNO", "CLIENTE_BLOQUEOU", "JA_COMPROU", "RENDA_FORA_FAIXA",
@@ -78,7 +78,7 @@ export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAg
     <section className="over" aria-label={`Ficha de ${lead.name}`}>
       <div className="over-in">
         <div className="fi-top"><button className="x" type="button" onClick={onFechar} aria-label="Voltar">←</button>
-          <div><b>{lead.name}</b><small>{linhaMeta(lead) || lead.campanha_nome || ""}</small></div></div>
+          <div><b>{lead.name}</b><small>{linhaMeta(lead) || origem(lead)}</small></div></div>
         <div className="fi-body">
           <div className="mask"><span>{revelado ? formatarFone(lead.phone) : mascarar(lead.phone)}</span><small>{revelado ? "chamado agora" : "o número aparece ao chamar"}</small></div>
           <div className="big">
@@ -104,7 +104,7 @@ export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAg
 
           <div className="lbl">Linha do tempo</div>
           <div className="tl">
-            <div>{dataCurta(lead.created_at)} {horaSP(lead.created_at)} · chegou{lead.campanha_nome ? ` pelo anúncio ${lead.campanha_nome}` : ""}</div>
+            <div>{dataCurta(lead.created_at)} {horaSP(lead.created_at)} · chegou{origem(lead) ? ` · ${origem(lead)}` : ""}</div>
             {tl.map((t, i) => <div key={i} className={i === tl.length - 1 ? "n" : ""}>{t}</div>)}
           </div>
           <div className="row">

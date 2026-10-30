@@ -17,7 +17,17 @@ export const TZ = "America/Sao_Paulo";
 export const diaSP = (d: string | number | Date) => new Date(d).toLocaleDateString("en-CA", { timeZone: TZ });
 export const horaSP = (d: string | number | Date) => new Date(d).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: TZ }).replace(":00", "h").replace(":", "h");
 export const dataCurta = (d: string | number | Date) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: TZ });
-export const primeiroNome = (n?: string | null) => (n || "").trim().split(/\s+/)[0] || "";
+export const primeiroNome = (n?: string | null) => { const p = (n || "").trim().split(/\s+/)[0] || ""; return p ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : ""; };
+/** De onde veio, do jeito que o corretor entende. Lista não mostra a origem (regra de 20/10); ID cru e código de disparo viram texto. */
+export const origem = (l: { source: string | null; campanha_nome: string | null; product?: string | null }) => {
+  if (l.source === "lista") return "";
+  if (l.source === "cold_pool") return "pescado por você";
+  if (l.source === "resgate") return "resgate de pasta";
+  const c = (l.campanha_nome || "").trim();
+  if (/^disparo/i.test(c)) return "respondeu a um disparo";
+  if (!c || /^\d{8,}$/.test(c)) return l.product || "";
+  return `anúncio ${c}`;
+};
 
 /** Número escondido: (11) 9••••-4874. Só o toque em WhatsApp/Ligar mostra o número inteiro. */
 export function mascarar(phone?: string | null) {

@@ -20,7 +20,7 @@ import Ficha from "@/components/painel-corretor/Ficha";
 import Pescar from "@/components/painel-corretor/Pescar";
 import {
   LeadPC, COLS, diaSP, horaSP, dataCurta, primeiroNome, comArtigo, linhaMeta, esperando, escudo, ultimoRegistro,
-  diasUteis, MES, QUANDO, quandoISO,
+  diasUteis, MES, QUANDO, quandoISO, origem,
 } from "@/components/painel-corretor/util";
 import "@/styles/painel-corretor.css";
 
@@ -281,7 +281,7 @@ export default function PainelCorretor() {
         onPointerDown={(e) => pd(e, l.id)} onPointerMove={pm} onPointerUp={pu} onPointerCancel={pc}
         onKeyDown={(e) => { if (e.key === "Enter") setSelId(l.id); }}>
         <div className="row"><b>{l.name}</b><span className={`tag ${TAGC[c.t]}`}>{c.tag}</span></div>
-        <span className="meta">{linhaMeta(l) || l.campanha_nome || "—"}</span>
+        <span className="meta">{linhaMeta(l) || origem(l) || "—"}</span>
         <div className="row"><span className={`shield ${esc.k}`}>🛡️ {esc.txt}</span>
           <span className="acts"><button className="btn" type="button" onClick={() => { setAdiar(l.id); setAdiarQ("Amanhã 10h"); }}>Adiar</button>
             <button className="btn wa" type="button" onClick={() => chamar(l, "WhatsApp")}>Chamar</button></span></div>
@@ -336,7 +336,7 @@ export default function PainelCorretor() {
               .slice(0, 200).map((l) => (
                 <button key={l.id} type="button" className="card" onClick={() => setSelId(l.id)}>
                   <div className="row"><b>{l.name}</b><span className={`tag ${esperando(l) ? "t-resp" : l.status === "NEW" ? "t-new" : l.status === "VISIT_SCHEDULED" ? "t-vis" : "t-mut"}`}>{esperando(l) ? "Respondeu" : STATUS_TXT[l.status] || l.status}</span></div>
-                  <span className="meta">{linhaMeta(l) || l.campanha_nome || "—"}</span>
+                  <span className="meta">{linhaMeta(l) || origem(l) || "—"}</span>
                 </button>))}
           </>}
 
