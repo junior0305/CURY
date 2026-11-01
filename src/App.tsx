@@ -27,6 +27,7 @@ import Atender from "./pages/Atender";
 import CorretorPainel from "./pages/CorretorPainel";
 import PainelCorretor from "./pages/PainelCorretor";
 import LinkLead from "./pages/LinkLead";
+import AvisoPush from "./pages/AvisoPush";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import ManagerV2 from "./pages/ManagerV2";
 import ManagerV3 from "./pages/ManagerV3";
@@ -212,6 +213,7 @@ const App = () => (
             <Route path="/painel" element={<ProtectedBrokerRoute><PainelCorretor /></ProtectedBrokerRoute>} />
             <Route path="/painel-completo" element={<ProtectedBrokerRoute><CorretorPainel /></ProtectedBrokerRoute>} />
             <Route path="/l/:codigo" element={<LinkLead />} />
+            <Route path="/aviso" element={<AvisoPush />} />
             <Route path="/atender" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-classico" element={<ProtectedBrokerRoute><DashboardFoco /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-wolf" element={<ProtectedBrokerRoute><DashboardWolf /></ProtectedBrokerRoute>} />
