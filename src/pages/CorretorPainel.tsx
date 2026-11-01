@@ -24,6 +24,7 @@ import { useUnidadesFecha } from "@/hooks/useEstrategia";
 import { empresa } from "@/lib/empresa";
 import AgendarVisita from "@/components/broker/AgendarVisita";
 import MetaMes from "@/components/painel-corretor/MetaMes";
+import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
 import { mascarar, formatarFone, comArtigo, quandoISO, dataCurta as dataCurtaSP, horaSP } from "@/components/painel-corretor/util";
 
 // ── stages do funil (iguais ao Atender atual) ───────────────────────────────
@@ -628,7 +629,7 @@ const CorretorPainel = () => {
                   <span className="roleta-tag">{counts.todos} fichas</span>
                 </div>
                 {/* meta do mês que o gerente definiu (some se não houver) */}
-                <div style={{ margin: "8px 0" }}><MetaMes uid={user?.id || ""} /></div>
+                <div style={{ margin: "8px 0", display: "grid", gap: 8 }}><AvisoLeadPush uid={user?.id || ""} /><MetaMes uid={user?.id || ""} /></div>
                 <div className="filter-bar">
                   <button className={`f-pill${filter === "prio" ? " on" : ""}`} onClick={() => setFilter("prio")}>Prioridade ({counts.prio})</button>
                   <button className={`f-pill${filter === "pescados" ? " on" : ""}`} onClick={() => setFilter("pescados")}>🎣 Pescados ({counts.pescados})</button>

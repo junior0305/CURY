@@ -18,6 +18,7 @@ import { DisparoCorretor } from "@/components/broker/DisparoCorretor";
 import AgendarVisita from "@/components/broker/AgendarVisita";
 import Ficha from "@/components/painel-corretor/Ficha";
 import Pescar from "@/components/painel-corretor/Pescar";
+import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
 import CorretorPainel from "@/pages/CorretorPainel";
 import {
   LeadPC, COLS, diaSP, horaSP, dataCurta, primeiroNome, comArtigo, linhaMeta, esperando, escudo, ultimoRegistro,
@@ -325,6 +326,7 @@ export default function PainelCorretor() {
 
         <main className="pc-body">
           {aba === "hoje" && <>
+            <AvisoLeadPush uid={uid} />
             <div className="stats">
               <button type="button" className={`st${nNew ? " hot" : ""}${filtro === "new" ? " on" : ""}`} onClick={() => setFiltro(filtro === "new" ? "" : "new")}><b>{nNew}</b><span>novos esperando</span></button>
               <button type="button" className={`st${filtro === "ret" ? " on" : ""}`} onClick={() => setFiltro(filtro === "ret" ? "" : "ret")}><b>{nRet}</b><span>retornos hoje</span></button>
@@ -368,6 +370,7 @@ export default function PainelCorretor() {
           ))}
 
           {aba === "eu" && <>
+            <AvisoLeadPush uid={uid} sempre />
             <div className="card plain"><span className="lbl" style={{ margin: 0 }}>Tempo até o 1º contato</span>
               <span className="num">{trilha?.min_1o_contato != null ? (trilha.min_1o_contato < 60 ? `${trilha.min_1o_contato} min` : `${Math.round(trilha.min_1o_contato / 60)}h`) : "—"}</span>
               <span className="meta">{trilha?.min_1o_contato != null ? `metade dos seus leads de ${MES()} foi chamada até aí` : "aparece quando você chamar os leads novos pelo Comandra"}{trilha?.min_1o_contato_equipe != null ? ` · equipe: ${trilha.min_1o_contato_equipe < 60 ? trilha.min_1o_contato_equipe + " min" : Math.round(trilha.min_1o_contato_equipe / 60) + "h"}` : ""}</span></div>
