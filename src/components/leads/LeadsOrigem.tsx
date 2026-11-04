@@ -4,6 +4,7 @@
  *   gerente = a estrutura dele · super = todos os gerentes abaixo · diretor/admin = todos.
  * Filtros (período com De/Até, equipe, campanha, tipo de origem, situação), resumo por equipe, cartão por campanha
  * que abre a gaveta lead a lead (há quanto tempo chegou, atendimento, Caminho = lead_historico) e Baixar CSV (download em csv_downloads).
+ * 04/11 (Junior): Passar também lead em atendimento, em qualquer fase, com motivo e só na mesma equipe (RPC passar_lead); Histórico = lead_linha_tempo.
  * 28/10 (Junior): Passar a qualquer momento (lead sem atendimento, RPC passar_lead) e Redistribuir descartados, um ou vários
  * (RPC redistribuir_leads) — sempre só na mesma equipe e só quando quem olha decide. Bloco "Por corretor": % descartado e tentativas.
  */
@@ -25,7 +26,9 @@ type Equipe = { id: string; nome: string; corretores: { id: string; nome: string
 type Dest = { tipo: "fila" | "roleta" | "pagina" | "plantao"; fila_id?: string; form_id?: string | null; roleta_de?: string | null;
   corretores?: { id: string; nome: string }[]; fora_plantao?: boolean; sugestao?: { form_id: string; nome: string; quem: string | null } | null };
 type Painel = { eu: { id: string; role: string }; equipes: Equipe[]; leads: Lead[]; destinos?: Record<string, Dest> };
-type Passo = { quando: string; de: string | null; para: string | null; por: string | null; motivo: string };
+type Evento = { quando: string; tipo: "troca" | "fase" | "registro" | "anotacao" | "sistema" | "tarefa"; quem: string | null; texto: string };
+type TarefaAberta = { quando: string; acao: string; descricao: string | null; quem: string | null };
+type Linha = { proximo_passo: string | null; tarefas?: TarefaAberta[]; eventos: Evento[] };
 
 const SIT: Record<string, [string, string]> = {
   NEW: ["Novo", "n"], IN_PROGRESS: ["Em atendimento", "i"], CONTACTED: ["Em atendimento", "i"], NEGOTIATING: ["Em atendimento", "i"],
@@ -42,6 +45,7 @@ const MOT: Record<string, string> = {
   VOLTOU_AO_POOL_REGUA: "voltou ao Pescar",
 };
 const mot = (m: string | null) => (m ? MOT[m] ?? m.toLowerCase().replace(/_/g, " ") : "sem motivo");
+const TIPO_EV: Record<Evento["tipo"], string> = { troca: "Corretor", fase: "Fase", registro: "Registro", anotacao: "Anotação", sistema: "Sistema", tarefa: "Tarefa" };
 const SENSIVEL = ["NUMERO_ERRADO", "CLIENTE_BLOQUEOU", "JA_COMPROU"];
 const descartado = (l: Lead) => (l.status === "ABANDONED" || l.status === "LOST") && l.motivo_descarte !== "VOLTOU_AO_POOL_REGUA" && !!l.corretor;
 const ha = (s: string | null) => {
@@ -117,7 +121,8 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
   const [aberta, setAberta] = useState<{ titulo: string; ids: string[] } | null>(null);
   const [eqAberta, setEqAberta] = useState<string | null>(null);
   const [grupoAberto, setGrupoAberto] = useState<string | null>(null);
-  const [caminho, setCaminho] = useState<Record<string, Passo[] | "carregando">>({});
+  const [caminho, setCaminho] = useState<Record<string, Linha | "carregando">>({});
+  const [motivoTroca, setMotivoTroca] = useState<Record<string, string>>({});
   const [para, setPara] = useState<Record<string, string>>({});
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [filtroG, setFiltroG] = useState<"todos" | "sem" | "desc">("todos");
@@ -170,19 +175,20 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
   const verCaminho = async (id: string) => {
     if (caminho[id] && caminho[id] !== "carregando") { setCaminho((c) => { const x = { ...c }; delete x[id]; return x; }); return; }
     setCaminho((c) => ({ ...c, [id]: "carregando" }));
-    const { data: d } = await sb.rpc("lead_caminho", { p_lead: id, p_como: como || null });
-    setCaminho((c) => ({ ...c, [id]: (d ?? []) as Passo[] }));
+    const { data: d } = await sb.rpc("lead_linha_tempo", { p_lead: id, p_como: como || null });
+    setCaminho((c) => ({ ...c, [id]: (d ?? { proximo_passo: null, eventos: [] }) as Linha }));
   };
   const passar = async (l: Lead) => {
     const p = para[l.id];
     if (!p) { toast.error("Escolha para qual corretor da equipe."); return; }
     setOcupado(l.id);
     try {
-      const { data: nome, error } = await sb.rpc("passar_lead", { p_lead: l.id, p_para: p, p_como: como || null });
+      const { data: nome, error } = await sb.rpc("passar_lead", { p_lead: l.id, p_para: p, p_como: como || null, p_motivo: motivoTroca[l.id]?.trim() || null });
       if (error) throw error;
       toast.success(`Lead passado para ${nome}. O corretor recebeu o aviso e o caminho do lead foi atualizado.`);
       qc.invalidateQueries({ queryKey: ["leads-origem"] });
       setCaminho((c) => { const x = { ...c }; delete x[l.id]; return x; });
+      setMotivoTroca((m) => { const x = { ...m }; delete x[l.id]; return x; });
     } catch (e: any) { toast.error(e?.details || e?.message || "Não consegui passar agora."); }
     finally { setOcupado(null); }
   };
@@ -493,6 +499,8 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
                   <th>Chegou</th><th>Lead</th><th>Com quem</th><th>Atendimento</th><th>Situação</th><th></th></tr></thead>
                   <tbody>{vis.map((l) => {
                     const s = sit(l.status), outros = corretoresDa(l.equipe).filter((c) => c.id !== l.corretor), cam = caminho[l.id], desc = descartado(l);
+                    const emJogo = !!l.corretor && !["ABANDONED", "LOST", "EXCLUDED"].includes(l.status);
+                    const pedeMotivo = emJogo && !l.sem_atendimento;
                     const atend = !l.corretor ? <span className="lo-ch">Sem corretor</span>
                       : l.sem_atendimento ? <span className="lo-ch bad">Sem atendimento {ha(l.atribuido_em)}</span>
                       : desc ? <span className="lo-ch">{l.tentativas} tentativa{l.tentativas === 1 ? "" : "s"} antes de descartar</span>
@@ -517,26 +525,36 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
                                 <option value="">Mandar para a fila…</option>{daFila.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
                               <button className="lo-btn pri" style={{ padding: "4px 10px", fontSize: 12.5 }} disabled={ocupado === l.id || !para[l.id]} onClick={() => mandarFila(l)}>Mandar</button></>;
                           })()}
-                          {(l.sem_atendimento || desc) && outros.length && !(l.dest_ok === false && l.sem_atendimento && l.dest && destinos[l.dest]?.tipo !== "plantao") ? <>
+                          {(emJogo || desc) && outros.length && !(l.dest_ok === false && l.sem_atendimento && l.dest && destinos[l.dest]?.tipo !== "plantao") ? <>
                             <select className="lo-sel" aria-label={desc ? "Redistribuir para" : "Passar para"} value={para[l.id] ?? ""}
                               onChange={(e) => setPara((p) => ({ ...p, [l.id]: e.target.value }))}>
                               <option value="">{desc ? "Redistribuir para…" : "Passar para…"}</option>{outros.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
+                            {pedeMotivo && para[l.id] ? <input className="lo-sel" aria-label="Motivo da troca" placeholder="Motivo da troca" value={motivoTroca[l.id] ?? ""}
+                              onChange={(e) => setMotivoTroca((m) => ({ ...m, [l.id]: e.target.value }))} /> : null}
+                            {pedeMotivo && para[l.id] && l.status === "CONCLUDED" ? <span className="lo-m">Este lead é venda: a contagem por corretor pode mudar.</span> : null}
                             {confirmar === l.id ? <>
                               <span className="lo-m">Motivo: {mot(l.motivo_descarte)}. Mesmo assim?</span>
                               <button className="lo-btn pri" style={{ padding: "4px 10px", fontSize: 12.5 }} disabled={ocupado === l.id} onClick={() => redistribuir([l.id], [para[l.id]], true)}>Sim</button>
                               <button className="lo-btn gh" style={{ padding: "4px 8px", fontSize: 12.5 }} onClick={() => setConfirmar(null)}>Não</button></>
-                              : <button className="lo-btn" style={{ padding: "4px 10px", fontSize: 12.5 }} disabled={ocupado === l.id || !para[l.id]}
+                              : <button className="lo-btn" style={{ padding: "4px 10px", fontSize: 12.5 }} disabled={ocupado === l.id || !para[l.id] || (pedeMotivo && !motivoTroca[l.id]?.trim())}
                                   onClick={() => !desc ? passar(l) : SENSIVEL.includes(l.motivo_descarte ?? "") ? setConfirmar(l.id) : redistribuir([l.id], [para[l.id]], false)}>
                                   {desc ? "Redistribuir" : "Passar"}</button>}
                           </> : null}
-                          <button className="lo-btn gh" style={{ padding: "4px 8px", fontSize: 12.5 }} onClick={() => verCaminho(l.id)}>Caminho</button>
+                          <button className="lo-btn gh" style={{ padding: "4px 8px", fontSize: 12.5 }} onClick={() => verCaminho(l.id)}>Histórico</button>
                         </div></td>
                       </tr>,
                       cam ? <tr key={l.id + "-c"}><td colSpan={7}><div className="lo-hist">
                         <span>{dh(l.entrou)} · entrou ({l.tipo}{l.campanha ? ` · ${l.campanha}` : ""}) · {l.como}</span>
-                        {cam === "carregando" ? <span>carregando…</span> : cam.length ? cam.map((p, i) => (
-                          <span key={i}>{dh(p.quando)} · {p.motivo === "entrada" ? `ficou com ${p.para ?? "?"}` : `${p.de ?? "sem dono"} → ${p.para ?? "sem dono"} (${p.motivo}${p.por ? `, por ${p.por}` : ""})`}</span>
-                        )) : <span>Sem trocas registradas (o caminho começou a ser gravado em 28/10).</span>}
+                        {cam === "carregando" ? <span>carregando…</span> : <>
+                          {cam.proximo_passo ? <span><b>Próximo passo combinado: {dh(cam.proximo_passo)}{new Date(cam.proximo_passo).getTime() < Date.now() ? " · vencido" : ""}</b></span> : null}
+                          {(cam.tarefas ?? []).map((t, i) => (
+                            <span key={"t" + i}><b>Tarefa aberta{t.quem ? ` de ${t.quem}` : ""}: {t.acao} para {dh(t.quando)}{new Date(t.quando).getTime() < Date.now() ? " · vencida" : ""}</b>{t.descricao ? ` · ${t.descricao}` : ""}</span>
+                          ))}
+                          {cam.eventos.length ? cam.eventos.map((e, i) => (
+                            <span key={i}>{dh(e.quando)} · {TIPO_EV[e.tipo]}{e.quem ? ` de ${e.quem}` : ""}: {e.tipo === "anotacao" ? <b>{e.texto}</b> : e.tipo === "tarefa" ? e.texto.replace(/^Tarefa · /, "") : e.texto}</span>
+                          )) : <span>Nenhum registro neste lead ainda.</span>}
+                          {cam.eventos.some((e) => e.texto.startsWith("Tentativa de contato ·")) ? <span className="lo-m">"Tentativa de contato" é gravada quando o corretor toca em chamar: não prova que a mensagem saiu.</span> : null}
+                        </>}
                       </div></td></tr> : null,
                     ];
                   })}</tbody></table></div>

@@ -6,11 +6,18 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchLeadNotes, addLeadNote } from "@/integrations/supabase/atender";
 import { updateLeadStatus, setLeadNegotiating, setLeadReturnDate } from "@/integrations/supabase/leads";
+import { fetchLeadOpenTasks, createTask, markTaskDone } from "@/integrations/supabase/tasks";
 import { LOST_REASON_LABEL } from "@/types/lead";
+import type { Task, TaskType } from "@/types/task";
 import type { LostReason } from "@/types/lead";
 import { LeadPC, mascarar, formatarFone, linhaMeta, escudo, ultimoRegistro, horaSP, dataCurta, FASES, QUANDO, quandoISO, origem } from "./util";
 
 const DOCS = [{ key: "rg", t: "🪪 RG / CNH" }, { key: "fgts", t: "🏦 Extrato FGTS" }, { key: "holerite", t: "📄 Holerite" }, { key: "endereco", t: "🏠 Comprovante de endereço" }];
+// Tarefa livre: o corretor escolhe a ação, a data e descreve. A gestão lê no Histórico do lead (lead_linha_tempo).
+const ACOES: { t: string; tipo: TaskType }[] = [
+  { t: "Ligar", tipo: "CALL" }, { t: "WhatsApp", tipo: "WHATSAPP_TEXT" }, { t: "Visita", tipo: "SCHEDULE_VISIT" },
+  { t: "Documentos", tipo: "DOCS_REQUEST" }, { t: "Outra", tipo: "FOLLOW_UP" },
+];
 const MOTIVOS: NonNullable<LostReason>[] = ["SEM_PERFIL", "NUMERO_ERRADO", "DESISTIU", "SEM_RETORNO", "CLIENTE_BLOQUEOU", "JA_COMPROU", "RENDA_FORA_FAIXA",
   "JA_TEM_IMOVEL", "JA_USOU_PROGRAMA", "RESTRICAO_CPF", "NAO_COMPARECEU", "FOI_CONCORRENTE", "LOCALIZACAO"];
 
@@ -21,9 +28,13 @@ export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAg
   const qc = useQueryClient();
   const [nota, setNota] = useState("");
   const [descartar, setDescartar] = useState(false);
-  const atualizar = () => { qc.invalidateQueries({ queryKey: ["pcLeads"] }); qc.invalidateQueries({ queryKey: ["pcNotas", lead.id] }); qc.invalidateQueries({ queryKey: ["pcTrilha"] }); };
+  const [novaTarefa, setNovaTarefa] = useState(false);
+  const [tAcao, setTAcao] = useState(""); const [tData, setTData] = useState(""); const [tDesc, setTDesc] = useState("");
+  const [salvandoT, setSalvandoT] = useState(false);
+  const atualizar = () => { qc.invalidateQueries({ queryKey: ["pcLeads"] }); qc.invalidateQueries({ queryKey: ["pcNotas", lead.id] }); qc.invalidateQueries({ queryKey: ["pcTarefas"] }); qc.invalidateQueries({ queryKey: ["pcTrilha"] }); };
 
   const { data: notas = [] } = useQuery({ queryKey: ["pcNotas", lead.id], queryFn: () => fetchLeadNotes(lead.id) });
+  const { data: tarefas = [] } = useQuery<Task[]>({ queryKey: ["pcTarefas", lead.id], queryFn: () => fetchLeadOpenTasks(lead.id) });
   const { data: docs = {} } = useQuery<Record<string, boolean>>({
     queryKey: ["pcDocs", lead.id],
     queryFn: async () => {
@@ -68,6 +79,35 @@ export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAg
       setNota(""); atualizar(); toast.success("Anotado · 🛡️ protegido por 48h");
     } catch { toast.error("Não consegui salvar a anotação"); }
   };
+  const criarTarefa = async () => {
+    const acao = ACOES.find((a) => a.t === tAcao);
+    const quando = tData ? new Date(tData) : null;
+    if (!acao || !quando || !tDesc.trim()) { toast.error("Escolha a ação, a data e descreva a tarefa."); return; }
+    if (quando.getTime() < Date.now()) { toast.error("Escolha uma data futura."); return; }
+    setSalvandoT(true);
+    try {
+      const iso = quando.toISOString();
+      await createTask({ userId, leadId: lead.id, type: acao.tipo, title: acao.t, notes: tDesc.trim(), dueAt: iso });
+      await addLeadNote(lead.id, userId, `Tarefa · ${acao.t} para ${dataCurta(iso)} ${horaSP(iso)}: ${tDesc.trim()}`).catch(() => {});
+      // A tarefa mais próxima é o que faz o cliente voltar para o Hoje do corretor.
+      const atual = lead.next_action_date ? Date.parse(lead.next_action_date) : null;
+      if (atual === null || atual < Date.now() || quando.getTime() < atual) await setLeadReturnDate(lead.id, iso).catch(() => {});
+      setTAcao(""); setTData(""); setTDesc(""); setNovaTarefa(false); atualizar(); toast.success("Tarefa criada");
+    } catch { toast.error("Não consegui criar a tarefa"); }
+    finally { setSalvandoT(false); }
+  };
+  const concluirTarefa = async (t: Task) => {
+    try {
+      await markTaskDone(t.id);
+      await addLeadNote(lead.id, userId, `Tarefa · ${t.title} concluída (era para ${dataCurta(t.dueAt)} ${horaSP(t.dueAt)})`).catch(() => {});
+      // Só mexe no retorno se ele era desta tarefa; um retorno combinado à parte continua valendo.
+      if (lead.next_action_date && Date.parse(lead.next_action_date) === Date.parse(t.dueAt)) {
+        const prox = tarefas.find((x) => x.id !== t.id)?.dueAt ?? null;
+        await supabase.from("leads").update({ next_action_date: prox }).eq("id", lead.id);
+      }
+      atualizar(); toast.success("Tarefa concluída");
+    } catch { toast.error("Não consegui concluir a tarefa"); }
+  };
   const descartarLead = async (m: NonNullable<LostReason>) => {
     try { await updateLeadStatus(lead.id, "ABANDONED", null, m); toast.success(`${lead.name} descartado · ${LOST_REASON_LABEL[m]}`); setDescartar(false); atualizar(); onFechar(); }
     catch { toast.error("Não consegui descartar"); }
@@ -96,6 +136,24 @@ export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAg
           <div className="box"><span className="lbl" style={{ margin: 0 }}>Próximo passo</span>
             <div className="chips">{QUANDO.map((q) => <button key={q} type="button" onClick={() => proximo(q)}>{q}</button>)}</div>
             {lead.next_action_date && <span className="meta">Combinado: {dataCurta(lead.next_action_date)} {horaSP(lead.next_action_date)}</span>}
+          </div>
+
+          <div className="box"><span className="lbl" style={{ margin: 0 }}>Tarefas{tarefas.length ? ` · ${tarefas.length}` : ""}</span>
+            {tarefas.map((t) => (
+              <div key={t.id} className="row">
+                <span className="meta" style={{ flex: 1 }}><b>{t.title}</b> · {dataCurta(t.dueAt)} {horaSP(t.dueAt)}{Date.parse(t.dueAt) < Date.now() ? " · atrasada" : ""}<br />{t.notes}</span>
+                <button className="btn" type="button" onClick={() => concluirTarefa(t)}>Concluir</button>
+              </div>
+            ))}
+            {!novaTarefa ? <button className="btn" type="button" onClick={() => setNovaTarefa(true)}>+ Nova tarefa</button> : <>
+              <select className="inp" aria-label="Ação da tarefa" value={tAcao} onChange={(e) => setTAcao(e.target.value)}>
+                <option value="">Qual a ação?</option>{ACOES.map((a) => <option key={a.t}>{a.t}</option>)}</select>
+              <input className="inp" type="datetime-local" aria-label="Data e hora da tarefa" value={tData} onChange={(e) => setTData(e.target.value)} />
+              <input className="inp" placeholder="Descreva a tarefa…" aria-label="Descrição da tarefa" value={tDesc} onChange={(e) => setTDesc(e.target.value)} />
+              <div className="row">
+                <button className="btn pri" type="button" disabled={salvandoT} onClick={criarTarefa}>Salvar tarefa</button>
+                <button className="btn" type="button" onClick={() => setNovaTarefa(false)}>Cancelar</button>
+              </div></>}
           </div>
 
           <div className="box"><span className="lbl" style={{ margin: 0 }}>Pasta · {DOCS.filter((d) => docs[d.key]).length} de {DOCS.length}</span>

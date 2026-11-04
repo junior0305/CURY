@@ -29,6 +29,17 @@ export async function fetchOpenTasks(): Promise<Task[]> {
   return (data || []).map(mapTaskFromDB);
 }
 
+export async function fetchLeadOpenTasks(leadId: string): Promise<Task[]> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("lead_id", leadId)
+    .eq("status", "OPEN")
+    .order("due_at", { ascending: true });
+  if (error) throw error;
+  return (data || []).map(mapTaskFromDB);
+}
+
 export async function createTask(input: {
   userId: string;
   leadId: string | null;

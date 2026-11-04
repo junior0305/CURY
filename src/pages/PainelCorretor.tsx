@@ -16,6 +16,8 @@ import { addLeadNote, waLink } from "@/integrations/supabase/atender";
 import { registerContactAttempt, updateLeadStatus, setLeadNegotiating, setLeadReturnDate } from "@/integrations/supabase/leads";
 import { DisparoCorretor } from "@/components/broker/DisparoCorretor";
 import AgendarVisita from "@/components/broker/AgendarVisita";
+import { fetchOpenTasks } from "@/integrations/supabase/tasks";
+import type { Task } from "@/types/task";
 import Ficha from "@/components/painel-corretor/Ficha";
 import Pescar from "@/components/painel-corretor/Pescar";
 import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
@@ -84,6 +86,12 @@ export default function PainelCorretor() {
       return (data as any) || [];
     },
   });
+  const { data: tarefasAbertas = [] } = useQuery<Task[]>({ queryKey: ["pcTarefas", "todas"], refetchInterval: 60_000, queryFn: fetchOpenTasks });
+  const tarefaDe = useMemo(() => {
+    const m = new Map<string, Task>();
+    for (const t of tarefasAbertas) if (t.leadId && !m.has(t.leadId)) m.set(t.leadId, t); // já vem da mais próxima para a mais distante
+    return m;
+  }, [tarefasAbertas]);
   const porLead = useMemo(() => {
     const m = new Map<string, { dias: Set<string>; ult: string | null; hoje: boolean }>();
     const hoje = diaSP(Date.now());
@@ -155,7 +163,7 @@ export default function PainelCorretor() {
     if (adiado) return null;
     if (l.next_action_date && diaSP(l.next_action_date) <= hojeD) {
       const atr = Date.parse(l.next_action_date) < Date.now();
-      return { t: "ret", tag: `📞 Retorno ${diaSP(l.next_action_date) < hojeD ? dataCurta(l.next_action_date) : horaSP(l.next_action_date)}${atr ? " · atrasado" : ""}`, u: atr ? 90 : 80 };
+      return { t: "ret", tag: `${tarefaDe.get(l.id) ? `📌 ${tarefaDe.get(l.id)!.title}` : "📞 Retorno"} ${diaSP(l.next_action_date) < hojeD ? dataCurta(l.next_action_date) : horaSP(l.next_action_date)}${atr ? " · atrasado" : ""}`, u: atr ? 90 : 80 };
     }
     const rg = regua(l);
     if (rg) return { t: "pes", tag: `🎣 ${rg.n}º toque ${rg.atrasado ? "atrasado" : "hoje"}`, u: rg.atrasado ? 75 : 60 };
@@ -167,7 +175,7 @@ export default function PainelCorretor() {
     return null;
   };
   const agora = useMemo(() => ativos.map((l) => ({ l, c: classe(l) })).filter((x) => x.c).sort((a, b) => b.c!.u - a.c!.u) as { l: LeadPC; c: { t: Tipo; tag: string; u: number } }[],
-    [ativos, porLead]); // eslint-disable-line
+    [ativos, porLead, tarefaDe]); // eslint-disable-line
   const nNew = agora.filter((x) => x.c.t === "new").length;
   const nRet = agora.filter((x) => x.c.t === "ret").length;
   const visHoje = agora.filter((x) => x.c.t === "vis");
