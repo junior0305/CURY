@@ -31,7 +31,7 @@ type Evento = { quando: string; tipo: "troca" | "fase" | "registro" | "anotacao"
 type TarefaAberta = { quando: string; acao: string; descricao: string | null; quem: string | null };
 type Linha = { proximo_passo: string | null; tarefas?: TarefaAberta[]; eventos: Evento[] };
 
-type RetItem = { lead_id: string; nome: string | null; status: string; corretor: string; situacao: "vencido" | "no_prazo" | "sem_proximo"; tipo: string; acao: string | null; descricao: string | null; quando: string | null };
+type RetItem = { lead_id: string; nome: string | null; status: string; corretor: string; situacao: "vencido" | "no_prazo" | "sem_proximo" | "feita"; tipo: string; acao: string | null; descricao: string | null; quando: string | null; feita_em: string | null };
 type RetCorretor = { id: string; nome: string; equipe: string | null; equipe_nome: string | null };
 type Retornos = { corretores: RetCorretor[]; itens: RetItem[] };
 
@@ -363,7 +363,7 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
       <span key={"t" + i}><b>Tarefa aberta{t.quem ? ` de ${t.quem}` : ""}: {t.acao} para {dh(t.quando)}{new Date(t.quando).getTime() < Date.now() ? " · vencida" : ""}</b>{t.descricao ? ` · ${t.descricao}` : ""}</span>
     ))}
     {cam.eventos.length ? cam.eventos.map((e, i) => (
-      <span key={i}>{dh(e.quando)} · {TIPO_EV[e.tipo]}{e.quem ? ` de ${e.quem}` : ""}: {e.tipo === "anotacao" ? <b>{e.texto}</b> : e.tipo === "tarefa" ? e.texto.replace(/^Tarefa · /, "") : e.texto}</span>
+      <span key={i}>{dh(e.quando)} · {e.tipo === "tarefa" && e.texto.includes(" concluída") ? "✅ Tarefa feita" : TIPO_EV[e.tipo]}{e.quem ? ` de ${e.quem}` : ""}: {e.tipo === "anotacao" ? <b>{e.texto}</b> : e.tipo === "tarefa" ? e.texto.replace(/^Tarefa · /, "") : e.texto}</span>
     )) : <span>Nenhum registro neste lead ainda.</span>}
     {cam.eventos.some((e) => e.texto.startsWith("Tentativa de contato ·")) ? <span className="lo-m">"Tentativa de contato" é gravada quando o corretor toca em chamar: não prova que a mensagem saiu.</span> : null}
   </>;
@@ -446,15 +446,15 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
           const it = retornos.itens.filter((i) => i.corretor === c.id);
           const venc = it.filter((i) => i.situacao === "vencido");
           const dias = venc.length ? Math.max(...venc.map((i) => Math.floor((Date.now() - new Date(i.quando!).getTime()) / 864e5))) : null;
-          return { ...c, venc: venc.length, prazo: it.filter((i) => i.situacao === "no_prazo").length, sem: it.filter((i) => i.situacao === "sem_proximo").length, dias };
+          return { ...c, venc: venc.length, prazo: it.filter((i) => i.situacao === "no_prazo").length, sem: it.filter((i) => i.situacao === "sem_proximo").length, feitas: it.filter((i) => i.situacao === "feita").length, dias };
         }).sort((a, b) => (ehGerente ? 0 : (a.equipe_nome ?? "").localeCompare(b.equipe_nome ?? "")) || b.venc - a.venc || b.sem - a.sem);
         const nVenc = linhasRet.reduce((s, x) => s + x.venc, 0), nSemP = linhasRet.reduce((s, x) => s + x.sem, 0);
         const equipesRet = [...new Set(linhasRet.map((x) => x.equipe_nome ?? "Sem equipe"))];
         const linhaCor = (x: typeof linhasRet[number]) => (
-          <tr key={x.id} style={{ cursor: "pointer" }} onClick={() => { setRetAberto(x.id); setRetFiltro(x.venc ? "vencido" : x.prazo ? "no_prazo" : "sem_proximo"); }}>
+          <tr key={x.id} style={{ cursor: "pointer" }} onClick={() => { setRetAberto(x.id); setRetFiltro(x.venc ? "vencido" : x.prazo ? "no_prazo" : x.feitas ? "feita" : "sem_proximo"); }}>
             <td><b>{x.nome}</b></td><td className="n">{x.prazo}</td>
             <td className="n" style={x.venc ? { color: "#b91c1c", fontWeight: 700 } : undefined}>{x.venc}</td>
-            <td className="n">{x.dias === null ? "—" : x.dias === 0 ? "hoje" : `${x.dias} dia${x.dias === 1 ? "" : "s"}`}</td><td className="n">{x.sem}</td></tr>
+            <td className="n">{x.dias === null ? "—" : x.dias === 0 ? "hoje" : `${x.dias} dia${x.dias === 1 ? "" : "s"}`}</td><td className="n">{x.sem}</td><td className="n">{x.feitas}</td></tr>
         );
         return (
           <section style={{ display: "grid", gap: 8 }}>
@@ -463,10 +463,10 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
               <span className="lo-m">{nVenc} vencido{nVenc === 1 ? "" : "s"} · {nSemP} lead{nSemP === 1 ? "" : "s"} em atendimento sem próximo passo</span></div>
             {verRetornos ? <>
               <div className="lo-t"><table><thead><tr><th>Corretor</th>
-                {["No prazo", "Vencidos", "Mais atrasado", "Sem próximo passo"].map((h) => <th key={h} style={{ textAlign: "right" }}>{h}</th>)}</tr></thead>
+                {["No prazo", "Vencidos", "Mais atrasado", "Sem próximo passo", "Feitas em 30 dias"].map((h) => <th key={h} style={{ textAlign: "right" }}>{h}</th>)}</tr></thead>
                 <tbody>{ehGerente ? linhasRet.map(linhaCor) : equipesRet.flatMap((eq) => {
                   const ls = linhasRet.filter((x) => (x.equipe_nome ?? "Sem equipe") === eq);
-                  return [<tr key={"eq" + eq}><td colSpan={5} style={{ background: "var(--sunk)", fontWeight: 700 }}>Equipe {eq} · {ls.reduce((s, x) => s + x.venc, 0)} vencidos</td></tr>, ...ls.map(linhaCor)];
+                  return [<tr key={"eq" + eq}><td colSpan={6} style={{ background: "var(--sunk)", fontWeight: 700 }}>Equipe {eq} · {ls.reduce((s, x) => s + x.venc, 0)} vencidos</td></tr>, ...ls.map(linhaCor)];
                 })}</tbody></table></div>
               <p className="lo-m" style={{ margin: 0 }}>Vencido é tarefa ou retorno com a data passada e sem nenhum registro do corretor depois dela. A lista só mostra o que o corretor registrou: por isso olhe também quem tem muitos leads sem próximo passo. Toque no corretor para ver os clientes.</p>
             </> : null}
@@ -480,7 +480,9 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
         const it = retornos.itens.filter((i) => i.corretor === cor.id);
         const qt = (s: RetItem["situacao"]) => it.filter((i) => i.situacao === s).length;
         const vis = it.filter((i) => i.situacao === retFiltro)
-          .sort((a, b) => (a.quando ? new Date(a.quando).getTime() : 0) - (b.quando ? new Date(b.quando).getTime() : 0)); // o mais antigo primeiro
+          .sort((a, b) => retFiltro === "feita"
+            ? new Date(b.feita_em ?? 0).getTime() - new Date(a.feita_em ?? 0).getTime() // a última feita primeiro
+            : (a.quando ? new Date(a.quando).getTime() : 0) - (b.quando ? new Date(b.quando).getTime() : 0)); // o mais antigo primeiro
         const outros = corretoresDa(cor.equipe).filter((c) => c.id !== cor.id);
         return (
           <div className="lo-side" role="dialog" aria-label={`Retornos de ${cor.nome}`} onClick={(e) => { if (e.target === e.currentTarget) setRetAberto(null); }}>
@@ -491,16 +493,19 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
                 <button className={retFiltro === "vencido" ? "on" : ""} onClick={() => setRetFiltro("vencido")}>Vencidos ({qt("vencido")})</button>
                 <button className={retFiltro === "no_prazo" ? "on" : ""} onClick={() => setRetFiltro("no_prazo")}>No prazo ({qt("no_prazo")})</button>
                 <button className={retFiltro === "sem_proximo" ? "on" : ""} onClick={() => setRetFiltro("sem_proximo")}>Sem próximo passo ({qt("sem_proximo")})</button>
+                <button className={retFiltro === "feita" ? "on" : ""} onClick={() => setRetFiltro("feita")}>Feitas em 30 dias ({qt("feita")})</button>
               </div>
-              <div className="lo-t"><table><thead><tr><th>Cliente</th><th>{retFiltro === "sem_proximo" ? "Situação" : "O que combinou"}</th><th>{retFiltro === "sem_proximo" ? "Último contato" : "Para quando"}</th><th></th></tr></thead>
+              <div className="lo-t"><table><thead><tr><th>Cliente</th><th>{retFiltro === "sem_proximo" ? "Situação" : "O que combinou"}</th><th>{retFiltro === "sem_proximo" ? "Último contato" : "Para quando"}</th>{retFiltro === "feita" ? <th>Feita em</th> : null}<th></th></tr></thead>
                 <tbody>{vis.flatMap((i) => {
                   const k = i.lead_id + i.situacao + (i.quando ?? ""), cam = caminho[i.lead_id];
                   return [<tr key={k}>
                     <td><b>{i.nome ?? "—"}</b></td>
                     <td>{i.situacao === "sem_proximo" ? <span className={`lo-ch ${sit(i.status)[1]}`}>{sit(i.status)[0]}</span> : <><b>{i.acao}</b>{i.descricao ? <div className="lo-m">{i.descricao}</div> : null}</>}</td>
                     <td style={{ whiteSpace: "nowrap" }}>{i.quando ? dh(i.quando) : "—"}{i.situacao === "vencido" ? <div className="lo-m" style={{ color: "#b91c1c" }}>vencido {ha(i.quando)}</div> : null}</td>
+                    {retFiltro === "feita" ? <td style={{ whiteSpace: "nowrap" }}>{i.feita_em ? dh(i.feita_em) : "—"}
+                      {i.feita_em && i.quando ? <div><span className={`lo-ch ${new Date(i.feita_em) <= new Date(i.quando) ? "ok" : "w"}`}>{new Date(i.feita_em) <= new Date(i.quando) ? "No prazo" : "Com atraso"}</span></div> : null}</td> : null}
                     <td><div className="lo-ac">
-                      {outros.length ? <>
+                      {outros.length && i.situacao !== "feita" ? <>
                         <select className="lo-sel" aria-label="Passar para" value={para[i.lead_id] ?? ""} onChange={(e) => setPara((p) => ({ ...p, [i.lead_id]: e.target.value }))}>
                           <option value="">Passar para…</option>{outros.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
                         {para[i.lead_id] ? <input className="lo-sel" aria-label="Motivo da troca" placeholder="Motivo da troca" value={motivoTroca[i.lead_id] ?? ""}
@@ -509,7 +514,7 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
                       </> : null}
                       <button className="lo-btn gh" style={{ padding: "4px 8px", fontSize: 12.5 }} onClick={() => verCaminho(i.lead_id)}>Histórico</button>
                     </div></td>
-                  </tr>, cam ? <tr key={k + "-c"}><td colSpan={4}><div className="lo-hist">{verHist(cam)}</div></td></tr> : null];
+                  </tr>, cam ? <tr key={k + "-c"}><td colSpan={retFiltro === "feita" ? 5 : 4}><div className="lo-hist">{verHist(cam)}</div></td></tr> : null];
                 })}</tbody></table></div>
               {!vis.length ? <p className="lo-m">Nada aqui.</p> : null}
             </div>

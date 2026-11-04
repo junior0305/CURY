@@ -49,7 +49,7 @@ export function TarefasLead({ leadId, nextAction, userId, onMudou, c }: {
   const concluir = async (t: Task) => {
     try {
       await markTaskDone(t.id);
-      await addLeadNote(leadId, userId, `Tarefa · ${t.title} concluída (era para ${dataCurta(t.dueAt)} ${horaSP(t.dueAt)})`).catch(() => {});
+      await addLeadNote(leadId, userId, `Tarefa · ${t.title} concluída (era para ${dataCurta(t.dueAt)} ${horaSP(t.dueAt)})${t.notes ? `: ${t.notes}` : ""}`).catch(() => {});
       // Só mexe no retorno se ele era desta tarefa; um retorno combinado à parte continua valendo.
       if (nextAction && Date.parse(nextAction) === Date.parse(t.dueAt)) {
         const prox = tarefas.find((x) => x.id !== t.id)?.dueAt ?? null;
