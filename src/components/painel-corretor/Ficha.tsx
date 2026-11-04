@@ -127,6 +127,24 @@ export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAg
           </div>
           <div className="row"><span className={`shield ${esc.k}`}>🛡️ {esc.txt}</span><button className="btn" type="button" onClick={onComoFoi}>Registrar como foi</button></div>
 
+          <div className="box"><span className="lbl" style={{ margin: 0 }}>Tarefas{tarefas.length ? ` · ${tarefas.length}` : ""}</span>
+            {tarefas.map((t) => (
+              <div key={t.id} className="row">
+                <span className="meta" style={{ flex: 1 }}><b>{t.title}</b> · {dataCurta(t.dueAt)} {horaSP(t.dueAt)}{Date.parse(t.dueAt) < Date.now() ? " · atrasada" : ""}<br />{t.notes}</span>
+                <button className="btn" type="button" onClick={() => concluirTarefa(t)}>Concluir</button>
+              </div>
+            ))}
+            {!novaTarefa ? <button className="btn" type="button" onClick={() => setNovaTarefa(true)}>📌 Agendar tarefa</button> : <>
+              <select className="inp" aria-label="Ação da tarefa" value={tAcao} onChange={(e) => setTAcao(e.target.value)}>
+                <option value="">Qual a ação?</option>{ACOES.map((a) => <option key={a.t}>{a.t}</option>)}</select>
+              <input className="inp" type="datetime-local" aria-label="Data e hora da tarefa" value={tData} onChange={(e) => setTData(e.target.value)} />
+              <input className="inp" placeholder="Descreva a tarefa…" aria-label="Descrição da tarefa" value={tDesc} onChange={(e) => setTDesc(e.target.value)} />
+              <div className="row">
+                <button className="btn pri" type="button" disabled={salvandoT} onClick={criarTarefa}>Salvar tarefa</button>
+                <button className="btn" type="button" onClick={() => setNovaTarefa(false)}>Cancelar</button>
+              </div></>}
+          </div>
+
           <div className="box"><span className="lbl" style={{ margin: 0 }}>Fase</span>
             <div className="chips">{FASES.map(([k, r, nr], i) => <button key={k} type="button" className={i === fi ? "on" : ""} onClick={() => k === "VISIT_SCHEDULED" ? onAgendar() : fase(k, nr)}>{r}</button>)}</div>
             {lead.visit_scheduled_at && <span className="meta">📅 Visita {dataCurta(lead.visit_scheduled_at)} às {horaSP(lead.visit_scheduled_at)}{lead.visita_local ? ` · ${lead.visita_local}` : ""}</span>}
@@ -136,24 +154,6 @@ export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAg
           <div className="box"><span className="lbl" style={{ margin: 0 }}>Próximo passo</span>
             <div className="chips">{QUANDO.map((q) => <button key={q} type="button" onClick={() => proximo(q)}>{q}</button>)}</div>
             {lead.next_action_date && <span className="meta">Combinado: {dataCurta(lead.next_action_date)} {horaSP(lead.next_action_date)}</span>}
-          </div>
-
-          <div className="box"><span className="lbl" style={{ margin: 0 }}>Tarefas{tarefas.length ? ` · ${tarefas.length}` : ""}</span>
-            {tarefas.map((t) => (
-              <div key={t.id} className="row">
-                <span className="meta" style={{ flex: 1 }}><b>{t.title}</b> · {dataCurta(t.dueAt)} {horaSP(t.dueAt)}{Date.parse(t.dueAt) < Date.now() ? " · atrasada" : ""}<br />{t.notes}</span>
-                <button className="btn" type="button" onClick={() => concluirTarefa(t)}>Concluir</button>
-              </div>
-            ))}
-            {!novaTarefa ? <button className="btn" type="button" onClick={() => setNovaTarefa(true)}>+ Nova tarefa</button> : <>
-              <select className="inp" aria-label="Ação da tarefa" value={tAcao} onChange={(e) => setTAcao(e.target.value)}>
-                <option value="">Qual a ação?</option>{ACOES.map((a) => <option key={a.t}>{a.t}</option>)}</select>
-              <input className="inp" type="datetime-local" aria-label="Data e hora da tarefa" value={tData} onChange={(e) => setTData(e.target.value)} />
-              <input className="inp" placeholder="Descreva a tarefa…" aria-label="Descrição da tarefa" value={tDesc} onChange={(e) => setTDesc(e.target.value)} />
-              <div className="row">
-                <button className="btn pri" type="button" disabled={salvandoT} onClick={criarTarefa}>Salvar tarefa</button>
-                <button className="btn" type="button" onClick={() => setNovaTarefa(false)}>Cancelar</button>
-              </div></>}
           </div>
 
           <div className="box"><span className="lbl" style={{ margin: 0 }}>Pasta · {DOCS.filter((d) => docs[d.key]).length} de {DOCS.length}</span>

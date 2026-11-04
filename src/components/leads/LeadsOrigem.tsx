@@ -4,6 +4,7 @@
  *   gerente = a estrutura dele · super = todos os gerentes abaixo · diretor/admin = todos.
  * Filtros (período com De/Até, equipe, campanha, tipo de origem, situação), resumo por equipe, cartão por campanha
  * que abre a gaveta lead a lead (há quanto tempo chegou, atendimento, Caminho = lead_historico) e Baixar CSV (download em csv_downloads).
+ * 04/11 (Junior): Retornos por corretor (RPC retornos_equipe): no prazo, vencido sem registro depois da data e sem próximo passo.
  * 04/11 (Junior): Passar também lead em atendimento, em qualquer fase, com motivo e só na mesma equipe (RPC passar_lead); Histórico = lead_linha_tempo.
  * 28/10 (Junior): Passar a qualquer momento (lead sem atendimento, RPC passar_lead) e Redistribuir descartados, um ou vários
  * (RPC redistribuir_leads) — sempre só na mesma equipe e só quando quem olha decide. Bloco "Por corretor": % descartado e tentativas.
@@ -29,6 +30,10 @@ type Painel = { eu: { id: string; role: string }; equipes: Equipe[]; leads: Lead
 type Evento = { quando: string; tipo: "troca" | "fase" | "registro" | "anotacao" | "sistema" | "tarefa"; quem: string | null; texto: string };
 type TarefaAberta = { quando: string; acao: string; descricao: string | null; quem: string | null };
 type Linha = { proximo_passo: string | null; tarefas?: TarefaAberta[]; eventos: Evento[] };
+
+type RetItem = { lead_id: string; nome: string | null; status: string; corretor: string; situacao: "vencido" | "no_prazo" | "sem_proximo"; tipo: string; acao: string | null; descricao: string | null; quando: string | null };
+type RetCorretor = { id: string; nome: string; equipe: string | null; equipe_nome: string | null };
+type Retornos = { corretores: RetCorretor[]; itens: RetItem[] };
 
 const SIT: Record<string, [string, string]> = {
   NEW: ["Novo", "n"], IN_PROGRESS: ["Em atendimento", "i"], CONTACTED: ["Em atendimento", "i"], NEGOTIATING: ["Em atendimento", "i"],
@@ -131,6 +136,9 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
   const [confirmar, setConfirmar] = useState<string | null>(null); // lead (ou "lote") esperando o "sim" de motivo sensível
   const [verCorretores, setVerCorretores] = useState(false);
   const [soAtencao, setSoAtencao] = useState(false);
+  const [verRetornos, setVerRetornos] = useState(false);
+  const [retAberto, setRetAberto] = useState<string | null>(null);
+  const [retFiltro, setRetFiltro] = useState<RetItem["situacao"]>("vencido");
 
   const janela = useMemo(() => {
     const h = hojeSP();
@@ -146,6 +154,16 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
       const { data, error } = await sb.rpc("leads_origem", { p_como: como || null, p_de: janela.de, p_ate: janela.ate });
       if (error) throw error;
       return data as Painel;
+    },
+  });
+
+  const { data: retornos } = useQuery({
+    queryKey: ["retornos-equipe", como ?? ""],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await sb.rpc("retornos_equipe", { p_como: como || null });
+      if (error) throw error;
+      return data as Retornos;
     },
   });
 
@@ -178,7 +196,7 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
     const { data: d } = await sb.rpc("lead_linha_tempo", { p_lead: id, p_como: como || null });
     setCaminho((c) => ({ ...c, [id]: (d ?? { proximo_passo: null, eventos: [] }) as Linha }));
   };
-  const passar = async (l: Lead) => {
+  const passar = async (l: { id: string }) => {
     const p = para[l.id];
     if (!p) { toast.error("Escolha para qual corretor da equipe."); return; }
     setOcupado(l.id);
@@ -187,6 +205,7 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
       if (error) throw error;
       toast.success(`Lead passado para ${nome}. O corretor recebeu o aviso e o caminho do lead foi atualizado.`);
       qc.invalidateQueries({ queryKey: ["leads-origem"] });
+      qc.invalidateQueries({ queryKey: ["retornos-equipe"] });
       setCaminho((c) => { const x = { ...c }; delete x[l.id]; return x; });
       setMotivoTroca((m) => { const x = { ...m }; delete x[l.id]; return x; });
     } catch (e: any) { toast.error(e?.details || e?.message || "Não consegui passar agora."); }
@@ -338,6 +357,17 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
   const leg = <div className="lo-leg"><span><i style={{ background: "#1d4ed8" }} />Visita/venda</span><span><i style={{ background: "#60a5fa" }} />Atendendo</span>
     <span><i style={{ background: "color-mix(in srgb,var(--ink) 22%,var(--card))" }} />Descartado</span><span><i style={{ background: "#dc2626" }} />Sem atendimento</span></div>;
 
+  const verHist = (cam: Linha | "carregando") => cam === "carregando" ? <span>carregando…</span> : <>
+    {cam.proximo_passo ? <span><b>Próximo passo combinado: {dh(cam.proximo_passo)}{new Date(cam.proximo_passo).getTime() < Date.now() ? " · vencido" : ""}</b></span> : null}
+    {(cam.tarefas ?? []).map((t, i) => (
+      <span key={"t" + i}><b>Tarefa aberta{t.quem ? ` de ${t.quem}` : ""}: {t.acao} para {dh(t.quando)}{new Date(t.quando).getTime() < Date.now() ? " · vencida" : ""}</b>{t.descricao ? ` · ${t.descricao}` : ""}</span>
+    ))}
+    {cam.eventos.length ? cam.eventos.map((e, i) => (
+      <span key={i}>{dh(e.quando)} · {TIPO_EV[e.tipo]}{e.quem ? ` de ${e.quem}` : ""}: {e.tipo === "anotacao" ? <b>{e.texto}</b> : e.tipo === "tarefa" ? e.texto.replace(/^Tarefa · /, "") : e.texto}</span>
+    )) : <span>Nenhum registro neste lead ainda.</span>}
+    {cam.eventos.some((e) => e.texto.startsWith("Tentativa de contato ·")) ? <span className="lo-m">"Tentativa de contato" é gravada quando o corretor toca em chamar: não prova que a mensagem saiu.</span> : null}
+  </>;
+
   // resumo do alto
   const sTot = situacao(leads);
   const anuncios = gruposDe(leads.filter((l) => l.tipo === "Anúncio"));
@@ -409,6 +439,83 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
             : <div className="lo-t"><table>{cabecalho("Campanha / origem")}<tbody>{linhasCampanhas(leads, "eu", false)}</tbody></table></div>}
         </section>
       )}
+
+      {(() => {
+        if (!retornos?.corretores.length) return null;
+        const linhasRet = retornos.corretores.filter((c) => !fEq || c.equipe === fEq).map((c) => {
+          const it = retornos.itens.filter((i) => i.corretor === c.id);
+          const venc = it.filter((i) => i.situacao === "vencido");
+          const dias = venc.length ? Math.max(...venc.map((i) => Math.floor((Date.now() - new Date(i.quando!).getTime()) / 864e5))) : null;
+          return { ...c, venc: venc.length, prazo: it.filter((i) => i.situacao === "no_prazo").length, sem: it.filter((i) => i.situacao === "sem_proximo").length, dias };
+        }).sort((a, b) => (ehGerente ? 0 : (a.equipe_nome ?? "").localeCompare(b.equipe_nome ?? "")) || b.venc - a.venc || b.sem - a.sem);
+        const nVenc = linhasRet.reduce((s, x) => s + x.venc, 0), nSemP = linhasRet.reduce((s, x) => s + x.sem, 0);
+        const equipesRet = [...new Set(linhasRet.map((x) => x.equipe_nome ?? "Sem equipe"))];
+        const linhaCor = (x: typeof linhasRet[number]) => (
+          <tr key={x.id} style={{ cursor: "pointer" }} onClick={() => { setRetAberto(x.id); setRetFiltro(x.venc ? "vencido" : x.prazo ? "no_prazo" : "sem_proximo"); }}>
+            <td><b>{x.nome}</b></td><td className="n">{x.prazo}</td>
+            <td className="n" style={x.venc ? { color: "#b91c1c", fontWeight: 700 } : undefined}>{x.venc}</td>
+            <td className="n">{x.dias === null ? "—" : x.dias === 0 ? "hoje" : `${x.dias} dia${x.dias === 1 ? "" : "s"}`}</td><td className="n">{x.sem}</td></tr>
+        );
+        return (
+          <section style={{ display: "grid", gap: 8 }}>
+            <div className="lo-h" style={{ cursor: "pointer" }} onClick={() => setVerRetornos(!verRetornos)}>
+              <h3>{verRetornos ? "▾" : "▸"} Retornos por corretor</h3>
+              <span className="lo-m">{nVenc} vencido{nVenc === 1 ? "" : "s"} · {nSemP} lead{nSemP === 1 ? "" : "s"} em atendimento sem próximo passo</span></div>
+            {verRetornos ? <>
+              <div className="lo-t"><table><thead><tr><th>Corretor</th>
+                {["No prazo", "Vencidos", "Mais atrasado", "Sem próximo passo"].map((h) => <th key={h} style={{ textAlign: "right" }}>{h}</th>)}</tr></thead>
+                <tbody>{ehGerente ? linhasRet.map(linhaCor) : equipesRet.flatMap((eq) => {
+                  const ls = linhasRet.filter((x) => (x.equipe_nome ?? "Sem equipe") === eq);
+                  return [<tr key={"eq" + eq}><td colSpan={5} style={{ background: "var(--sunk)", fontWeight: 700 }}>Equipe {eq} · {ls.reduce((s, x) => s + x.venc, 0)} vencidos</td></tr>, ...ls.map(linhaCor)];
+                })}</tbody></table></div>
+              <p className="lo-m" style={{ margin: 0 }}>Vencido é tarefa ou retorno com a data passada e sem nenhum registro do corretor depois dela. A lista só mostra o que o corretor registrou: por isso olhe também quem tem muitos leads sem próximo passo. Toque no corretor para ver os clientes.</p>
+            </> : null}
+          </section>
+        );
+      })()}
+
+      {(() => {
+        const cor = retAberto ? retornos?.corretores.find((c) => c.id === retAberto) : null;
+        if (!cor || !retornos) return null;
+        const it = retornos.itens.filter((i) => i.corretor === cor.id);
+        const qt = (s: RetItem["situacao"]) => it.filter((i) => i.situacao === s).length;
+        const vis = it.filter((i) => i.situacao === retFiltro)
+          .sort((a, b) => (a.quando ? new Date(a.quando).getTime() : 0) - (b.quando ? new Date(b.quando).getTime() : 0)); // o mais antigo primeiro
+        const outros = corretoresDa(cor.equipe).filter((c) => c.id !== cor.id);
+        return (
+          <div className="lo-side" role="dialog" aria-label={`Retornos de ${cor.nome}`} onClick={(e) => { if (e.target === e.currentTarget) setRetAberto(null); }}>
+            <div className="lo-pan">
+              <div className="lo-h"><div><b style={{ fontSize: 17 }}>Retornos de {cor.nome}</b>{cor.equipe_nome ? <div className="lo-m">equipe {cor.equipe_nome}</div> : null}</div>
+                <button className="lo-btn gh" onClick={() => setRetAberto(null)}>Fechar ✕</button></div>
+              <div className="lo-tabs">
+                <button className={retFiltro === "vencido" ? "on" : ""} onClick={() => setRetFiltro("vencido")}>Vencidos ({qt("vencido")})</button>
+                <button className={retFiltro === "no_prazo" ? "on" : ""} onClick={() => setRetFiltro("no_prazo")}>No prazo ({qt("no_prazo")})</button>
+                <button className={retFiltro === "sem_proximo" ? "on" : ""} onClick={() => setRetFiltro("sem_proximo")}>Sem próximo passo ({qt("sem_proximo")})</button>
+              </div>
+              <div className="lo-t"><table><thead><tr><th>Cliente</th><th>{retFiltro === "sem_proximo" ? "Situação" : "O que combinou"}</th><th>{retFiltro === "sem_proximo" ? "Último contato" : "Para quando"}</th><th></th></tr></thead>
+                <tbody>{vis.flatMap((i) => {
+                  const k = i.lead_id + i.situacao + (i.quando ?? ""), cam = caminho[i.lead_id];
+                  return [<tr key={k}>
+                    <td><b>{i.nome ?? "—"}</b></td>
+                    <td>{i.situacao === "sem_proximo" ? <span className={`lo-ch ${sit(i.status)[1]}`}>{sit(i.status)[0]}</span> : <><b>{i.acao}</b>{i.descricao ? <div className="lo-m">{i.descricao}</div> : null}</>}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>{i.quando ? dh(i.quando) : "—"}{i.situacao === "vencido" ? <div className="lo-m" style={{ color: "#b91c1c" }}>vencido {ha(i.quando)}</div> : null}</td>
+                    <td><div className="lo-ac">
+                      {outros.length ? <>
+                        <select className="lo-sel" aria-label="Passar para" value={para[i.lead_id] ?? ""} onChange={(e) => setPara((p) => ({ ...p, [i.lead_id]: e.target.value }))}>
+                          <option value="">Passar para…</option>{outros.map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}</select>
+                        {para[i.lead_id] ? <input className="lo-sel" aria-label="Motivo da troca" placeholder="Motivo da troca" value={motivoTroca[i.lead_id] ?? ""}
+                          onChange={(e) => setMotivoTroca((m) => ({ ...m, [i.lead_id]: e.target.value }))} /> : null}
+                        {para[i.lead_id] ? <button className="lo-btn" style={{ padding: "4px 10px", fontSize: 12.5 }} disabled={ocupado === i.lead_id || !motivoTroca[i.lead_id]?.trim()} onClick={() => passar({ id: i.lead_id })}>Passar</button> : null}
+                      </> : null}
+                      <button className="lo-btn gh" style={{ padding: "4px 8px", fontSize: 12.5 }} onClick={() => verCaminho(i.lead_id)}>Histórico</button>
+                    </div></td>
+                  </tr>, cam ? <tr key={k + "-c"}><td colSpan={4}><div className="lo-hist">{verHist(cam)}</div></td></tr> : null];
+                })}</tbody></table></div>
+              {!vis.length ? <p className="lo-m">Nada aqui.</p> : null}
+            </div>
+          </div>
+        );
+      })()}
 
       {(() => {
         const m = new Map<string, { nome: string; equipe: string; ls: Lead[] }>();
@@ -545,16 +652,7 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
                       </tr>,
                       cam ? <tr key={l.id + "-c"}><td colSpan={7}><div className="lo-hist">
                         <span>{dh(l.entrou)} · entrou ({l.tipo}{l.campanha ? ` · ${l.campanha}` : ""}) · {l.como}</span>
-                        {cam === "carregando" ? <span>carregando…</span> : <>
-                          {cam.proximo_passo ? <span><b>Próximo passo combinado: {dh(cam.proximo_passo)}{new Date(cam.proximo_passo).getTime() < Date.now() ? " · vencido" : ""}</b></span> : null}
-                          {(cam.tarefas ?? []).map((t, i) => (
-                            <span key={"t" + i}><b>Tarefa aberta{t.quem ? ` de ${t.quem}` : ""}: {t.acao} para {dh(t.quando)}{new Date(t.quando).getTime() < Date.now() ? " · vencida" : ""}</b>{t.descricao ? ` · ${t.descricao}` : ""}</span>
-                          ))}
-                          {cam.eventos.length ? cam.eventos.map((e, i) => (
-                            <span key={i}>{dh(e.quando)} · {TIPO_EV[e.tipo]}{e.quem ? ` de ${e.quem}` : ""}: {e.tipo === "anotacao" ? <b>{e.texto}</b> : e.tipo === "tarefa" ? e.texto.replace(/^Tarefa · /, "") : e.texto}</span>
-                          )) : <span>Nenhum registro neste lead ainda.</span>}
-                          {cam.eventos.some((e) => e.texto.startsWith("Tentativa de contato ·")) ? <span className="lo-m">"Tentativa de contato" é gravada quando o corretor toca em chamar: não prova que a mensagem saiu.</span> : null}
-                        </>}
+                        {verHist(cam)}
                       </div></td></tr> : null,
                     ];
                   })}</tbody></table></div>
