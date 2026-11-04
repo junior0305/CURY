@@ -318,7 +318,6 @@ export default function Respostas() {
         content: isAutoPromote
           ? `Lead auto-promovido (classificado QUENTE) → atribuído a ${broker.first_name}. Campanha "${row.campaign_name || "—"}"`
           : `Lead atribuído a ${broker.first_name} via aba Respostas (Admin). Campanha "${row.campaign_name || "—"}"`,
-        type: "SYSTEM",
       }).then(() => {}, () => {});
 
       toast.success(isAutoPromote ? `🔥 Lead promovido a ${broker.first_name}` : `Lead atribuído a ${broker.first_name}`);

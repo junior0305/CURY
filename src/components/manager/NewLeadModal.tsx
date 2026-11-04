@@ -104,7 +104,6 @@ export function NewLeadModal({ managerId, managerName, brokers, onClose, initial
       await supabase.from("lead_notes").insert({
         lead_id: lead.id,
         content: `Lead criado manualmente pelo gerente ${managerName} em ${new Date().toLocaleString("pt-BR")}. Status inicial: ${status}. Origem: ${tagValue}.`,
-        type: "SYSTEM",
       }).then(() => {}, () => {});
 
       // lead_state inicial
