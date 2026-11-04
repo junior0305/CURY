@@ -24,8 +24,11 @@ import { useUnidadesFecha } from "@/hooks/useEstrategia";
 import { empresa } from "@/lib/empresa";
 import AgendarVisita from "@/components/broker/AgendarVisita";
 import MetaMes from "@/components/painel-corretor/MetaMes";
+import { TarefasLead, TarefasLista, ClassesTarefa } from "@/components/painel-corretor/TarefasLead";
 import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
 import { mascarar, formatarFone, comArtigo, quandoISO, dataCurta as dataCurtaSP, horaSP } from "@/components/painel-corretor/util";
+
+const CLS_TAREFA: ClassesTarefa = { titulo: "prompt-label", meta: "prompt-hint", btn: "pb", pri: "pb prim", inp: "note-input" };
 
 // ── stages do funil (iguais ao Atender atual) ───────────────────────────────
 const STAGES: [LeadStatus, string][] = [
@@ -657,6 +660,9 @@ const CorretorPainel = () => {
             {/* Palco */}
             <main className="stage">
               <div className="stage-inner">
+                {user && <div className="card" style={{ marginBottom: 12 }}>
+                  <TarefasLista userId={user.id} nomes={new Map(leads.map((l) => [l.id, l.name]))} onAbrir={(id) => { setSelId(id); setMobileDetail(true); }} c={CLS_TAREFA} />
+                </div>}
                 {jarvis.length > 0 && (
                   <div className="card" style={{ marginBottom: 12, borderColor: "var(--accent-border)", background: "var(--accent-soft)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, fontSize: 14, color: "var(--accent)", marginBottom: 10 }}>
@@ -773,6 +779,10 @@ const CorretorPainel = () => {
                           </div>
                         );
                       })()}
+                      {user && <div style={{ marginTop: 14 }}>
+                        <TarefasLead key={sel.id} leadId={sel.id} nextAction={sel.nextActionDate} userId={user.id} c={CLS_TAREFA}
+                          onMudou={() => { qc.invalidateQueries({ queryKey: ["painelLeads"] }); qc.invalidateQueries({ queryKey: ["painelNotes", sel.id] }); }} />
+                      </div>}
                       <div className="action-prompt" style={{ marginTop: 14 }}>
                         <span className="prompt-label">Anotações</span>
                         <span className="prompt-hint">O que você conversou com o cliente (não é obrigatório)</span>

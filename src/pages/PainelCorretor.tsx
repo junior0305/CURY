@@ -17,6 +17,7 @@ import { registerContactAttempt, updateLeadStatus, setLeadNegotiating, setLeadRe
 import { DisparoCorretor } from "@/components/broker/DisparoCorretor";
 import AgendarVisita from "@/components/broker/AgendarVisita";
 import { fetchOpenTasks } from "@/integrations/supabase/tasks";
+import { TarefasLista } from "@/components/painel-corretor/TarefasLead";
 import type { Task } from "@/types/task";
 import Ficha from "@/components/painel-corretor/Ficha";
 import Pescar from "@/components/painel-corretor/Pescar";
@@ -295,6 +296,7 @@ export default function PainelCorretor() {
         onKeyDown={(e) => { if (e.key === "Enter") setSelId(l.id); }}>
         <div className="row"><b>{l.name}</b><span className={`tag ${TAGC[c.t]}`}>{c.tag}</span></div>
         <span className="meta">{linhaMeta(l) || origem(l) || "—"}</span>
+        {tarefaDe.get(l.id)?.notes && <span className="meta">📌 {tarefaDe.get(l.id)!.notes}</span>}
         <div className="row"><span className={`shield ${esc.k}`}>🛡️ {esc.txt}</span>
           <span className="acts"><button className="btn" type="button" onClick={() => { setAdiar(l.id); setAdiarQ("Amanhã 10h"); }}>Adiar</button>
             <button className="btn wa" type="button" onClick={() => chamar(l, "WhatsApp")}>Chamar</button></span></div>
@@ -339,6 +341,11 @@ export default function PainelCorretor() {
               <button type="button" className={`st${nNew ? " hot" : ""}${filtro === "new" ? " on" : ""}`} onClick={() => setFiltro(filtro === "new" ? "" : "new")}><b>{nNew}</b><span>novos esperando</span></button>
               <button type="button" className={`st${filtro === "ret" ? " on" : ""}`} onClick={() => setFiltro(filtro === "ret" ? "" : "ret")}><b>{nRet}</b><span>retornos hoje</span></button>
               <button type="button" className={`st${filtro === "vis" ? " on" : ""}`} onClick={() => setFiltro(filtro === "vis" ? "" : "vis")}><b>{visHoje.length}</b><span>{visHoje.length === 1 ? `visita às ${horaSP(visHoje[0].l.visit_scheduled_at!)}` : "visitas hoje"}</span></button>
+            </div>
+            <div className="card plain">
+              <TarefasLista userId={uid} nomes={new Map(ativos.map((l) => [l.id, l.name]))} onAbrir={setSelId} c={{ titulo: "lbl", meta: "meta", btn: "btn", pri: "btn pri", inp: "inp" }} />
+              <select className="inp" aria-label="Agendar tarefa para qual cliente" value="" onChange={(e) => e.target.value && setSelId(e.target.value)}>
+                <option value="">📌 Agendar tarefa para qual cliente?</option>{ativos.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
             </div>
             <div className="lbl">Agora{filtro ? " · filtrado" : ""}</div>
             {lista.length ? lista.slice(0, 40).map(({ l, c }) => card(l, c)) : <p className="hint vazio">Tudo em dia por aqui. 🎉</p>}
