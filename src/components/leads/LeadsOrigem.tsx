@@ -136,7 +136,7 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
   const [confirmar, setConfirmar] = useState<string | null>(null); // lead (ou "lote") esperando o "sim" de motivo sensível
   const [verCorretores, setVerCorretores] = useState(false);
   const [soAtencao, setSoAtencao] = useState(false);
-  const [verRetornos, setVerRetornos] = useState(false);
+  const [verRetornos, setVerRetornos] = useState(true);
   const [retAberto, setRetAberto] = useState<string | null>(null);
   const [retFiltro, setRetFiltro] = useState<RetItem["situacao"]>("vencido");
 
@@ -399,6 +399,40 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
       </div>
       {(data.leads ?? []).length >= 5000 ? <p className="lo-m">Mostrando os 5.000 mais recentes do período. Para ver todos, diminua o período.</p> : null}
 
+      {(() => {
+        if (!retornos?.corretores.length) return null;
+        const linhasRet = retornos.corretores.filter((c) => !fEq || c.equipe === fEq).map((c) => {
+          const it = retornos.itens.filter((i) => i.corretor === c.id);
+          const venc = it.filter((i) => i.situacao === "vencido");
+          const dias = venc.length ? Math.max(...venc.map((i) => Math.floor((Date.now() - new Date(i.quando!).getTime()) / 864e5))) : null;
+          return { ...c, venc: venc.length, prazo: it.filter((i) => i.situacao === "no_prazo").length, sem: it.filter((i) => i.situacao === "sem_proximo").length, feitas: it.filter((i) => i.situacao === "feita").length, dias };
+        }).sort((a, b) => (ehGerente ? 0 : (a.equipe_nome ?? "").localeCompare(b.equipe_nome ?? "")) || b.venc - a.venc || b.sem - a.sem);
+        const nVenc = linhasRet.reduce((s, x) => s + x.venc, 0), nSemP = linhasRet.reduce((s, x) => s + x.sem, 0);
+        const equipesRet = [...new Set(linhasRet.map((x) => x.equipe_nome ?? "Sem equipe"))];
+        const linhaCor = (x: typeof linhasRet[number]) => (
+          <tr key={x.id} style={{ cursor: "pointer" }} onClick={() => { setRetAberto(x.id); setRetFiltro(x.venc ? "vencido" : x.prazo ? "no_prazo" : x.feitas ? "feita" : "sem_proximo"); }}>
+            <td><b>{x.nome}</b></td><td className="n">{x.prazo}</td>
+            <td className="n" style={x.venc ? { color: "#b91c1c", fontWeight: 700 } : undefined}>{x.venc}</td>
+            <td className="n">{x.dias === null ? "—" : x.dias === 0 ? "hoje" : `${x.dias} dia${x.dias === 1 ? "" : "s"}`}</td><td className="n">{x.sem}</td><td className="n">{x.feitas}</td></tr>
+        );
+        return (
+          <section style={{ display: "grid", gap: 8 }}>
+            <div className="lo-h" style={{ cursor: "pointer" }} onClick={() => setVerRetornos(!verRetornos)}>
+              <h3>{verRetornos ? "▾" : "▸"} Tarefas e retornos por corretor</h3>
+              <span className="lo-m">{nVenc} vencido{nVenc === 1 ? "" : "s"} · {nSemP} lead{nSemP === 1 ? "" : "s"} em atendimento sem próximo passo</span></div>
+            {verRetornos ? <>
+              <div className="lo-t"><table><thead><tr><th>Corretor</th>
+                {["No prazo", "Vencidos", "Mais atrasado", "Sem próximo passo", "Feitas em 30 dias"].map((h) => <th key={h} style={{ textAlign: "right" }}>{h}</th>)}</tr></thead>
+                <tbody>{ehGerente ? linhasRet.map(linhaCor) : equipesRet.flatMap((eq) => {
+                  const ls = linhasRet.filter((x) => (x.equipe_nome ?? "Sem equipe") === eq);
+                  return [<tr key={"eq" + eq}><td colSpan={6} style={{ background: "var(--sunk)", fontWeight: 700 }}>Equipe {eq} · {ls.reduce((s, x) => s + x.venc, 0)} vencidos</td></tr>, ...ls.map(linhaCor)];
+                })}</tbody></table></div>
+              <p className="lo-m" style={{ margin: 0 }}>Vencido é tarefa ou retorno com a data passada e sem nenhum registro do corretor depois dela. A lista só mostra o que o corretor registrou: por isso olhe também quem tem muitos leads sem próximo passo. Toque no corretor para ver os clientes.</p>
+            </> : null}
+          </section>
+        );
+      })()}
+
       <div className="lo-k">
         <button type="button" className={`lo-kp${!fTipo && !soAtencao ? " on" : ""}`} onClick={() => { setFTipo(""); setSoAtencao(false); }}>
           <span className="k">Leads no período</span><span className="v">{leads.length}</span>
@@ -439,40 +473,6 @@ export default function LeadsOrigem({ como }: { como?: string | null }) {
             : <div className="lo-t"><table>{cabecalho("Campanha / origem")}<tbody>{linhasCampanhas(leads, "eu", false)}</tbody></table></div>}
         </section>
       )}
-
-      {(() => {
-        if (!retornos?.corretores.length) return null;
-        const linhasRet = retornos.corretores.filter((c) => !fEq || c.equipe === fEq).map((c) => {
-          const it = retornos.itens.filter((i) => i.corretor === c.id);
-          const venc = it.filter((i) => i.situacao === "vencido");
-          const dias = venc.length ? Math.max(...venc.map((i) => Math.floor((Date.now() - new Date(i.quando!).getTime()) / 864e5))) : null;
-          return { ...c, venc: venc.length, prazo: it.filter((i) => i.situacao === "no_prazo").length, sem: it.filter((i) => i.situacao === "sem_proximo").length, feitas: it.filter((i) => i.situacao === "feita").length, dias };
-        }).sort((a, b) => (ehGerente ? 0 : (a.equipe_nome ?? "").localeCompare(b.equipe_nome ?? "")) || b.venc - a.venc || b.sem - a.sem);
-        const nVenc = linhasRet.reduce((s, x) => s + x.venc, 0), nSemP = linhasRet.reduce((s, x) => s + x.sem, 0);
-        const equipesRet = [...new Set(linhasRet.map((x) => x.equipe_nome ?? "Sem equipe"))];
-        const linhaCor = (x: typeof linhasRet[number]) => (
-          <tr key={x.id} style={{ cursor: "pointer" }} onClick={() => { setRetAberto(x.id); setRetFiltro(x.venc ? "vencido" : x.prazo ? "no_prazo" : x.feitas ? "feita" : "sem_proximo"); }}>
-            <td><b>{x.nome}</b></td><td className="n">{x.prazo}</td>
-            <td className="n" style={x.venc ? { color: "#b91c1c", fontWeight: 700 } : undefined}>{x.venc}</td>
-            <td className="n">{x.dias === null ? "—" : x.dias === 0 ? "hoje" : `${x.dias} dia${x.dias === 1 ? "" : "s"}`}</td><td className="n">{x.sem}</td><td className="n">{x.feitas}</td></tr>
-        );
-        return (
-          <section style={{ display: "grid", gap: 8 }}>
-            <div className="lo-h" style={{ cursor: "pointer" }} onClick={() => setVerRetornos(!verRetornos)}>
-              <h3>{verRetornos ? "▾" : "▸"} Retornos por corretor</h3>
-              <span className="lo-m">{nVenc} vencido{nVenc === 1 ? "" : "s"} · {nSemP} lead{nSemP === 1 ? "" : "s"} em atendimento sem próximo passo</span></div>
-            {verRetornos ? <>
-              <div className="lo-t"><table><thead><tr><th>Corretor</th>
-                {["No prazo", "Vencidos", "Mais atrasado", "Sem próximo passo", "Feitas em 30 dias"].map((h) => <th key={h} style={{ textAlign: "right" }}>{h}</th>)}</tr></thead>
-                <tbody>{ehGerente ? linhasRet.map(linhaCor) : equipesRet.flatMap((eq) => {
-                  const ls = linhasRet.filter((x) => (x.equipe_nome ?? "Sem equipe") === eq);
-                  return [<tr key={"eq" + eq}><td colSpan={6} style={{ background: "var(--sunk)", fontWeight: 700 }}>Equipe {eq} · {ls.reduce((s, x) => s + x.venc, 0)} vencidos</td></tr>, ...ls.map(linhaCor)];
-                })}</tbody></table></div>
-              <p className="lo-m" style={{ margin: 0 }}>Vencido é tarefa ou retorno com a data passada e sem nenhum registro do corretor depois dela. A lista só mostra o que o corretor registrou: por isso olhe também quem tem muitos leads sem próximo passo. Toque no corretor para ver os clientes.</p>
-            </> : null}
-          </section>
-        );
-      })()}
 
       {(() => {
         const cor = retAberto ? retornos?.corretores.find((c) => c.id === retAberto) : null;
