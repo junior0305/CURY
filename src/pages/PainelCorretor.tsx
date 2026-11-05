@@ -27,7 +27,7 @@ import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
 import CorretorPainel from "@/pages/CorretorPainel";
 import {
   LeadPC, COLS, diaSP, horaSP, dataCurta, primeiroNome, comArtigo, linhaMeta, esperando, escudo, ultimoRegistro,
-  diasUteis, MES, QUANDO, quandoISO, origem,
+  diasUteis, MES, QUANDO, quandoISO, origem, casaBusca, ehNovo, ha,
 } from "@/components/painel-corretor/util";
 import "@/styles/painel-corretor.css";
 
@@ -307,6 +307,16 @@ export default function PainelCorretor() {
     );
   };
 
+  const novos = useMemo(() => ativos.filter(ehNovo), [ativos]);
+  const clientesFiltrados = ativos.filter((l) => (!cliFase || (cliFase === "NOVO" ? ehNovo(l) : cliFase === "HOJE" ? diaSP(l.created_at) === hojeD : l.status === cliFase || (cliFase === "NEW" && l.status === "IN_PROGRESS"))) && casaBusca(l, busca));
+  const cliCard = (l: LeadPC) => (
+    <button key={l.id} type="button" className={`card${desk && selId === l.id ? " sel" : ""}`} onClick={() => setSelId(l.id)}>
+      <div className="row"><b>{l.name}</b><span className={`tag ${esperando(l) ? "t-resp" : ehNovo(l) ? "t-new" : l.status === "VISIT_SCHEDULED" ? "t-vis" : "t-mut"}`}>{esperando(l) ? "Respondeu" : ehNovo(l) ? `🔥 Novo · há ${ha(l.created_at)}` : STATUS_TXT[l.status] || l.status}</span></div>
+      <span className="meta">{linhaMeta(l) || origem(l) || "—"}</span>
+      <span className="meta">chegou {diaSP(l.created_at) === hojeD ? "hoje" : dataCurta(l.created_at)} às {horaSP(l.created_at)}</span>
+    </button>);
+  const buscaInput = <input className="inp" type="search" aria-label="Buscar cliente" placeholder="🔎 Buscar por nome, telefone ou link do aviso…" value={busca} onChange={(e) => setBusca(e.target.value)} />;
+
   const metaCard = (
     <div className="card plain goal">
       <div className="row"><b>🏠 Meta: {metaVendas} apartamento{metaVendas > 1 ? "s" : ""} no mês</b><span className="meta">dia {Math.min(du.hojeN, du.total)} de {du.total}</span></div>
@@ -345,6 +355,14 @@ export default function PainelCorretor() {
               <button type="button" className={`st${filtro === "ret" ? " on" : ""}`} onClick={() => setFiltro(filtro === "ret" ? "" : "ret")}><b>{nRet}</b><span>retornos hoje</span></button>
               <button type="button" className={`st${filtro === "vis" ? " on" : ""}`} onClick={() => setFiltro(filtro === "vis" ? "" : "vis")}><b>{visHoje.length}</b><span>{visHoje.length === 1 ? `visita às ${horaSP(visHoje[0].l.visit_scheduled_at!)}` : "visitas hoje"}</span></button>
             </div>
+            {buscaInput}
+            {busca.trim() ? <>
+              <div className="lbl">Resultado da busca · {clientesFiltrados.length}</div>
+              {clientesFiltrados.length ? clientesFiltrados.slice(0, 50).map(cliCard) : <p className="hint vazio">Nenhum cliente seu com esse nome ou telefone.</p>}
+            </> : <>
+            {nNew > 0 && <button type="button" className="card plain" onClick={() => { setAba("cli"); setCliFase("NOVO"); }}>
+              <div className="row"><b>🔥 {nNew} cliente{nNew > 1 ? "s" : ""} novo{nNew > 1 ? "s" : ""} esperando o 1º contato</b><span className="tag t-new">ver</span></div>
+              <span className="meta">o mais recente chegou há {ha(novos[0]?.created_at || new Date().toISOString())}</span></button>}
             <button className="btn full" type="button" onClick={() => setNovoCliente(true)}>+ Novo cliente</button>
             <div className="card plain">
               <TarefasLista userId={uid} nomes={new Map(ativos.map((l) => [l.id, l.name]))} onAbrir={setSelId} c={{ titulo: "lbl", meta: "meta", btn: "btn", pri: "btn pri", inp: "inp" }} />
@@ -356,19 +374,16 @@ export default function PainelCorretor() {
             {lista.length > 0 && <p className="hint">{desk ? "Clique no card para abrir a ficha ao lado" : "Arraste o card → para chamar · ← para adiar"}</p>}
             <div className="lbl">Rumo ao apartamento do mês</div>
             {metaCard}
+            </>}
           </>}
 
           {aba === "cli" && <>
             <button className="btn full" type="button" onClick={() => setNovoCliente(true)}>+ Novo cliente</button>
-            <input className="inp" aria-label="Buscar cliente" placeholder="Buscar por nome…" value={busca} onChange={(e) => setBusca(e.target.value)} />
-            <div className="chips">{[["", "Todos"], ["NEW", "Novos"], ["NEGOTIATING", "Conversando"], ["VISIT_SCHEDULED", "Visita"], ["DOCS_REQUESTED", "Documentos"]].map(([k, r]) =>
+            {buscaInput}
+            <div className="chips">{[["", "Todos"], ["NOVO", `🔥 Novos · ${novos.length}`], ["HOJE", "Chegaram hoje"], ["NEGOTIATING", "Conversando"], ["VISIT_SCHEDULED", "Visita"], ["DOCS_REQUESTED", "Documentos"]].map(([k, r]) =>
               <button type="button" key={k} className={cliFase === k ? "on" : ""} onClick={() => setCliFase(k)}>{r}</button>)}</div>
-            {ativos.filter((l) => (!cliFase || l.status === cliFase || (cliFase === "NEW" && l.status === "IN_PROGRESS")) && (!busca || (l.name || "").toLowerCase().includes(busca.toLowerCase())))
-              .slice(0, 200).map((l) => (
-                <button key={l.id} type="button" className={`card${desk && selId === l.id ? " sel" : ""}`} onClick={() => setSelId(l.id)}>
-                  <div className="row"><b>{l.name}</b><span className={`tag ${esperando(l) ? "t-resp" : l.status === "NEW" ? "t-new" : l.status === "VISIT_SCHEDULED" ? "t-vis" : "t-mut"}`}>{esperando(l) ? "Respondeu" : STATUS_TXT[l.status] || l.status}</span></div>
-                  <span className="meta">{linhaMeta(l) || origem(l) || "—"}</span>
-                </button>))}
+            <span className="meta">{clientesFiltrados.length} cliente{clientesFiltrados.length === 1 ? "" : "s"} · mais recentes primeiro</span>
+            {clientesFiltrados.slice(0, 200).map(cliCard)}
           </>}
 
           {aba === "pes" && uid && <Pescar userId={uid} onPegou={(id) => { setAba("hoje"); setSelId(id); }} />}

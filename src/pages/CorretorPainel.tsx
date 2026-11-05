@@ -28,7 +28,7 @@ import LeadForm from "@/components/broker/LeadForm";
 import { Sheet } from "@/components/ui/sheet";
 import { TarefasLead, TarefasLista, ClassesTarefa } from "@/components/painel-corretor/TarefasLead";
 import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
-import { mascarar, formatarFone, comArtigo, quandoISO, dataCurta as dataCurtaSP, horaSP } from "@/components/painel-corretor/util";
+import { mascarar, formatarFone, comArtigo, quandoISO, dataCurta as dataCurtaSP, horaSP, casaBusca, ha } from "@/components/painel-corretor/util";
 
 const CLS_TAREFA: ClassesTarefa = { titulo: "prompt-label", meta: "prompt-hint", btn: "pb", pri: "pb prim", inp: "note-input" };
 
@@ -70,6 +70,8 @@ const fmtRenda = (v?: string | null) => {
   if (!v) return "—";
   return String(v).replace(/_/g, " ").replace(/r\$/gi, "R$").replace(/\s+/g, " ").trim();
 };
+// lead novo = ainda sem nenhum toque do corretor (mesma regra do painel do celular)
+const ehNovoL = (l: Lead) => l.status === "NEW" && !(l.contactAttempts || 0) && l.source !== "cold_pool";
 const rendaNum = (l?: Lead | null) => {
   if (!l?.rendaDeclarada) return 0;
   const digits = String(l.rendaDeclarada).replace(/[^\d]/g, "");
@@ -115,7 +117,8 @@ const CorretorPainel = () => {
   const reduce = useReducedMotion();
 
   const [mode, setMode] = useState<"atender" | "disparar" | "pescar">("atender");
-  const [filter, setFilter] = useState<"prio" | "pescados" | "visita" | "todos">("prio");
+  const [filter, setFilter] = useState<"prio" | "novos" | "pescados" | "visita" | "todos">("prio");
+  const [busca, setBusca] = useState("");
   // ?lead=<id> vem do painel novo ("Simulador e Fecha a Conta")
   const [selId, setSelId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("lead"));
   const [novoCliente, setNovoCliente] = useState(false);
@@ -144,6 +147,7 @@ const CorretorPainel = () => {
 
   const counts = useMemo(() => ({
     prio: leads.filter((l) => l.leadTemperature === "quente" || l.status === "NEW" || l.status === "IN_PROGRESS").length,
+    novos: leads.filter(ehNovoL).length,
     pescados: leads.filter((l) => l.source === "cold_pool").length,
     visita: leads.filter((l) => l.status === "VISIT_SCHEDULED" || l.status === "VISITA_REALIZADA").length,
     todos: leads.length,
@@ -152,12 +156,15 @@ const CorretorPainel = () => {
   const rows = useMemo(() => {
     let r = leads;
     if (filter === "prio") r = leads.filter((l) => l.leadTemperature === "quente" || l.status === "NEW" || l.status === "IN_PROGRESS" || l.status === "NEGOTIATING");
+    else if (filter === "novos") r = leads.filter(ehNovoL);
     else if (filter === "pescados") r = leads.filter((l) => l.source === "cold_pool");
     else if (filter === "visita") r = leads.filter((l) => l.status === "VISIT_SCHEDULED" || l.status === "VISITA_REALIZADA");
+    // busca vale para todas as fichas, não só a aba aberta
+    if (busca.trim()) return leads.filter((l) => casaBusca(l, busca));
     // "Cliente esperando" sempre no topo
     const esp = (l: Lead) => respostaReal(l) && (!l.lastBrokerWhatsappAt || new Date(l.lastLeadResponseAt) > new Date(l.lastBrokerWhatsappAt));
     return [...r.filter(esp), ...r.filter((l) => !esp(l))];
-  }, [leads, filter]);
+  }, [leads, filter, busca]);
 
   // Notas que alimentam a régua (tentativas) e o andamento (última conversa) — uma consulta para a lista toda
   const idsRegua = useMemo(() => leads
@@ -586,6 +593,7 @@ const CorretorPainel = () => {
       const va = (l as any).visit_scheduled_at as string | null;
       return { cls: "l-badge", txt: va ? `Visita ${new Date(va).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}` : "Visita marcada" };
     }
+    if (ehNovoL(l)) return { cls: "l-badge urgent", txt: `🔥 Novo · há ${ha(l.createdAt)}` };
     if (l.status === "VISITA_REALIZADA") return { cls: "l-badge", txt: "Compareceu" };
     if (l.status === "DOCS_REQUESTED") return { cls: "l-badge", txt: "Docs" };
     const an = andamentoDe(l);
@@ -640,8 +648,10 @@ const CorretorPainel = () => {
                 </Sheet>
                 {/* meta do mês que o gerente definiu (some se não houver) */}
                 <div style={{ margin: "8px 0", display: "grid", gap: 8 }}><AvisoLeadPush uid={user?.id || ""} /><MetaMes uid={user?.id || ""} /></div>
+                <input className="note-input" type="search" style={{ width: "100%", marginBottom: 8 }} aria-label="Buscar cliente" placeholder="🔎 Buscar por nome, telefone ou link do aviso…" value={busca} onChange={(e) => setBusca(e.target.value)} />
                 <div className="filter-bar">
                   <button className={`f-pill${filter === "prio" ? " on" : ""}`} onClick={() => setFilter("prio")}>Prioridade ({counts.prio})</button>
+                  <button className={`f-pill${filter === "novos" ? " on" : ""}`} onClick={() => setFilter("novos")}>🔥 Novos ({counts.novos})</button>
                   <button className={`f-pill${filter === "pescados" ? " on" : ""}`} onClick={() => setFilter("pescados")}>🎣 Pescados ({counts.pescados})</button>
                   <button className={`f-pill${filter === "visita" ? " on" : ""}`} onClick={() => setFilter("visita")}>Visitas ({counts.visita})</button>
                   <button className={`f-pill${filter === "todos" ? " on" : ""}`} onClick={() => setFilter("todos")}>Todos ({counts.todos})</button>
@@ -654,6 +664,7 @@ const CorretorPainel = () => {
                     <div key={l.id} className={`lead-row${sel?.id === l.id ? " selected" : ""}`} onClick={() => { setSelId(l.id); setMobileDetail(true); }}>
                       <div>
                         <div className="l-name">{l.name}{l.source === "cold_pool" && <span className="pescado-tag">🎣 Pescado</span>}</div>
+                        <div className="l-meta">chegou {new Date(l.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}</div>
                         <div className="l-meta">{[l.tipoTrabalho && TIPO_TRABALHO_LABEL[l.tipoTrabalho], fmtRenda(l.rendaDeclarada) !== "—" ? fmtRenda(l.rendaDeclarada) : null, regiaoDe(l) || null].filter(Boolean).join(" · ") || mascarar(l.phone)}</div>
                       </div>
                       <span className={b.cls}>{b.txt}</span>

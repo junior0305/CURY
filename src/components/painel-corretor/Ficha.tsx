@@ -9,7 +9,7 @@ import { updateLeadStatus, setLeadNegotiating, setLeadReturnDate } from "@/integ
 import { TarefasLead } from "./TarefasLead";
 import { LOST_REASON_LABEL } from "@/types/lead";
 import type { LostReason } from "@/types/lead";
-import { LeadPC, mascarar, formatarFone, linhaMeta, escudo, ultimoRegistro, horaSP, dataCurta, FASES, QUANDO, quandoISO, origem } from "./util";
+import { LeadPC, mascarar, formatarFone, linhaMeta, escudo, ultimoRegistro, horaSP, dataCurta, FASES, QUANDO, quandoISO, origem, rendaCurta, TRABALHO, ha } from "./util";
 
 const DOCS = [{ key: "rg", t: "🪪 RG / CNH" }, { key: "fgts", t: "🏦 Extrato FGTS" }, { key: "holerite", t: "📄 Holerite" }, { key: "endereco", t: "🏠 Comprovante de endereço" }];
 const MOTIVOS: NonNullable<LostReason>[] = ["SEM_PERFIL", "NUMERO_ERRADO", "DESISTIU", "SEM_RETORNO", "CLIENTE_BLOQUEOU", "JA_COMPROU", "RENDA_FORA_FAIXA",
@@ -32,6 +32,26 @@ export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAg
       const m: Record<string, boolean> = {}; (data || []).forEach((r: any) => { m[r.documento] = r.entregue; }); return m;
     },
   });
+
+  // região: a do formulário; sem ela, a da fila da campanha (mesma regra do painel do computador)
+  const { data: regiaoFila = {} } = useQuery<Record<string, string>>({
+    queryKey: ["queueRegions"], staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data } = await supabase.from("distribution_queues").select("match_value, region").not("region", "is", null);
+      const m: Record<string, string> = {}; (data || []).forEach((q: any) => { if (q.match_value && q.region) m[q.match_value] = q.region; }); return m;
+    },
+  });
+  const regiao = lead.regiao_interesse || (lead.fb_campaign ? regiaoFila[lead.fb_campaign] : "") || "";
+  const outras = Object.entries(lead.form_respostas || {})
+    .filter(([k, v]) => v && !/regi|bairro|zona|morar|cidade|localiza|renda|salari|ganha|trabalh|emprego|ocupa|profiss|nome|telefone|phone|email/i.test(k));
+  const dados: [string, string][] = [
+    ["📍 Região", regiao || "—"],
+    ["💰 Renda", rendaCurta(lead.renda_declarada) || "—"],
+    ["💼 Trabalho", TRABALHO(lead.tipo_trabalho) || "—"],
+    ["🕐 Chegou", `${dataCurta(lead.created_at)} às ${horaSP(lead.created_at)} · há ${ha(lead.created_at)}`],
+    ...(origem(lead) ? [["📣 Origem", origem(lead)] as [string, string]] : []),
+    ...outras.map(([k, v]) => [k.replace(/_/g, " ").replace(/\?$/, ""), String(v).replace(/_/g, " ")] as [string, string]),
+  ];
 
   const ultNota = (notas as any[])[0]?.created_at ?? (notas as any[])[0]?.createdAt ?? null;
   const esc = escudo(lead, ultimoRegistro(lead, ultNota));
@@ -88,6 +108,15 @@ export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAg
           </div>
           <div className="row"><span className={`shield ${esc.k}`}>🛡️ {esc.txt}</span><button className="btn" type="button" onClick={onComoFoi}>Registrar como foi</button></div>
 
+          <div className="box"><span className="lbl" style={{ margin: 0 }}>Dados do cliente</span>
+            {dados.map(([k, v]) => <div key={k} className="gl"><span>{k}</span><span>{v}</span></div>)}
+          </div>
+
+          {!descartar ? <button className="btn" type="button" onClick={() => setDescartar(true)}>🗑️ Descartar cliente · sem interesse, número errado…</button>
+            : <div className="box"><span className="lbl" style={{ margin: 0 }}>Por que descartar?</span>
+              <div className="chips">{MOTIVOS.map((m) => <button key={m} type="button" onClick={() => descartarLead(m)}>{LOST_REASON_LABEL[m]}</button>)}</div>
+              <button className="btn" type="button" onClick={() => setDescartar(false)}>Cancelar</button></div>}
+
           <div className="box"><TarefasLead key={lead.id} leadId={lead.id} nextAction={lead.next_action_date} userId={userId} onMudou={atualizar}
             c={{ titulo: "lbl", meta: "meta", btn: "btn", pri: "btn pri", inp: "inp" }} /></div>
 
@@ -117,10 +146,6 @@ export default function Ficha({ lead, userId, revelado, onFechar, onChamar, onAg
           </div>
 
           <a className="btn" style={{ textAlign: "center", textDecoration: "none" }} href={`/painel-completo?lead=${lead.id}`}>Simulador e Fecha a Conta ↗</a>
-          {!descartar ? <button className="btn" type="button" onClick={() => setDescartar(true)}>Descartar cliente</button>
-            : <div className="box"><span className="lbl" style={{ margin: 0 }}>Por que descartar?</span>
-              <div className="chips">{MOTIVOS.map((m) => <button key={m} type="button" onClick={() => descartarLead(m)}>{LOST_REASON_LABEL[m]}</button>)}</div>
-              <button className="btn" type="button" onClick={() => setDescartar(false)}>Cancelar</button></div>}
         </div>
       </div>
     </section>

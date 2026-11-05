@@ -10,8 +10,9 @@ export type LeadPC = {
   negotiating_since: string | null; visit_scheduled_at: string | null; visita_local: string | null;
   renda_declarada: string | null; tipo_trabalho: string | null; regiao_interesse: string | null;
   campanha_nome: string | null; product: string | null; primeiro_contato_em: string | null;
+  fb_campaign?: string | null; form_respostas?: Record<string, string> | null;
 };
-export const COLS = "id,name,phone,status,source,created_at,last_interaction_at,last_lead_response_at,last_broker_whatsapp_at,contact_attempts,next_action_date,negotiating_since,visit_scheduled_at,visita_local,renda_declarada,tipo_trabalho,regiao_interesse,campanha_nome,product,primeiro_contato_em";
+export const COLS = "id,name,phone,status,source,created_at,last_interaction_at,last_lead_response_at,last_broker_whatsapp_at,contact_attempts,next_action_date,negotiating_since,visit_scheduled_at,visita_local,renda_declarada,tipo_trabalho,regiao_interesse,campanha_nome,product,primeiro_contato_em,fb_campaign,form_respostas";
 
 export const TZ = "America/Sao_Paulo";
 export const diaSP = (d: string | number | Date) => new Date(d).toLocaleDateString("en-CA", { timeZone: TZ });
@@ -66,6 +67,20 @@ export const rendaCurta = (r?: string | null) => {
   return /^\d/.test(t) ? `R$ ${t}` : t;
 };
 const TRAB: Record<string, string> = { CLT: "CLT", AUTONOMO: "Autônomo", FUNCIONARIO_PUBLICO: "Func. público" };
+/** Busca do corretor: nome, telefone (só dígitos, 4+) ou o código do link do aviso (/l/<código>). */
+export const casaBusca = (l: { id: string; name: string | null; phone: string | null }, q: string) => {
+  const t = q.trim().toLowerCase(); if (!t) return true;
+  const cod = (t.match(/\/l\/([0-9a-f]{4,8})/) || [])[1] || (/^[0-9a-f]{8}$/.test(t) ? t : "");
+  if (cod && l.id.startsWith(cod)) return true;
+  const d = t.replace(/\D/g, "");
+  if (d.length >= 4 && (l.phone || "").replace(/\D/g, "").includes(d)) return true;
+  return (l.name || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(t.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+};
+/** Lead novo = ainda sem nenhum toque do corretor. */
+export const ehNovo = (l: { status: string; contact_attempts?: number | null; source?: string | null }) => l.status === "NEW" && !(l.contact_attempts || 0) && l.source !== "cold_pool";
+export const ha = (iso: string) => { const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000)); return m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)} dias`; };
+export const TRABALHO = (t?: string | null) => (t ? TRAB[t] || t : "");
+
 export const linhaMeta = (l: LeadPC) => [l.regiao_interesse, rendaCurta(l.renda_declarada) ? `renda ${rendaCurta(l.renda_declarada)}` : "", l.tipo_trabalho ? TRAB[l.tipo_trabalho] : ""].filter(Boolean).join(" · ");
 
 /** O cliente mandou mensagem depois do último contato do corretor (mesma regra do situacaoLead). */
