@@ -14,9 +14,10 @@ interface LeadFormProps {
   managerId: string | null;
   initialName?: string;
   initialPhone?: string;
+  onCriado?: (leadId: string) => void;
 }
 
-const LeadForm = ({ onOpenChange, brokerId, managerId, initialName, initialPhone }: LeadFormProps) => {
+const LeadForm = ({ onOpenChange, brokerId, managerId, initialName, initialPhone, onCriado }: LeadFormProps) => {
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({ name: initialName || "", email: "", phone: initialPhone || "", tag: "" });
@@ -85,8 +86,11 @@ const LeadForm = ({ onOpenChange, brokerId, managerId, initialName, initialPhone
       }
 
       logStatus = "success";
-      toast.success("✅ Lead criado com sucesso!");
+      toast.success("✅ Cliente cadastrado na sua carteira!");
       queryClient.invalidateQueries({ queryKey: ["dashboardLeads"] });
+      queryClient.invalidateQueries({ queryKey: ["pcLeads"] });
+      queryClient.invalidateQueries({ queryKey: ["painelLeads"] });
+      if (insertedLead?.id) onCriado?.(insertedLead.id);
       onOpenChange(false);
       setFormData({ name: "", email: "", phone: "", tag: "" });
     } catch (error: any) {
@@ -111,9 +115,9 @@ const LeadForm = ({ onOpenChange, brokerId, managerId, initialName, initialPhone
   return (
     <SheetContent side="right" className="sm:max-w-md bg-slate-900 border-gray-700 p-6 overflow-y-auto">
       <SheetHeader className="mb-6">
-        <SheetTitle className="text-2xl font-bold text-white">Novo Lead Manual</SheetTitle>
+        <SheetTitle className="text-2xl font-bold text-white">Novo cliente</SheetTitle>
         <SheetDescription className="text-gray-500">
-          Cadastre leads de indicações ou contatos próprios.
+          Cadastre um cliente da sua carteira: indicação ou contato próprio.
         </SheetDescription>
       </SheetHeader>
 
@@ -141,7 +145,7 @@ const LeadForm = ({ onOpenChange, brokerId, managerId, initialName, initialPhone
           className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black h-12 rounded-xl shadow-lg shadow-indigo-900/40 mt-2"
           disabled={loading}>
           {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-          <Save className="w-4 h-4 mr-2" /> Salvar Lead
+          <Save className="w-4 h-4 mr-2" /> Salvar cliente
         </Button>
       </form>
     </SheetContent>

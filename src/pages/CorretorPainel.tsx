@@ -24,6 +24,8 @@ import { useUnidadesFecha } from "@/hooks/useEstrategia";
 import { empresa } from "@/lib/empresa";
 import AgendarVisita from "@/components/broker/AgendarVisita";
 import MetaMes from "@/components/painel-corretor/MetaMes";
+import LeadForm from "@/components/broker/LeadForm";
+import { Sheet } from "@/components/ui/sheet";
 import { TarefasLead, TarefasLista, ClassesTarefa } from "@/components/painel-corretor/TarefasLead";
 import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
 import { mascarar, formatarFone, comArtigo, quandoISO, dataCurta as dataCurtaSP, horaSP } from "@/components/painel-corretor/util";
@@ -116,6 +118,7 @@ const CorretorPainel = () => {
   const [filter, setFilter] = useState<"prio" | "pescados" | "visita" | "todos">("prio");
   // ?lead=<id> vem do painel novo ("Simulador e Fecha a Conta")
   const [selId, setSelId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("lead"));
+  const [novoCliente, setNovoCliente] = useState(false);
   const [mobileDetail, setMobileDetail] = useState(() => !!new URLSearchParams(window.location.search).get("lead")); // celular: lista vs ficha
   const [tool, setTool] = useState<"sim" | "doc" | "msg">("sim");
   const [noteDraft, setNoteDraft] = useState("");
@@ -631,6 +634,10 @@ const CorretorPainel = () => {
                   <span className="sidebar-title">Atendimento</span>
                   <span className="roleta-tag">{counts.todos} fichas</span>
                 </div>
+                <button className="pb prim" style={{ width: "100%", marginBottom: 8 }} onClick={() => setNovoCliente(true)}>+ Novo cliente</button>
+                <Sheet open={novoCliente} onOpenChange={setNovoCliente}>
+                  {novoCliente && user && <LeadForm onOpenChange={setNovoCliente} brokerId={user.id} managerId={null} onCriado={(id) => { setSelId(id); setFilter("todos"); setMobileDetail(true); }} />}
+                </Sheet>
                 {/* meta do mês que o gerente definiu (some se não houver) */}
                 <div style={{ margin: "8px 0", display: "grid", gap: 8 }}><AvisoLeadPush uid={user?.id || ""} /><MetaMes uid={user?.id || ""} /></div>
                 <div className="filter-bar">

@@ -17,6 +17,8 @@ import { registerContactAttempt, updateLeadStatus, setLeadNegotiating, setLeadRe
 import { DisparoCorretor } from "@/components/broker/DisparoCorretor";
 import AgendarVisita from "@/components/broker/AgendarVisita";
 import { fetchOpenTasks } from "@/integrations/supabase/tasks";
+import LeadForm from "@/components/broker/LeadForm";
+import { Sheet } from "@/components/ui/sheet";
 import { TarefasLista } from "@/components/painel-corretor/TarefasLead";
 import type { Task } from "@/types/task";
 import Ficha from "@/components/painel-corretor/Ficha";
@@ -52,6 +54,7 @@ export default function PainelCorretor() {
   const [busca, setBusca] = useState("");
   const [cliFase, setCliFase] = useState("");
   const [selId, setSelId] = useState<string | null>(null);
+  const [novoCliente, setNovoCliente] = useState(false);
   const [revelados, setRevelados] = useState<Set<string>>(new Set());
   const [como, setComo] = useState<{ id: string; canal: string } | null>(null);
   const [comoOut, setComoOut] = useState("Conversamos");
@@ -342,6 +345,7 @@ export default function PainelCorretor() {
               <button type="button" className={`st${filtro === "ret" ? " on" : ""}`} onClick={() => setFiltro(filtro === "ret" ? "" : "ret")}><b>{nRet}</b><span>retornos hoje</span></button>
               <button type="button" className={`st${filtro === "vis" ? " on" : ""}`} onClick={() => setFiltro(filtro === "vis" ? "" : "vis")}><b>{visHoje.length}</b><span>{visHoje.length === 1 ? `visita às ${horaSP(visHoje[0].l.visit_scheduled_at!)}` : "visitas hoje"}</span></button>
             </div>
+            <button className="btn full" type="button" onClick={() => setNovoCliente(true)}>+ Novo cliente</button>
             <div className="card plain">
               <TarefasLista userId={uid} nomes={new Map(ativos.map((l) => [l.id, l.name]))} onAbrir={setSelId} c={{ titulo: "lbl", meta: "meta", btn: "btn", pri: "btn pri", inp: "inp" }} />
               <select className="inp" aria-label="Agendar tarefa para qual cliente" value="" onChange={(e) => e.target.value && setSelId(e.target.value)}>
@@ -355,6 +359,7 @@ export default function PainelCorretor() {
           </>}
 
           {aba === "cli" && <>
+            <button className="btn full" type="button" onClick={() => setNovoCliente(true)}>+ Novo cliente</button>
             <input className="inp" aria-label="Buscar cliente" placeholder="Buscar por nome…" value={busca} onChange={(e) => setBusca(e.target.value)} />
             <div className="chips">{[["", "Todos"], ["NEW", "Novos"], ["NEGOTIATING", "Conversando"], ["VISIT_SCHEDULED", "Visita"], ["DOCS_REQUESTED", "Documentos"]].map(([k, r]) =>
               <button type="button" key={k} className={cliFase === k ? "on" : ""} onClick={() => setCliFase(k)}>{r}</button>)}</div>
@@ -449,6 +454,9 @@ export default function PainelCorretor() {
           <button className="btn pri full" type="button" onClick={salvarDia}>Fechar o dia</button>
         </section>
       )}
+      <Sheet open={novoCliente} onOpenChange={setNovoCliente}>
+        {novoCliente && uid && <LeadForm onOpenChange={setNovoCliente} brokerId={uid} managerId={perfil?.manager_id ?? null} onCriado={setSelId} />}
+      </Sheet>
       {agendar && (() => { const l = leads.find((x) => x.id === agendar); return (
         <AgendarVisita leadId={agendar} nome={l?.name || null} brokerId={uid} onFechar={() => setAgendar(null)}
           onFeito={(resumo) => { setAgendar(null); atualizar(); toast.success(resumo); }} />); })()}
