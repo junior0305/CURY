@@ -41,6 +41,15 @@ export default function PlantoesCadastro({ como }: { como?: string | null }) {
     queryFn: async () => { const { data, error } = await (supabase as any).rpc("plantoes_gerenciar", { p_como: como || null }); if (error) throw error; return data || []; },
   });
   const atualizar = () => qc.invalidateQueries({ queryKey: ["plantoesGerenciar"] });
+  const { data: cfg } = useQuery<{ exige_liberacao: boolean; pode: boolean }>({
+    queryKey: ["plantaoConfig", como || "eu"],
+    queryFn: async () => { const { data, error } = await (supabase as any).rpc("plantao_config_ler", { p_como: como || null }); if (error) throw error; return data; },
+  });
+  const salvarCfg = (exige: boolean) => rodar("cfg", async () => {
+    const { error } = await (supabase as any).rpc("plantao_config_salvar", { p_exige: exige, p_como: como || null }); if (error) throw error;
+    toast.success(exige ? "Cada check-in agora espera você liberar" : "Check-in volta a entrar sozinho no fim da roleta");
+    qc.invalidateQueries({ queryKey: ["plantaoConfig"] });
+  });
   const rodar = async (chave: string, f: () => Promise<void>) => {
     if (ocupado) return; setOcupado(chave);
     try { await f(); } catch (e) { toast.error(erroTxt(e)); } finally { setOcupado(null); }
@@ -79,6 +88,20 @@ export default function PlantoesCadastro({ como }: { como?: string | null }) {
   return (
     <div className="plc">
       <style>{CSS}</style>
+      {cfg?.pode && (
+        <section className="plc-caixa" aria-label="Como o check-in entra na roleta">
+          <h3>Check-in da equipe</h3>
+          <span className="plc-m">Todo check-in entra no fim da roleta: o corretor recebe depois de quem já estava no plantão. Assim, quem chega cedo e faz o check-in é premiado.</span>
+          <label className="plc-fila" style={{ cursor: "pointer" }}>
+            <input type="radio" name="plc-lib" checked={!cfg.exige_liberacao} disabled={!!ocupado} onChange={() => salvarCfg(false)} />
+            <span><b>Entra sozinho no fim da roleta</b> (padrão)</span>
+          </label>
+          <label className="plc-fila" style={{ cursor: "pointer" }}>
+            <input type="radio" name="plc-lib" checked={cfg.exige_liberacao} disabled={!!ocupado} onChange={() => salvarCfg(true)} />
+            <span><b>Cada check-in espera eu liberar</b> · você recebe o aviso e libera em Time › Plantão agora</span>
+          </label>
+        </section>)}
+
       <section className="plc-caixa" aria-label="Quem está no plantão agora">
         <h3>Quem está no plantão agora</h3>
         <PlantaoAgora como={como} />

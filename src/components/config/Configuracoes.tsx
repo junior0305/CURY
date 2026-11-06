@@ -32,7 +32,7 @@ type Secao = "avisos" | "equipe" | "plantoes" | "base" | "whatsapp" | "facebook"
 const SECOES: { k: Secao; label: string; sub: string }[] = [
   { k: "avisos", label: "Avisos e cobranças", sub: "O que o sistema cobra e quando" },
   { k: "equipe", label: "Equipe", sub: "Cadastrar, desabilitar e desligar corretor" },
-  { k: "plantoes", label: "Plantões", sub: "Onde a equipe faz check-in e quem está lá" },
+  { k: "plantoes", label: "Plantões e check-in", sub: "Onde a equipe faz check-in, quem está lá e como entra na roleta" },
   { k: "base", label: "Base de contatos", sub: "Listas para o Pescar ou lead caindo" },
   { k: "whatsapp", label: "Meu WhatsApp", sub: "O chip que envia as suas mensagens" },
   { k: "facebook", label: "Facebook e leads", sub: "Páginas, formulários e quem recebe" },

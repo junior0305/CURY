@@ -82,9 +82,10 @@ export default function InicioCorretor({ uid, c, onAtender, onPlacar, onAbrir }:
   const alvoHoje = Math.max(1, Math.min(15, Math.ceil(Math.max(0, ATENDIDOS_POR_VENDA * metaVendas - (atMes - atHoje)) / du.restam)));
 
   const sit = plantao?.situacao as string | undefined;
-  const pilPlantao = sit === "roleta" ? { b: "Na roleta", s: plantao?.plantao?.nome || "plantão", k: "ok" }
+  const pilPlantao = sit === "roleta" ? { b: plantao?.fim_da_roleta ? "Na roleta · no fim" : "Na roleta", s: plantao?.plantao?.nome || "plantão", k: "ok" }
     : sit === "visita" ? { b: "Em visita", s: "segue na roleta", k: "ok" }
     : sit === "fora" ? { b: "Fora da roleta", s: "Conferir ›", k: "alerta" }
+    : sit === "aguardando" ? { b: "Aguardando gerente", s: "check-in feito ›", k: "alerta" }
     : { b: sit === "saiu" ? "Saiu do plantão" : "Sem check-in", s: "Fazer check-in ›", k: "alerta" };
   if (plantao?.conferencia_pendente && (sit === "roleta" || sit === "visita")) Object.assign(pilPlantao, { b: `Conferência ${plantao.conferencia_pendente.qual}`, s: "Confirmar ›", k: "alerta" });
   const pilPlacar = placar?.ok ? { b: `Placar · ${placar.eu.pontos} pts`, s: placar.no_podio && placar.pos ? `${placar.pos}º no pódio ›` : placar.top10 ? "top 10 ›" : `faltam ${placar.falta_top10} p/ top 10 ›` } : { b: "Meu Placar", s: "ver ›" };

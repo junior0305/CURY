@@ -10,7 +10,8 @@ import { pegarLocal, distTxt, horaTxt, motivoTxt, erroTxt, confTxt, type Local, 
 import type { ClassesTarefa } from "./TarefasLead";
 
 type Dia = {
-  situacao: "sem_checkin" | "roleta" | "visita" | "fora" | "saiu"; plantao: { nome: string; status: string } | null;
+  situacao: "sem_checkin" | "roleta" | "visita" | "fora" | "saiu" | "aguardando"; plantao: { nome: string; status: string } | null;
+  fim_da_roleta: string | null;
   checkin_em: string | null; checkin_dist_m: number | null; visita_desde: string | null;
   conferencia_pendente: { qual: string; ate: string } | null; c930: ConfDia; c16: ConfDia;
 };
@@ -59,7 +60,7 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
     const { data, error } = await (supabase as any).rpc("plantao_checkin", { p_plantao: escolhido, p_lat: l.lat, p_lng: l.lng, p_prec: l.prec });
     if (error) throw error;
     if (!data?.ok) { setAviso(motivoTxt(data)); setLocal(null); return; }
-    toast.success(`Check-in no ${data.plantao} · você está na roleta`); setLista(null); atualizar();
+    toast.success(data.aguarda ? `Check-in no ${data.plantao} · aguardando seu gerente liberar` : `Check-in no ${data.plantao} · você entrou no fim da roleta`); setLista(null); atualizar();
   });
   const fazerNovo = () => rodar("novo", async () => {
     if (!nomeNovo.trim()) { setAviso("Escreva o nome do plantão."); return; }
@@ -67,7 +68,7 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
     const { data, error } = await (supabase as any).rpc("plantao_novo", { p_nome: nomeNovo.trim(), p_lat: l.lat, p_lng: l.lng, p_prec: l.prec });
     if (error) throw error;
     if (!data?.ok) { setAviso(motivoTxt(data)); return; }
-    toast.success("Check-in feito · seu gerente vai aprovar o plantão novo"); setNovo(false); setNomeNovo(""); setLista(null); atualizar();
+    toast.success(data.aguarda ? "Check-in feito · aguardando seu gerente liberar" : "Check-in feito · você entrou no fim da roleta e seu gerente vai aprovar o plantão novo"); setNovo(false); setNomeNovo(""); setLista(null); atualizar();
   });
   const conferir = () => rodar("conferir", async () => {
     setLocal(null);
@@ -75,7 +76,7 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
     const { data, error } = await (supabase as any).rpc("plantao_conferir", { p_lat: l.lat, p_lng: l.lng, p_prec: l.prec });
     if (error) throw error;
     if (!data?.ok) { setAviso(motivoTxt(data)); atualizar(); return; }
-    toast.success("Conferido · você segue na roleta"); atualizar();
+    toast.success(data.aguarda ? "Conferido · aguardando seu gerente liberar" : "Conferido · você está na roleta"); atualizar();
   });
   const simples = (fn: "plantao_visita" | "plantao_saida", msg: string) => rodar(fn, async () => {
     const { error } = await (supabase as any).rpc(fn); if (error) throw error; toast.success(msg); atualizar();
@@ -120,9 +121,14 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
           <button className={c.pri} type="button" onClick={conferir} disabled={!!ocupado}>{ocupado === "conferir" ? "Conferindo…" : "Estou no plantão"}</button>
           <button className={c.btn} type="button" onClick={() => simples("plantao_visita", "Em visita · você segue na roleta por até 2h")} disabled={!!ocupado}>Estou em visita com cliente</button>
         </div>
+      </> : dia.situacao === "aguardando" ? <>
+        <b>⏳ Check-in feito · aguardando seu gerente liberar</b>
+        <span className={c.meta}>Check-in às {horaTxt(dia.checkin_em)} no {nomeP}. Quando ele liberar, você entra no fim da roleta e recebe um aviso.</span>
+        <div style={fila}><button className={c.btn} type="button" onClick={() => simples("plantao_saida", "Check-in cancelado")} disabled={!!ocupado}>Saí do plantão</button></div>
       </> : dia.situacao === "roleta" ? <>
         <b>✅ Você está na roleta · {nomeP}</b>
         <span className={c.meta}>Check-in às {horaTxt(dia.checkin_em)}{dia.checkin_dist_m != null ? `, a ${distTxt(dia.checkin_dist_m)}` : ""}{dia.plantao?.status === "pendente" ? " · plantão aguardando o gerente" : ""}</span>
+        {dia.fim_da_roleta && <span className={c.meta}>Você entrou no fim da roleta às {horaTxt(dia.fim_da_roleta)}: recebe depois de quem já estava no plantão. Chegar cedo garante a vez.</span>}
         <span className={c.meta}>Conferência 9h30: {confTxt(dia.c930)} · 16h: {confTxt(dia.c16)}</span>
         <div style={fila}>
           <button className={c.btn} type="button" onClick={() => simples("plantao_visita", "Em visita · você segue na roleta por até 2h")} disabled={!!ocupado}>Estou em visita com cliente</button>
