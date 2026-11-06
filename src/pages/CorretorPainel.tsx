@@ -23,11 +23,12 @@ import { TIPO_TRABALHO_LABEL, LOST_REASON_LABEL } from "@/types/lead";
 import { useUnidadesFecha } from "@/hooks/useEstrategia";
 import { empresa } from "@/lib/empresa";
 import AgendarVisita from "@/components/broker/AgendarVisita";
-import MetaMes from "@/components/painel-corretor/MetaMes";
+import MeuPlacar, { PlacarFaixa } from "@/components/painel-corretor/MeuPlacar";
 import LeadForm from "@/components/broker/LeadForm";
-import { Sheet } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { TarefasLead, TarefasLista, ClassesTarefa } from "@/components/painel-corretor/TarefasLead";
 import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
+import PlantaoCheckin from "@/components/painel-corretor/PlantaoCheckin";
 import { mascarar, formatarFone, comArtigo, quandoISO, dataCurta as dataCurtaSP, horaSP, casaBusca, ha } from "@/components/painel-corretor/util";
 
 const CLS_TAREFA: ClassesTarefa = { titulo: "prompt-label", meta: "prompt-hint", btn: "pb", pri: "pb prim", inp: "note-input" };
@@ -122,6 +123,7 @@ const CorretorPainel = () => {
   // ?lead=<id> vem do painel novo ("Simulador e Fecha a Conta")
   const [selId, setSelId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("lead"));
   const [novoCliente, setNovoCliente] = useState(false);
+  const [placar, setPlacar] = useState(false);
   const [mobileDetail, setMobileDetail] = useState(() => !!new URLSearchParams(window.location.search).get("lead")); // celular: lista vs ficha
   const [tool, setTool] = useState<"sim" | "doc" | "msg">("sim");
   const [noteDraft, setNoteDraft] = useState("");
@@ -647,7 +649,14 @@ const CorretorPainel = () => {
                   {novoCliente && user && <LeadForm onOpenChange={setNovoCliente} brokerId={user.id} managerId={null} onCriado={(id) => { setSelId(id); setFilter("todos"); setMobileDetail(true); }} />}
                 </Sheet>
                 {/* meta do mês que o gerente definiu (some se não houver) */}
-                <div style={{ margin: "8px 0", display: "grid", gap: 8 }}><AvisoLeadPush uid={user?.id || ""} /><MetaMes uid={user?.id || ""} /></div>
+                <div style={{ margin: "8px 0", display: "grid", gap: 8 }}><PlantaoCheckin uid={user?.id || ""} c={CLS_TAREFA} /><AvisoLeadPush uid={user?.id || ""} /><PlacarFaixa uid={user?.id || ""} onAbrir={() => setPlacar(true)} /></div>
+                <Sheet open={placar} onOpenChange={setPlacar}>
+                  <SheetContent side="right" className="w-full sm:max-w-md p-0 overflow-y-auto" style={{ background: "#0B1626" }}>
+                    <SheetTitle className="sr-only">Meu Placar</SheetTitle>
+                    {placar && user && <MeuPlacar uid={user.id} onAbrir={(id) => { setPlacar(false); setFilter("todos"); setSelId(id); setMobileDetail(true); }}
+                      onFiltro={() => { setPlacar(false); setBusca(""); setFilter("prio"); }} />}
+                  </SheetContent>
+                </Sheet>
                 <input className="note-input" type="search" style={{ width: "100%", marginBottom: 8 }} aria-label="Buscar cliente" placeholder="🔎 Buscar por nome, telefone ou link do aviso…" value={busca} onChange={(e) => setBusca(e.target.value)} />
                 <div className="filter-bar">
                   <button className={`f-pill${filter === "prio" ? " on" : ""}`} onClick={() => setFilter("prio")}>Prioridade ({counts.prio})</button>

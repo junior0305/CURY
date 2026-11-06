@@ -45,7 +45,9 @@ import {
   X,
   ShieldAlert,
   CalendarDays,
+  MapPin,
 } from "lucide-react";
+import PlantaoAgora from "@/components/plantao/PlantaoAgora";
 import "@/styles/cockpit-gerente.css";
 import "@/styles/time-gerente.css";
 import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
@@ -72,7 +74,7 @@ const nomeMes = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString(
 type PessoaMeta = { id: string; nome: string; papel: string; meta: number | null; realizado: number; pode_editar: boolean };
 type PainelMetas = { mes: string; dono: PessoaMeta; filhos: PessoaMeta[] };
 
-type SubAba = "hoje" | "rendimento" | "urgencias" | "tropa" | "novos";
+type SubAba = "hoje" | "plantao" | "rendimento" | "urgencias" | "tropa" | "novos";
 
 export default function TimeTab({ managerId }: { managerId: string | undefined }) {
   const { session } = useAuth();
@@ -385,6 +387,14 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
         </button>
 
         <button
+          className={`time-tab-btn ${subAba === "plantao" ? "active" : ""}`}
+          onClick={() => setSubAba("plantao")}
+        >
+          <MapPin size={15} />
+          Plantão agora
+        </button>
+
+        <button
           className={`time-tab-btn ${subAba === "rendimento" ? "active" : ""}`}
           onClick={() => setSubAba("rendimento")}
         >
@@ -415,6 +425,9 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
           VISÃO 1: QUEM COBRAR AGORA (FOCO & URGÊNCIAS)
           ══════════════════════════════════════════════════════════════════════ */}
       {/* 29/10 · EQUIPE HOJE: agenda de visitas + quem cobrar agora + pastas */}
+      {/* 06/11 · check-in de plantão: quem está lá, conferências 9h30/16h, "Não está aqui" */}
+      {subAba === "plantao" && <PlantaoAgora como={managerId} />}
+
       {subAba === "hoje" && (
         <AgendaEquipe donoId={managerId} lateral={
           <section className="ae-box" aria-label="Quem cobrar agora">

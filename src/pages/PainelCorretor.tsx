@@ -24,6 +24,8 @@ import type { Task } from "@/types/task";
 import Ficha from "@/components/painel-corretor/Ficha";
 import Pescar from "@/components/painel-corretor/Pescar";
 import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
+import PlantaoCheckin from "@/components/painel-corretor/PlantaoCheckin";
+import MeuPlacar, { PlacarFaixa } from "@/components/painel-corretor/MeuPlacar";
 import CorretorPainel from "@/pages/CorretorPainel";
 import {
   LeadPC, COLS, diaSP, horaSP, dataCurta, primeiroNome, comArtigo, linhaMeta, esperando, escudo, ultimoRegistro,
@@ -185,19 +187,13 @@ export default function PainelCorretor() {
   const visHoje = agora.filter((x) => x.c.t === "vis");
   const lista = agora.filter((x) => !filtro || x.c.t === filtro || (filtro === "new" && x.c.t === "resp"));
 
-  // ── meta do mês ────────────────────────────────────────────────────────────────
+  // ── meta do mês (o detalhe fica no Meu Placar) ────────────────────────────────────────────────────────────────
   const metaVendas = Number(metaP?.dono?.meta) > 0 ? Number(metaP.dono.meta) : 1;
   const metaDoGerente = Number(metaP?.dono?.meta) > 0;
-  const vendasMes = Number(metaP?.dono?.realizado) || 0;
   const du = diasUteis();
   const alvoMes = { atendidos: POR_VENDA.atendidos * metaVendas, visitas: POR_VENDA.visitas * metaVendas, docs: POR_VENDA.docs * metaVendas };
   const atMes = Number(trilha?.atendidos_mes) || 0, atHoje = Number(trilha?.atendidos_hoje) || 0;
-  const visMes = Number(trilha?.visitas_mes) || 0, docsMes = Number(trilha?.docs_mes) || 0;
   const alvoHoje = Math.max(1, Math.min(15, Math.ceil(Math.max(0, alvoMes.atendidos - (atMes - atHoje)) / du.restam)));
-  const faltaDocs = Math.max(0, alvoMes.docs - docsMes), faltaVis = Math.max(0, alvoMes.visitas - visMes);
-  const ritmo = du.hojeN > 1 ? Math.round(((docsMes / POR_VENDA.docs) / du.hojeN) * du.total * 10) / 10 : null;
-  const proxVisita = useMemo(() => ativos.filter((l) => l.status === "VISIT_SCHEDULED" && l.visit_scheduled_at && Date.parse(l.visit_scheduled_at) > Date.now() - 3 * 3.6e6)
-    .sort((a, b) => a.visit_scheduled_at!.localeCompare(b.visit_scheduled_at!))[0] || null, [ativos]);
   const bateuAntes = useRef<boolean | null>(null);
   useEffect(() => {
     if (!trilha) return;
@@ -288,7 +284,7 @@ export default function PainelCorretor() {
   const hojeTxt = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Sao_Paulo" });
   const titulo: Record<Aba, [string, string]> = {
     hoje: [`${saud}${nomeEu ? ", " + nomeEu : ""}`, hojeTxt], cli: ["Clientes", `${ativos.length} com você`], pes: ["Pescar", "contatos da sua região"],
-    disp: ["Disparar", "pelo número oficial da sua equipe"], eu: ["Eu", `seu mês de ${MES()}`],
+    disp: ["Disparar", "pelo número oficial da sua equipe"], eu: ["Meu Placar", `seu mês de ${MES()}`],
   };
 
   const card = (l: LeadPC, c: { t: Tipo; tag: string }) => {
@@ -308,7 +304,12 @@ export default function PainelCorretor() {
   };
 
   const novos = useMemo(() => ativos.filter(ehNovo), [ativos]);
-  const clientesFiltrados = ativos.filter((l) => (!cliFase || (cliFase === "NOVO" ? ehNovo(l) : cliFase === "HOJE" ? diaSP(l.created_at) === hojeD : l.status === cliFase || (cliFase === "NEW" && l.status === "IN_PROGRESS"))) && casaBusca(l, busca));
+  // mesmas regras do Meu Placar (meu_placar): quente = respondeu em 48h e espera o corretor; parado = 3+ dias sem contato
+  const ehQuente = (l: LeadPC) => !!l.last_lead_response_at && Date.parse(l.last_lead_response_at) > Date.now() - 48 * 3.6e6 && (!l.last_broker_whatsapp_at || l.last_lead_response_at > l.last_broker_whatsapp_at);
+  const ehParado = (l: LeadPC) => ["IN_PROGRESS", "NEGOTIATING", "FOLLOW_UP_AUTO", "REACTIVATED"].includes(l.status)
+    && Date.parse(l.last_broker_whatsapp_at || l.last_interaction_at || l.created_at) < Date.now() - 3 * 864e5 && (!l.next_action_date || Date.parse(l.next_action_date) < Date.now());
+  const clientesFiltrados = ativos.filter((l) => (!cliFase || (cliFase === "NOVO" ? ehNovo(l) : cliFase === "HOJE" ? diaSP(l.created_at) === hojeD
+    : cliFase === "QUENTE" ? ehQuente(l) : cliFase === "PARADO" ? ehParado(l) : l.status === cliFase || (cliFase === "NEW" && l.status === "IN_PROGRESS"))) && casaBusca(l, busca));
   const cliCard = (l: LeadPC) => (
     <button key={l.id} type="button" className={`card${desk && selId === l.id ? " sel" : ""}`} onClick={() => setSelId(l.id)}>
       <div className="row"><b>{l.name}</b><span className={`tag ${esperando(l) ? "t-resp" : ehNovo(l) ? "t-new" : l.status === "VISIT_SCHEDULED" ? "t-vis" : "t-mut"}`}>{esperando(l) ? "Respondeu" : ehNovo(l) ? `🔥 Novo · há ${ha(l.created_at)}` : STATUS_TXT[l.status] || l.status}</span></div>
@@ -316,20 +317,6 @@ export default function PainelCorretor() {
       <span className="meta">chegou {diaSP(l.created_at) === hojeD ? "hoje" : dataCurta(l.created_at)} às {horaSP(l.created_at)}</span>
     </button>);
   const buscaInput = <input className="inp" type="search" aria-label="Buscar cliente" placeholder="🔎 Buscar por nome, telefone ou link do aviso…" value={busca} onChange={(e) => setBusca(e.target.value)} />;
-
-  const metaCard = (
-    <div className="card plain goal">
-      <div className="row"><b>🏠 Meta: {metaVendas} apartamento{metaVendas > 1 ? "s" : ""} no mês</b><span className="meta">dia {Math.min(du.hojeN, du.total)} de {du.total}</span></div>
-      <span className="meta">{metaDoGerente ? `meta sugerida pelo seu gerente${perfil?.gerente ? ", " + perfil.gerente : ""}` : "meta padrão: 1 por corretor (seu gerente pode mudar)"}</span>
-      <div className="gl"><span>Hoje</span><span>{atHoje} de {alvoHoje} clientes atendidos {atHoje >= alvoHoje ? "✅" : ""}</span></div>
-      <div className="prog"><i style={{ width: `${Math.min(100, (100 * atHoje) / alvoHoje)}%` }} /></div>
-      <div className="gl"><span>Visitas no mês</span><span>{visMes} de {alvoMes.visitas}{proxVisita ? <> · <b className="ok">próxima: {comArtigo(proxVisita.name)}, {diaSP(proxVisita.visit_scheduled_at!) === hojeD ? horaSP(proxVisita.visit_scheduled_at!) : dataCurta(proxVisita.visit_scheduled_at!)}</b></> : faltaVis ? <> · <b className="no">falta{faltaVis > 1 ? "m" : ""} {faltaVis}</b></> : " ✅"}</span></div>
-      <div className="gl"><span>Documentos no mês</span><span>{docsMes} de {alvoMes.docs}{faltaDocs ? <> · <b className="no">falta{faltaDocs > 1 ? "m" : ""} {faltaDocs}</b></> : " ✅"}</span></div>
-      <span className="meta">{vendasMes >= metaVendas ? `🎉 Meta do mês batida: ${vendasMes} venda${vendasMes > 1 ? "s" : ""}!`
-        : faltaDocs === 1 ? "Falta pouco: mais uma pasta com documentos fecha a conta do mês."
-        : ritmo != null ? `Seu ritmo: ${String(ritmo).replace(".", ",")} venda${ritmo === 1 ? "" : "s"} no mês. Cada pasta com documentos deixa a conta mais perto.` : "Comece pelos clientes de hoje."}</span>
-    </div>
-  );
 
   // Notebook/desktop: o painel de sempre (CorretorPainel), no padrão do antigo — pedido do Junior (30/10).
   // O painel novo é o do celular.
@@ -350,6 +337,8 @@ export default function PainelCorretor() {
         <main className="pc-body">
           {aba === "hoje" && <>
             <AvisoLeadPush uid={uid} />
+            <div className="card plain"><PlantaoCheckin uid={uid} c={{ titulo: "lbl", meta: "meta", btn: "btn", pri: "btn pri", inp: "inp" }} /></div>
+            <PlacarFaixa uid={uid} onAbrir={() => setAba("eu")} />
             <div className="stats">
               <button type="button" className={`st${nNew ? " hot" : ""}${filtro === "new" ? " on" : ""}`} onClick={() => setFiltro(filtro === "new" ? "" : "new")}><b>{nNew}</b><span>novos esperando</span></button>
               <button type="button" className={`st${filtro === "ret" ? " on" : ""}`} onClick={() => setFiltro(filtro === "ret" ? "" : "ret")}><b>{nRet}</b><span>retornos hoje</span></button>
@@ -372,15 +361,13 @@ export default function PainelCorretor() {
             <div className="lbl">Agora{filtro ? " · filtrado" : ""}</div>
             {lista.length ? lista.slice(0, 40).map(({ l, c }) => card(l, c)) : <p className="hint vazio">Tudo em dia por aqui. 🎉</p>}
             {lista.length > 0 && <p className="hint">{desk ? "Clique no card para abrir a ficha ao lado" : "Arraste o card → para chamar · ← para adiar"}</p>}
-            <div className="lbl">Rumo ao apartamento do mês</div>
-            {metaCard}
             </>}
           </>}
 
           {aba === "cli" && <>
             <button className="btn full" type="button" onClick={() => setNovoCliente(true)}>+ Novo cliente</button>
             {buscaInput}
-            <div className="chips">{[["", "Todos"], ["NOVO", `🔥 Novos · ${novos.length}`], ["HOJE", "Chegaram hoje"], ["NEGOTIATING", "Conversando"], ["VISIT_SCHEDULED", "Visita"], ["DOCS_REQUESTED", "Documentos"]].map(([k, r]) =>
+            <div className="chips">{[["", "Todos"], ["NOVO", `🔥 Novos · ${novos.length}`], ["HOJE", "Chegaram hoje"], ["QUENTE", "Quentes"], ["PARADO", "Parados"], ["NEGOTIATING", "Conversando"], ["VISIT_SCHEDULED", "Visita"], ["DOCS_REQUESTED", "Documentos"]].map(([k, r]) =>
               <button type="button" key={k} className={cliFase === k ? "on" : ""} onClick={() => setCliFase(k)}>{r}</button>)}</div>
             <span className="meta">{clientesFiltrados.length} cliente{clientesFiltrados.length === 1 ? "" : "s"} · mais recentes primeiro</span>
             {clientesFiltrados.slice(0, 200).map(cliCard)}
@@ -405,18 +392,16 @@ export default function PainelCorretor() {
           ))}
 
           {aba === "eu" && <>
+            <MeuPlacar uid={uid} titulo={false} onAbrir={(id) => { setAba("hoje"); setSelId(id); }}
+              onFiltro={(f) => { setAba("cli"); setBusca(""); setCliFase(f === "quentes" ? "QUENTE" : "PARADO"); }}
+              numeros={<div className="mp-grade">
+                <span><b>{atHoje} de {alvoHoje}</b><span className="mp-m">atendidos hoje</span></span>
+                <span><b>{atMes}</b><span className="mp-m">atendidos no mês</span></span>
+                <span><b>{trilha?.min_1o_contato != null ? (trilha.min_1o_contato < 60 ? `${trilha.min_1o_contato} min` : `${Math.round(trilha.min_1o_contato / 60)}h`) : "—"}</b>
+                  <span className="mp-m">até o 1º contato{trilha?.min_1o_contato_equipe != null ? ` · equipe ${trilha.min_1o_contato_equipe < 60 ? trilha.min_1o_contato_equipe + " min" : Math.round(trilha.min_1o_contato_equipe / 60) + "h"}` : ""}</span></span>
+                <span><b>{metaVendas}</b><span className="mp-m">meta de vendas{metaDoGerente ? " do gerente" : ""}</span></span>
+              </div>} />
             <AvisoLeadPush uid={uid} sempre />
-            <div className="card plain"><span className="lbl" style={{ margin: 0 }}>Tempo até o 1º contato</span>
-              <span className="num">{trilha?.min_1o_contato != null ? (trilha.min_1o_contato < 60 ? `${trilha.min_1o_contato} min` : `${Math.round(trilha.min_1o_contato / 60)}h`) : "—"}</span>
-              <span className="meta">{trilha?.min_1o_contato != null ? `metade dos seus leads de ${MES()} foi chamada até aí` : "aparece quando você chamar os leads novos pelo Comandra"}{trilha?.min_1o_contato_equipe != null ? ` · equipe: ${trilha.min_1o_contato_equipe < 60 ? trilha.min_1o_contato_equipe + " min" : Math.round(trilha.min_1o_contato_equipe / 60) + "h"}` : ""}</span></div>
-            <div className="card plain"><span className="lbl" style={{ margin: 0 }}>Trilha de {MES()} · {metaVendas} apartamento{metaVendas > 1 ? "s" : ""}</span>
-              <span className="meta">{metaDoGerente ? `meta sugerida pelo seu gerente${perfil?.gerente ? ", " + perfil.gerente : ""}` : "meta padrão: 1 por corretor"}</span>
-              {([["Clientes atendidos", atMes, alvoMes.atendidos], ["Visitas atendidas", visMes, alvoMes.visitas], ["Documentos (pastas)", docsMes, alvoMes.docs], ["Venda", vendasMes, metaVendas]] as [string, number, number][]).map(([n, a, m]) => (
-                <div key={n} style={{ display: "grid", gap: 4 }}><div className="gl"><span>{n}</span><span>{a} de {m}</span></div><div className="prog"><i style={{ width: `${Math.min(100, (100 * a) / Math.max(1, m))}%` }} /></div></div>))}
-              <span className="meta">Quanto mais você faz, menor fica a meta dos próximos dias.</span></div>
-            <div className="card plain"><span className="lbl" style={{ margin: 0 }}>Por que esses números</span>
-              <span className="meta">A cada 5 visitas atendidas sai 1 venda, e a cada 3 pastas com documentos sai 1 venda. Em dias úteis: 3 clientes atendidos por dia, 1 visita a cada 4 dias e 1 pasta a cada semana e meia.
-                {trilha?.fonte === "c2s_junix" ? " Visitas pelo check-in do plantão e pastas e vendas pelo Junix." : " Visitas e documentos contam pelo que você marca na ficha (Veio, Documentos)."}</span></div>
             <a className="btn" style={{ textAlign: "center", textDecoration: "none" }} href="/painel-completo">Painel completo (simulador, Fecha a Conta) ↗</a>
             <button className="btn" type="button" onClick={() => signOut()}>Sair da conta</button>
           </>}
@@ -433,7 +418,7 @@ export default function PainelCorretor() {
         )}
 
         <nav className="nav" aria-label="Seções">
-          {([["hoje", "☀️", "Hoje"], ["cli", "👥", "Clientes"], ["pes", "🎣", "Pescar"], ["disp", "📣", "Disparar"], ["eu", "👤", "Eu"]] as [Aba, string, string][]).map(([k, i, r]) => (
+          {([["hoje", "☀️", "Hoje"], ["cli", "👥", "Clientes"], ["pes", "🎣", "Pescar"], ["disp", "📣", "Disparar"], ["eu", "🏆", "Placar"]] as [Aba, string, string][]).map(([k, i, r]) => (
             <button key={k} type="button" className={aba === k ? "on" : ""} onClick={() => { setAba(k); setFiltro(""); }} aria-current={aba === k ? "page" : undefined}>
               {k === "hoje" && nNew > 0 && <span className="pip">{nNew}</span>}<i>{i}</i>{r}</button>))}
         </nav>
