@@ -23,6 +23,7 @@ export const horaTxt = (iso?: string | null) => iso ? new Date(iso).toLocaleTime
 
 /** Resposta das RPCs de plantão em uma frase para a pessoa. */
 export function motivoTxt(r: { motivo?: string; dist_m?: number; plantao?: string; precisao_m?: number }) {
+  if (r.motivo === "fora_horario") return "O check-in vale das 7h às 20h. Às 21h todos os check-ins encerram e no dia seguinte começa de novo.";
   if (r.motivo === "precisao") return `A localização veio imprecisa (±${r.precisao_m ?? "?"} m). Chegue perto de uma janela ou saia do elevador e tente de novo.`;
   if (r.motivo === "longe") return `Você está a ${distTxt(r.dist_m)} do ${r.plantao || "plantão"}. O check-in vale a até 200 m.`;
   if (r.motivo === "ja_existe") return `Já existe o ${r.plantao} aqui perto. Escolha ele na lista.`;

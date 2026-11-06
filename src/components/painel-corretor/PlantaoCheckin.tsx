@@ -1,5 +1,5 @@
 // Check-in de plantão do corretor (06/11, protótipo https://claude.ai/artifact/3fXsuS6dy3QPiVzsZq1vZQ).
-// Escolhe o plantão (mais perto primeiro) → "Cheguei no plantão" liga a roleta. Conferências 9h30 e 16h,
+// Escolhe o plantão (mais perto primeiro) → "Cheguei no plantão" liga a roleta (das 7h às 20h; tudo encerra às 21h). Conferências 9h30 e 16h,
 // "Em visita" (até 2h) e "Saí". Plantão fora da lista: o corretor digita o nome e o gerente aprova.
 // Serve o celular (PainelCorretor) e o computador (CorretorPainel), cada um com as próprias classes.
 import { useEffect, useState } from "react";
@@ -155,7 +155,7 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
         {escolher}
       </>}
       {aviso && <span className={c.meta} role="alert" style={{ color: "#E5654B", fontWeight: 600 }}>{aviso}</span>}
-      <span className={c.meta}>A localização só é lida quando você toca: no check-in e nas conferências das 9h30 e 16h.</span>
+      <span className={c.meta}>Check-in das 7h às 20h, quando você chegar. Às 9h30 e às 16h o Comandra confere se você continua no plantão. Às 21h todos os check-ins encerram: no dia seguinte, check-in de novo.</span>
     </div>
   );
 }
