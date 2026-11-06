@@ -219,7 +219,20 @@ export default function Disparar() {
   const alerta = cheiros.length > 0;
   const nomeCheck = nomeExib.trim() ? checarNome(nomeExib) : null;
 
+  // "Enviar sem imagem" (06/11): a Meta não deixa tirar o topo de uma mensagem aprovada com imagem.
+  // O disparo sai por uma cópia sem imagem (mesmo texto, mesma conta), criada aqui e aprovada pela Meta.
+  const [semImagem, setSemImagem] = useState(false);
+  const [criandoSemImg, setCriandoSemImg] = useState(false);
   const tplAtivo: Template | null = data?.templates.find((t) => t.id === tplSel) ?? null;
+  const temImagem = !!tplAtivo && (tplAtivo.headerTipo === "IMAGE" || !!tplAtivo.headerImagem);
+  const irmaSemImg: Template | null = tplAtivo && temImagem
+    ? (data?.templates ?? []).find((t) => t.id !== tplAtivo.id && t.waba === tplAtivo.waba && t.headerTipo !== "IMAGE" && !t.headerImagem
+        && (t.corpo ?? "").trim() === (tplAtivo.corpo ?? "").trim()) ?? null
+    : null;
+  const irmaAprovada = !!irmaSemImg && (irmaSemImg.status ?? "").toUpperCase() === "APPROVED";
+  const usarSemImg = semImagem && temImagem;
+  /** a mensagem que de fato sai: a escolhida ou, com "Enviar sem imagem", a cópia sem imagem aprovada */
+  const tplEnvio: Template | null = usarSemImg ? (irmaAprovada ? irmaSemImg : null) : tplAtivo;
 
   const preco = (cat: string) =>
     (cat === "UTILITY" ? data?.precos.utility : data?.precos.marketing) ?? 0.3;
@@ -701,15 +714,19 @@ export default function Disparar() {
       // envio, e o que está no navegador não existe para ela. Vale numa
       // variável local — o estado do React não muda na mesma linha, e usá-lo
       // aqui mandaria a imagem antiga.
-      let urlImagem = imgDisparo;
-      if (urlImagem?.startsWith("data:")) {
+      if (usarSemImg && !tplEnvio) {
+        toast.error(irmaSemImg ? "A versão sem imagem ainda está em análise na Meta. Assim que aprovar, o disparo libera." : "Crie a versão sem imagem primeiro (botão logo abaixo da imagem).", { duration: 9000 });
+        setDisparando(false); return;
+      }
+      let urlImagem = usarSemImg ? null : imgDisparo;
+      if (!usarSemImg && urlImagem?.startsWith("data:")) {
         toast.info("Guardando a imagem…");
         urlImagem = await subirImagem(urlImagem);
         setImgDisparo(urlImagem);
       }
       await dispararCampanha({
-        managerId: userId, templateId: tplAtivo.id,
-        nome: `${tplAtivo.nome} · ${new Date().toLocaleDateString("pt-BR")}`,
+        managerId: userId, templateId: (tplEnvio ?? tplAtivo).id,
+        nome: `${(tplEnvio ?? tplAtivo).nome} · ${new Date().toLocaleDateString("pt-BR")}`,
         alvos: vai, vars: Object.fromEntries(Object.entries(valores).map(([k, val]) => [chaveVar(k), val])), brokerIds: brokers,
         // "escolher" = escolha manual: o motor manda para esses corretores sem
         // filtrar chip/roleta. "fila" segue o rodizio normal.
@@ -729,8 +746,8 @@ export default function Disparar() {
           const vai2 = sobra.slice(0, cfg2.tetoHoje);
           const amanha8 = (() => { const t = new Date(); t.setDate(t.getDate() + 1); t.setHours(8, 0, 0, 0); return t.toISOString(); })();
           await dispararCampanha({
-            managerId: userId, templateId: tplAtivo.id,
-            nome: `${tplAtivo.nome} · ${new Date().toLocaleDateString("pt-BR")} · parte 2`,
+            managerId: userId, templateId: (tplEnvio ?? tplAtivo).id,
+            nome: `${(tplEnvio ?? tplAtivo).nome} · ${new Date().toLocaleDateString("pt-BR")} · parte 2`,
             alvos: vai2, vars: Object.fromEntries(Object.entries(valores).map(([k, val]) => [chaveVar(k), val])), brokerIds: brokers, manual: destino === "escolher", kind: tipoCampanha,
             configId: cfg2.id, imagem: urlImagem,
             quando: resto === "amanha" ? amanha8 : (marcado ? marcado.toISOString() : null),
@@ -1908,7 +1925,7 @@ export default function Disparar() {
 
                 <div className="f">
                   <label htmlFor="d-tpl">Qual mensagem</label>
-                  <select id="d-tpl" value={tplSel} onChange={(e) => setTplSel(e.target.value)} disabled={!cfgEnvio}>
+                  <select id="d-tpl" value={tplSel} onChange={(e) => { setTplSel(e.target.value); setSemImagem(false); }} disabled={!cfgEnvio}>
                     <option value="">{cfgEnvio ? "— escolha —" : "escolha o número primeiro"}</option>
                     {/* só os templates aprovados NA CONTA do número que vai enviar: template de outra conta é recusado pela Meta */}
                     {tplsDoNumero.map((t) => (
@@ -1972,6 +1989,35 @@ export default function Disparar() {
                       {imgDisparo ? "Clique para trocar. Vai ajustada para 1125 × 590."
                         : "Clique para trocar a foto só neste disparo — a mensagem continua a mesma e não volta para aprovação."}
                     </small>
+                    <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, cursor: "pointer", fontWeight: 600 }}>
+                      <input type="checkbox" checked={semImagem} onChange={(e) => setSemImagem(e.target.checked)} />
+                      Enviar sem imagem
+                    </label>
+                    {semImagem && (irmaAprovada ? (
+                      <small>Vai sair pela versão sem imagem <b className="mono">{irmaSemImg!.nome}</b> (mesmo texto, já aprovada pela Meta).</small>
+                    ) : irmaSemImg ? (
+                      <small style={{ color: "var(--warn)" }}>A versão sem imagem <b className="mono">{irmaSemImg.nome}</b> está em análise na Meta. Assim que aprovar, este disparo libera (costuma levar de minutos a algumas horas).</small>
+                    ) : (
+                      <div style={{ display: "grid", gap: 6, marginTop: 4 }}>
+                        <small>A Meta não deixa tirar a imagem de uma mensagem aprovada com imagem. O Comandra cria uma cópia sem imagem, com o mesmo texto, e manda para aprovação.</small>
+                        <button type="button" className="btn" disabled={criandoSemImg || !cfgEnvio} onClick={async () => {
+                          if (!tplAtivo || !cfgEnvio) return;
+                          setCriandoSemImg(true);
+                          try {
+                            const nome = `${tplAtivo.nome}`.toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 48) + "_sem_imagem";
+                            await criarTemplate({
+                              name: nome, body_text: tplAtivo.corpo, category: (tplAtivo.categoria || "MARKETING").toUpperCase(), language: tplAtivo.idioma,
+                              header_type: "NONE", header_image_url: null, footer_text: tplAtivo.rodape,
+                              buttons: Array.isArray(tplAtivo.botoes) ? tplAtivo.botoes : [], variables: tplAtivo.variaveis,
+                              exemplos: Object.fromEntries(tplAtivo.variaveis.map((v) => [v, ehNomeVar(v) ? "Maria" : "exemplo"])),
+                              owner_id: cfgEnvio.ownerId ?? undefined, waba_id: cfgEnvio.wabaId,
+                            });
+                            toast.success("Versão sem imagem enviada para a Meta aprovar. Ela aparece aqui sozinha quando aprovar.");
+                            qc.invalidateQueries({ queryKey: ["disparar"] });
+                          } catch (e: any) { toast.error(e?.message || "A Meta recusou a cópia sem imagem."); }
+                          finally { setCriandoSemImg(false); }
+                        }}>{criandoSemImg ? "Enviando para a Meta…" : "Criar versão sem imagem"}</button>
+                      </div>))}
                   </div>
                 ) : tplAtivo ? (
                   // Silencio aqui fazia o gerente esperar uma foto que nao
@@ -2074,7 +2120,7 @@ export default function Disparar() {
                   texto={tplAtivo?.corpo}
                   rodape={tplAtivo?.rodape}
                   botoes={(tplAtivo?.botoes ?? []).map((b: any) => b?.text ?? "")}
-                  imagem={imgDisparo ?? tplAtivo?.headerImagem ?? null} />
+                  imagem={usarSemImg ? null : (imgDisparo ?? tplAtivo?.headerImagem ?? null)} />
                 <p className="fone-leg">
                   {tplAtivo ? "É assim que vai chegar." : "Escolha a mensagem para ver a prévia."}
                 </p>

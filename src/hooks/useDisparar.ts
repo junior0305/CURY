@@ -682,6 +682,8 @@ export async function criarTemplate(t: {
   /** de quem é o número — sem isto o template nasce na conta da casa e o
    *  disparo pelo número do gerente falha por template inexistente */
   owner_id?: string;
+  /** conta (WABA) onde nasce a mensagem: quem tem mais de um número precisa dizer qual (06/11) */
+  waba_id?: string | null;
 }) {
   const { data, error } = await supabase.functions.invoke("wa-template", { body: t });
   if (error) throw error;
