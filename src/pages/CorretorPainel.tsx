@@ -23,12 +23,12 @@ import { TIPO_TRABALHO_LABEL, LOST_REASON_LABEL } from "@/types/lead";
 import { useUnidadesFecha } from "@/hooks/useEstrategia";
 import { empresa } from "@/lib/empresa";
 import AgendarVisita from "@/components/broker/AgendarVisita";
-import MeuPlacar, { PlacarFaixa } from "@/components/painel-corretor/MeuPlacar";
+import MeuPlacar from "@/components/painel-corretor/MeuPlacar";
+import InicioCorretor from "@/components/painel-corretor/InicioCorretor";
+import { useLeadsPC, useTarefasAbertas, tarefaPorLead, montarFila, GRUPOS } from "@/components/painel-corretor/fila";
 import LeadForm from "@/components/broker/LeadForm";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { TarefasLead, TarefasLista, ClassesTarefa } from "@/components/painel-corretor/TarefasLead";
-import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
-import PlantaoCheckin from "@/components/painel-corretor/PlantaoCheckin";
 import { mascarar, formatarFone, comArtigo, quandoISO, dataCurta as dataCurtaSP, horaSP, casaBusca, ha } from "@/components/painel-corretor/util";
 
 const CLS_TAREFA: ClassesTarefa = { titulo: "prompt-label", meta: "prompt-hint", btn: "pb", pri: "pb prim", inp: "note-input" };
@@ -118,7 +118,9 @@ const CorretorPainel = () => {
   const reduce = useReducedMotion();
 
   const [mode, setMode] = useState<"atender" | "disparar" | "pescar">("atender");
-  const [filter, setFilter] = useState<"prio" | "novos" | "pescados" | "visita" | "todos">("prio");
+  const [filter, setFilter] = useState<"fila" | "prio" | "novos" | "pescados" | "visita" | "todos">("prio");
+  // tela principal (visão rápida + Atender) até escolher um cliente; ?lead= abre direto a ficha
+  const [inicio, setInicio] = useState(() => !new URLSearchParams(window.location.search).get("lead"));
   const [busca, setBusca] = useState("");
   // ?lead=<id> vem do painel novo ("Simulador e Fecha a Conta")
   const [selId, setSelId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("lead"));
@@ -147,6 +149,10 @@ const CorretorPainel = () => {
     queryKey: ["painelLeads"], queryFn: fetchLeadsForDashboard, refetchInterval: 30000, enabled: !!user,
   });
 
+  const { data: leadsPC = [] } = useLeadsPC(user?.id || "");
+  const { data: tarefasPC = [] } = useTarefasAbertas();
+  const filaHoje = useMemo(() => montarFila(leadsPC, tarefaPorLead(tarefasPC, user?.id || "")), [leadsPC, tarefasPC, user?.id]);
+  const filaInfo = useMemo(() => new Map(filaHoje.map((x) => [x.l.id, x])), [filaHoje]);
   const counts = useMemo(() => ({
     prio: leads.filter((l) => l.leadTemperature === "quente" || l.status === "NEW" || l.status === "IN_PROGRESS").length,
     novos: leads.filter(ehNovoL).length,
@@ -157,6 +163,7 @@ const CorretorPainel = () => {
 
   const rows = useMemo(() => {
     let r = leads;
+    if (filter === "fila" && !busca.trim()) return filaHoje.map((x) => leads.find((l) => l.id === x.l.id)).filter(Boolean) as Lead[];
     if (filter === "prio") r = leads.filter((l) => l.leadTemperature === "quente" || l.status === "NEW" || l.status === "IN_PROGRESS" || l.status === "NEGOTIATING");
     else if (filter === "novos") r = leads.filter(ehNovoL);
     else if (filter === "pescados") r = leads.filter((l) => l.source === "cold_pool");
@@ -166,7 +173,7 @@ const CorretorPainel = () => {
     // "Cliente esperando" sempre no topo
     const esp = (l: Lead) => respostaReal(l) && (!l.lastBrokerWhatsappAt || new Date(l.lastLeadResponseAt) > new Date(l.lastBrokerWhatsappAt));
     return [...r.filter(esp), ...r.filter((l) => !esp(l))];
-  }, [leads, filter, busca]);
+  }, [leads, filter, busca, filaHoje]);
 
   // Notas que alimentam a régua (tentativas) e o andamento (última conversa) — uma consulta para a lista toda
   const idsRegua = useMemo(() => leads
@@ -644,12 +651,9 @@ const CorretorPainel = () => {
                   <span className="sidebar-title">Atendimento</span>
                   <span className="roleta-tag">{counts.todos} fichas</span>
                 </div>
-                <button className="pb prim" style={{ width: "100%", marginBottom: 8 }} onClick={() => setNovoCliente(true)}>+ Novo cliente</button>
                 <Sheet open={novoCliente} onOpenChange={setNovoCliente}>
                   {novoCliente && user && <LeadForm onOpenChange={setNovoCliente} brokerId={user.id} managerId={null} onCriado={(id) => { setSelId(id); setFilter("todos"); setMobileDetail(true); }} />}
                 </Sheet>
-                {/* meta do mês que o gerente definiu (some se não houver) */}
-                <div style={{ margin: "8px 0", display: "grid", gap: 8 }}><PlantaoCheckin uid={user?.id || ""} c={CLS_TAREFA} /><AvisoLeadPush uid={user?.id || ""} /><PlacarFaixa uid={user?.id || ""} onAbrir={() => setPlacar(true)} /></div>
                 <Sheet open={placar} onOpenChange={setPlacar}>
                   <SheetContent side="right" className="w-full sm:max-w-md p-0 overflow-y-auto" style={{ background: "#0B1626" }}>
                     <SheetTitle className="sr-only">Meu Placar</SheetTitle>
@@ -657,8 +661,13 @@ const CorretorPainel = () => {
                       onFiltro={() => { setPlacar(false); setBusca(""); setFilter("prio"); }} />}
                   </SheetContent>
                 </Sheet>
-                <input className="note-input" type="search" style={{ width: "100%", marginBottom: 8 }} aria-label="Buscar cliente" placeholder="🔎 Buscar por nome, telefone ou link do aviso…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+                <button className="pb" style={{ width: "100%", marginBottom: 8 }} onClick={() => { setInicio(true); setMobileDetail(true); }}>🏠 Tela principal</button>
+                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <input className="note-input" type="search" style={{ flex: 1, margin: 0 }} aria-label="Buscar cliente" placeholder="🔎 Buscar por nome, telefone ou link do aviso…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+                <button className="pb prim" aria-label="Novo cliente" title="Novo cliente" onClick={() => setNovoCliente(true)}>+</button>
+                </div>
                 <div className="filter-bar">
+                  <button className={`f-pill${filter === "fila" ? " on" : ""}`} onClick={() => setFilter("fila")}>Fila de hoje ({filaHoje.length})</button>
                   <button className={`f-pill${filter === "prio" ? " on" : ""}`} onClick={() => setFilter("prio")}>Prioridade ({counts.prio})</button>
                   <button className={`f-pill${filter === "novos" ? " on" : ""}`} onClick={() => setFilter("novos")}>🔥 Novos ({counts.novos})</button>
                   <button className={`f-pill${filter === "pescados" ? " on" : ""}`} onClick={() => setFilter("pescados")}>🎣 Pescados ({counts.pescados})</button>
@@ -670,13 +679,15 @@ const CorretorPainel = () => {
                 {rows.map((l) => {
                   const b = badgeFor(l);
                   return (
-                    <div key={l.id} className={`lead-row${sel?.id === l.id ? " selected" : ""}`} onClick={() => { setSelId(l.id); setMobileDetail(true); }}>
+                    <div key={l.id} className={`lead-row${!inicio && sel?.id === l.id ? " selected" : ""}`} onClick={() => { setSelId(l.id); setInicio(false); setMobileDetail(true); }}>
                       <div>
                         <div className="l-name">{l.name}{l.source === "cold_pool" && <span className="pescado-tag">🎣 Pescado</span>}</div>
                         <div className="l-meta">chegou {new Date(l.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}</div>
                         <div className="l-meta">{[l.tipoTrabalho && TIPO_TRABALHO_LABEL[l.tipoTrabalho], fmtRenda(l.rendaDeclarada) !== "—" ? fmtRenda(l.rendaDeclarada) : null, regiaoDe(l) || null].filter(Boolean).join(" · ") || mascarar(l.phone)}</div>
                       </div>
-                      <span className={b.cls}>{b.txt}</span>
+                      {filter === "fila" && filaInfo.get(l.id)
+                        ? <span className="l-badge" style={{ background: GRUPOS[filaInfo.get(l.id)!.g].cor, color: "#fff", borderColor: "transparent" }}>{GRUPOS[filaInfo.get(l.id)!.g].rot}</span>
+                        : <span className={b.cls}>{b.txt}</span>}
                     </div>
                   );
                 })}
@@ -687,27 +698,19 @@ const CorretorPainel = () => {
             {/* Palco */}
             <main className="stage">
               <div className="stage-inner">
-                {user && <div className="card" style={{ marginBottom: 12 }}>
-                  <TarefasLista userId={user.id} nomes={new Map(leads.map((l) => [l.id, l.name]))} onAbrir={(id) => { setSelId(id); setMobileDetail(true); }} c={CLS_TAREFA} />
-                </div>}
-                {jarvis.length > 0 && (
-                  <div className="card" style={{ marginBottom: 12, borderColor: "var(--accent-border)", background: "var(--accent-soft)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, fontSize: 14, color: "var(--accent)", marginBottom: 10 }}>
-                      🤖 Comandra · o que fazer agora
-                      <span style={{ background: "var(--accent)", color: "#fff", borderRadius: 99, fontSize: 11, padding: "1px 7px", fontWeight: 800 }}>{jarvis.length}</span>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {jarvis.slice(0, 3).map((j) => (
-                        <button key={j.id} onClick={() => { setSelId(j.id); setMobileDetail(true); }}
-                          style={{ display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: "10px 12px", borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", width: "100%" }}>
-                          <span style={{ fontSize: 17 }}>{j.icon}</span>
-                          <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{j.txt}</span>
-                          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--accent)" }}>Ir →</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {inicio && user ? (
+                  <InicioCorretor uid={user.id} c={CLS_TAREFA} onPlacar={() => setPlacar(true)}
+                    onAbrir={(id) => { setSelId(id); setFilter("todos"); setInicio(false); }}
+                    onAtender={() => { setBusca(""); if (filaHoje.length) { setFilter("fila"); setSelId(filaHoje[0].l.id); } else setFilter("todos"); setInicio(false); }} />
+                ) : <>
+                {filter === "fila" && sel && filaInfo.get(sel.id) && (() => {
+                  const k = filaHoje.findIndex((x) => x.l.id === sel.id), x = filaHoje[k], prox = filaHoje[k + 1];
+                  return (
+                    <div className="card" style={{ marginBottom: 12, display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", borderColor: GRUPOS[x.g].cor }}>
+                      <span><b style={{ color: GRUPOS[x.g].cor }}>{x.motivo}</b><br /><span style={{ fontSize: 12.5, color: "var(--muted)" }}>Fila de hoje · cliente {k + 1} de {filaHoje.length}</span></span>
+                      {prox ? <button className="pb prim" onClick={() => setSelId(prox.l.id)}>Próximo da fila ›</button> : <span style={{ fontWeight: 700 }}>Último da fila 🎉</span>}
+                    </div>);
+                })()}
                 {sel ? (
                   <>
                     <div className="mobile-back-bar">
@@ -927,6 +930,7 @@ const CorretorPainel = () => {
                 ) : (
                   <div className="card" style={{ textAlign: "center", padding: 48, color: "var(--muted)" }}>Selecione uma ficha na lista.</div>
                 )}
+                </>}
               </div>
             </main>
           </div>

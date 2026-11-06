@@ -19,17 +19,19 @@ import AgendarVisita from "@/components/broker/AgendarVisita";
 import { fetchOpenTasks } from "@/integrations/supabase/tasks";
 import LeadForm from "@/components/broker/LeadForm";
 import { Sheet } from "@/components/ui/sheet";
-import { TarefasLista } from "@/components/painel-corretor/TarefasLead";
 import type { Task } from "@/types/task";
 import Ficha from "@/components/painel-corretor/Ficha";
 import Pescar from "@/components/painel-corretor/Pescar";
 import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
-import PlantaoCheckin from "@/components/painel-corretor/PlantaoCheckin";
-import MeuPlacar, { PlacarFaixa } from "@/components/painel-corretor/MeuPlacar";
+import MeuPlacar from "@/components/painel-corretor/MeuPlacar";
+import InicioCorretor from "@/components/painel-corretor/InicioCorretor";
+import { montarFila, contarGrupos, GRUPOS, ORDEM } from "@/components/painel-corretor/fila";
+import { LOST_REASON_LABEL } from "@/types/lead";
+import type { LostReason } from "@/types/lead";
 import CorretorPainel from "@/pages/CorretorPainel";
 import {
   LeadPC, COLS, diaSP, horaSP, dataCurta, primeiroNome, comArtigo, linhaMeta, esperando, escudo, ultimoRegistro,
-  diasUteis, MES, QUANDO, quandoISO, origem, casaBusca, ehNovo, ha,
+  diasUteis, MES, QUANDO, quandoISO, origem, casaBusca, ehNovo, ha, rendaCurta, TRABALHO,
 } from "@/components/painel-corretor/util";
 import "@/styles/painel-corretor.css";
 
@@ -57,6 +59,9 @@ export default function PainelCorretor() {
   const [cliFase, setCliFase] = useState("");
   const [selId, setSelId] = useState<string | null>(null);
   const [novoCliente, setNovoCliente] = useState(false);
+  const [filaOn, setFilaOn] = useState(false);
+  const [feitos, setFeitos] = useState<Set<string>>(new Set());
+  const [descFila, setDescFila] = useState(false);
   const [revelados, setRevelados] = useState<Set<string>>(new Set());
   const [como, setComo] = useState<{ id: string; canal: string } | null>(null);
   const [comoOut, setComoOut] = useState("Conversamos");
@@ -149,43 +154,19 @@ export default function PainelCorretor() {
     })();
   }, [uid]);
 
-  // ── classificação do "Agora" ──────────────────────────────────────────────────
+  // ── fila do Atender (regras em painel-corretor/fila.ts, as mesmas do computador) ──
   const hojeD = diaSP(Date.now());
-  const regua = (l: LeadPC) => {
-    if (l.source !== "cold_pool" || diaSP(l.created_at) < REGUA_DESDE || esperando(l) || !["NEW", "IN_PROGRESS"].includes(l.status)) return null;
-    const pesca = diaSP(l.created_at);
-    const dias = [...(porLead.get(l.id)?.dias ?? new Set<string>())].filter((d) => d >= pesca);
-    const feitos = Math.min(4, dias.length);
-    if (feitos >= 4 || dias.includes(hojeD)) return null;
-    const d = Math.round((Date.parse(hojeD + "T12:00:00Z") - Date.parse(pesca + "T12:00:00Z")) / 864e5);
-    if (d < OFFS_REGUA[feitos]) return null;
-    return { n: feitos + 1, atrasado: d > OFFS_REGUA[feitos] };
+  const filaHoje = useMemo(() => montarFila(leads, tarefaDe), [leads, tarefaDe]);
+  const gruposN = useMemo(() => contarGrupos(leads, tarefaDe), [leads, tarefaDe]);
+  const nNew = gruposN.resp + gruposN.novo;
+  const filaRest = filaHoje.filter((x) => !feitos.has(x.l.id));
+  const atual = filaRest[0] || null;
+  const proximo = (id: string) => { setFeitos((f) => new Set(f).add(id)); setDescFila(false); };
+  const descartarFila = async (l: LeadPC, m: NonNullable<LostReason>) => {
+    try { await updateLeadStatus(l.id, "ABANDONED", null, m); toast.success(`${l.name} descartado · ${LOST_REASON_LABEL[m]}`); proximo(l.id); atualizar(); }
+    catch { toast.error("Não consegui descartar"); }
   };
-  const classe = (l: LeadPC): { t: Tipo; tag: string; u: number } | null => {
-    if (esperando(l)) return { t: "resp", tag: `💬 Respondeu · há ${haMin(l.last_lead_response_at!)}`, u: 100 };
-    if (l.status === "NEW" && !(l.contact_attempts || 0) && l.source !== "cold_pool") return { t: "new", tag: `🔥 Novo · há ${haMin(l.created_at)}`, u: 95 };
-    const adiado = l.next_action_date && Date.parse(l.next_action_date) > Date.now() && diaSP(l.next_action_date) > hojeD;
-    if (l.visit_scheduled_at && diaSP(l.visit_scheduled_at) === hojeD && l.status === "VISIT_SCHEDULED") return { t: "vis", tag: `📅 Visita ${horaSP(l.visit_scheduled_at)}`, u: 85 };
-    if (adiado) return null;
-    if (l.next_action_date && diaSP(l.next_action_date) <= hojeD) {
-      const atr = Date.parse(l.next_action_date) < Date.now();
-      return { t: "ret", tag: `${tarefaDe.get(l.id) ? `📌 ${tarefaDe.get(l.id)!.title}` : "📞 Retorno"} ${diaSP(l.next_action_date) < hojeD ? dataCurta(l.next_action_date) : horaSP(l.next_action_date)}${atr ? " · atrasado" : ""}`, u: atr ? 90 : 80 };
-    }
-    const rg = regua(l);
-    if (rg) return { t: "pes", tag: `🎣 ${rg.n}º toque ${rg.atrasado ? "atrasado" : "hoje"}`, u: rg.atrasado ? 75 : 60 };
-    if (l.status === "NEGOTIATING") {
-      const base = [l.negotiating_since, porLead.get(l.id)?.ult, l.last_lead_response_at].filter(Boolean).sort().slice(-1)[0] as string | undefined;
-      const dias = base ? Math.floor((Date.now() - Date.parse(base)) / 864e5) : 0;
-      if (dias >= 3) return { t: "par", tag: `⏳ Sem avanço há ${dias} dias`, u: 70 };
-    }
-    return null;
-  };
-  const agora = useMemo(() => ativos.map((l) => ({ l, c: classe(l) })).filter((x) => x.c).sort((a, b) => b.c!.u - a.c!.u) as { l: LeadPC; c: { t: Tipo; tag: string; u: number } }[],
-    [ativos, porLead, tarefaDe]); // eslint-disable-line
-  const nNew = agora.filter((x) => x.c.t === "new").length;
-  const nRet = agora.filter((x) => x.c.t === "ret").length;
-  const visHoje = agora.filter((x) => x.c.t === "vis");
-  const lista = agora.filter((x) => !filtro || x.c.t === filtro || (filtro === "new" && x.c.t === "resp"));
+  const ultimaNota = (id: string) => notas.filter((n) => n.lead_id === id && !n.content.startsWith(PREFIXO_TENTATIVA)).sort((a, b) => b.created_at.localeCompare(a.created_at))[0] || null;
 
   // ── meta do mês (o detalhe fica no Meu Placar) ────────────────────────────────────────────────────────────────
   const metaVendas = Number(metaP?.dono?.meta) > 0 ? Number(metaP.dono.meta) : 1;
@@ -235,13 +216,13 @@ export default function PainelCorretor() {
           await supabase.from("leads").update({ last_broker_whatsapp_at: agoraIso, last_interaction_at: agoraIso }).eq("id", l.id);
           if (["NEW", "IN_PROGRESS", "FOLLOW_UP_AUTO", "REACTIVATED"].includes(l.status)) await setLeadNegotiating(l.id).catch(() => {});
         }
-        if (comoQ === "Agendar visita") { setComo(null); atualizar(); setAgendar(l.id); return; }
+        if (comoQ === "Agendar visita") { setComo(null); setFeitos((f) => new Set(f).add(l.id)); atualizar(); setAgendar(l.id); return; }
         const iso = quandoISO(comoQ);
         await setLeadReturnDate(l.id, iso);
         await addLeadNote(l.id, uid, `Combinado retorno em ${dataCurta(iso)} ${horaSP(iso)}`).catch(() => {});
         toast.success(`Registrado: ${comoOut.toLowerCase()} · próximo passo ${comoQ.toLowerCase()} · 🛡️ protegido por 48h`);
       }
-      setComo(null); atualizar();
+      setComo(null); setFeitos((f) => new Set(f).add(l.id)); atualizar();
     } catch { toast.error("Não consegui registrar. Tente de novo."); }
   };
   const salvarAdiar = async () => {
@@ -283,24 +264,8 @@ export default function PainelCorretor() {
   const saud = (() => { const h = Number(new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo" })); return h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite"; })();
   const hojeTxt = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Sao_Paulo" });
   const titulo: Record<Aba, [string, string]> = {
-    hoje: [`${saud}${nomeEu ? ", " + nomeEu : ""}`, hojeTxt], cli: ["Clientes", `${ativos.length} com você`], pes: ["Pescar", "contatos da sua região"],
+    hoje: filaOn ? ["Atender", "um cliente por vez, na ordem certa"] : [`${saud}${nomeEu ? ", " + nomeEu : ""}`, hojeTxt], cli: ["Clientes", `${ativos.length} com você`], pes: ["Pescar", "contatos da sua região"],
     disp: ["Disparar", "pelo número oficial da sua equipe"], eu: ["Meu Placar", `seu mês de ${MES()}`],
-  };
-
-  const card = (l: LeadPC, c: { t: Tipo; tag: string }) => {
-    const esc = escudo(l, ultimoRegistro(l, porLead.get(l.id)?.ult));
-    return (
-      <div key={l.id} className={`card${desk && selId === l.id ? " sel" : ""}`} role="button" tabIndex={0} aria-label={`Abrir ${l.name}`}
-        onPointerDown={(e) => pd(e, l.id)} onPointerMove={pm} onPointerUp={pu} onPointerCancel={pc}
-        onKeyDown={(e) => { if (e.key === "Enter") setSelId(l.id); }}>
-        <div className="row"><b>{l.name}</b><span className={`tag ${TAGC[c.t]}`}>{c.tag}</span></div>
-        <span className="meta">{linhaMeta(l) || origem(l) || "—"}</span>
-        {tarefaDe.get(l.id)?.notes && <span className="meta">📌 {tarefaDe.get(l.id)!.notes}</span>}
-        <div className="row"><span className={`shield ${esc.k}`}>🛡️ {esc.txt}</span>
-          <span className="acts"><button className="btn" type="button" onClick={() => { setAdiar(l.id); setAdiarQ("Amanhã 10h"); }}>Adiar</button>
-            <button className="btn wa" type="button" onClick={() => chamar(l, "WhatsApp")}>Chamar</button></span></div>
-      </div>
-    );
   };
 
   const novos = useMemo(() => ativos.filter(ehNovo), [ativos]);
@@ -331,37 +296,50 @@ export default function PainelCorretor() {
           <div className="r">
             <button className="tema" type="button" onClick={trocarTema} aria-label={claro ? "Mudar para tela escura" : "Mudar para tela clara"} title="Claro / escuro">{claro ? "🌙" : "☀️"}</button>
             {aba === "hoje" && <button className="btn" type="button" onClick={() => { setDiaOk(new Set()); setFechaDia(true); }}>Fechar o dia</button>}
+            {aba === "hoje" && !filaOn && <button className="btn pri" type="button" aria-label="Novo cliente" onClick={() => setNovoCliente(true)}>+</button>}
           </div>
         </header>
 
         <main className="pc-body">
-          {aba === "hoje" && <>
-            <AvisoLeadPush uid={uid} />
-            <div className="card plain"><PlantaoCheckin uid={uid} c={{ titulo: "lbl", meta: "meta", btn: "btn", pri: "btn pri", inp: "inp" }} /></div>
-            <PlacarFaixa uid={uid} onAbrir={() => setAba("eu")} />
-            <div className="stats">
-              <button type="button" className={`st${nNew ? " hot" : ""}${filtro === "new" ? " on" : ""}`} onClick={() => setFiltro(filtro === "new" ? "" : "new")}><b>{nNew}</b><span>novos esperando</span></button>
-              <button type="button" className={`st${filtro === "ret" ? " on" : ""}`} onClick={() => setFiltro(filtro === "ret" ? "" : "ret")}><b>{nRet}</b><span>retornos hoje</span></button>
-              <button type="button" className={`st${filtro === "vis" ? " on" : ""}`} onClick={() => setFiltro(filtro === "vis" ? "" : "vis")}><b>{visHoje.length}</b><span>{visHoje.length === 1 ? `visita às ${horaSP(visHoje[0].l.visit_scheduled_at!)}` : "visitas hoje"}</span></button>
+          {aba === "hoje" && !filaOn && <InicioCorretor uid={uid} c={{ titulo: "lbl", meta: "meta", btn: "btn", pri: "btn pri", inp: "inp" }}
+            onAtender={() => { if (filaRest.length) setFilaOn(true); else setAba("cli"); }} onPlacar={() => setAba("eu")} onAbrir={setSelId} />}
+
+          {aba === "hoje" && filaOn && <>
+            <div className="row" style={{ gap: 10 }}>
+              <button className="btn" type="button" onClick={() => setFilaOn(false)} aria-label="Voltar para a tela principal">←</button>
+              <div style={{ flex: 1, display: "grid", gap: 4 }}>
+                <span className="meta">{atual ? `cliente ${feitos.size + 1} de ${feitos.size + filaRest.length}` : "fila concluída"}</span>
+                <div className="prog"><i style={{ width: `${(100 * feitos.size) / Math.max(1, feitos.size + filaRest.length)}%` }} /></div>
+              </div>
             </div>
-            {buscaInput}
-            {busca.trim() ? <>
-              <div className="lbl">Resultado da busca · {clientesFiltrados.length}</div>
-              {clientesFiltrados.length ? clientesFiltrados.slice(0, 50).map(cliCard) : <p className="hint vazio">Nenhum cliente seu com esse nome ou telefone.</p>}
-            </> : <>
-            {nNew > 0 && <button type="button" className="card plain" onClick={() => { setAba("cli"); setCliFase("NOVO"); }}>
-              <div className="row"><b>🔥 {nNew} cliente{nNew > 1 ? "s" : ""} novo{nNew > 1 ? "s" : ""} esperando o 1º contato</b><span className="tag t-new">ver</span></div>
-              <span className="meta">o mais recente chegou há {ha(novos[0]?.created_at || new Date().toISOString())}</span></button>}
-            <button className="btn full" type="button" onClick={() => setNovoCliente(true)}>+ Novo cliente</button>
-            <div className="card plain">
-              <TarefasLista userId={uid} nomes={new Map(ativos.map((l) => [l.id, l.name]))} onAbrir={setSelId} c={{ titulo: "lbl", meta: "meta", btn: "btn", pri: "btn pri", inp: "inp" }} />
-              <select className="inp" aria-label="Agendar tarefa para qual cliente" value="" onChange={(e) => e.target.value && setSelId(e.target.value)}>
-                <option value="">📌 Agendar tarefa para qual cliente?</option>{ativos.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
-            </div>
-            <div className="lbl">Agora{filtro ? " · filtrado" : ""}</div>
-            {lista.length ? lista.slice(0, 40).map(({ l, c }) => card(l, c)) : <p className="hint vazio">Tudo em dia por aqui. 🎉</p>}
-            {lista.length > 0 && <p className="hint">{desk ? "Clique no card para abrir a ficha ao lado" : "Arraste o card → para chamar · ← para adiar"}</p>}
-            </>}
+            <div className="chips">{ORDEM.map((g) => { const n = filaRest.filter((x) => x.g === g).length;
+              return n ? <span key={g} className="tag" style={{ background: GRUPOS[g].cor, color: "#fff" }}>{n} {GRUPOS[g].rot.toLowerCase()}</span> : null; })}</div>
+            {atual ? (() => { const l = atual.l, nota = ultimaNota(l.id); return (
+              <div className="card plain" style={{ border: `2px solid ${GRUPOS[atual.g].cor}`, gap: 12 }}>
+                <span className="tag" style={{ alignSelf: "flex-start", background: GRUPOS[atual.g].cor, color: "#fff", fontWeight: 800 }}>{atual.motivo}</span>
+                <button type="button" onClick={() => setSelId(l.id)} style={{ all: "unset", cursor: "pointer", fontSize: 24, fontWeight: 800 }}>{l.name}</button>
+                <div className="gl"><span>Região</span><span>{l.regiao_interesse || "—"}</span></div>
+                <div className="gl"><span>Renda</span><span>{rendaCurta(l.renda_declarada) || "—"}</span></div>
+                <div className="gl"><span>Trabalho</span><span>{TRABALHO(l.tipo_trabalho) || "—"}</span></div>
+                <div className="gl"><span>Fase</span><span>{STATUS_TXT[l.status] || l.status}</span></div>
+                {nota && <span className="meta">📝 {dataCurta(nota.created_at)} {horaSP(nota.created_at)} · {nota.content}</span>}
+                <div className="row">
+                  <button className="btn wa" type="button" style={{ flex: 1 }} onClick={() => chamar(l, "WhatsApp")}>🟢 Chamar no WhatsApp</button>
+                  <button className="btn" type="button" onClick={() => chamar(l, "Ligação")}>📞 Ligar</button>
+                </div>
+                <span className="meta">Depois de chamar, registre como foi e o próximo cliente aparece.</span>
+                <div className="row">
+                  <button className="btn" type="button" style={{ flex: 1 }} onClick={() => proximo(l.id)}>Pular por agora</button>
+                  <button className="btn" type="button" style={{ flex: 1 }} onClick={() => setDescFila(!descFila)}>🗑️ Descartar</button>
+                </div>
+                {descFila && <div className="chips">{(["SEM_PERFIL", "NUMERO_ERRADO", "SEM_RETORNO", "DESISTIU", "JA_COMPROU", "RENDA_FORA_FAIXA"] as NonNullable<LostReason>[]).map((m) =>
+                  <button key={m} type="button" onClick={() => descartarFila(l, m)}>{LOST_REASON_LABEL[m]}</button>)}</div>}
+              </div>); })()
+              : <div className="card plain" style={{ textAlign: "center", padding: "28px 16px" }}><b>Fila em dia! 🎉</b>
+                  <span className="meta">Você passou por todos os clientes de hoje.</span>
+                  <button className="btn pri" type="button" onClick={() => { setFilaOn(false); setAba("cli"); }}>Ver todos os clientes</button></div>}
+            <button className="btn" type="button" onClick={() => { setFilaOn(false); setAba("cli"); }}>Ver todos os {ativos.length} em lista</button>
+            <p className="hint">Ordem: responderam · novos (menos de 24h) · retornos e tarefas de hoje · visitas de hoje · pescados · parados · nunca chamados (até 10 por dia)</p>
           </>}
 
           {aba === "cli" && <>
