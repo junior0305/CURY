@@ -7,11 +7,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { pegarLocal, distTxt, horaTxt, motivoTxt, erroTxt, confTxt, type Local, type ConfDia } from "@/lib/plantao";
+import { waLink } from "@/integrations/supabase/atender";
 import type { ClassesTarefa } from "./TarefasLead";
 
 type Dia = {
-  situacao: "sem_checkin" | "roleta" | "visita" | "fora" | "saiu" | "aguardando"; plantao: { nome: string; status: string } | null;
-  fim_da_roleta: string | null;
+  situacao: "sem_checkin" | "roleta" | "visita" | "fora" | "saiu" | "aguardando" | "vencido"; plantao: { nome: string; status: string } | null;
+  fim_da_roleta: string | null; pedidos_hoje: number;
+  liberacao: { em: string; ate: string; dist_m: number | null; motivo: string | null; pedido: boolean } | null;
   checkin_em: string | null; checkin_dist_m: number | null; visita_desde: string | null;
   conferencia_pendente: { qual: string; ate: string } | null; c930: ConfDia; c16: ConfDia;
 };
@@ -19,6 +21,7 @@ type Perto = { id: string; nome: string; endereco: string | null; dist: number |
 
 const coluna = { display: "grid", gap: 8 } as const;
 const fila = { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" } as const;
+const MOTIVOS = ["Estou no plantão, o endereço do sistema está errado", "O GPS não pega aqui dentro"];
 
 export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTarefa }) {
   const qc = useQueryClient();
@@ -29,6 +32,8 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
   const [novo, setNovo] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
   const [aviso, setAviso] = useState("");
+  const [pedir, setPedir] = useState(false);          // check-in não passou → pedir liberação ao gerente
+  const [outroMotivo, setOutroMotivo] = useState("");
   const [agora, setAgora] = useState(Date.now());
 
   const { data: dia, isError } = useQuery<Dia>({
@@ -37,6 +42,11 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
   });
   useEffect(() => { const t = setInterval(() => setAgora(Date.now()), 15_000); return () => clearInterval(t); }, []);
   const atualizar = () => qc.invalidateQueries({ queryKey: ["plantaoDia", uid] });
+  const { data: lideres = [] } = useQuery<{ nome: string; phone: string | null; papel: string }[]>({
+    queryKey: ["plantaoLideres", uid], enabled: !!uid, staleTime: 3600_000,
+    queryFn: async () => { const { data } = await (supabase as any).rpc("plantao_meus_lideres"); return data || []; },
+  });
+  const superL = lideres.find((l) => l.papel === "super" && l.phone) || lideres.find((l) => l.phone);
 
   // localização recente (até 2 min) vale para o check-in logo depois de abrir a lista
   const localAgora = async () => {
@@ -59,7 +69,7 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
     const l = await localAgora();
     const { data, error } = await (supabase as any).rpc("plantao_checkin", { p_plantao: escolhido, p_lat: l.lat, p_lng: l.lng, p_prec: l.prec });
     if (error) throw error;
-    if (!data?.ok) { setAviso(motivoTxt(data)); setLocal(null); return; }
+    if (!data?.ok) { setAviso(motivoTxt(data)); if (data?.motivo === "longe" || data?.motivo === "precisao") setPedir(true); return; }
     toast.success(data.aguarda ? `Check-in no ${data.plantao} · aguardando seu gerente liberar` : `Check-in no ${data.plantao} · você entrou no fim da roleta`); setLista(null); atualizar();
   });
   const fazerNovo = () => rodar("novo", async () => {
@@ -69,6 +79,15 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
     if (error) throw error;
     if (!data?.ok) { setAviso(motivoTxt(data)); return; }
     toast.success(data.aguarda ? "Check-in feito · aguardando seu gerente liberar" : "Check-in feito · você entrou no fim da roleta e seu gerente vai aprovar o plantão novo"); setNovo(false); setNomeNovo(""); setLista(null); atualizar();
+  });
+  const pedirLiberacao = (motivo: string) => rodar("pedir", async () => {
+    if (!escolhido) { setAviso("Escolha o plantão onde você está."); return; }
+    if (!motivo.trim()) { setAviso("Escolha ou escreva o motivo."); return; }
+    const l = await localAgora();
+    const { data, error } = await (supabase as any).rpc("plantao_pedir_liberacao", { p_plantao: escolhido, p_lat: l.lat, p_lng: l.lng, p_prec: l.prec, p_motivo: motivo.trim() });
+    if (error) throw error;
+    if (!data?.ok) { setAviso(motivoTxt(data)); return; }
+    toast.success("Pedido enviado ao seu gerente e ao seu super"); setPedir(false); setLista(null); setOutroMotivo(""); atualizar();
   });
   const conferir = () => rodar("conferir", async () => {
     setLocal(null);
@@ -98,6 +117,16 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
             <span>{distTxt(p.dist)}</span>
           </button>))}
         <button className={c.pri} type="button" onClick={fazerCheckin} disabled={!!ocupado || !escolhido}>{ocupado === "checkin" ? "Conferindo…" : "Cheguei no plantão"}</button>
+        {pedir && (
+          <div style={coluna}>
+            <b>Não conseguiu? Peça ao seu gerente para liberar</b>
+            <span className={c.meta}>O Comandra manda o pedido com a sua localização para o seu gerente e o seu super. Ele vence em 1 hora.{dia.pedidos_hoje ? ` Você já pediu ${dia.pedidos_hoje} de 2 hoje.` : ""}</span>
+            {MOTIVOS.map((m) => <button key={m} type="button" className={c.btn} disabled={!!ocupado} onClick={() => pedirLiberacao(m)}>{m}</button>)}
+            <div style={fila}>
+              <input className={c.inp} style={{ flex: 1 }} placeholder="Outro motivo" value={outroMotivo} onChange={(e) => setOutroMotivo(e.target.value)} aria-label="Outro motivo" />
+              <button type="button" className={c.btn} disabled={!!ocupado || !outroMotivo.trim()} onClick={() => pedirLiberacao(outroMotivo)}>Pedir</button>
+            </div>
+          </div>)}
         {!novo ? <button className={c.btn} type="button" onClick={() => setNovo(true)}>Meu plantão não está na lista</button> : (
           <div style={coluna}>
             <input className={c.inp} placeholder="Nome do plantão (ex.: Plantão Tikoá Penha)" value={nomeNovo} onChange={(e) => setNomeNovo(e.target.value)} aria-label="Nome do plantão" />
@@ -122,9 +151,19 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
           <button className={c.btn} type="button" onClick={() => simples("plantao_visita", "Em visita · você segue na roleta por até 2h")} disabled={!!ocupado}>Estou em visita com cliente</button>
         </div>
       </> : dia.situacao === "aguardando" ? <>
-        <b>⏳ Check-in feito · aguardando seu gerente liberar</b>
-        <span className={c.meta}>Check-in às {horaTxt(dia.checkin_em)} no {nomeP}. Quando ele liberar, você entra no fim da roleta e recebe um aviso.</span>
+        <b>⏳ Aguardando seu gerente liberar</b>
+        <span className={c.meta}>{dia.liberacao?.pedido
+          ? `Pedido enviado às ${horaTxt(dia.liberacao.em)} para o ${nomeP}. Vence às ${horaTxt(dia.liberacao.ate)}. Quando liberarem, você entra no fim da roleta e recebe um aviso.`
+          : `Check-in às ${horaTxt(dia.checkin_em)} no ${nomeP}. Sua equipe libera cada check-in: quando o gerente liberar, você entra no fim da roleta.`}</span>
+        {superL && <a className={c.btn} style={{ textAlign: "center", textDecoration: "none" }} target="_blank" rel="noreferrer"
+          href={waLink(superL.phone || "", `Oi ${superL.nome}, pedi liberação do check-in no ${nomeP} pelo Comandra e ainda não fui liberado. Pode ver para mim?`)}>Chamar {superL.nome} no WhatsApp</a>}
         <div style={fila}><button className={c.btn} type="button" onClick={() => simples("plantao_saida", "Check-in cancelado")} disabled={!!ocupado}>Saí do plantão</button></div>
+      </> : dia.situacao === "vencido" ? <>
+        <b>⏰ Seu pedido de liberação venceu</b>
+        <span className={c.meta}>Ninguém respondeu em 1 hora. Faça o check-in de novo ou peça outra liberação.</span>
+        {escolher}
+        {superL && <a className={c.btn} style={{ textAlign: "center", textDecoration: "none" }} target="_blank" rel="noreferrer"
+          href={waLink(superL.phone || "", `Oi ${superL.nome}, pedi liberação do check-in pelo Comandra e ninguém respondeu. Pode me liberar?`)}>Chamar {superL.nome} no WhatsApp</a>}
       </> : dia.situacao === "roleta" ? <>
         <b>✅ Você está na roleta · {nomeP}</b>
         <span className={c.meta}>Check-in às {horaTxt(dia.checkin_em)}{dia.checkin_dist_m != null ? `, a ${distTxt(dia.checkin_dist_m)}` : ""}{dia.plantao?.status === "pendente" ? " · plantão aguardando o gerente" : ""}</span>

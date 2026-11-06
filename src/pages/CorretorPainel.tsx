@@ -25,6 +25,7 @@ import { empresa } from "@/lib/empresa";
 import AgendarVisita from "@/components/broker/AgendarVisita";
 import MeuPlacar from "@/components/painel-corretor/MeuPlacar";
 import InicioCorretor from "@/components/painel-corretor/InicioCorretor";
+import CheckinAviso from "@/components/painel-corretor/CheckinAviso";
 import { useLeadsPC, useTarefasAbertas, tarefaPorLead, montarFila, GRUPOS } from "@/components/painel-corretor/fila";
 import LeadForm from "@/components/broker/LeadForm";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -641,6 +642,7 @@ const CorretorPainel = () => {
           </div>
         </nav>
 
+        {user && <CheckinAviso uid={user.id} c={CLS_TAREFA} />}
         {/* ── MODO ATENDER ── */}
         {mode === "atender" && (
           <div className={`shell${mobileDetail ? " mobile-show-detail" : ""}`}>

@@ -25,6 +25,7 @@ import Pescar from "@/components/painel-corretor/Pescar";
 import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
 import MeuPlacar from "@/components/painel-corretor/MeuPlacar";
 import InicioCorretor from "@/components/painel-corretor/InicioCorretor";
+import CheckinAviso from "@/components/painel-corretor/CheckinAviso";
 import { montarFila, contarGrupos, GRUPOS, ORDEM } from "@/components/painel-corretor/fila";
 import { LOST_REASON_LABEL } from "@/types/lead";
 import type { LostReason } from "@/types/lead";
@@ -289,6 +290,7 @@ export default function PainelCorretor() {
 
   return (
     <div className={`pc${claro ? " claro" : ""}`}>
+      <CheckinAviso uid={uid} c={{ titulo: "lbl", meta: "meta", btn: "btn", pri: "btn pri", inp: "inp" }} />
       <div className={`pc-app${desk ? " desk" : ""}`}>
         <div className={`pc-col${desk && !["hoje", "cli"].includes(aba) ? " wide" : ""}`}>
         <header className="pc-top">

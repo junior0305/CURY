@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { syncAudioSettings } from "@/hooks/use-audio-arena";
 import { supabase } from "@/integrations/supabase/client";
 import EntrarComoBarra from "@/components/EntrarComoBarra";
+import PedidosLiberacaoBarra from "@/components/plantao/PedidosLiberacaoBarra";
 import { instalarBloqueioEntrarComo } from "@/lib/entrarComo";
 
 // "Entrar como" (28/10): mensagens/disparos bloqueados desde a primeira chamada
@@ -201,6 +202,7 @@ const App = () => (
           <ThemeProvider>
           <AudioSyncOnLoad />
           <AvisoVersaoNova />
+          <PedidosLiberacaoBarra />
           <Toaster />
           <Sonner />
           <Routes>

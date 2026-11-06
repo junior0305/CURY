@@ -86,6 +86,7 @@ export default function InicioCorretor({ uid, c, onAtender, onPlacar, onAbrir }:
     : sit === "visita" ? { b: "Em visita", s: "segue na roleta", k: "ok" }
     : sit === "fora" ? { b: "Fora da roleta", s: "Conferir ›", k: "alerta" }
     : sit === "aguardando" ? { b: "Aguardando gerente", s: "check-in feito ›", k: "alerta" }
+    : sit === "vencido" ? { b: "Pedido venceu", s: "pedir de novo ›", k: "alerta" }
     : { b: sit === "saiu" ? "Saiu do plantão" : "Sem check-in", s: "Fazer check-in ›", k: "alerta" };
   if (plantao?.conferencia_pendente && (sit === "roleta" || sit === "visita")) Object.assign(pilPlantao, { b: `Conferência ${plantao.conferencia_pendente.qual}`, s: "Confirmar ›", k: "alerta" });
   const pilPlacar = placar?.ok ? { b: `Placar · ${placar.eu.pontos} pts`, s: placar.no_podio && placar.pos ? `${placar.pos}º no pódio ›` : placar.top10 ? "top 10 ›" : `faltam ${placar.falta_top10} p/ top 10 ›` } : { b: "Meu Placar", s: "ver ›" };
