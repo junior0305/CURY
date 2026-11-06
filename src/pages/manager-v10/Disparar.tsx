@@ -291,7 +291,7 @@ export default function Disparar() {
       const r = await ajustarImagem(f);
       setImgDisparo(r.dataUrl);
       toast.success(r.mudou
-        ? `Ajustada para 1125 × 590 — a sua tinha ${r.orig.w} × ${r.orig.h}.`
+        ? `Imagem inteira, sem corte, no formato do WhatsApp (1125 × 590) — a sua tinha ${r.orig.w} × ${r.orig.h}.`
         : "Imagem no formato certo.");
     } catch (e: any) { toast.error(e?.message ?? "Não consegui ler a imagem."); }
   }
@@ -307,7 +307,7 @@ export default function Disparar() {
       const r = await ajustarImagem(f);
       setImg(r.dataUrl);
       setImgInfo(r.mudou
-        ? `A imagem foi ajustada sozinha para 1125 × 590, que é o formato que o WhatsApp mostra. A sua original tinha ${r.orig.w} × ${r.orig.h} — ficaria cortada nas laterais.`
+        ? `A imagem entrou inteira no formato que o WhatsApp mostra (1125 × 590), sem cortar nada: a sua tinha ${r.orig.w} × ${r.orig.h}, e as sobras dos lados ficam com a própria imagem desfocada. Para ocupar tudo, faça a arte deitada nesse formato.`
         : `Imagem no formato certo (1125 × 590). Nada foi cortado.`);
     } catch (e: any) { toast.error(e?.message ?? "Não consegui ler essa imagem."); }
   }
@@ -1986,7 +1986,7 @@ export default function Disparar() {
                         onChange={(e) => pegarImagemDisparo(e.target.files?.[0])} />
                     </label>
                     <small>
-                      {imgDisparo ? "Clique para trocar. Vai ajustada para 1125 × 590."
+                      {imgDisparo ? "Clique para trocar. A imagem vai inteira, sem corte, no formato do WhatsApp (1125 × 590)."
                         : "Clique para trocar a foto só neste disparo — a mensagem continua a mesma e não volta para aprovação."}
                     </small>
                     <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, cursor: "pointer", fontWeight: 600 }}>

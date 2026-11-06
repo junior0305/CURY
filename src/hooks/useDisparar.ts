@@ -579,7 +579,8 @@ export function ajustarFoto(file: File): Promise<string> {
   });
 }
 
-/** Corta pelo centro no formato que o WhatsApp mostra (≈1,91:1), sem deformar.
+/** Põe a imagem INTEIRA no formato que o WhatsApp mostra (≈1,91:1), sem cortar nem deformar (06/11: arte alta
+ *  perdia o título e o rodapé no corte pelo centro). A sobra dos lados é a própria imagem, ampliada e desfocada.
  *  Ninguém vai abrir editor de imagem para disparar. */
 export function ajustarImagem(file: File): Promise<{ dataUrl: string; orig: { w: number; h: number }; mudou: boolean }> {
   const W = 1125, H = 590;
@@ -590,7 +591,16 @@ export function ajustarImagem(file: File): Promise<{ dataUrl: string; orig: { w:
       cv.width = W; cv.height = H;
       const ctx = cv.getContext("2d");
       if (!ctx) { erro(new Error("navegador não deixou ajustar a imagem")); return; }
-      const e = Math.max(W / img.width, H / img.height);
+      const naMedida = Math.abs(img.width / img.height - W / H) <= 0.08;
+      // fundo: a mesma imagem cobrindo tudo, desfocada e um pouco escura (some atrás da arte)
+      const ec = Math.max(W / img.width, H / img.height);
+      if (!naMedida) {
+        ctx.filter = "blur(28px) brightness(0.8)";
+        ctx.drawImage(img, (W - img.width * ec) / 2, (H - img.height * ec) / 2, img.width * ec, img.height * ec);
+        ctx.filter = "none";
+      }
+      // a arte inteira por cima, centralizada
+      const e = naMedida ? ec : Math.min(W / img.width, H / img.height);
       const w = img.width * e, h = img.height * e;
       ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
       ok({ dataUrl: cv.toDataURL("image/jpeg", 0.9),
