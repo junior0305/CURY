@@ -41,6 +41,7 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
   const [sel, setSel] = useState<string | null>(null);
   const [marc, setMarc] = useState<Set<string>>(new Set());
   const [verPausados, setVerPausados] = useState(false);
+  const [buscaForm, setBuscaForm] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
   const [gruposAbertos, setGruposAbertos] = useState<Set<string>>(new Set());
@@ -101,8 +102,12 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
   // formulário parado com nome igual ao de um ativo confundia na hora de criar a fila.
   // Admin e diretor também veem os com fila criada e podem abrir os parados.
   const ativos = (data?.forms ?? []).filter((f) => f.anuncio_ativo || f.leads_7d > 0 || (tudo && filaDe.has(f.form_id)));
-  const pausados = tudo ? (data?.forms ?? []).filter((f) => !ativos.includes(f)) : [];
-  const lista = verPausados ? [...ativos, ...pausados] : ativos;
+  // 07/11: gerente e super também podem abrir os sem uso (continuam escondidos por padrão — a regra de 22/10 segue):
+  // quem acabou de ligar uma página só com formulários parados via a tela vazia, sem nenhum botão.
+  const pausados = (data?.forms ?? []).filter((f) => !ativos.includes(f));
+  const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const lista = (verPausados || buscaForm.trim() ? [...ativos, ...pausados] : ativos)
+    .filter((f) => !buscaForm.trim() || semAcento(f.nome ?? "").includes(semAcento(buscaForm.trim())));
   const comFila = ativos.filter((f) => filaDe.has(f.form_id)).length;
   // Agrupado por conta de anúncio (22/10): o super vê "Dudu — formulários dele", "Alba — os dela"...
   // Sem conta conhecida (formulário só da página) agrupa pelo dono.
@@ -185,7 +190,7 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
           <span>
             {ativos.length
               ? `${ativos.length} formulário${ativos.length === 1 ? "" : "s"} ativo${ativos.length === 1 ? "" : "s"} · ${comFila} com fila · ${ativos.length - comFila} seguem o plantão`
-              : "Nenhum formulário ativo nas suas contas de anúncio."}
+              : "Nenhum formulário recebeu lead nos últimos 7 dias. Abra para ver os formulários das suas páginas."}
           </span>
         </div>
         <button type="button" className="ff-btn" onClick={() => setAberto(true)}>Gerenciar filas</button>
@@ -202,6 +207,18 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
               <button type="button" className="ff-x" aria-label="Fechar" onClick={() => setAberto(false)}>×</button>
             </div>
 
+            {(ativos.length + pausados.length) > 6 && (
+              <input className="ff-busca" type="search" placeholder="Buscar formulário pelo nome…" value={buscaForm}
+                onChange={(e) => setBuscaForm(e.target.value)} aria-label="Buscar formulário pelo nome" />
+            )}
+            {ativos.length === 0 && !verPausados && !buscaForm.trim() && (
+              <div className="ff-vazio">
+                <b>Nenhum formulário recebeu lead nos últimos 7 dias{pausados.length ? ` (você tem ${pausados.length} parados)` : ""}.</b>
+                <span>Se uma campanha está rodando e não aparece aqui, ela usa formulário de <b>outra página</b>: ligue essa página em Configurar › Facebook e leads.
+                  Para achar o formulário, abra a campanha no Gerenciador de Anúncios › anúncio › <b>Formulário instantâneo</b>.</span>
+              </div>
+            )}
+            {buscaForm.trim() && lista.length === 0 && <p className="ff-mut">Nenhum formulário com esse nome.</p>}
             {porConta.map((g) => (
               <section key={g.chave} className="ff-conta">
                 <div className="ff-conta-top">
@@ -345,5 +362,7 @@ const CSS = `
 .ff-eq-btn small{font-size:12px;color:var(--cv-text-muted,#5B6B80)}
 .ff-link{background:none !important;border:0 !important;color:#0E7C7B !important;font-weight:700;font-size:12.5px;cursor:pointer;padding:6px !important}
 .ff-mut{font-size:12.5px;color:var(--cv-text-muted,#5B6B80)}
+.ff-busca{min-height:40px;padding:0 12px;border:1px solid var(--cv-border,#CFD7E3);border-radius:10px;font:inherit;background:transparent;color:inherit;margin:0 0 12px;width:100%;box-sizing:border-box}
+.ff-vazio{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:10px;background:rgba(201,146,42,.12);font-size:13.5px;line-height:1.45;margin-bottom:12px}
 .ff-mais{align-self:flex-start;background:none;border:0;color:#0E7C7B;font-weight:700;font-size:13px;cursor:pointer;padding:6px 0}
 `;
