@@ -40,7 +40,6 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
   const [aberto, setAberto] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
   const [marc, setMarc] = useState<Set<string>>(new Set());
-  const [verPausados, setVerPausados] = useState(false);
   const [buscaForm, setBuscaForm] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
@@ -106,7 +105,8 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
   // quem acabou de ligar uma página só com formulários parados via a tela vazia, sem nenhum botão.
   const pausados = (data?.forms ?? []).filter((f) => !ativos.includes(f));
   const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  const lista = (verPausados || buscaForm.trim() ? [...ativos, ...pausados] : ativos)
+  // 07/11 (Junior: "quero que o formulário apareça"): todos aparecem, os em uso primeiro; os parados vêm logo abaixo.
+  const lista = [...ativos, ...pausados]
     .filter((f) => !buscaForm.trim() || semAcento(f.nome ?? "").includes(semAcento(buscaForm.trim())));
   const comFila = ativos.filter((f) => filaDe.has(f.form_id)).length;
   // Agrupado por conta de anúncio (22/10): o super vê "Dudu — formulários dele", "Alba — os dela"...
@@ -190,7 +190,7 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
           <span>
             {ativos.length
               ? `${ativos.length} formulário${ativos.length === 1 ? "" : "s"} ativo${ativos.length === 1 ? "" : "s"} · ${comFila} com fila · ${ativos.length - comFila} seguem o plantão`
-              : "Nenhum formulário recebeu lead nos últimos 7 dias. Abra para ver os formulários das suas páginas."}
+              : `${pausados.length} formulário${pausados.length === 1 ? "" : "s"} das suas páginas · ${comFila} com fila`}
           </span>
         </div>
         <button type="button" className="ff-btn" onClick={() => setAberto(true)}>Gerenciar filas</button>
@@ -210,13 +210,6 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
             {(ativos.length + pausados.length) > 6 && (
               <input className="ff-busca" type="search" placeholder="Buscar formulário pelo nome…" value={buscaForm}
                 onChange={(e) => setBuscaForm(e.target.value)} aria-label="Buscar formulário pelo nome" />
-            )}
-            {ativos.length === 0 && !verPausados && !buscaForm.trim() && (
-              <div className="ff-vazio">
-                <b>Nenhum formulário recebeu lead nos últimos 7 dias{pausados.length ? ` (você tem ${pausados.length} parados)` : ""}.</b>
-                <span>Se uma campanha está rodando e não aparece aqui, ela usa formulário de <b>outra página</b>: ligue essa página em Configurar › Facebook e leads.
-                  Para achar o formulário, abra a campanha no Gerenciador de Anúncios › anúncio › <b>Formulário instantâneo</b>.</span>
-              </div>
             )}
             {buscaForm.trim() && lista.length === 0 && <p className="ff-mut">Nenhum formulário com esse nome.</p>}
             {porConta.map((g) => (
@@ -300,11 +293,6 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
               </section>
             ))}
 
-            {pausados.length > 0 && (
-              <button type="button" className="ff-mais" onClick={() => setVerPausados((v) => !v)}>
-                {verPausados ? "Esconder os que não estão em uso" : `Ver também ${pausados.length} formulário${pausados.length > 1 ? "s" : ""} sem uso (sem anúncio rodando nem lead em 7 dias)`}
-              </button>
-            )}
             <p className="ff-mut">
               Os formulários vêm das páginas que você ligou (em Configurar › Facebook e leads) e dos anúncios das suas contas:
               aparecem na hora em que a página é ligada, antes do primeiro lead. Formulário sem anúncio rodando nem lead em 7 dias
