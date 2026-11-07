@@ -12,16 +12,30 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 
-type Linha = { nome: string; telefone: string; regiao: string; situacao: "ok" | "invalido" | "repetido" | "lead" | "base" | "bloqueado" };
+type Linha = { n: number; nome: string; telefone: string; original: string; regiao: string; motivo?: string;
+  situacao: "ok" | "invalido" | "repetido" | "lead" | "base" | "bloqueado" };
 type Pessoa = { id: string; first_name: string | null; last_name: string | null; role: string; manager_id: string | null };
 const sb = supabase as any;
 const nomeDe = (p?: Pessoa) => (p ? [p.first_name, p.last_name].filter(Boolean).join(" ") || "—" : "—");
+/** por que o telefone não serve (para o checkup do arquivo) */
+const porqueInvalido = (t: string) => {
+  const d = (t || "").replace(/\D/g, "");
+  if (!t.trim()) return "sem telefone";
+  if (/[a-z@]/i.test(t)) return "tem letras (parece e-mail ou texto)";
+  const sem55 = d.startsWith("55") && d.length >= 12 ? d.slice(2) : d;
+  if (sem55.length < 10) return "faltam dígitos (sem DDD?)";
+  if (sem55.length > 11) return "dígitos demais";
+  if (sem55.length === 10) return "parece fixo (celular tem 9 na frente)";
+  if (sem55[2] !== "9") return "não é celular (o 3º dígito deve ser 9)";
+  return "DDD inválido";
+};
 const celular = (t: string) => { let d = (t || "").replace(/\D/g, ""); if (d.length === 10 || d.length === 11) d = "55" + d; return /^55[1-9][1-9]9\d{8}$/.test(d) ? d : null; };
 const ERROS: Record<string, string> = {
   confirme_lgpd: "Confirme que os contatos foram obtidos com autorização.",
   corretor_fora_da_sua_equipe: "Algum corretor escolhido não é da sua equipe.",
   escolha_corretores: "Escolha pelo menos um corretor (ou use a roleta da equipe).",
-  sem_permissao: "Você não tem permissão para subir listas.",
+  sem_permissao: "Você não tem permissão para mexer nesta lista.",
+  nome_obrigatorio: "Escreva o nome da lista.",
 };
 
 // Excel salva CSV em Windows-1252: lido como UTF-8, "José" vira "Jos�". Tenta UTF-8 e cai para 1252.
@@ -31,9 +45,10 @@ async function lerTexto(f: File): Promise<string> {
   catch { return new TextDecoder("windows-1252").decode(buf); }
 }
 
-function lerCsv(texto: string): { nome: string; telefone: string; regiao: string }[] {
+type Leitura = { linhas: { n: number; nome: string; telefone: string; regiao: string }[]; temCab: boolean; semRegiao: boolean; regiaoIgnorada: boolean; sep: string };
+function lerCsv(texto: string): Leitura {
   const linhas = texto.replace(/\r/g, "").split("\n").filter((l) => l.trim());
-  if (!linhas.length) return [];
+  if (!linhas.length) return { linhas: [], temCab: false, semRegiao: true, regiaoIgnorada: false, sep: "," };
   const sep = (linhas[0].match(/;/g) || []).length > (linhas[0].match(/,/g) || []).length ? ";" : ",";
   const cols = (l: string) => l.split(sep).map((c) => c.trim().replace(/^"|"$/g, ""));
   const cab = cols(linhas[0]).map((c) => c.toLowerCase());
@@ -44,15 +59,34 @@ function lerCsv(texto: string): { nome: string; telefone: string; regiao: string
   const corpo = temCab ? linhas.slice(1) : linhas;
   // 30/10 (planilha do Alisson sem cabeçalho: nome, telefone, e-mail): coluna que é e-mail ou telefone não é região.
   // Sem região, a lista usa o próprio nome da lista (ex.: "Zona Sul").
+  let regiaoIgnorada = false;
   if (iR >= 0) {
     const amostra = corpo.slice(0, 200).map((l) => cols(l)[iR] ?? "").filter(Boolean);
     const ruim = amostra.filter((v) => /@/.test(v) || /^\+?\d[\d\s()-]{6,}$/.test(v)).length;
-    if (amostra.length && ruim / amostra.length > 0.2) iR = -1;
+    if (amostra.length && ruim / amostra.length > 0.2) { iR = -1; regiaoIgnorada = true; }
   }
-  return corpo.map((l) => {
-    const c = cols(l);
-    return { nome: c[iN] ?? "", telefone: c[iT] ?? "", regiao: iR >= 0 ? c[iR] ?? "" : "" };
-  });
+  return {
+    temCab, sep, regiaoIgnorada, semRegiao: iR < 0,
+    linhas: corpo.map((l, k) => {
+      const c = cols(l);
+      return { n: k + (temCab ? 2 : 1), nome: c[iN] ?? "", telefone: c[iT] ?? "", regiao: iR >= 0 ? c[iR] ?? "" : "" };
+    }),
+  };
+}
+
+/** Modelo para o líder preencher (abre certo no Excel: separador ; e acentos em UTF-8 com BOM). */
+function baixarModelo() {
+  const txt = "\uFEFFnome;telefone;regiao\nMaria Silva;11987654321;Zona Sul\nJoão Souza;(11) 97654-3210;Santo Amaro\nAna Lima;5511912345678;Campo Limpo\n";
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([txt], { type: "text/csv;charset=utf-8" }));
+  a.download = "modelo-lista-comandra.csv"; a.click(); URL.revokeObjectURL(a.href);
+}
+function baixarProblemas(ls: Linha[], arquivo: string) {
+  const esc = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const txt = "\uFEFF" + ["linha;nome;telefone;regiao;problema", ...ls.map((l) => [l.n, esc(l.nome), esc(l.original), esc(l.regiao), esc(l.motivo || "")].join(";"))].join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([txt], { type: "text/csv;charset=utf-8" }));
+  a.download = `problemas-${arquivo.replace(/\.(csv|txt)$/i, "")}.csv`; a.click(); URL.revokeObjectURL(a.href);
 }
 
 export default function BaseContatos({ donoId }: { donoId?: string | null }) {
@@ -69,6 +103,8 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
   const [marc, setMarc] = useState<Set<string>>(new Set());
   const [lgpd, setLgpd] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [leitura, setLeitura] = useState<Leitura | null>(null);
+  const [renomear, setRenomear] = useState<{ id: string; nome: string } | null>(null);
   const porDia = Math.floor((10 * 60) / intervalo); // 9h às 19h
 
   const { data: pessoas = [] } = useQuery<Pessoa[]>({
@@ -100,14 +136,16 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
     if (!f) return;
     setArquivo(f.name);
     if (!nome) setNome(f.name.replace(/\.(csv|txt)$/i, ""));
-    const brutas = lerCsv(await lerTexto(f));
-    const vistos = new Set<string>();
+    const leitura = lerCsv(await lerTexto(f));
+    setLeitura(leitura);
+    const brutas = leitura.linhas;
+    const vistos = new Map<string, number>();
     const pre: Linha[] = brutas.map((r) => {
       const t = celular(r.telefone);
-      if (!t) return { ...r, situacao: "invalido" as const };
-      if (vistos.has(t)) return { ...r, telefone: t, situacao: "repetido" as const };
-      vistos.add(t);
-      return { ...r, telefone: t, situacao: "ok" as const };
+      if (!t) return { ...r, original: r.telefone, situacao: "invalido" as const, motivo: porqueInvalido(r.telefone) };
+      if (vistos.has(t)) return { ...r, original: r.telefone, telefone: t, situacao: "repetido" as const, motivo: `repetido (igual à linha ${vistos.get(t)})` };
+      vistos.set(t, r.n);
+      return { ...r, original: r.telefone, telefone: t, situacao: "ok" as const };
     });
     const tels = pre.filter((l) => l.situacao === "ok").map((l) => l.telefone);
     const sit = new Map<string, string>();
@@ -115,7 +153,9 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
       const { data } = await sb.rpc("previa_lista_contatos", { p_telefones: tels.slice(i, i + 500) });
       for (const r of (data ?? []) as any[]) sit.set(r.telefone, r.situacao);
     }
-    setLinhas(pre.map((l) => (l.situacao === "ok" ? { ...l, situacao: (sit.get(l.telefone) ?? "ok") as Linha["situacao"] } : l)));
+    const MOTIVO: Record<string, string> = { lead: "já é lead no Comandra", base: "já está numa lista/base", bloqueado: "pediu para não receber" };
+    setLinhas(pre.map((l) => { if (l.situacao !== "ok") return l; const st = (sit.get(l.telefone) ?? "ok") as Linha["situacao"];
+      return st === "ok" ? l : { ...l, situacao: st, motivo: MOTIVO[st] || st }; }));
   }
 
   const conta = (s: Linha["situacao"]) => linhas.filter((l) => l.situacao === s).length;
@@ -135,7 +175,15 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
     toast.success(destino === "pool"
       ? `${data?.inseridos ?? 0} contatos no Pescar da sua equipe.`
       : `Gotejamento começou: ${data?.inseridos ?? 0} contatos, 1 a cada ${intervalo} min no horário da equipe.`, { duration: 8000 });
-    setLinhas([]); setArquivo(""); setNome(""); setLgpd(false);
+    setLinhas([]); setArquivo(""); setNome(""); setLgpd(false); setLeitura(null);
+    qc.invalidateQueries({ queryKey: ["base-listas"] });
+  }
+
+  async function salvarNome() {
+    if (!renomear) return;
+    const { error } = await sb.rpc("renomear_lista_contatos", { p_lista: renomear.id, p_nome: renomear.nome });
+    if (error) { toast.error(ERROS[(error.message || "").trim()] ?? error.message); return; }
+    toast.success("Nome da lista trocado."); setRenomear(null);
     qc.invalidateQueries({ queryKey: ["base-listas"] });
   }
 
@@ -164,6 +212,7 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
             <input type="file" accept=".csv,.txt,text/csv" onChange={(e) => escolherArquivo(e.target.files?.[0])} />
           </label>
         </div>
+        <span className="bc-mut">Não sabe montar o arquivo? <button type="button" className="bc-link" onClick={baixarModelo}>Baixar o modelo CSV</button> · 3 colunas: <b>nome</b>, <b>telefone</b> com DDD (celular, com 9) e <b>região</b>. Abre no Excel; salve como CSV.</span>
         {linhas.length > 0 && (
           <>
             <div className="bc-cont">
@@ -174,6 +223,28 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
               <div><span>Inválidos · repetidos · não querem</span><b>{conta("invalido") + conta("repetido") + conta("bloqueado")}</b></div>
             </div>
             <span className="bc-mut">{arquivo}</span>
+            {(() => {
+              const prob = linhas.filter((l) => l.situacao === "invalido" || l.situacao === "repetido");
+              const pctRuim = linhas.length ? prob.length / linhas.length : 0;
+              const semNome = linhas.filter((l) => l.situacao === "ok" && !l.nome.trim()).length;
+              const avisos: string[] = [];
+              if (leitura && !leitura.temCab) avisos.push("O arquivo não tem cabeçalho: usei a ordem nome, telefone, região.");
+              if (leitura?.regiaoIgnorada) avisos.push(`A coluna de região tinha e-mail ou telefone e foi ignorada: todos ficam com a região "${nome.trim() || "nome da lista"}".`);
+              else if (leitura?.semRegiao) avisos.push(`Sem coluna de região: todos ficam com a região "${nome.trim() || "nome da lista"}".`);
+              if (semNome) avisos.push(`${semNome} contato${semNome > 1 ? "s" : ""} sem nome: o corretor vai ver só o telefone.`);
+              const porMotivo = new Map<string, number>();
+              for (const l of prob) porMotivo.set(l.motivo || l.situacao, (porMotivo.get(l.motivo || l.situacao) || 0) + 1);
+              return (
+                <div className={`bc-check${pctRuim > 0.3 ? " ruim" : prob.length || avisos.length ? " atencao" : " ok"}`}>
+                  <b>{pctRuim > 0.3 ? `Arquivo com muitos erros: ${Math.round(pctRuim * 100)}% das linhas não servem. Confira antes de subir.`
+                    : prob.length || avisos.length ? "Checkup do arquivo: dá para subir, mas confira" : "Checkup do arquivo: tudo certo ✅"}</b>
+                  {avisos.map((a) => <span key={a}>• {a}</span>)}
+                  {[...porMotivo.entries()].map(([m, n]) => <span key={m}>• {n} linha{n > 1 ? "s" : ""} com {m} — não sobe{n > 1 ? "m" : ""}</span>)}
+                  {prob.slice(0, 5).map((l) => <span key={l.n} className="bc-ex">linha {l.n}: {l.nome || "(sem nome)"} · "{l.original}" → {l.motivo}</span>)}
+                  {prob.length > 0 && <div><button type="button" className="bc-link" onClick={() => baixarProblemas(prob, arquivo)}>Baixar as {prob.length} linhas com problema</button> para corrigir e subir de novo.</div>}
+                  <span>Só os <b>{validos}</b> válidos sobem; os outros ficam de fora.</span>
+                </div>);
+            })()}
           </>
         )}
       </section>
@@ -247,7 +318,15 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
               const feitos = l.total - l.restantes;
               return (
                 <tr key={l.id}>
-                  <td><b>{l.nome}</b><br /><small>por {l.criado_por_nome ?? "—"} em {new Date(l.criado_em).toLocaleDateString("pt-BR")}</small></td>
+                  <td>{renomear?.id === l.id ? (
+                      <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                        <input className="bc-ren" value={renomear.nome} onChange={(e) => setRenomear({ id: l.id, nome: e.target.value })} aria-label="Novo nome da lista"
+                          onKeyDown={(e) => { if (e.key === "Enter") salvarNome(); if (e.key === "Escape") setRenomear(null); }} autoFocus />
+                        <button type="button" className="bc-link" onClick={salvarNome}>Salvar</button>
+                        <button type="button" className="bc-link" onClick={() => setRenomear(null)}>Cancelar</button>
+                      </span>
+                    ) : <><b>{l.nome}</b> <button type="button" className="bc-link" style={{ fontSize: 12 }} onClick={() => setRenomear({ id: l.id, nome: l.nome })}>Renomear</button></>}
+                    <br /><small>por {l.criado_por_nome ?? "—"} em {new Date(l.criado_em).toLocaleDateString("pt-BR")}</small></td>
                   <td>{l.destino === "pool" ? "Pool (Pescar)" : `Gotejamento · 1 a cada ${l.intervalo_min} min · ${l.para === "roleta" ? "roleta" : "escolhidos"}`}</td>
                   <td style={{ minWidth: 170 }}>
                     <div className="bc-bar"><div style={{ width: `${l.total ? Math.round((feitos / l.total) * 100) : 0}%` }} /></div>
@@ -308,6 +387,10 @@ const CSS = `
 .bc-tab th{text-align:left;font-size:12px;text-transform:uppercase;color:var(--cv-text-muted,#5B6B80);padding:8px 10px;border-bottom:1px solid var(--cv-border,#E1E6EE)}
 .bc-tab td{padding:9px 10px;border-bottom:1px solid var(--cv-border,#E1E6EE)}
 .bc-tab td.m{font-family:"JetBrains Mono",monospace}
+.bc-check{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:10px;font-size:13.5px;line-height:1.45}
+.bc-check.ok{background:rgba(29,107,69,.1)}.bc-check.atencao{background:rgba(201,146,42,.14)}.bc-check.ruim{background:rgba(180,70,47,.14)}
+.bc-check .bc-ex{font-family:"JetBrains Mono",monospace;font-size:12px;opacity:.85}
+.bc-ren{min-height:34px;padding:0 8px;border:1px solid var(--cv-border,#CFD7E3);border-radius:8px;font:inherit;background:transparent;color:inherit;min-width:220px}
 .bc-tab small{color:var(--cv-text-muted,#5B6B80);font-size:12px}
 .bc-bar{height:8px;border-radius:99px;background:rgba(91,107,128,.15);overflow:hidden}
 .bc-bar div{height:100%;background:#0E7C7B;border-radius:99px}
