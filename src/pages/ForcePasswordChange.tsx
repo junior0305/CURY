@@ -22,6 +22,18 @@ const WOLF_STYLES = `
   }
 `;
 
+// Erros do servidor de login em português, dizendo o que fazer (07/11: "não funciona" era o erro em inglês
+// "New password should be different from the old password" quando a pessoa repetia a senha provisória).
+function erroEmPortugues(msg: string) {
+  const m = (msg || "").toLowerCase();
+  if (m.includes("different from the old")) return "A nova senha precisa ser diferente da senha provisória. Escolha outra senha.";
+  if (m.includes("weak") || m.includes("at least") || m.includes("characters")) return "Senha fraca: use pelo menos 8 caracteres, com letras e números.";
+  if (m.includes("session") || m.includes("jwt") || m.includes("expired") || m.includes("not found") || m.includes("auth"))
+    return "Sua sessão expirou. Toque em Sair (no canto de cima), entre de novo com a senha provisória e troque a senha.";
+  if (m.includes("network") || m.includes("fetch")) return "Sem conexão com a internet. Confira o sinal e tente de novo.";
+  return "Não consegui trocar a senha agora. Tente de novo em instantes. (" + msg + ")";
+}
+
 export default function ForcePasswordChange() {
   const { user, signOut } = useAuth();
 
@@ -56,6 +68,7 @@ export default function ForcePasswordChange() {
     }
 
     setLoading(true);
+    let flagLimpa = false;
     try {
       // 1. Limpa a flag ANTES de atualizar a senha — assim quando USER_UPDATED
       //    disparar no AuthProvider, o profile já terá must_change_password=false.
@@ -64,18 +77,26 @@ export default function ForcePasswordChange() {
         .update({ must_change_password: false })
         .eq("id", user!.id);
       if (profileError) throw profileError;
+      flagLimpa = true;
 
       // 2. Atualiza a senha — dispara USER_UPDATED, AuthProvider re-lê o profile
       //    (que já tem must_change_password=false) e redireciona para /dashboard.
+      // Se a troca falhar, a flag VOLTA (07/11): antes ficava limpa com a senha antiga, e a pessoa tentava
+      // entrar com a senha nova que nunca foi salva ("senha errada").
       const { error: authError } = await supabase.auth.updateUser({ password });
-      if (authError) throw authError;
+      if (authError) {
+        await supabase.from("profiles").update({ must_change_password: true }).eq("id", user!.id).then(() => {}, () => {});
+        flagLimpa = false;
+        throw authError;
+      }
 
       toast.success("Senha atualizada com sucesso! Bem-vindo ao sistema.");
       // O redirect é feito pelo efeito de role no AuthProvider quando mustChangePassword muda para false.
       // Não chamar navigate aqui — evita race condition onde ProtectedBrokerRoute
       // ainda vê mustChangePassword=true e redireciona de volta para esta tela.
     } catch (err: any) {
-      toast.error("Erro ao atualizar senha: " + err.message);
+      if (flagLimpa) await supabase.from("profiles").update({ must_change_password: true }).eq("id", user!.id).then(() => {}, () => {});
+      toast.error(erroEmPortugues(err?.message || ""), { duration: 9000 });
     } finally {
       setLoading(false);
     }
@@ -233,6 +254,7 @@ export default function ForcePasswordChange() {
                   { ok: password.length >= 8,           text: "Mínimo 8 caracteres" },
                   { ok: /[A-Z]/.test(password),          text: "Uma letra maiúscula" },
                   { ok: /[0-9]/.test(password),          text: "Um número" },
+                  { ok: password.length > 0,             text: "Diferente da senha provisória que você recebeu" },
                 ].map(r => (
                   <div key={r.text} className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full shrink-0 transition-all"

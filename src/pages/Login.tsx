@@ -89,6 +89,14 @@ export default function Login() {
                 texto: "É para lá que mando o link de nova senha." });
       return;
     }
+    // Login do Comandra (nome@comandra, nome@planoego) não é caixa de e-mail: o link nunca chega (07/11).
+    // Quem reseta é o gerente, em Configurar › Equipe › Resetar senha.
+    const dominio = email.trim().toLowerCase().split("@")[1] || "";
+    if (dominio && !dominio.includes(".")) {
+      setErro(null);
+      setAviso(`Peça ao seu gerente para resetar a sua senha: no Comandra dele, em Configurar › Equipe › Resetar senha. Ele recebe uma senha provisória para te passar; no 1º acesso você cria a sua (diferente da provisória).`);
+      return;
+    }
     setEntrando(true); setErro(null); setAviso(null);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
