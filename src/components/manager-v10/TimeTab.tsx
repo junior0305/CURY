@@ -48,6 +48,7 @@ import {
   MapPin,
 } from "lucide-react";
 import PlantaoAgora from "@/components/plantao/PlantaoAgora";
+import Candidatos from "@/components/recrutamento/Candidatos";
 import "@/styles/cockpit-gerente.css";
 import "@/styles/time-gerente.css";
 import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
@@ -74,7 +75,7 @@ const nomeMes = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString(
 type PessoaMeta = { id: string; nome: string; papel: string; meta: number | null; realizado: number; pode_editar: boolean };
 type PainelMetas = { mes: string; dono: PessoaMeta; filhos: PessoaMeta[] };
 
-type SubAba = "hoje" | "plantao" | "rendimento" | "urgencias" | "tropa" | "novos";
+type SubAba = "hoje" | "plantao" | "candidatos" | "rendimento" | "urgencias" | "tropa" | "novos";
 
 export default function TimeTab({ managerId }: { managerId: string | undefined }) {
   const { session } = useAuth();
@@ -395,6 +396,14 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
         </button>
 
         <button
+          className={`time-tab-btn ${subAba === "candidatos" ? "active" : ""}`}
+          onClick={() => setSubAba("candidatos")}
+        >
+          <UserPlus size={15} />
+          Candidatos
+        </button>
+
+        <button
           className={`time-tab-btn ${subAba === "rendimento" ? "active" : ""}`}
           onClick={() => setSubAba("rendimento")}
         >
@@ -427,6 +436,8 @@ export default function TimeTab({ managerId }: { managerId: string | undefined }
       {/* 29/10 · EQUIPE HOJE: agenda de visitas + quem cobrar agora + pastas */}
       {/* 06/11 · check-in de plantão: quem está lá, conferências 9h30/16h, "Não está aqui" */}
       {subAba === "plantao" && <PlantaoAgora como={managerId} />}
+      {/* 07/11 · recrutamento: candidatos das campanhas de contratação do super/diretor */}
+      {subAba === "candidatos" && <Candidatos como={managerId} />}
 
       {subAba === "hoje" && (
         <AgendaEquipe donoId={managerId} lateral={

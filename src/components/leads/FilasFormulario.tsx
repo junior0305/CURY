@@ -44,6 +44,10 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
   const [gruposAbertos, setGruposAbertos] = useState<Set<string>>(new Set());
+  // Recrutamento (07/11): super/diretor marca o formulário de contratação e escolhe os gerentes que entrevistam
+  const [tipo, setTipo] = useState<"cliente" | "recrut">("cliente");
+  const [gerMarc, setGerMarc] = useState<string[]>([]);
+  const podeRecrut = role === "SUPERINTENDENT" || role === "DIRECTOR" || role === "ADMIN";
   const tudo = (role === "ADMIN" || role === "DIRECTOR") && (!como || como === meuId);
 
   const { data } = useQuery({
@@ -57,10 +61,11 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
       let qp = supabase.from("profiles").select("id,first_name,last_name,role,manager_id,lead_assignment_enabled").eq("is_active", true);
       if (arvore) qp = qp.in("id", arvore);
       const qf = supabase.from("formularios_catalogo" as any).select("form_id,page_id,nome,nome_fonte,anuncios,owner_id,status,leads_7d,anuncio_ativo,ad_account_id");
-      const [pRes, fResTodos, qRes] = await Promise.all([
+      const [pRes, fResTodos, qRes, rRes] = await Promise.all([
         qp,
         qf.order("leads_7d", { ascending: false }),
         supabase.from("distribution_queues").select("id,match_value,broker_ids,criado_por,last_assigned_index").eq("match_field", "form_id").eq("is_active", true),
+        supabase.rpc("recrutamento_lista" as any),
       ]);
       // O formulário é da pessoa quando: a conta de anúncio é da árvore dela; OU (formulário sem dono ou de um chefe dela)
       // o nome traz o nome de um gerente da árvore (23/10: "ALBA - Vila Ema" roda na conta da Liliane).
@@ -90,13 +95,16 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
       const contas = new Map<string, string>();
       const { data: sa } = await supabase.from("fb_saude" as any).select("account_id,dados->>conta");
       for (const r of (sa ?? []) as any[]) if (r.conta) contas.set(String(r.account_id), r.conta);
-      return { contas, pessoas: (pRes.data ?? []) as Pessoa[], forms: ((fRes.data ?? []) as unknown) as Form[], filas: ((qRes.data ?? []) as unknown) as Fila[], freq };
+      return { contas, pessoas: (pRes.data ?? []) as Pessoa[], forms: ((fRes.data ?? []) as unknown) as Form[], filas: ((qRes.data ?? []) as unknown) as Fila[], freq,
+        recrut: ((rRes.data ?? []) as any[]) as { form_id: string; gerente_ids: string[] }[] };
     },
   });
 
   const pessoas = data?.pessoas ?? [];
   const porId = useMemo(() => new Map(pessoas.map((p) => [p.id, p])), [pessoas]);
   const filaDe = useMemo(() => new Map((data?.filas ?? []).map((f) => [f.match_value, f])), [data?.filas]);
+  const recDe = useMemo(() => new Map((data?.recrut ?? []).map((r) => [r.form_id, r.gerente_ids ?? []])), [data?.recrut]);
+  const gerentes = useMemo(() => pessoas.filter((p) => p.role === "MANAGER").sort((a, b) => nomeDe(a).localeCompare(nomeDe(b))), [pessoas]);
   // Em uso = anúncio rodando ou lead nos últimos 7 dias. Gerente e super (Junior, 22/10) veem SÓ esses:
   // formulário parado com nome igual ao de um ativo confundia na hora de criar a fila.
   // Admin e diretor também veem os com fila criada e podem abrir os parados.
@@ -136,6 +144,10 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
     if (sel === f.form_id) { setSel(null); return; }
     setSel(f.form_id);
     setMarc(new Set(filaDe.get(f.form_id)?.broker_ids ?? []));
+    const rec = recDe.get(f.form_id);
+    // sugere Recrutamento quando o nome fala em corretores/contratação e ainda não tem fila de cliente
+    setTipo(rec || (podeRecrut && !filaDe.has(f.form_id) && /CORRETOR|RECRUT|CONTRAT|VAGA/i.test(f.nome ?? "")) ? "recrut" : "cliente");
+    setGerMarc(rec ?? []);
     setBusca("");
     // com poucas equipes abre tudo; com muitas, começa fechado (abre a equipe que já tem gente marcada)
     const marcados = new Set(filaDe.get(f.form_id)?.broker_ids ?? []);
@@ -171,6 +183,24 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
     const { error } = await supabase.rpc("tirar_fila_formulario" as any, { p_form_id: f.form_id });
     if (error) { toast.error(ERROS[(error.message || "").trim()] ?? `Não consegui tirar: ${error.message}`); return; }
     toast.success("Fila tirada. Os leads deste formulário voltam a seguir o plantão.");
+    setSel(null);
+    qc.invalidateQueries({ queryKey: ["filas-formulario"] });
+  }
+
+  async function salvarRecrut(f: Form) {
+    if (!gerMarc.length) { toast.error("Escolha pelo menos um gerente para receber os candidatos."); return; }
+    setSalvando(true);
+    const { error } = await supabase.rpc("recrutamento_marcar" as any, { p_form_id: f.form_id, p_page_id: f.page_id, p_nome: f.nome, p_gerentes: gerMarc });
+    setSalvando(false);
+    if (error) { toast.error((error as any).details || `Não consegui salvar: ${error.message}`); return; }
+    toast.success("Formulário marcado como recrutamento. Os próximos candidatos vão para os gerentes escolhidos.");
+    setSel(null);
+    qc.invalidateQueries({ queryKey: ["filas-formulario"] });
+  }
+  async function tirarRecrut(f: Form) {
+    const { error } = await supabase.rpc("recrutamento_desmarcar" as any, { p_form_id: f.form_id });
+    if (error) { toast.error(`Não consegui tirar: ${error.message}`); return; }
+    toast.success("Não é mais recrutamento. Os leads deste formulário voltam a seguir o plantão.");
     setSel(null);
     qc.invalidateQueries({ queryKey: ["filas-formulario"] });
   }
@@ -220,6 +250,7 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
                 </div>
             {g.forms.map((f) => {
               const fila = filaDe.get(f.form_id);
+              const rec = recDe.get(f.form_id);
               const on = sel === f.form_id;
               const meta = [f.anuncio_ativo ? "Anúncio rodando" : f.leads_7d ? "Recebendo lead" : "Sem anúncio ativo", f.leads_7d ? `${f.leads_7d} leads em 7 dias` : "ainda sem lead no Comandra",
                 f.nome_fonte === "anuncio" ? "nome pelo anúncio" : null].filter(Boolean).join(" · ");
@@ -230,12 +261,51 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
                       <b>{f.nome || `Formulário ${f.form_id}`}</b>
                       <small>{meta}</small>
                     </span>
+                    {rec ? (
+                      <span className="ff-badge rec">Recrutamento · {rec.map((id) => nomeDe(porId.get(id)).split(" ")[0]).join(", ")}</span>
+                    ) : (
                     <span className={`ff-badge${fila ? " tem" : ""}`}>
                       {fila ? `Fila: ${fila.broker_ids.map((id) => nomeDe(porId.get(id)).split(" ")[0]).join(", ")}` : "Sem fila · segue o plantão"}
                     </span>
+                    )}
                   </button>
                   {on && (
                     <div className="ff-edit">
+                      {podeRecrut && (
+                        <>
+                          <span className="ff-lbl">Que tipo de lead chega por este formulário?</span>
+                          <div className="ff-tipos">
+                            <button type="button" className={`ff-tipo${tipo === "cliente" ? " on" : ""}`} aria-pressed={tipo === "cliente"} onClick={() => setTipo("cliente")}>
+                              <b>Cliente</b><small>Vai para os corretores (fila ou plantão)</small>
+                            </button>
+                            <button type="button" className={`ff-tipo rec${tipo === "recrut" ? " on" : ""}`} aria-pressed={tipo === "recrut"} onClick={() => setTipo("recrut")}>
+                              <b>Recrutamento (candidato a corretor)</b><small>Vai para os gerentes entrevistarem</small>
+                            </button>
+                          </div>
+                        </>
+                      )}
+                      {tipo === "recrut" && podeRecrut ? (
+                        <>
+                          <span className="ff-mut" style={{ color: "#7A5520" }}>O candidato não entra na roleta de corretores, não conta como lead pago e não manda evento de cliente para a Meta.</span>
+                          <span className="ff-lbl">Quais gerentes recebem os candidatos?</span>
+                          <div className="ff-pills">
+                            {gerentes.length === 0 && <span className="ff-mut">Nenhum gerente na sua estrutura.</span>}
+                            {gerentes.map((g) => {
+                              const m = gerMarc.includes(g.id);
+                              return (
+                                <button type="button" key={g.id} className={`ff-pill${m ? " on" : ""}`} aria-pressed={m}
+                                  onClick={() => setGerMarc((s) => (m ? s.filter((x) => x !== g.id) : [...s, g.id]))}>{nomeDe(g)}</button>
+                              );
+                            })}
+                          </div>
+                          <span className="ff-mut">{gerMarc.length ? `Rodízio entre ${gerMarc.length} gerente${gerMarc.length > 1 ? "s" : ""}, na ordem em que você marcou.` : "Marque quem entrevista."}{fila ? " A fila de corretores deste formulário será desligada." : ""}</span>
+                          <div className="ff-acoes">
+                            <button type="button" className="ff-btn" disabled={salvando} onClick={() => salvarRecrut(f)}>{rec ? "Salvar mudanças" : "Salvar como recrutamento"}</button>
+                            {rec && <button type="button" className="ff-btn ghost" onClick={() => tirarRecrut(f)}>Não é recrutamento (volta para o plantão)</button>}
+                          </div>
+                        </>
+                      ) : (
+                      <>
                       <span className="ff-lbl">Quem recebe os leads deste formulário</span>
                       {grupos.length === 0 && <span className="ff-mut">Nenhum corretor na sua equipe.</span>}
                       <input className="ff-busca" placeholder="Procurar corretor pelo nome…" value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Procurar corretor" />
@@ -285,6 +355,8 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
                         <button type="button" className="ff-btn" disabled={salvando} onClick={() => salvar(f)}>{fila ? "Salvar mudanças" : "Criar fila"}</button>
                         {fila && <button type="button" className="ff-btn ghost" onClick={() => tirar(f)}>Tirar a fila (volta para o plantão)</button>}
                       </div>
+                      </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -334,6 +406,13 @@ const CSS = `
 .ff-nome small{font-size:12px;color:var(--cv-text-muted,#5B6B80)}
 .ff-badge{padding:4px 10px;border-radius:99px;font-size:11.5px;font-weight:700;max-width:220px;text-align:right;background:rgba(91,107,128,.12);color:var(--cv-text-muted,#3C4B5F);flex-shrink:0}
 .ff-badge.tem{background:rgba(14,124,123,.12);color:#0E7C7B}
+.ff-badge.rec{background:#C9922A;color:#fff}
+.ff-tipos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.ff-tipo{display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;min-height:56px;padding:10px 12px !important;border-radius:10px !important;border:1px solid var(--cv-border,#CFD7E3) !important;background:transparent !important;color:inherit !important;cursor:pointer}
+.ff-tipo b{font-size:13.5px}.ff-tipo small{font-size:12px;color:var(--cv-text-muted,#5B6B80)}
+.ff-tipo.on{border:2px solid #0E7C7B !important;background:rgba(14,124,123,.08) !important}
+.ff-tipo.rec.on{border-color:#C9922A !important;background:rgba(201,146,42,.12) !important}
+@media (max-width:520px){.ff-tipos{grid-template-columns:1fr}}
 .ff-edit{padding:12px 14px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--cv-border,#E1E6EE)}
 .ff-lbl{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--cv-text-muted,#5B6B80)}
 .ff-grupo{display:flex;flex-direction:column;gap:5px}

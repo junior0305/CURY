@@ -21,20 +21,22 @@ const semAcento = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 
 export default function CadastrarCorretor({
-  managerId: gerenteInicial, onFechar, onPronto, nomeInicial = "", gerentes,
+  managerId: gerenteInicial, onFechar, onPronto, nomeInicial = "", telInicial = "", gerentes,
 }: {
   managerId: string;
   onFechar: () => void;
   /** recebe o id do corretor criado (para quem precisa ligar algo a ele, ex.: vínculo de nome) */
   onPronto: (novoId?: string) => void;
   nomeInicial?: string;
+  /** candidato contratado (recrutamento): já vem com o telefone */
+  telInicial?: string;
   /** Superintendente: escolhe abaixo de qual gerente o corretor fica. Sem isso,
    *  é o gerente cadastrando na própria equipe (o servidor força o manager_id). */
   gerentes?: { id: string; nome: string }[];
 }) {
   const [managerId, setManagerId] = useState(gerenteInicial);
   const [nome, setNome] = useState(nomeInicial);
-  const [tel, setTel] = useState("");
+  const [tel, setTel] = useState(telInicial);
   const [foto, setFoto] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [gerente, setGerente] = useState<{ nome: string; equipe: string | null; teamId: string | null; fila: string | null }>(
