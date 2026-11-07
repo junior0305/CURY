@@ -6,7 +6,8 @@
  *
  * De onde vêm os formulários: formularios_catalogo, montado de hora em hora no servidor
  * (/root/econ/formularios_catalogo.py) a partir dos anúncios das contas de cada líder e das
- * páginas compartilhadas com a ADMIN 01 — por isso aparecem antes do primeiro lead.
+ * páginas compartilhadas com a ADMIN 01 e das páginas ligadas pelo próprio líder (fb_connected_pages, 06/11; desde 07/11
+ * também na hora da conexão, pelo fb-connect-callback) — por isso aparecem antes do primeiro lead.
  * Salvar/tirar passa pelas RPCs salvar_fila_formulario / tirar_fila_formulario, que conferem
  * se os corretores são da árvore de quem salva.
  */
@@ -288,8 +289,9 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
               </button>
             )}
             <p className="ff-mut">
-              Os formulários vêm dos anúncios das suas contas e aparecem antes do primeiro lead. Para ver o nome exato de cada formulário
-              e os que ainda não estão em anúncio, compartilhe a página com a ADMIN 01 (ID 505522686848507). A lista atualiza de hora em hora.
+              Os formulários vêm das páginas que você ligou (em Configurar › Facebook e leads) e dos anúncios das suas contas:
+              aparecem na hora em que a página é ligada, antes do primeiro lead. Formulário sem anúncio rodando nem lead em 7 dias
+              fica em "sem uso". A lista também se atualiza sozinha de hora em hora.
             </p>
           </aside>
         </div>
