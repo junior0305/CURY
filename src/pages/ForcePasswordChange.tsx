@@ -91,6 +91,8 @@ export default function ForcePasswordChange() {
       }
 
       toast.success("Senha atualizada com sucesso! Bem-vindo ao sistema.");
+      // Garantia: se o redirecionamento pelo papel não acontecer em 1,5 s, vai para o início (que leva à tela certa).
+      setTimeout(() => { if (window.location.pathname === "/force-password-change") window.location.replace("/"); }, 1500);
       // O redirect é feito pelo efeito de role no AuthProvider quando mustChangePassword muda para false.
       // Não chamar navigate aqui — evita race condition onde ProtectedBrokerRoute
       // ainda vê mustChangePassword=true e redireciona de volta para esta tela.

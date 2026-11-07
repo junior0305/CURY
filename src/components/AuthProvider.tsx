@@ -275,8 +275,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (!loading && session && role) {
       const path = window.location.pathname;
-      // Nunca redireciona quem está trocando senha obrigatória — o ProtectedRoute já cuida disso
-      if (path === '/force-password-change') return;
+      // Não tira da tela quem AINDA precisa trocar a senha. Trocou (flag limpa) → segue para a tela do papel
+      // (07/11: o "return" valia sempre e a pessoa ficava parada na troca de senha depois de trocar).
+      if (path === '/force-password-change' && mustChangePassword) return;
       try {
         if (role === 'SUPERINTENDENT' || role === 'DIRECTOR') {
           // Super/Diretor: painel de HIERARQUIA (/super, estilo gerente, com drill
