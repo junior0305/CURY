@@ -37,6 +37,7 @@ const CSS = `
 export default function PlantaoAgora({ como }: { como?: string | null }) {
   const qc = useQueryClient();
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const [todos, setTodos] = useState(false);   // super/diretor veem dezenas de corretores: abre só em quem tem check-in ou pendência
   const { data: linhas = [], isLoading, error } = useQuery<Linha[]>({
     queryKey: ["plantaoAgora", como || "eu"], refetchInterval: 60_000,
     queryFn: async () => { const { data, error } = await (supabase as any).rpc("plantao_agora", { p_como: como || null }); if (error) throw error; return data || []; },
@@ -58,7 +59,15 @@ export default function PlantaoAgora({ como }: { como?: string | null }) {
   const suspeitos = linhas.filter((l) => l.coordenada_igual);
   const varias = new Set(linhas.map((l) => l.gerente)).size > 1;
   const ordem: Record<string, number> = { aguardando: 0, fora: 1, sem_checkin: 2, roleta: 3, visita: 4, saiu: 5 };
-  const lista = [...linhas].sort((a, b) => (ordem[a.s.situacao] ?? 9) - (ordem[b.s.situacao] ?? 9) || a.nome.localeCompare(b.nome));
+  const filtra = linhas.length > 25 && !todos;
+  const lista = [...linhas].filter((l) => !filtra || l.s.situacao !== "sem_checkin" || l.coordenada_igual)
+    .sort((a, b) => (ordem[a.s.situacao] ?? 9) - (ordem[b.s.situacao] ?? 9) || (a.gerente || "").localeCompare(b.gerente || "") || a.nome.localeCompare(b.nome));
+  // resumo por equipe (super e diretor)
+  const porEquipe = varias ? [...new Set(linhas.map((l) => l.gerente || "—"))].sort().map((g) => {
+    const ls = linhas.filter((l) => (l.gerente || "—") === g);
+    return { g, total: ls.length, roleta: ls.filter((l) => l.s.situacao === "roleta" || l.s.situacao === "visita").length,
+             agu: ls.filter((l) => l.s.situacao === "aguardando").length, fora: ls.filter((l) => l.s.situacao === "fora").length };
+  }).sort((a, b) => b.roleta - a.roleta || a.g.localeCompare(b.g)) : [];
 
   return (
     <div className="plt">
@@ -73,6 +82,17 @@ export default function PlantaoAgora({ como }: { como?: string | null }) {
       {suspeitos.map((l) => (
         <div key={l.id} className="plt-alerta"><b>{l.nome}:</b> os últimos registros de localização tiveram a mesma coordenada exata, sem diferença de 1 metro. Pode ser localização falsa: confira se está no plantão.</div>))}
       {comCheckin.length === 0 && <p className="plt-m">Ninguém fez check-in hoje ainda. O corretor faz pelo painel dele (Hoje › Plantão de hoje).</p>}
+      {porEquipe.length > 0 && (
+        <div className="plt-kpis">
+          {porEquipe.map((e) => (
+            <div key={e.g} className="plt-kpi"><span style={{ fontWeight: 700, opacity: 1 }}>Equipe {e.g}</span>
+              <span><b style={{ fontSize: 18, color: "#0B9A84" }}>{e.roleta}</b> de {e.total} no plantão{e.agu ? ` · ${e.agu} esperando liberar` : ""}{e.fora ? ` · ${e.fora} fora` : ""}</span></div>))}
+        </div>)}
+      {linhas.length > 25 && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="plt-m">{filtra ? `Mostrando ${lista.length} com check-in ou pendência, de ${linhas.length} corretores.` : `Mostrando todos os ${linhas.length} corretores.`}</span>
+          <button type="button" className="plt-btn" onClick={() => setTodos(!todos)}>{filtra ? "Ver todos" : "Só quem fez check-in"}</button>
+        </div>)}
       <div className="plt-tab">
         <table>
           <thead><tr><th>Corretor</th>{varias && <th>Equipe</th>}<th>Plantão</th><th>Check-in</th><th>9h30</th><th>16h</th><th>Situação</th><th><span style={{ position: "absolute", left: -9999 }}>Ação</span></th></tr></thead>
