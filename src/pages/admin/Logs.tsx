@@ -1,3 +1,4 @@
+import { CHIP_COLUNAS } from "@/utils/chipLive";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -107,7 +108,7 @@ export default function Logs() {
   const loadBotsForTest = async () => {
     const { data } = await supabase
       .from("bot_instances")
-      .select("*")
+      .select(CHIP_COLUNAS)
       .eq("status", "active")
       .order("name");
     setBots(data || []);

@@ -76,7 +76,7 @@ export default function CadastrarCorretor({
     const t = setTimeout(async () => {
       const [{ data: perfil }, { data: inst }] = await Promise.all([
         supabase.from("profiles").select("id").eq("email", `${primeiro}@${DOMINIO_LOGIN}`).maybeSingle(),
-        supabase.from("bot_instances").select("id").eq("instance_name", base).maybeSingle(),
+        supabase.rpc("instancia_existe" as any, { p_nome: base }),   // 08/11: o gerente não vê os chips de fora da equipe
       ]);
       setConflito(!!perfil || !!inst);
     }, 350);

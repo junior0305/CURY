@@ -1,3 +1,4 @@
+import { CHIP_COLUNAS } from "@/utils/chipLive";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -254,7 +255,7 @@ export default function Campanhas() {
     // load available prospecting bots + identify team (manager) of each
     (async () => {
       const [{ data: bots }, { data: profiles }] = await Promise.all([
-        supabase.from('bot_instances').select('*').eq('is_prospecting', true).in('status', ['active', 'open']).order('name', { ascending: true }),
+        supabase.from('bot_instances').select(CHIP_COLUNAS).eq('is_prospecting', true).in('status', ['active', 'open']).order('name', { ascending: true }),
         supabase.from('profiles').select('id, first_name, role, manager_id, bot_instance_id').not('bot_instance_id', 'is', null),
       ]);
       const ownerByBot = new Map<string, any>((profiles || []).map((p: any) => [p.bot_instance_id, p]));

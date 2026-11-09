@@ -1,3 +1,4 @@
+import { CHIP_COLUNAS } from "@/utils/chipLive";
 import { useEffect, useState, useMemo } from "react";
 import { DOMINIO_LOGIN } from "@/integrations/supabase/companies";
 import { supabase } from "@/integrations/supabase/client";
@@ -113,7 +114,7 @@ export default function Tropas() {
     setLoading(true);
     const { data, error } = await supabase
       .from("profiles")
-      .select("*, bot_instances!bot_instance_id(*), teams:team_id(id, name), managers:profiles!manager_id(id, email, first_name, full_name)")
+      .select(`*, bot_instances!bot_instance_id(${CHIP_COLUNAS}), teams:team_id(id, name), managers:profiles!manager_id(id, email, first_name, full_name)`)
       .order("email", { ascending: true });
     
     if (error) {
@@ -125,7 +126,7 @@ export default function Tropas() {
   };
 
   const loadBots = async () => {
-    const { data } = await supabase.from("bot_instances").select("*").order("name");
+    const { data } = await supabase.from("bot_instances").select(CHIP_COLUNAS).order("name");
     if (data) setBots(data);
   };
 

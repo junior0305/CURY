@@ -1,3 +1,4 @@
+import { CHIP_COLUNAS } from "@/utils/chipLive";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -77,14 +78,14 @@ export default function Exercito() {
     setLoading(true);
     const { data, error } = await supabase
       .from("bot_instances")
-      .select("*")
+      .select(CHIP_COLUNAS)
       .order("priority", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (error) {
       toast({ title: "Erro ao carregar bots", description: error.message, variant: "destructive" });
     } else {
-      setBots(data || []);
+      setBots((data as any) || []);
     }
     setLoading(false);
   };
@@ -106,7 +107,8 @@ export default function Exercito() {
   }, []);
 
   const handleSave = async () => {
-    if (!formData.name || !formData.phone || !formData.evolution_api_url || !formData.evolution_api_key) {
+    // a chave da API não volta para o navegador (08/11): só é obrigatória num chip novo; editar sem digitar mantém a atual
+    if (!formData.name || !formData.phone || !formData.evolution_api_url || (!editBot && !formData.evolution_api_key)) {
       toast({ title: "Preencha todos os campos obrigatórios", variant: "destructive" });
       return;
     }
@@ -115,7 +117,7 @@ export default function Exercito() {
           name: formData.name,
           phone: formData.phone,
           evolution_api_url: formData.evolution_api_url,
-          evolution_api_key: formData.evolution_api_key,
+          ...(formData.evolution_api_key ? { evolution_api_key: formData.evolution_api_key } : {}),
           persona_name: formData.persona_name,
           persona_style: formData.persona_style,
           daily_limit: formData.daily_limit,
@@ -178,7 +180,7 @@ export default function Exercito() {
       name: bot.name,
       phone: bot.phone,
       evolution_api_url: bot.evolution_api_url,
-      evolution_api_key: bot.evolution_api_key,
+      evolution_api_key: "",
       persona_name: bot.persona_name,
       persona_style: bot.persona_style,
       daily_limit: bot.daily_limit,
@@ -390,7 +392,7 @@ export default function Exercito() {
                     </button>
                   </div>
                   <code className="text-xs text-gray-400 font-mono break-all block bg-slate-900/60 rounded px-2 py-1">
-                    {showApiKey.has(bot.id) ? bot.evolution_api_key : "•".repeat(32)}
+                    {showApiKey.has(bot.id) ? "guardada no servidor (digite uma nova para trocar)" : "•".repeat(32)}
                   </code>
                 </div>
 
