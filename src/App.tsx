@@ -56,8 +56,6 @@ import AnalisePage from "./pages/manager-v2/AnalisePage";
 import PoolPage from "./pages/manager/PoolPage";
 import { Loader2 } from "lucide-react";
 import CommandCenter from "./pages/CommandCenter";
-import BootstrapAdmin from "@/pages/BootstrapAdmin";
-import ProfileDebug from "@/pages/ProfileDebug";
 import UserManagement from "@/pages/UserManagement";
 import AtribuirChips from "@/pages/admin/AtribuirChips";
 import ColdPool from "@/pages/admin/ColdPool";
@@ -262,9 +260,8 @@ const App = () => (
             <Route path="/admin/replicacao" element={<ProtectedAdminRoute><Replicacao /></ProtectedAdminRoute>} />
             <Route path="/admin/ouro-ana" element={<ProtectedAdminRoute><OuroAna /></ProtectedAdminRoute>} />
             <Route path="/secretaria" element={<ProtectedSecretaryRoute><Secretaria /></ProtectedSecretaryRoute>} />
+            {/* 08/11: /bootstrap-admin e /profile-debug saíram (chamavam create-admin/set-admin-role sem login) */}
             <Route path="/force-password-change" element={<ForcePasswordChange />} />
-            <Route path="/bootstrap-admin" element={<BootstrapAdmin />} />
-            <Route path="/profile-debug" element={<ProfileDebug />} />
             <Route path="/mockup-gerente" element={<MockupGerente />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
