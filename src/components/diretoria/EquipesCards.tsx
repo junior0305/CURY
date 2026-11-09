@@ -101,10 +101,10 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
     const visitas = soma((l) => l.visitas), pastas = soma((l) => l.pastas), vgv = soma((l) => l.vgv);
 
     const inds: Ind[] = [];
-    if (semPlantao) inds.push({ k: "presenca", nm: "Presença hoje", falta: "Plantão desta equipe não aparece no C2S. Sem ponto, não dá para medir." });
+    if (semPlantao) inds.push({ k: "presenca", nm: "Presença hoje", falta: "Ninguém desta equipe fez check-in no plantão (pela localização do Comandra) no período." });
     else if (!corretores) inds.push({ k: "presenca", nm: "Presença hoje", falta: "Nenhum corretor cadastrado." });
-    else if (semPontoHoje) inds.push({ k: "presenca", nm: "Presença hoje", falta: "O C2S ainda não trouxe nenhum ponto de hoje." });
-    else { const r = hojeN / corretores; inds.push({ k: "presenca", nm: "Presença hoje", sub: `${hojeN} de ${corretores} corretores${c2s ? " (base C2S 30 dias)" : ""}`, val: `${Math.round(r * 100)}%`, ref: `ref ${REF.presenca * 100}%`, r: r / REF.presenca }); }
+    else if (semPontoHoje) inds.push({ k: "presenca", nm: "Presença hoje", falta: "Ainda ninguém fez check-in hoje." });
+    else { const r = hojeN / corretores; inds.push({ k: "presenca", nm: "Presença hoje", sub: `${hojeN} de ${corretores} corretores${c2s ? " (base: quem foi ao plantão em 30 dias)" : ""}`, val: `${Math.round(r * 100)}%`, ref: `ref ${REF.presenca * 100}%`, r: r / REF.presenca }); }
 
     const refPl = REF.plantoesMes * dias / 30;
     if (semPlantao) inds.push({ k: "plantoes", nm: "Plantões por corretor", falta: "Sem registro de plantão." });
@@ -175,7 +175,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
             {placarEmp !== vendasEmp ? <span><b>{v1(placarEmp)}</b> no placar da diretoria</span> : null}</div>
         </div>
         <div><div className="dir-lbl">Presença hoje</div><div className="eqc-v">{corEmp && !semPontoHoje ? `${hojeEmp} de ${corEmp}` : "—"}</div>
-          <div className="eqc-s">{semPontoHoje ? "C2S ainda sem ponto de hoje" : corEmp ? `${Math.round(hojeEmp / corEmp * 100)}% · ref ${REF.presenca * 100}%` : ""}{semPl.length ? ` · sem ${semPl.join(", ")} (fora do C2S)` : ""}</div></div>
+          <div className="eqc-s">{semPontoHoje ? "Ainda sem check-in hoje" : corEmp ? `${Math.round(hojeEmp / corEmp * 100)}% · ref ${REF.presenca * 100}%` : ""}{semPl.length ? ` · sem ${semPl.join(", ")} (fora do C2S)` : ""}</div></div>
         <div><div className="dir-lbl">Gargalo mais comum</div><div className="eqc-v">{topG ? GARGALO[topG[0]][0] : "—"}</div>
           <div className="eqc-s">{topG ? `${topG[1]} de ${cards.length} superintendências · ${perTxt}` : carregandoCons ? "carregando…" : ""}</div></div>
         <div><div className="dir-lbl">Atrás do ritmo</div><div className="eqc-v">{atras.length ? atras.join(", ") : comMeta.length ? "ninguém" : "—"}</div>
@@ -192,7 +192,7 @@ export default function EquipesCards({ diretorId, supers, linhasDoSuper, dias, c
                 <div><h3>{c.s.nome}</h3>
                   <div className="eqc-s">{c.corretores} corretores · {c.s.c2s ? c.s.c2s.gerentes.length : c.s.gerentes.length} gerentes · {mi(c.vgv)} no placar no período</div></div>
                 <div className="eqc-chips">
-                  {c.s.c2s ? <span className="dir-chip c-gray">plantão do C2S · corretores sem conta</span> : null}
+                  {c.s.c2s ? <span className="dir-chip c-gray">plantão pelo nome · corretores sem conta</span> : null}
                   {c.semPlantao ? <span className="dir-chip c-org">fora do C2S</span> : null}
                 </div>
               </div>
