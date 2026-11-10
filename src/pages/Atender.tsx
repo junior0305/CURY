@@ -186,11 +186,11 @@ const STYLES = `
 
 /* ── helpers ── */
 const STAGES: [LeadStatus, string][] = [
-  ["NEW", "Novo"], ["IN_PROGRESS", "Atend."], ["NEGOTIATING", "Negoc."],
+  ["NEW", "Novo"], ["IN_PROGRESS", "Tentando"], ["NEGOTIATING", "Conversando"],
   ["VISIT_SCHEDULED", "Visita"], ["VISITA_REALIZADA", "Veio"], ["DOCS_REQUESTED", "Docs"], ["CONCLUDED", "Venda"],
 ];
 const STAGE_TAG: Partial<Record<LeadStatus, [string, string]>> = {
-  NEW: ["novo", "Novo"], IN_PROGRESS: ["atend", "Atend."], NEGOTIATING: ["negoc", "Negoc."],
+  NEW: ["novo", "Novo"], IN_PROGRESS: ["atend", "Tentando"], NEGOTIATING: ["negoc", "Conversando"],
   VISIT_SCHEDULED: ["visita", "Visita"], VISITA_REALIZADA: ["visita", "Veio"], DOCS_REQUESTED: ["docs", "Docs"],
   CONCLUDED: ["venda", "Venda"], REACTIVATED: ["novo", "Voltou"], FOLLOW_UP_AUTO: ["frio", "Follow-up"],
 };

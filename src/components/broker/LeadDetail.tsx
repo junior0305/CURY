@@ -32,8 +32,8 @@ interface LeadDetailProps {
 
 const PIPELINE_STEPS = [
   { id: "NEW",              label: "Novo",   icon: Zap,          color: "bg-sky-500",     ring: "ring-sky-500/40" },
-  { id: "IN_PROGRESS",      label: "Atend.", icon: MessageSquare, color: "bg-blue-500",    ring: "ring-blue-500/40" },
-  { id: "NEGOTIATING",      label: "Negoc.", icon: Handshake,     color: "bg-orange-500",  ring: "ring-orange-500/40" },
+  { id: "IN_PROGRESS",      label: "Tentando", icon: MessageSquare, color: "bg-blue-500",    ring: "ring-blue-500/40" },
+  { id: "NEGOTIATING",      label: "Conversando", icon: Handshake,     color: "bg-orange-500",  ring: "ring-orange-500/40" },
   { id: "VISIT_SCHEDULED",  label: "Visita", icon: Calendar,      color: "bg-emerald-500", ring: "ring-emerald-500/40" },
   { id: "VISITA_REALIZADA", label: "Veio",   icon: Home,          color: "bg-teal-500",    ring: "ring-teal-500/40" },
   { id: "DOCS_REQUESTED",   label: "Docs",   icon: FileText,      color: "bg-amber-500",   ring: "ring-amber-500/40" },

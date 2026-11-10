@@ -44,7 +44,7 @@ const REGUA_DESDE = "2026-10-17";
 const OFFS_REGUA = [0, 1, 3, 7];
 const FECHADO = new Set(["CONCLUDED", "ABANDONED", "EXCLUDED"]);
 const POR_VENDA = { atendidos: 66, visitas: 5, docs: 3 }; // Econ, 90 dias até 30/10/2026
-const STATUS_TXT: Record<string, string> = { NEW: "Novo", IN_PROGRESS: "Atendendo", NEGOTIATING: "Conversando", VISIT_SCHEDULED: "Visita", VISITA_REALIZADA: "Veio", DOCS_REQUESTED: "Documentos", CONCLUDED: "Venda", FOLLOW_UP_AUTO: "Atendendo", REACTIVATED: "Voltou" };
+const STATUS_TXT: Record<string, string> = { NEW: "Novo", IN_PROGRESS: "Tentando", NEGOTIATING: "Conversando", VISIT_SCHEDULED: "Visita", VISITA_REALIZADA: "Veio", DOCS_REQUESTED: "Documentos", CONCLUDED: "Venda", FOLLOW_UP_AUTO: "Atendendo", REACTIVATED: "Voltou" };
 
 const lerTema = () => { try { return localStorage.getItem("pc_tema") === "claro"; } catch { return false; } };
 const haMin = (iso: string) => { const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000)); return m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)} dias`; };

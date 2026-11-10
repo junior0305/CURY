@@ -136,6 +136,6 @@ export const QUANDO = ["Hoje 18h", "Amanhã 10h", "Em 2 dias", "Sexta"];
 
 export const FASES: [string, string, string][] = [
   // status, rótulo na tela, rótulo da nota (igual ao painel antigo; a conta do mês lê "Fase · Veio"/"Fase · Docs")
-  ["NEW", "Novo", "Novo"], ["IN_PROGRESS", "Atendendo", "Atend."], ["NEGOTIATING", "Conversando", "Negoc."],
+  ["NEW", "Novo", "Novo"], ["IN_PROGRESS", "Tentando", "Tentando"], ["NEGOTIATING", "Conversando", "Conversando"],
   ["VISIT_SCHEDULED", "Visita", "Visita"], ["VISITA_REALIZADA", "Veio", "Veio"], ["DOCS_REQUESTED", "Documentos", "Docs"], ["CONCLUDED", "Venda", "Venda"],
 ];

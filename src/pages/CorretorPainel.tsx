@@ -36,7 +36,7 @@ const CLS_TAREFA: ClassesTarefa = { titulo: "prompt-label", meta: "prompt-hint",
 
 // ── stages do funil (iguais ao Atender atual) ───────────────────────────────
 const STAGES: [LeadStatus, string][] = [
-  ["NEW", "Novo"], ["IN_PROGRESS", "Atend."], ["NEGOTIATING", "Negoc."],
+  ["NEW", "Novo"], ["IN_PROGRESS", "Tentando"], ["NEGOTIATING", "Conversando"],
   ["VISIT_SCHEDULED", "Visita"], ["VISITA_REALIZADA", "Veio"], ["DOCS_REQUESTED", "Docs"], ["CONCLUDED", "Venda"],
 ];
 
