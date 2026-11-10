@@ -47,6 +47,11 @@ export default function LeadsNova() {
   const [tf, setTf] = useState(0); const [tk, setTk] = useState("todos");
   const [comparar, setComparar] = useState(false);
   const [filaForm, setFilaForm] = useState<string | null>(null);
+  // "Precisa de mim agora": por corretor (padrão, fácil de ler) · um a um · lista com seleção
+  const [modoAgora, setModoAgora] = useState<"corretor" | "um" | "lista">("corretor");
+  const [umFila, setUmFila] = useState<string[]>([]);   // chaves (id|g) na ordem do um a um
+  const [umIdx, setUmIdx] = useState(0);
+  const [umPara, setUmPara] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["ln-dados", gerente, jan.de, jan.ate], enabled: !!gerente, refetchInterval: 120_000,
@@ -184,9 +189,25 @@ export default function LeadsNova() {
   }).sort((a, b) => b.recebeu - a.recebeu), [corretores, data]);
 
   const tab = (k: Aba, nome: string, n?: number) => (
-    <button key={k} type="button" role="tab" aria-selected={aba === k} className={`ln-aba${aba === k ? " on" : ""}`} onClick={() => setAba(k)}>{nome}{n != null ? <b>{n}</b> : null}</button>
+    <button key={k} type="button" role="tab" aria-selected={aba === k} className={`ln-aba${aba === k ? " on" : ""}`} onClick={() => { setAba(k); setSel(new Set()); setDst(new Set()); }}>{nome}{n != null ? <b>{n}</b> : null}</button>
   );
   const tagSt = (g: number) => ({ color: TAG[g][0], background: TAG[g][1] });
+  const loteBarra = sel.size ? (
+    <div className="ln-lote">
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <b style={{ fontSize: 15 }}>{sel.size} lead(s) marcados · redistribuir para:</b>
+        <button type="button" onClick={() => { setSel(new Set()); setDst(new Set()); }} style={{ font: "inherit", background: "none", border: 0, color: "#fff", textDecoration: "underline", cursor: "pointer" }}>limpar seleção</button>
+      </div>
+      <div className="ln-btns">
+        {corretores.map((c) => <button key={c.id} type="button" className={`ln-pill${dst.has(c.id) ? " on" : ""}`} aria-pressed={dst.has(c.id)} onClick={() => alternar(dst, setDst, c.id)}>{c.nome.split(" ")[0]}{c.roleta ? " · roleta" : ""} · {carteira.get(c.id) ?? 0}</button>)}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 13, color: "#C9D3DF" }}>{dst.size ? `${sel.size} lead(s) em rodízio entre ${[...dst].map(nomeC).join(", ")} (cerca de ${Math.ceil(sel.size / dst.size)} para cada).` : "Escolha um ou mais corretores."}</span>
+        <button type="button" className="ln-btn" disabled={indo || !dst.size} onClick={redistribuir} style={{ background: "#2BB5A0", borderColor: "#2BB5A0", color: "#0F1B2D", fontWeight: 800 }}>{indo ? "Redistribuindo…" : "Redistribuir agora"}</button>
+      </div>
+      <span style={{ fontSize: 12, color: "#C9D3DF" }}>Só corretores da equipe do lead. Lead de outra estrutura não passa (regra de isolamento). Descartado volta para "Novo". Cada corretor recebe o aviso no app.</span>
+    </div>
+  ) : null;
 
   return (
     <div className="mgr10 app2">
@@ -201,6 +222,7 @@ export default function LeadsNova() {
             <div className="ln-acoes">
               {([["hoje", "Hoje"], ["ontem", "Ontem"], ["7d", "7 dias"], ["mes", "Mês"], ["datas", "Escolher datas"]] as [Periodo, string][]).map(([k, r]) => (
                 <button key={k} type="button" className={`ln-pill${per === k ? " on" : ""}`} onClick={() => setPer(k)}>{r}</button>))}
+              <button type="button" className="ln-pill brand" onClick={() => setFilaForm("*")}>Gerenciar filas</button>
               <Link className="ln-pill brand" to="/manager/anuncios">Ver anúncios</Link>
               <button type="button" className="ln-pill" onClick={baixarCsv} disabled={!data?.periodo.length}>Baixar CSV</button>
             </div>
@@ -225,31 +247,123 @@ export default function LeadsNova() {
 
           {isLoading ? <p className="ln-vazio">Carregando os leads…</p> : null}
 
-          {aba === "agora" && data ? (<>
-            <div className="ln-filtros">
-              {[[0, "Responderam e ninguém voltou", "cliente falou, corretor sumiu"], [1, "Nunca abordados", "de 24h a 15 dias sem contato"], [2, "Sem corretor", "campanha sem fila ou corretor saiu"], [3, "Tarefas atrasadas", "o corretor agendou e não fez"]]
-                .map(([g, nome, sub]) => (
-                  <button key={g} type="button" className="ln-filtro" onClick={() => setFiltroAgora(filtroAgora === g ? -1 : (g as number))}
-                    style={{ color: TAG[g as number][0], border: filtroAgora === g ? `2px solid ${TAG[g as number][0]}` : undefined }}>
-                    <b>{contaG(g as number)}</b><span>{nome}</span><small>{sub}</small></button>))}
-            </div>
-            <div className="ln-caixa">
-              {agora.filter((x) => filtroAgora < 0 || x.g === filtroAgora).slice(0, 200).map((x, i) => (
-                <div key={x.id + i} className="ln-linha">
-                  <span className="ln-tag" style={tagSt(x.g)}>{x.tag}</span>
-                  <div className="ln-corpo"><b>{x.lead?.name || "Sem nome"}{x.lead?.campanha_nome ? ` · ${x.lead.campanha_nome}` : ""}</b><span>{x.porque}</span></div>
-                  <span className="ln-quem">{x.quem ? `com ${nomeC(x.quem)}` : "—"}</span>
-                  <div className="ln-btns">
-                    {x.quem && x.g !== 2
-                      ? <button type="button" className="ln-btn p" onClick={() => cobrar([x.id], nomeC(x.quem))}>Cobrar {nomeC(x.quem)}</button>
-                      : <button type="button" className="ln-btn p" onClick={() => setGaveta({ id: x.id, trocando: true })}>Passar para…</button>}
-                    <button type="button" className="ln-btn" onClick={() => setGaveta({ id: x.id, trocando: false })}>Abrir</button>
+          {aba === "agora" && data ? (() => {
+            const lista = agora.filter((x) => filtroAgora < 0 || x.g === filtroAgora);
+            const chave = (x: { id: string; g: number }) => `${x.id}|${x.g}`;
+            const grupos = new Map<string, typeof lista>();
+            for (const x of lista) { const k = x.quem ?? "sem"; grupos.set(k, [...(grupos.get(k) ?? []), x]); }
+            const ordemG = [...grupos.entries()].sort((a, b) => (a[0] === "sem" ? -1 : b[0] === "sem" ? 1 : b[1].length - a[1].length));
+            const comecarUm = (itens: typeof lista) => { setUmFila(itens.map(chave)); setUmIdx(0); setUmPara(""); setModoAgora("um"); };
+            const umItens = umFila.map((k) => agora.find((x) => chave(x) === k)).filter(Boolean) as typeof lista;
+            const atual = umItens[umIdx];
+            const proximo = () => { setUmPara(""); setUmIdx((n) => n + 1); };
+            const passarUm = async () => {
+              if (!atual || !umPara) return;
+              setIndo(true);
+              const { data: r, error } = await sb.rpc("redistribuir_lote", { p_leads: [atual.id], p_para: [umPara], p_como: como, p_motivo: "Passado pelo gestor (um a um)" });
+              setIndo(false);
+              if (error) { toast.error(error.details || error.message); return; }
+              if (!r?.feitos) { toast.error(r?.pulados?.[0]?.motivo ? `Não deu: ${r.pulados[0].motivo}` : "Não consegui passar."); return; }
+              toast.success(`Passado para ${nomeC(umPara)}.`); proximo();
+            };
+            const resumo = (itens: typeof lista) => [[0, "responderam sem retorno"], [1, "nunca abordados"], [2, "sem corretor"], [3, "tarefas atrasadas"]]
+              .map(([g, r]) => { const n = itens.filter((x) => x.g === g).length; return n ? `${n} ${r}` : null; }).filter(Boolean).join(" · ");
+            return (<>
+              <div className="ln-filtros">
+                {[[0, "Responderam e ninguém voltou", "cliente falou, corretor sumiu"], [1, "Nunca abordados", "de 24h a 15 dias sem contato"], [2, "Sem corretor", "campanha sem fila ou corretor saiu"], [3, "Tarefas atrasadas", "o corretor agendou e não fez"]]
+                  .map(([g, nome, sub]) => (
+                    <button key={g} type="button" className="ln-filtro" onClick={() => { setFiltroAgora(filtroAgora === g ? -1 : (g as number)); setSel(new Set()); }}
+                      style={{ color: TAG[g as number][0], border: filtroAgora === g ? `2px solid ${TAG[g as number][0]}` : undefined }}>
+                      <b>{contaG(g as number)}</b><span>{nome}</span><small>{sub}</small></button>))}
+              </div>
+              <div className="ln-acoes">
+                <span className="ln-nota">Ver:</span>
+                {([["corretor", "Por corretor"], ["um", "Um a um"], ["lista", "Lista (para marcar vários)"]] as ["corretor" | "um" | "lista", string][]).map(([k, r]) => (
+                  <button key={k} type="button" className={`ln-pill${modoAgora === k ? " on" : ""}`}
+                    onClick={() => { if (k === "um") comecarUm(lista); else { setModoAgora(k); setSel(new Set()); } }}>{r}</button>))}
+                <span className="ln-nota" style={{ marginLeft: "auto" }}>{lista.length} pendente(s){filtroAgora >= 0 ? " neste filtro" : ""}</span>
+              </div>
+
+              {modoAgora === "corretor" ? (
+                <div className="ln-caixa">
+                  {ordemG.map(([k, itens]) => (
+                    <div key={k} className="ln-linha">
+                      <div className="ln-corpo">
+                        <b>{k === "sem" ? "Sem corretor" : nomeC(k)} · {itens.length} lead(s)</b>
+                        <span>{resumo(itens)}</span>
+                      </div>
+                      <div className="ln-btns">
+                        {k !== "sem" ? <button type="button" className="ln-btn p" onClick={() => cobrar(itens.filter((x) => x.g !== 2).map((x) => x.id), nomeC(k))}>Cobrar {nomeC(k)}</button> : null}
+                        <button type="button" className="ln-btn" onClick={() => { setSel(new Set(itens.map((x) => x.id))); setModoAgora("lista"); }}>Redistribuir {itens.length > 1 ? `os ${itens.length}` : ""}</button>
+                        <button type="button" className="ln-btn" onClick={() => comecarUm(itens)}>Ver um a um</button>
+                      </div>
+                    </div>))}
+                  {!lista.length ? <p className="ln-vazio">Nada pendente agora. A equipe está em dia.</p> : null}
+                </div>
+              ) : null}
+
+              {modoAgora === "um" ? (
+                atual ? (
+                  <div className="ln-card" style={{ maxWidth: 720, gap: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      <span className="ln-tag" style={tagSt(atual.g)}>{atual.tag}</span>
+                      <span className="ln-nota"><b>{umIdx + 1}</b> de {umItens.length}</span>
+                    </div>
+                    <div>
+                      <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>{atual.lead?.name || "Sem nome"}</h2>
+                      <span className="ln-nota">{[atual.lead?.campanha_nome, atual.lead?.regiao_interesse, atual.lead?.renda_declarada ? `renda ${atual.lead.renda_declarada}` : null].filter(Boolean).join(" · ")}</span>
+                    </div>
+                    <span style={{ fontSize: 14.5 }}>{atual.porque} · está {atual.quem ? <>com <b>{nomeC(atual.quem)}</b></> : <b>sem corretor</b>}</span>
+                    {atual.quem && atual.g !== 2 ? (
+                      <button type="button" className="ln-btn p" style={{ alignSelf: "flex-start" }} onClick={async () => { await cobrar([atual.id], nomeC(atual.quem)); proximo(); }}>Cobrar {nomeC(atual.quem)} e ir para o próximo</button>
+                    ) : null}
+                    <div className="ln-box">
+                      <span className="ln-nota">Ou passe para outro corretor:</span>
+                      <div className="ln-btns">
+                        {corretores.filter((c) => c.id !== atual.quem).sort((a, b) => Number(b.roleta) - Number(a.roleta) || (carteira.get(a.id) ?? 0) - (carteira.get(b.id) ?? 0)).map((c) => (
+                          <button key={c.id} type="button" className={`ln-pill${umPara === c.id ? " on" : ""}`} onClick={() => setUmPara(c.id)}>{c.nome.split(" ")[0]}{c.roleta ? " · roleta" : ""} · {carteira.get(c.id) ?? 0}</button>))}
+                      </div>
+                      <button type="button" className="ln-btn" disabled={indo || !umPara} onClick={passarUm} style={{ alignSelf: "flex-start", background: "#12233A", color: "#fff", borderColor: "#12233A" }}>{indo ? "Passando…" : umPara ? `Passar para ${nomeC(umPara)} e ir para o próximo` : "Escolha o corretor"}</button>
+                    </div>
+                    <div className="ln-btns">
+                      <button type="button" className="ln-btn" onClick={() => setGaveta({ id: atual.id })}>Abrir o lead (tarefa, anotação, caminho)</button>
+                      <button type="button" className="ln-btn" onClick={proximo}>Pular</button>
+                      {umIdx > 0 ? <button type="button" className="ln-btn" onClick={() => { setUmPara(""); setUmIdx(umIdx - 1); }}>Voltar</button> : null}
+                    </div>
                   </div>
-                </div>))}
-              {!agora.length ? <p className="ln-vazio">Nada pendente agora. A equipe está em dia.</p> : null}
-            </div>
-            <span className="ln-nota">Primeiro quem respondeu, depois tarefas atrasadas, sem corretor e nunca abordados (só os últimos 15 dias; os mais velhos ficam em Chegaram) · mais recentes primeiro. "Cobrar" manda o WhatsApp para o corretor com o nome do cliente. Lead com retorno combinado para frente não aparece aqui.</span>
-          </>) : null}
+                ) : (
+                  <div className="ln-card" style={{ maxWidth: 720 }}>
+                    <b style={{ fontSize: 16 }}>Pronto: você passou pelos {umItens.length} lead(s).</b>
+                    <div className="ln-btns"><button type="button" className="ln-btn p" onClick={() => setModoAgora("corretor")}>Voltar para a lista por corretor</button></div>
+                  </div>
+                )
+              ) : null}
+
+              {modoAgora === "lista" ? (<>
+                {loteBarra}
+                <div className="ln-caixa">
+                  <div className="ln-linha" style={{ background: "var(--cv-surface-subtle,#F3F6F9)" }}>
+                    <label className="ln-nota" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input type="checkbox" checked={!!lista.length && lista.every((x) => sel.has(x.id))}
+                        onChange={() => setSel(lista.every((x) => sel.has(x.id)) ? new Set() : new Set(lista.map((x) => x.id)))} /> marcar todos ({lista.length})</label>
+                  </div>
+                  {lista.slice(0, 300).map((x, i) => (
+                    <div key={chave(x) + i} className="ln-linha">
+                      <input type="checkbox" aria-label={`Marcar ${x.lead?.name ?? "lead"}`} checked={sel.has(x.id)} onChange={() => alternar(sel, setSel, x.id)} />
+                      <span className="ln-tag" style={tagSt(x.g)}>{x.tag}</span>
+                      <div className="ln-corpo"><b>{x.lead?.name || "Sem nome"}{x.lead?.campanha_nome ? ` · ${x.lead.campanha_nome}` : ""}</b><span>{x.porque}</span></div>
+                      <span className="ln-quem">{x.quem ? `com ${nomeC(x.quem)}` : "—"}</span>
+                      <div className="ln-btns">
+                        {x.quem && x.g !== 2 ? <button type="button" className="ln-btn" onClick={() => cobrar([x.id], nomeC(x.quem))}>Cobrar</button> : null}
+                        <button type="button" className="ln-btn" onClick={() => setGaveta({ id: x.id })}>Abrir</button>
+                      </div>
+                    </div>))}
+                  {!lista.length ? <p className="ln-vazio">Nada pendente agora.</p> : null}
+                </div>
+              </>) : null}
+              <span className="ln-nota">Primeiro quem respondeu, depois tarefas atrasadas, sem corretor e nunca abordados (só os últimos 15 dias; os mais velhos ficam em Chegaram) · mais recentes primeiro. "Cobrar" manda o WhatsApp para o corretor com o nome do(s) cliente(s). Lead com retorno combinado para frente não aparece aqui.</span>
+            </>);
+          })() : null}
 
           {aba === "chegaram" && data ? (<>
             <div className="ln-acoes">
@@ -261,22 +375,7 @@ export default function LeadsNova() {
               </select>
               <span className="ln-nota" style={{ marginLeft: "auto" }}>{chegaram.length} de {data.periodo.length} ({jan.rotulo}) · mais recentes primeiro</span>
             </div>
-            {sel.size ? (
-              <div className="ln-lote">
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <b style={{ fontSize: 15 }}>{sel.size} lead(s) marcados · redistribuir para:</b>
-                  <button type="button" onClick={() => { setSel(new Set()); setDst(new Set()); }} style={{ font: "inherit", background: "none", border: 0, color: "#fff", textDecoration: "underline", cursor: "pointer" }}>limpar seleção</button>
-                </div>
-                <div className="ln-btns">
-                  {corretores.map((c) => <button key={c.id} type="button" className={`ln-pill${dst.has(c.id) ? " on" : ""}`} aria-pressed={dst.has(c.id)} onClick={() => alternar(dst, setDst, c.id)}>{c.nome.split(" ")[0]}{c.roleta ? " · roleta" : ""} · {carteira.get(c.id) ?? 0}</button>)}
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  <span style={{ fontSize: 13, color: "#C9D3DF" }}>{dst.size ? `${sel.size} lead(s) em rodízio entre ${[...dst].map(nomeC).join(", ")} (cerca de ${Math.ceil(sel.size / dst.size)} para cada).` : "Escolha um ou mais corretores."}</span>
-                  <button type="button" className="ln-btn" disabled={indo || !dst.size} onClick={redistribuir} style={{ background: "#2BB5A0", borderColor: "#2BB5A0", color: "#0F1B2D", fontWeight: 800 }}>{indo ? "Redistribuindo…" : "Redistribuir agora"}</button>
-                </div>
-                <span style={{ fontSize: 12, color: "#C9D3DF" }}>Só corretores da equipe do lead. Lead de outra estrutura não passa (regra de isolamento). Descartado volta para "Novo". Cada corretor recebe o aviso no app.</span>
-              </div>
-            ) : null}
+            {loteBarra}
             <div className="ln-caixa ln-tab">
               <table>
                 <thead><tr>
@@ -375,7 +474,6 @@ export default function LeadsNova() {
                 {!campanhas.length ? <p className="ln-vazio">Nenhum lead no período. Formulário novo, ainda sem lead, aparece em "Gerenciar filas".</p> : null}
               </div>
             )}
-            {filaForm ? <FilasFormulario como={como} abrir={filaForm} semCartao onFechar={() => { setFilaForm(null); recarregar(); }} /> : null}
           </>) : null}
 
           {aba === "anuncios" && gerente ? <AnunciosGerente embutido donoId={gerente} /> : null}
@@ -403,6 +501,7 @@ export default function LeadsNova() {
           </>) : null}
         </div>
       </main>
+      {filaForm ? <FilasFormulario como={como} abrir={filaForm} semCartao onFechar={() => { setFilaForm(null); recarregar(); }} /> : null}
       {gaveta ? <LeadGaveta leadId={gaveta.id} como={como} corretores={corretores} carteira={carteira} trocandoInicial={!!gaveta.trocando} onFechar={() => { setGaveta(null); recarregar(); }} /> : null}
     </div>
   );
