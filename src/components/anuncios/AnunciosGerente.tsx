@@ -19,9 +19,11 @@ const brl2 = (n: number | null | undefined) => (n == null || !isFinite(n) ? "—
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 type Aba = "alertas" | "campanhas" | "comparar" | "entrega" | "pixel";
 
-export default function AnunciosGerente() {
+/** `embutido` (10/11): dentro da aba Anúncios da tela de Leads — só os números e os alertas, sem menu nem cabeçalho.
+ *  Entrega, Pixel e Comparar gerentes ficam na tela completa (/manager/anuncios). */
+export default function AnunciosGerente({ embutido = false, donoId }: { embutido?: boolean; donoId?: string } = {}) {
   const { session } = useAuth();
-  const eu = session?.user?.id;
+  const eu = donoId ?? session?.user?.id;
   const { mode, toggle } = useTheme();
   useEffect(loadFonts, []);
   const [aba, setAba] = useState<Aba>("alertas");
@@ -131,6 +133,7 @@ export default function AnunciosGerente() {
           </div>
         </div>
 
+        {embutido ? <Alertas problemas={problemas} dicas={dicas} gestor={gestor ?? null} conta={d.conta} automatico={!!reguaLigada} /> : <>
         <nav className="an-abas" aria-label="Seções dos anúncios">
           {([["alertas", "Alertas do tráfego", problemas.length], ["campanhas", "Campanhas", null], ["comparar", "Comparar gerentes", null], ["entrega", "Entrega", null], ["pixel", "Pixel", null]] as [Aba, string, number | null][])
             .map(([k, rot, n]) => (
@@ -143,9 +146,12 @@ export default function AnunciosGerente() {
           : aba === "comparar" ? <Comparativo eu={eu!} />
           : aba === "entrega" ? <Entrega d={d} />
           : <Pixel d={d} />}
+        </>}
       </>
     );
   };
+
+  if (embutido) return <div className="an"><style>{CSS}</style>{corpo()}</div>;
 
   return (
     <div className="mgr10 app2">
@@ -187,6 +193,10 @@ function Alertas({ problemas, dicas, gestor, conta, automatico }: {
       <div className="an-info">
         {gestor ? <span>Gestor de tráfego: <b>{gestor.nome}</b> · {gestor.telefone}</span>
           : <span>Nenhum gestor de tráfego cadastrado. <Link to="/manager/config?secao=facebook">Cadastrar</Link></span>}
+        {gestor && problemas.length > 1 ? (
+          <a className="an-btn" target="_blank" rel="noreferrer"
+            href={`https://wa.me/${String(gestor.telefone).replace(/\D/g, "")}?text=${encodeURIComponent(`Oi ${gestor.nome.split(" ")[0]}, alertas na conta ${conta}:\n\n${problemas.map((a: any, i: number) => `${i + 1}. *${a.titulo}*\n${a.detalhe}`).join("\n\n")}`)}`}>
+            Cobrar o gestor de todos os alertas</a>) : null}
         <span className={automatico ? "ok" : ""}>{automatico ? "Aviso automático ligado" : "Aviso automático desligado"} · <Link to="/manager/config?secao=avisos">ajustar em Configurar</Link></span>
       </div>
       {!problemas.length ? <div className="an-card"><p className="an-vazio">Nenhum problema na conta agora. O robô confere de hora em hora.</p></div> : null}
@@ -194,7 +204,7 @@ function Alertas({ problemas, dicas, gestor, conta, automatico }: {
         <div key={i} className={`an-alerta ${a.g}`}>
           <span className="an-dot" />
           <div><b>{a.titulo}</b><p>{a.detalhe}</p></div>
-          {gestor ? <a className="an-btn" href={link(a)} target="_blank" rel="noreferrer">Avisar {gestor.nome.split(" ")[0]}</a> : null}
+          {gestor ? <a className="an-btn" href={link(a)} target="_blank" rel="noreferrer">Cobrar {gestor.nome.split(" ")[0]}</a> : null}
         </div>
       ))}
       {dicas.length ? <h3 className="an-h3">Oportunidades</h3> : null}

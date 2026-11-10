@@ -11,7 +11,7 @@
  * Salvar/tirar passa pelas RPCs salvar_fila_formulario / tirar_fila_formulario, que conferem
  * se os corretores são da árvore de quem salva.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,12 +32,15 @@ const ERROS: Record<string, string> = {
 
 /** `como`: id do super/gerente cuja tela está aberta. No "Ver como" (admin/diretor abrindo a tela de
  *  outra pessoa) a lista fica igual à que essa pessoa vê, só com o que ela alcança (22/10). */
-export default function FilasFormulario({ como }: { como?: string | null } = {}) {
+/** `abrir` (10/11, Leads nova): abre a gaveta já no formulário (botão "Trocar quem recebe" do cartão da campanha);
+ *  `semCartao` esconde o cartão "Fila de leads por formulário"; `onFechar` avisa quando a gaveta fecha. */
+export default function FilasFormulario({ como, abrir, semCartao = false, onFechar }: { como?: string | null; abrir?: string | null; semCartao?: boolean; onFechar?: () => void } = {}) {
   const { session, role } = useAuth();
   const meuId = session?.user?.id;
   const eu = como || meuId;
   const qc = useQueryClient();
-  const [aberto, setAberto] = useState(false);
+  const [aberto, setAberto0] = useState(false);
+  const setAberto = (v: boolean) => { setAberto0(v); if (!v) onFechar?.(); };
   const [sel, setSel] = useState<string | null>(null);
   const [marc, setMarc] = useState<Set<string>>(new Set());
   const [buscaForm, setBuscaForm] = useState("");
@@ -153,6 +156,15 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
     const marcados = new Set(filaDe.get(f.form_id)?.broker_ids ?? []);
     setGruposAbertos(new Set(grupos.length <= 2 ? grupos.map((g) => g.lider) : grupos.filter((g) => g.cs.some((c) => marcados.has(c.id))).map((g) => g.lider)));
   };
+  // aberto de fora já num formulário (cartão da campanha na tela de Leads)
+  const abriuDeFora = useRef<string | null>(null);
+  useEffect(() => {
+    if (!abrir || !data || abriuDeFora.current === abrir) return;
+    abriuDeFora.current = abrir;
+    const f = (data.forms ?? []).find((x) => x.form_id === abrir);
+    setAberto0(true);
+    if (f && sel !== f.form_id) abrirForm(f);
+  }, [abrir, data]); // eslint-disable-line react-hooks/exhaustive-deps
   const freq = data?.freq ?? new Map<string, number>();
   const frequentes = useMemo(() => pessoas.filter((p) => p.role === "BROKER" && (freq.get(p.id) ?? 0) > 0)
     .sort((a, b) => (freq.get(b.id) ?? 0) - (freq.get(a.id) ?? 0)).slice(0, 8), [pessoas, freq]);
@@ -214,7 +226,7 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
   return (
     <>
       <style>{CSS}</style>
-      <section className="ff-card">
+      {semCartao ? null : <section className="ff-card">
         <div className="ff-card-txt">
           <b>Fila de leads por formulário</b>
           <span>
@@ -224,7 +236,7 @@ export default function FilasFormulario({ como }: { como?: string | null } = {})
           </span>
         </div>
         <button type="button" className="ff-btn" onClick={() => setAberto(true)}>Gerenciar filas</button>
-      </section>
+      </section>}
 
       {aberto && (
         <div className="ff-fundo" onClick={() => setAberto(false)}>
