@@ -70,9 +70,10 @@ export default function AnunciosGerente({ embutido = false, donoId }: { embutido
     if (isLoading) return <p className="an-vazio">Carregando a conta de anúncio…</p>;
     if (!d) return (
       <div className="an-card an-vazio-box">
-        <h3>A conta de anúncio ainda não foi ligada</h3>
-        <p>Os leads já chegam pela página. Os números de anúncio aparecem aqui sozinhos assim que a conta for ligada: pelo nome da conta
-          ({((empresa() as any).fb_prefixo || "EV")} - Gerente SEUNOME), em até 1 hora, ou pelo diretor em Configurar › Facebook e leads › Contas de anúncio, em 1 minuto.</p>
+        <h3>A conta de anúncio ainda não apareceu</h3>
+        <p>Para os números aparecerem aqui, sua conta de anúncio precisa estar <b>compartilhada com o ADMIN 01</b> (no Gerenciador de Negócios:
+          Contas de anúncios › sua conta › Atribuir parceiro › ID 505522686848507) e ter <b>o seu nome</b>
+          (ex.: {((empresa() as any).fb_prefixo || "EV")}-GERENTE-SEUNOME). Feito isso, ela aparece sozinha em até 1 hora.</p>
       </div>
     );
     const cm = d.comandra ?? {};
