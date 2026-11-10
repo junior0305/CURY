@@ -161,8 +161,9 @@ export default function FilasFormulario({ como, abrir, semCartao = false, onFech
   useEffect(() => {
     if (!abrir || !data || abriuDeFora.current === abrir) return;
     abriuDeFora.current = abrir;
-    const f = (data.forms ?? []).find((x) => x.form_id === abrir);
     setAberto0(true);
+    if (abrir === "*") return;   // "Gerenciar filas": abre a lista inteira
+    const f = (data.forms ?? []).find((x) => x.form_id === abrir);
     if (f && sel !== f.form_id) abrirForm(f);
   }, [abrir, data]); // eslint-disable-line react-hooks/exhaustive-deps
   const freq = data?.freq ?? new Map<string, number>();

@@ -329,6 +329,7 @@ export default function LeadsNova() {
             <div className="ln-acoes">
               <button type="button" className={`ln-pill${!comparar ? " on" : ""}`} onClick={() => setComparar(false)}>Cartões</button>
               <button type="button" className={`ln-pill${comparar ? " on" : ""}`} onClick={() => setComparar(true)}>Comparar campanhas</button>
+              <button type="button" className="ln-btn p" onClick={() => setFilaForm("*")}>Gerenciar filas</button>
               <span className="ln-nota" style={{ marginLeft: "auto" }}>gasto do Facebook (Saúde dos anúncios); leads e visitas do Comandra, no período</span>
             </div>
             {comparar ? (
@@ -366,10 +367,10 @@ export default function LeadsNova() {
                     </div>
                     <div className="ln-vai">
                       <span><span className="ln-nota">Vai para: </span><b>{c.vai}</b></span>
-                      {c.form ? <button type="button" className="ln-btn" onClick={() => setFilaForm(c.form)}>Trocar quem recebe</button> : null}
+                      {c.form ? <button type="button" className={`ln-btn${c.semFila ? " p" : ""}`} onClick={() => setFilaForm(c.form)}>{c.semFila ? "Criar fila" : "Trocar quem recebe"}</button> : null}
                     </div>
                   </div>))}
-                {!campanhas.length ? <p className="ln-vazio">Nenhum lead no período.</p> : null}
+                {!campanhas.length ? <p className="ln-vazio">Nenhum lead no período. Formulário novo, ainda sem lead, aparece em "Gerenciar filas".</p> : null}
               </div>
             )}
             {filaForm ? <FilasFormulario como={como} abrir={filaForm} semCartao onFechar={() => { setFilaForm(null); recarregar(); }} /> : null}
