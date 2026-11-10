@@ -89,7 +89,9 @@ export default function LeadsNova() {
       const l = leadPorId.get(t.lead_id);
       itens.push({ id: t.lead_id, g: 3, tag: `Tarefa venceu ${quando(t.due_at)}`, porque: `${nomeC(t.user_id)} agendou "${t.title}" e não fez`, quem: t.user_id === gerente ? null : t.user_id, lead: l, t: new Date(t.due_at).getTime() });
     }
-    return itens.sort((a, b) => a.t - b.t);
+    // ordem: quem respondeu primeiro, depois tarefa atrasada, sem corretor e nunca abordado; dentro de cada grupo o mais recente
+    const ordem: Record<number, number> = { 0: 0, 3: 1, 2: 2, 1: 3 };
+    return itens.sort((a, b) => ordem[a.g] - ordem[b.g] || b.t - a.t);
   }, [data, atrasadas, leadPorId]); // eslint-disable-line react-hooks/exhaustive-deps
   const contaG = (g: number) => agora.filter((x) => x.g === g).length;
 
@@ -225,7 +227,7 @@ export default function LeadsNova() {
 
           {aba === "agora" && data ? (<>
             <div className="ln-filtros">
-              {[[0, "Responderam e ninguém voltou", "cliente falou, corretor sumiu"], [1, "Nunca abordados", "chegaram há mais de 24h"], [2, "Sem corretor", "campanha sem fila ou corretor saiu"], [3, "Tarefas atrasadas", "o corretor agendou e não fez"]]
+              {[[0, "Responderam e ninguém voltou", "cliente falou, corretor sumiu"], [1, "Nunca abordados", "de 24h a 15 dias sem contato"], [2, "Sem corretor", "campanha sem fila ou corretor saiu"], [3, "Tarefas atrasadas", "o corretor agendou e não fez"]]
                 .map(([g, nome, sub]) => (
                   <button key={g} type="button" className="ln-filtro" onClick={() => setFiltroAgora(filtroAgora === g ? -1 : (g as number))}
                     style={{ color: TAG[g as number][0], border: filtroAgora === g ? `2px solid ${TAG[g as number][0]}` : undefined }}>
@@ -246,7 +248,7 @@ export default function LeadsNova() {
                 </div>))}
               {!agora.length ? <p className="ln-vazio">Nada pendente agora. A equipe está em dia.</p> : null}
             </div>
-            <span className="ln-nota">Em ordem do que esfria primeiro. "Cobrar" manda o WhatsApp para o corretor com o nome do cliente. Lead com retorno combinado para frente não aparece aqui.</span>
+            <span className="ln-nota">Primeiro quem respondeu, depois tarefas atrasadas, sem corretor e nunca abordados (só os últimos 15 dias; os mais velhos ficam em Chegaram) · mais recentes primeiro. "Cobrar" manda o WhatsApp para o corretor com o nome do cliente. Lead com retorno combinado para frente não aparece aqui.</span>
           </>) : null}
 
           {aba === "chegaram" && data ? (<>

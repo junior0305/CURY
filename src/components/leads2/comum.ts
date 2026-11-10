@@ -76,7 +76,8 @@ export function precisa(l: LeadN): null | { g: 0 | 1 | 2; tag: string; porque: s
   if (l.next_action_date && new Date(l.next_action_date).getTime() > Date.now()) return null;   // retorno combinado para frente
   if (esperando(l) && horas(l.last_lead_response_at) >= 1)
     return { g: 0, tag: `Respondeu há ${ha(l.last_lead_response_at)}`, porque: "O cliente mandou mensagem e o corretor ainda não voltou" };
-  if (!atendido(l) && horas(l.created_at) >= 24)
+  // 10/11: só os últimos 15 dias (os mais velhos ficam na aba Chegaram para redistribuir; aqui afogavam a lista)
+  if (!atendido(l) && horas(l.created_at) >= 24 && horas(l.created_at) <= 15 * 24)
     return { g: 1, tag: `Chegou há ${ha(l.created_at)}`, porque: (l.contact_attempts ?? 0) === 0 ? "Nenhuma tentativa de contato desde que chegou" : "Sem contato real desde que chegou" };
   return null;
 }

@@ -158,13 +158,16 @@ export default function FilasFormulario({ como, abrir, semCartao = false, onFech
   };
   // aberto de fora já num formulário (cartão da campanha na tela de Leads)
   const abriuDeFora = useRef<string | null>(null);
+  const [foraDaLista, setForaDaLista] = useState(false);
+  // a gaveta abre NA HORA (antes esperava carregar tudo e parecia que o botão não funcionava)
+  useEffect(() => { if (abrir) setAberto0(true); }, [abrir]);
   useEffect(() => {
-    if (!abrir || !data || abriuDeFora.current === abrir) return;
+    if (!abrir || abrir === "*" || !data || abriuDeFora.current === abrir) return;
     abriuDeFora.current = abrir;
-    setAberto0(true);
-    if (abrir === "*") return;   // "Gerenciar filas": abre a lista inteira
     const f = (data.forms ?? []).find((x) => x.form_id === abrir);
-    if (f && sel !== f.form_id) abrirForm(f);
+    if (!f) { setForaDaLista(true); return; }
+    if (sel !== f.form_id) abrirForm(f);
+    setTimeout(() => document.getElementById(`ff-${f.form_id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 80);
   }, [abrir, data]); // eslint-disable-line react-hooks/exhaustive-deps
   const freq = data?.freq ?? new Map<string, number>();
   const frequentes = useMemo(() => pessoas.filter((p) => p.role === "BROKER" && (freq.get(p.id) ?? 0) > 0)
@@ -250,6 +253,14 @@ export default function FilasFormulario({ como, abrir, semCartao = false, onFech
               <button type="button" className="ff-x" aria-label="Fechar" onClick={() => setAberto(false)}>×</button>
             </div>
 
+            {!data ? <p className="ff-mut">Carregando os formulários…</p> : null}
+            {foraDaLista ? (
+              <div className="ff-vazio">
+                <b>Esse formulário não é da sua equipe.</b>
+                <span>Ele é da página da sua superintendência (ou de outro gerente): a fila dele é decidida por quem é dono da página.
+                  Os leads dele chegam para a sua equipe pela roleta do plantão. Para mudar, fale com quem é dono da página.</span>
+              </div>
+            ) : null}
             {(ativos.length + pausados.length) > 6 && (
               <input className="ff-busca" type="search" placeholder="Buscar formulário pelo nome…" value={buscaForm}
                 onChange={(e) => setBuscaForm(e.target.value)} aria-label="Buscar formulário pelo nome" />
@@ -268,7 +279,7 @@ export default function FilasFormulario({ como, abrir, semCartao = false, onFech
               const meta = [f.anuncio_ativo ? "Anúncio rodando" : f.leads_7d ? "Recebendo lead" : "Sem anúncio ativo", f.leads_7d ? `${f.leads_7d} leads em 7 dias` : "ainda sem lead no Comandra",
                 f.nome_fonte === "anuncio" ? "nome pelo anúncio" : null].filter(Boolean).join(" · ");
               return (
-                <div key={f.form_id} className={`ff-form${on ? " on" : ""}`}>
+                <div key={f.form_id} id={`ff-${f.form_id}`} className={`ff-form${on ? " on" : ""}`}>
                   <button type="button" className="ff-linha" onClick={() => abrirForm(f)} aria-expanded={on}>
                     <span className="ff-nome">
                       <b>{f.nome || `Formulário ${f.form_id}`}</b>
