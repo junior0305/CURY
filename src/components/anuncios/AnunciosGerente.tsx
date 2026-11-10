@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { empresa } from "@/lib/empresa";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -69,7 +70,12 @@ export default function AnunciosGerente({ embutido = false, donoId }: { embutido
     if (!d) return (
       <div className="an-card an-vazio-box">
         <h3>Nenhuma conta de anúncio ligada a você</h3>
-        <p>O robô lê as contas do Business Manager da diretoria. Peça ao administrador para ligar a conta da sua equipe ao seu nome.</p>
+        <p>Ligar a página traz os leads e os formulários, mas não a conta de anúncio. Para os números e alertas aparecerem aqui:</p>
+        <ol style={{ margin: "6px 0 0", paddingLeft: 20, display: "grid", gap: 4, fontSize: 13.5 }}>
+          <li>No Gerenciador de Negócios dono da sua conta de anúncio: Configurações do negócio › Contas de anúncios › sua conta › <b>Atribuir parceiro</b> → o Business Manager da diretoria, com acesso de análise de desempenho.</li>
+          <li>Dê à conta o nome <b>{((empresa() as any).fb_prefixo || "EV")}-GERENTE-SEUNOME</b> (ex.: {((empresa() as any).fb_prefixo || "EV")}-GERENTE-MONALISA): o robô liga a conta a você sozinho em até 1 hora.</li>
+          <li>Ou peça ao diretor para ligar a conta ao seu nome em Configurar › Facebook e leads › Contas de anúncio.</li>
+        </ol>
       </div>
     );
     const cm = d.comandra ?? {};

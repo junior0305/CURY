@@ -62,7 +62,7 @@ export default function LeadsNova() {
         sb.from("leads").select(COLS_LEAD).eq("manager_id", gerente).not("status", "in", "(CONCLUDED,EXCLUDED,ABANDONED,LOST)").gte("created_at", desde90).limit(4000),
         sb.from("leads").select(COLS_LEAD).eq("manager_id", gerente).gte("created_at", jan.de).lt("created_at", jan.ate).order("created_at", { ascending: false }).limit(5000),
         sb.from("distribution_queues").select("match_value,broker_ids").eq("match_field", "form_id").eq("is_active", true),
-        sb.from("formularios_catalogo").select("form_id,nome"),
+        sb.from("formularios_catalogo").select("form_id,nome,owner_id,anuncio_ativo"),
         sb.from("fb_saude").select("dados").eq("dono_id", gerente),
       ]);
       const corretores: Corretor[] = ((cs.data ?? []) as any[]).map((p) => ({ id: p.id, nome: [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || "Corretor", roleta: p.lead_assignment_enabled !== false }));
@@ -73,6 +73,8 @@ export default function LeadsNova() {
         corretores, ativos: ((ativos.data ?? []) as LeadN[]).filter((l) => !ehTeste(l)), periodo: ((periodo.data ?? []) as LeadN[]).filter((l) => !ehTeste(l)),
         filas: new Map(((filas.data ?? []) as any[]).map((f) => [f.match_value, f.broker_ids as string[]])),
         formNome: new Map(((forms.data ?? []) as any[]).map((f) => [f.form_id, f.nome as string])),
+        // formulários das páginas do gerente (aparecem no Por campanha antes do primeiro lead)
+        formsDele: ((forms.data ?? []) as any[]).filter((f) => f.owner_id === gerente) as { form_id: string; nome: string | null; anuncio_ativo: boolean | null }[],
         campanhasFb: ((saude.data ?? []) as any[]).flatMap((s) => s.dados?.campanhas ?? []), tarefas: tarefas as any[],
       };
     },
@@ -160,6 +162,7 @@ export default function LeadsNova() {
       if (!m.has(chave)) m.set(chave, { chave, nome: nome!, form: l.fb_form_id, leads: [] });
       m.get(chave)!.leads.push(l);
     }
+    for (const f of data?.formsDele ?? []) if (!m.has(f.form_id)) m.set(f.form_id, { chave: f.form_id, nome: f.nome || `Formulário ${f.form_id}`, form: f.form_id, leads: [] });
     return [...m.values()].map((c) => {
       const fila = c.form ? data?.filas.get(c.form) : undefined;
       const parados = c.leads.filter((l) => precisa(l)).length;
