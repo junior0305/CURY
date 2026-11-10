@@ -2,7 +2,7 @@
 // Escolhe o plantão (mais perto primeiro) → "Cheguei no plantão" liga a roleta (das 7h às 20h; tudo encerra às 21h). Conferências 9h30 e 16h,
 // "Em visita" (até 2h) e "Saí". Plantão fora da lista: o corretor digita o nome e o gerente aprova.
 // Serve o celular (PainelCorretor) e o computador (CorretorPainel), cada um com as próprias classes.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,7 +32,8 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
   const [novo, setNovo] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
   const [aviso, setAviso] = useState("");
-  const [pedir, setPedir] = useState(false);          // check-in não passou → pedir liberação ao gerente
+  const [pedir, setPedir] = useState(false);
+  const pedirVisto = useRef(false);   // rola até o pedido de liberação uma vez quando ele abre          // check-in não passou → pedir liberação ao gerente
   const [outroMotivo, setOutroMotivo] = useState("");
   const [agora, setAgora] = useState(Date.now());
 
@@ -55,7 +56,7 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
   };
   const rodar = async (chave: string, f: () => Promise<void>) => {
     if (ocupado) return; setOcupado(chave); setAviso("");
-    try { await f(); } catch (e: any) { setAviso(erroTxt(e)); } finally { setOcupado(null); }
+    try { await f(); } catch (e: any) { setAviso(erroTxt(e)); toast.error(erroTxt(e)); } finally { setOcupado(null); }
   };
 
   const abrirLista = () => rodar("lista", async () => {
@@ -69,7 +70,8 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
     const l = await localAgora();
     const { data, error } = await (supabase as any).rpc("plantao_checkin", { p_plantao: escolhido, p_lat: l.lat, p_lng: l.lng, p_prec: l.prec });
     if (error) throw error;
-    if (!data?.ok) { setAviso(motivoTxt(data)); if (data?.motivo === "longe" || data?.motivo === "precisao") setPedir(true); return; }
+    // 10/11: recusado precisa aparecer na hora (no celular o texto ficava abaixo da lista, fora da tela)
+    if (!data?.ok) { setAviso(motivoTxt(data)); toast.error(motivoTxt(data)); if (data?.motivo === "longe" || data?.motivo === "precisao") setPedir(true); return; }
     toast.success(data.aguarda ? `Check-in no ${data.plantao} · aguardando seu gerente liberar` : `Check-in no ${data.plantao} · você entrou no fim da roleta`); setLista(null); atualizar();
   });
   const fazerNovo = () => rodar("novo", async () => {
@@ -117,8 +119,9 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
             <span>{distTxt(p.dist)}</span>
           </button>))}
         <button className={c.pri} type="button" onClick={fazerCheckin} disabled={!!ocupado || !escolhido}>{ocupado === "checkin" ? "Conferindo…" : "Cheguei no plantão"}</button>
+        {aviso && <span className={c.meta} role="alert" style={{ color: "#E5654B", fontWeight: 600 }}>{aviso}</span>}
         {pedir && (
-          <div style={coluna}>
+          <div style={coluna} ref={(el) => { if (el && !pedirVisto.current) { pedirVisto.current = true; el.scrollIntoView({ behavior: "smooth", block: "center" }); } }}>
             <b>Não conseguiu? Peça ao seu gerente para liberar</b>
             <span className={c.meta}>O Comandra manda o pedido com a sua localização para o seu gerente e o seu super. Ele vence em 1 hora.{dia.pedidos_hoje ? ` Você já pediu ${dia.pedidos_hoje} de 2 hoje.` : ""}</span>
             {MOTIVOS.map((m) => <button key={m} type="button" className={c.btn} disabled={!!ocupado} onClick={() => pedirLiberacao(m)}>{m}</button>)}
@@ -193,7 +196,7 @@ export default function PlantaoCheckin({ uid, c }: { uid: string; c: ClassesTare
         <span className={c.meta}>Sem check-in você não entra na roleta e não recebe cliente novo.</span>
         {escolher}
       </>}
-      {aviso && <span className={c.meta} role="alert" style={{ color: "#E5654B", fontWeight: 600 }}>{aviso}</span>}
+      {aviso && !lista && <span className={c.meta} role="alert" style={{ color: "#E5654B", fontWeight: 600 }}>{aviso}</span>}
       <span className={c.meta}>Check-in das 7h às 20h, quando você chegar. Às 9h30 e às 16h o Comandra confere se você continua no plantão. Às 21h todos os check-ins encerram: no dia seguinte, check-in de novo.</span>
     </div>
   );
