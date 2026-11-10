@@ -70,14 +70,9 @@ export default function AnunciosGerente({ embutido = false, donoId }: { embutido
     if (isLoading) return <p className="an-vazio">Carregando a conta de anúncio…</p>;
     if (!d) return (
       <div className="an-card an-vazio-box">
-        <h3>Nenhuma conta de anúncio ligada a você</h3>
-        <p>Ligar a página traz os leads e os formulários, mas não a conta de anúncio. Para os números e alertas aparecerem aqui:</p>
-        <ol style={{ margin: "6px 0 0", paddingLeft: 20, display: "grid", gap: 4, fontSize: 13.5 }}>
-          <li>No Gerenciador de Negócios dono da sua conta de anúncio: Configurações do negócio › Contas de anúncios › sua conta › <b>Atribuir parceiro</b> → o Business Manager da diretoria, com acesso de análise de desempenho.</li>
-          <li>Dê à conta o nome <b>{((empresa() as any).fb_prefixo || "EV")}-GERENTE-SEUNOME</b> (ex.: {((empresa() as any).fb_prefixo || "EV")}-GERENTE-MONALISA): o robô liga a conta a você sozinho em até 1 hora.</li>
-          <li>Ou peça ao diretor para ligar a conta ao seu nome em Configurar › Facebook e leads › Contas de anúncio.</li>
-        </ol>
-        {eu ? <LigarContaAqui donoId={eu} /> : null}
+        <h3>A conta de anúncio ainda não foi ligada</h3>
+        <p>Os leads já chegam pela página. Os números de anúncio aparecem aqui sozinhos assim que a conta for ligada: pelo nome da conta
+          ({((empresa() as any).fb_prefixo || "EV")} - Gerente SEUNOME), em até 1 hora, ou pelo diretor em Configurar › Facebook e leads › Contas de anúncio, em 1 minuto.</p>
       </div>
     );
     const cm = d.comandra ?? {};
@@ -184,54 +179,6 @@ export default function AnunciosGerente({ embutido = false, donoId }: { embutido
           {corpo()}
         </div>
       </main>
-    </div>
-  );
-}
-
-/** 10/11 (Junior): admin/diretor na tela de alguém (Ver como ou Entrar como) liga a conta de anúncio a essa pessoa ali mesmo.
- *  A edge fb-contas só deixa ligar a ESSA pessoa e só conta sem dono; para o próprio gerente nada aparece aqui. */
-function LigarContaAqui({ donoId }: { donoId: string }) {
-  const { session, role } = useAuth();
-  const vendoOutro = (role === "ADMIN" || role === "DIRECTOR") && donoId !== session?.user?.id;
-  let entrouComo = false;
-  try { entrouComo = !!localStorage.getItem("cmd_sessao_original"); } catch { /* sem acesso */ }
-  const ativo = vendoOutro || entrouComo;
-  const [numero, setNumero] = useState("");
-  const [indo, setIndo] = useState<string | null>(null);
-  const [feito, setFeito] = useState<string | null>(null);
-  const { data, isLoading } = useQuery({
-    queryKey: ["ligar-conta-aqui", donoId], enabled: ativo, staleTime: 60_000,
-    queryFn: async () => {
-      const { data } = await supabase.functions.invoke("fb-contas", { body: { modo: "listar", como: vendoOutro ? donoId : undefined } });
-      return data as { liga_para?: string | null; novas?: { account_id: string; nome: string; bm: string | null; ativa_no_facebook: boolean }[] } | null;
-    },
-  });
-  if (!ativo || (data && !data.liga_para)) return null;
-  async function ligar(acc: string) {
-    setIndo(acc);
-    const { data: r, error } = await supabase.functions.invoke("fb-contas", { body: { modo: "atribuir", account_id: acc, owner_id: donoId, como: vendoOutro ? donoId : undefined } });
-    setIndo(null);
-    const erro = (r as any)?.error || error?.message;
-    if (erro) { toast.error(erro); return; }
-    setFeito(acc);
-  }
-  if (feito) return <p style={{ marginTop: 12, fontSize: 14, fontWeight: 700, color: "#0B7A6A" }}>Conta ligada. Em 1 a 2 minutos o Comandra lê o Facebook e os números aparecem aqui (recarregue a tela).</p>;
-  return (
-    <div style={{ marginTop: 14, borderTop: "1px solid var(--cv-border,#E1E6EE)", paddingTop: 12, display: "grid", gap: 8 }}>
-      <b style={{ fontSize: 14.5 }}>Você está na tela desta pessoa: ligue a conta de anúncio dela aqui</b>
-      {isLoading ? <span style={{ fontSize: 13 }}>Procurando as contas que o Comandra enxerga…</span> : null}
-      {(data?.novas ?? []).slice(0, 12).map((c) => (
-        <div key={c.account_id} style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap", border: "1px solid var(--cv-border,#E1E6EE)", borderRadius: 10, padding: "8px 12px" }}>
-          <span style={{ fontSize: 13.5 }}><b>{c.nome}</b> · {c.account_id}{c.bm ? ` · ${c.bm}` : ""}{c.ativa_no_facebook ? "" : " · desativada no Facebook"}</span>
-          <button className="an-btn" disabled={!!indo} onClick={() => ligar(c.account_id)}>{indo === c.account_id ? "Ligando…" : "Ligar a esta pessoa"}</button>
-        </div>
-      ))}
-      {data && !(data.novas ?? []).length ? <span style={{ fontSize: 13 }}>Nenhuma conta sem dono à vista. Se a conta foi compartilhada agora com o ADMIN 01, digite o número dela:</span> : null}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <input value={numero} onChange={(e) => setNumero(e.target.value.replace(/\D/g, ""))} placeholder="Número da conta de anúncio" aria-label="Número da conta de anúncio"
-          style={{ font: "inherit", fontSize: 14, minHeight: 38, border: "1px solid var(--cv-border,#C9D3DF)", borderRadius: 8, padding: "0 10px", background: "transparent", color: "inherit" }} />
-        <button className="an-btn" disabled={!!indo || numero.length < 8} onClick={() => ligar(numero)}>{indo === numero ? "Ligando…" : "Ligar pelo número"}</button>
-      </div>
     </div>
   );
 }
