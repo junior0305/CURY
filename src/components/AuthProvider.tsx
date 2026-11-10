@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { toast } from "sonner";
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { COMPANIES, getSelectedCompanyId, ADMIN_SO_ADMIN } from '@/integrations/supabase/companies';
@@ -269,6 +270,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
+
+  // 10/11: desligado com o app aberto sai em até 1 minuto (o login já é bloqueado e as sessões apagadas no servidor,
+  // mas o token que está no aparelho vale até expirar). Não age dentro de "Entrar como".
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid) return;
+    let parado = false;
+    const conferir = async () => {
+      if (parado || localStorage.getItem("cmd_sessao_original")) return;
+      const { data, error } = await supabase.from("profiles").select("is_active").eq("id", uid).maybeSingle();
+      if (!error && data && (data as any).is_active === false) {
+        parado = true;
+        toast.error("Seu acesso ao Comandra foi encerrado. Fale com seu gestor.");
+        await supabase.auth.signOut().catch(() => {});
+        window.location.href = "/login";
+      }
+    };
+    const t = setInterval(conferir, 60_000);
+    window.addEventListener("focus", conferir);
+    return () => { parado = true; clearInterval(t); window.removeEventListener("focus", conferir); };
   }, [session?.user?.id]);
 
   // Redirect based on role changes to ensure the UI navigates to the correct area

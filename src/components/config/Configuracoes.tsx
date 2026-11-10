@@ -15,6 +15,8 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import ReguaEquipe from "@/components/regua/ReguaEquipe";
 import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
+import DesligarGerente from "@/components/equipe/DesligarGerente";
+import { TrocarEquipe, CarteirasPendentes } from "@/components/equipe/TrocaEquipe";
 import { toast } from "sonner";
 import { salvarGestor } from "@/hooks/useAnuncios";
 import ContasAnuncio from "@/components/config/ContasAnuncio";
@@ -116,6 +118,7 @@ function Equipe({ nivel, donoId }: { nivel: Nivel; donoId: string | null }) {
     },
   });
   const [gerenteVer, setGerenteVer] = useState<string>("");
+  const [desligarGer, setDesligarGer] = useState(false);
   useEffect(() => { if (!gerenteVer && gerentes.length) setGerenteVer(gerentes[0].id); }, [gerentes, gerenteVer]);
   const managerId = nivel === "gerente" ? eu ?? undefined : gerenteVer || undefined;
 
@@ -130,12 +133,16 @@ function Equipe({ nivel, donoId }: { nivel: Nivel; donoId: string | null }) {
           </label>
         ) : <p className="cfg-dica"><b>Desabilitar</b> tira o corretor da roleta: ele para de receber lead novo, mas continua entrando e atendendo a carteira. <b>Desligar</b> é para quem saiu da empresa: separa a carteira e tira o acesso.</p>}
         <div className="cfg-pessoa-acoes">
+          {nivel !== "gerente" && gerenteVer ? <button type="button" className="cfg-btn perigo" onClick={() => setDesligarGer(true)}>Desligar este gerente</button> : null}
           {nivel === "diretor" ? <button className="cfg-btn" onClick={() => setLider("SUPERINTENDENT")} disabled={!chefes?.diretor.length}>+ Cadastrar superintendente</button> : null}
           {nivel !== "gerente" ? <button className="cfg-btn" onClick={() => setLider("MANAGER")} disabled={!chefes?.supers.length}>+ Cadastrar gerente</button> : null}
           <button className="cfg-btn prim" onClick={() => setCadastrar(true)} disabled={!managerId}>+ Cadastrar corretor</button>
         </div>
       </div>
-      {managerId ? <ListaCorretores managerId={managerId} /> : null}
+      {managerId ? <ListaCorretores managerId={managerId} gerentes={nivel === "gerente" ? undefined : gerentes} /> : null}
+      {nivel !== "gerente" ? <CarteirasPendentes /> : null}
+      {desligarGer && gerenteVer ? <DesligarGerente gerenteId={gerenteVer} onFechar={() => setDesligarGer(false)}
+        onPronto={() => { setDesligarGer(false); setGerenteVer(""); qc.invalidateQueries({ queryKey: ["cfg-gerentes"] }); qc.invalidateQueries({ queryKey: ["cfg-corretores"] }); qc.invalidateQueries({ queryKey: ["carteiras-pendentes"] }); }} /> : null}
       {managerId ? <VincularNomes managerId={managerId} /> : null}
       {lider && chefes ? (
         <CadastrarLider papel={lider} chefes={lider === "SUPERINTENDENT" ? chefes.diretor : chefes.supers}
@@ -159,10 +166,11 @@ const quando = (iso: string | null) => {
   return h < 0.25 ? "online agora" : h < 24 ? `entrou há ${Math.round(h)}h` : `entrou há ${Math.round(h / 24)}d`;
 };
 
-function ListaCorretores({ managerId }: { managerId: string }) {
+function ListaCorretores({ managerId, gerentes }: { managerId: string; gerentes?: { id: string; nome: string }[] }) {
   const qc = useQueryClient();
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [desligar, setDesligar] = useState<string | null>(null);
+  const [trocar, setTrocar] = useState<{ id: string; nome: string } | null>(null);
   const chave = ["cfg-corretores", managerId];
   const { data: lista, isLoading } = useQuery({
     queryKey: chave, staleTime: 30_000,
@@ -209,6 +217,7 @@ function ListaCorretores({ managerId }: { managerId: string }) {
             <div className="cfg-pessoa-acoes">
               <button className={`cfg-btn ${desab ? "prim" : ""}`} disabled={ocupado === c.id} onClick={() => alternar(c)}>{desab ? "Habilitar" : "Desabilitar"}</button>
               <button className="cfg-btn" disabled={ocupado === c.id} onClick={() => resetar(c)}>Resetar senha</button>
+              {gerentes && gerentes.length > 1 ? <button className="cfg-btn" onClick={() => setTrocar({ id: c.id, nome: nome(c) })}>Trocar de equipe</button> : null}
               <button className="cfg-btn perigo" onClick={() => setDesligar(c.id)}>Desligar</button>
             </div>
           </div>
@@ -216,6 +225,8 @@ function ListaCorretores({ managerId }: { managerId: string }) {
       })}
       {desligar ? <DesligarCorretor brokerId={desligar} onFechar={() => setDesligar(null)}
         onPronto={() => { setDesligar(null); qc.invalidateQueries({ queryKey: chave }); }} /> : null}
+      {trocar && gerentes ? <TrocarEquipe broker={trocar} gerentes={gerentes} atual={managerId} onFechar={() => setTrocar(null)}
+        onPronto={() => { setTrocar(null); qc.invalidateQueries({ queryKey: ["cfg-corretores"] }); }} /> : null}
     </div>
   );
 }
