@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import "@/styles/manager-v10.css";
 import "@/styles/cockpit-gerente.css";
 import "@/styles/pastas-kanban.css";
+import AvisoJunix from "@/components/manager-v10/AvisoJunix";
 import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 
 const ini = (s: string) => s.trim().slice(0, 2).toUpperCase();
@@ -71,6 +72,7 @@ export default function Pastas() {
   const [filtroAtivo, setFiltroAtivo] = useState<FiltroTipo>("todas");
   const [gerenteSelecionado, setGerenteSelecionado] = useState<string>("todos");
   const [viewModo, setViewModo] = useState<ViewModo>("kanban");
+  const [soMes, setSoMes] = useState(false);
 
   loadFonts();
 
@@ -93,6 +95,11 @@ export default function Pastas() {
       base = base.filter((p) => classificarFase(p.etapa) === "analise");
     }
 
+    if (soMes) {
+      const ini = new Date(); const iniMes = new Date(ini.getFullYear(), ini.getMonth(), 1).toISOString().slice(0, 10);
+      base = base.filter((p) => (p.cadastradaEm || "").slice(0, 10) >= iniMes);
+    }
+
     if (gerenteSelecionado !== "todos") {
       base = base.filter((p) => (p.gerenteNome || "").toLowerCase() === gerenteSelecionado.toLowerCase());
     }
@@ -110,7 +117,7 @@ export default function Pastas() {
     }
 
     return base;
-  }, [data, filtroAtivo, gerenteSelecionado, busca]);
+  }, [data, filtroAtivo, gerenteSelecionado, busca, soMes]);
 
   const pastasPorFase = useMemo(() => {
     const mapa: Record<string, Pasta[]> = {
@@ -200,6 +207,12 @@ export default function Pastas() {
             </button>
           </div>
         </header>
+
+        <AvisoJunix />
+        <label style={{ display: "inline-flex", gap: 8, alignItems: "center", margin: "0 0 12px", fontSize: 13.5, cursor: "pointer" }}>
+          <input type="checkbox" checked={soMes} onChange={(e) => setSoMes(e.target.checked)} />
+          Só pastas cadastradas neste mês {soMes ? `(${listaFiltrada.length})` : ""}
+        </label>
 
         {/* ── SCORE ROW / KPIS RÁPIDOS (CLICÁVEIS) ── */}
         <section className="pastas-kpis-grid">
@@ -367,6 +380,9 @@ export default function Pastas() {
                               <span className={`dias-badge mono ${p.dias >= DIAS_TRAVADA ? "crit" : p.dias >= 3 ? "warn" : "ok"}`}>
                                 {p.dias === 0 ? "Hoje" : `${p.dias}d parado`}
                               </span>
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--cv-text-muted,#64748b)", marginTop: 2 }}>
+                              {p.cadastradaEm ? `Cadastrada ${new Date(p.cadastradaEm).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" })}` : "sem data de cadastro"}
                             </div>
 
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, flexWrap: "wrap", fontSize: 11, color: "var(--cv-text-dim)" }}>

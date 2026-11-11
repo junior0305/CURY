@@ -11,6 +11,7 @@
  * Regras: "atendido/sem contato/esperando" = src/lib/situacaoLead.ts (mesma do Time e do Leads);
  * nada estimado; mês compara com mês, semana com semana. Substitui o CockpitGerenteV3 na aba Tempo real.
  */
+import AvisoJunix from "@/components/manager-v10/AvisoJunix";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -228,6 +229,8 @@ export default function HojeGerente({ managerId }: { managerId: string }) {
         </div>
         <SeletorPeriodo />
       </header>
+
+      <AvisoJunix />
 
       {esperandoLista.length > 0 && (
         <div className="hj-alerta">

@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import PlantaoEmpresa from "./PlantaoEmpresa";
 import AnunciosGerentes from "./AnunciosGerentes";
 import { empresa } from "@/lib/empresa";
+import AvisoJunix from "@/components/manager-v10/AvisoJunix";
 
 type Nivel = "gerente" | "corretor";
 
@@ -368,6 +369,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
               <div className="panel-cury" style={{ padding: 40, textAlign: "center", color: "var(--bi-mut)" }}>Somando a operação…</div>
             ) : (
               <>
+                <AvisoJunix />
                 {/* 4 CARTÕES GRADIENTE */}
                 <div className="hero-kpi-4">
                   <div className="gk-card purple">
