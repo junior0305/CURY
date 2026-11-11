@@ -227,6 +227,8 @@ export default function FacebookLeads({ como, avancado }: { como?: string | null
         </div>
       </section>
 
+      <ContaDaPessoa como={como ?? null} />
+
       {/* ② formulários */}
       <section className="fbl-step">
         <div className="fbl-sh"><span className="fbl-n">2</span><div><h3>Para onde vai cada formulário</h3>
@@ -316,5 +318,60 @@ export default function FacebookLeads({ como, avancado }: { como?: string | null
 
       {avancado ? <details><summary>Avançado</summary><div style={{ marginTop: 12, display: "grid", gap: 16 }}>{avancado}</div></details> : null}
     </div>
+  );
+}
+
+/** 10/11 (Junior): enquanto a Meta não aprova "ler anúncios" para o app, a conta escolhida na janela do Facebook não chega.
+ *  Admin/diretor na tela da pessoa (Ver como ou Entrar como) escolhe aqui a conta de anúncio dela, entre as que o Comandra
+ *  já lê pelo ADMIN 01 e estão sem dono. Gerente/super/corretor não veem este bloco; a edge fb-contas confere de novo. */
+function ContaDaPessoa({ como }: { como: string | null }) {
+  const { session, role } = useAuth();
+  const qc = useQueryClient();
+  const vendoOutro = (role === "ADMIN" || role === "DIRECTOR") && !!como && como !== session?.user?.id;
+  let entrouComo = false;
+  try { entrouComo = !!localStorage.getItem("cmd_sessao_original"); } catch { /* sem acesso */ }
+  const ativo = vendoOutro || entrouComo;
+  const pessoa = vendoOutro ? como! : session?.user?.id ?? "";
+  const [escolha, setEscolha] = useState("");
+  const [indo, setIndo] = useState(false);
+  const { data, isLoading } = useQuery({
+    queryKey: ["conta-da-pessoa", pessoa], enabled: ativo && !!pessoa, staleTime: 60_000,
+    queryFn: async () => {
+      const { data } = await supabase.functions.invoke("fb-contas", { body: { modo: "listar", como: vendoOutro ? pessoa : undefined } });
+      return data as { liga_para?: string | null; contas?: { account_id: string; nome: string; dono_id: string | null }[];
+        novas?: { account_id: string; nome: string; bm: string | null; ativa_no_facebook: boolean }[] } | null;
+    },
+  });
+  if (!ativo || (data && !data.liga_para)) return null;
+  const minhas = (data?.contas ?? []).filter((c) => c.dono_id === pessoa);
+  async function ligar() {
+    if (!escolha) return;
+    setIndo(true);
+    const { data: r, error } = await supabase.functions.invoke("fb-contas", { body: { modo: "atribuir", account_id: escolha, owner_id: pessoa, como: vendoOutro ? pessoa : undefined } });
+    setIndo(false);
+    const erro = (r as any)?.error || error?.message;
+    if (erro) { toast.error(erro); return; }
+    toast.success("Conta de anúncio ligada. Em 1 a 2 minutos os números aparecem na aba Anúncios.");
+    setEscolha(""); qc.invalidateQueries({ queryKey: ["conta-da-pessoa", pessoa] });
+  }
+  return (
+    <section className="fbl-step" aria-label="Conta de anúncio desta pessoa">
+      <div className="fbl-sh"><span className="fbl-n">+</span><div><h3>Conta de anúncio desta pessoa</h3>
+        <p>Só você (admin) vê este bloco. Enquanto a Meta não libera a permissão de anúncios, escolha aqui a conta dela.</p></div></div>
+      {isLoading ? <p>Procurando as contas…</p> : (
+        <div style={{ display: "grid", gap: 10 }}>
+          {minhas.length ? <p style={{ margin: 0 }}>Já ligada: <b>{minhas.map((c) => c.nome).join(", ")}</b></p> : <p style={{ margin: 0 }}>Nenhuma conta ligada ainda.</p>}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <select value={escolha} onChange={(e) => setEscolha(e.target.value)} aria-label="Conta de anúncio"
+              style={{ font: "inherit", fontSize: 14, minHeight: 40, borderRadius: 8, border: "1px solid var(--cv-border,#C9D3DF)", padding: "0 10px", background: "transparent", color: "inherit", maxWidth: "100%" }}>
+              <option value="">{(data?.novas ?? []).length ? "Escolha a conta de anúncio…" : "Nenhuma conta sem dono à vista"}</option>
+              {(data?.novas ?? []).map((c) => <option key={c.account_id} value={c.account_id}>{c.nome} · {c.account_id}{c.ativa_no_facebook ? "" : " (desativada)"}</option>)}
+            </select>
+            <button className="fbl-btn" disabled={!escolha || indo} onClick={ligar}>{indo ? "Ligando…" : "Ligar a esta pessoa"}</button>
+          </div>
+          <small style={{ color: "var(--cv-text-muted,#5B6B80)" }}>Aparecem só contas sem dono que o Comandra lê pelo ADMIN 01. A conta precisa estar compartilhada com o ADMIN 01 (Atribuir parceiro).</small>
+        </div>
+      )}
+    </section>
   );
 }
