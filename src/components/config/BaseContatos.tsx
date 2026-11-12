@@ -1,3 +1,4 @@
+import React from "react";
 /* Base de contatos (20/10) — Configurar do gerente, super e diretor.
  * Protótipo aprovado: https://claude.ai/artifact/VhYLDdpVWaBetEMsiJb4YY
  * O líder sobe um CSV (nome, telefone, região) e escolhe:
@@ -105,6 +106,20 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
   const [busy, setBusy] = useState(false);
   const [leitura, setLeitura] = useState<Leitura | null>(null);
   const [renomear, setRenomear] = useState<{ id: string; nome: string } | null>(null);
+  const [editar, setEditar] = useState<{ id: string; nome: string; brokers: Set<string> } | null>(null);
+
+  async function abrirEditar(l: any) {
+    const { data } = await sb.from("listas_contatos").select("broker_ids").eq("id", l.id).maybeSingle();
+    setEditar({ id: l.id, nome: l.nome, brokers: new Set(((data?.broker_ids ?? []) as string[])) });
+  }
+  async function salvarCorretores() {
+    if (!editar) return;
+    if (!editar.brokers.size) { toast.error("Escolha pelo menos um corretor."); return; }
+    const { error } = await sb.rpc("editar_corretores_lista", { p_lista: editar.id, p_broker_ids: [...editar.brokers] });
+    if (error) { toast.error((error as any).details || error.message); return; }
+    toast.success("Corretores da lista atualizados. O gotejamento passa a cair para eles."); setEditar(null);
+    qc.invalidateQueries({ queryKey: ["base-listas"] });
+  }
   const porDia = Math.floor((10 * 60) / intervalo); // 9h às 19h
 
   const { data: pessoas = [] } = useQuery<Pessoa[]>({
@@ -317,7 +332,8 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
             <tbody>{listas.map((l) => {
               const feitos = l.total - l.restantes;
               return (
-                <tr key={l.id}>
+                <React.Fragment key={l.id}>
+                <tr>
                   <td>{renomear?.id === l.id ? (
                       <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                         <input className="bc-ren" value={renomear.nome} onChange={(e) => setRenomear({ id: l.id, nome: e.target.value })} aria-label="Novo nome da lista"
@@ -335,10 +351,36 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
                   <td className="m">{l.viraram_lead}</td>
                   <td className="m">{l.com_contato} · {l.visitas} · {l.vendas}</td>
                   <td style={{ textAlign: "right" }}>
+                    {l.destino !== "pool" && l.status !== "concluida" && <button type="button" className="bc-link" onClick={() => abrirEditar(l)}>Trocar corretores</button>}
                     {l.status === "ativa" && <button type="button" className="bc-link" onClick={() => pausar(l.id, true)}>Pausar</button>}
                     {l.status === "pausada" && <button type="button" className="bc-link" onClick={() => pausar(l.id, false)}>Retomar</button>}
                   </td>
                 </tr>
+                {editar?.id === l.id && (
+                  <tr><td colSpan={6}>
+                    <div className="bc-esc" style={{ padding: "6px 2px 12px" }}>
+                      <span className="bc-lbl">Quem recebe o gotejamento de "{editar.nome}" (a lista passa a ir só para os marcados):</span>
+                      {grupos.length === 0 && <span className="bc-mut">Nenhum corretor na sua equipe.</span>}
+                      {grupos.map((g) => (
+                        <div key={g.k} className="bc-grupo">
+                          <span className="bc-lbl">{g.nome}</span>
+                          <div className="bc-pills">
+                            {g.cs.map((c) => {
+                              const on = editar.brokers.has(c.id);
+                              return <button key={c.id} type="button" className={`bc-pill${on ? " on" : ""}`} aria-pressed={on}
+                                onClick={() => setEditar((e) => e ? { ...e, brokers: (() => { const n = new Set(e.brokers); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n; })() } : e)}>{nomeDe(c)}</button>;
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button type="button" className="bc-btn" onClick={salvarCorretores}>Salvar ({editar.brokers.size})</button>
+                        <button type="button" className="bc-link" onClick={() => setEditar(null)}>Cancelar</button>
+                      </div>
+                    </div>
+                  </td></tr>
+                )}
+                </React.Fragment>
               );
             })}</tbody>
           </table></div>
