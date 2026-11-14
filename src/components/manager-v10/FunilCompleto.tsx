@@ -19,7 +19,6 @@ const CANAIS: { k: Canal; nome: string }[] = [
   { k: "pagos", nome: "Leads pagos" }, { k: "anuncio", nome: "Anúncio" }, { k: "disparo", nome: "Disparo" },
   { k: "pescado", nome: "Pescaria" }, { k: "lista", nome: "Lista" }, { k: "outro", nome: "Outros" },
 ];
-const NOME_MES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const nf = (n: number) => n.toLocaleString("pt-BR");
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : null);
 
@@ -28,10 +27,10 @@ export default function FunilCompleto({ managerId }: { managerId: string }) {
   const [canal, setCanal] = useState<Canal>("pagos");
   const hoje = diaSP(new Date());
   const iniMes = hoje.slice(0, 8) + "01";
-  // um dia só (Hoje/Ontem) quase não tem funil: mostra o mês, igual ao Hoje
-  const doMes = per.de === per.ate;
-  const de = doMes ? iniMes : per.de;
-  const ate = doMes ? hoje : per.ate;
+  // cada período mostra o seu recorte de verdade (Hoje = o dia, Esta Semana = a semana…),
+  // senão "Hoje" puxava o mês e ficava maior que "Esta Semana" (conserto Junior 14/11)
+  const de = per.de;
+  const ate = per.ate;
   const { brokers, leads, origens, metricas, vendas } = useDadosEquipe(managerId, [de, iniMes].sort()[0]);
   const { data: pastasData } = usePastas(managerId);
   const pastas = pastasData?.minhas ?? [];
@@ -80,7 +79,7 @@ export default function FunilCompleto({ managerId }: { managerId: string }) {
       <style>{CSS}</style>
       <div className="fc-top">
         <div>
-          <h2>Funil da equipe · {doMes ? NOME_MES[Number(hoje.slice(5, 7)) - 1] : per.rotulo}</h2>
+          <h2>Funil da equipe · {per.rotulo}</h2>
           <p>A % é sobre a etapa anterior. Mesmas contas do funil do Hoje.</p>
         </div>
         <SeletorPeriodo />
