@@ -47,6 +47,7 @@ type Etapa = "agora" | "bm" | "tpl" | "disp" | "conv" | "corretores";
 type Destino = "fila" | "escolher";
 
 const brl = (n: number) => "R$ " + n.toFixed(2).replace(".", ",");
+const STATUS_PT: Record<string, string> = { sending: "Enviando", sent: "Concluído", done: "Concluído", completed: "Concluído", scheduled: "Agendado", paused: "Pausado", draft: "Rascunho", failed: "Falhou", canceled: "Cancelado", cancelled: "Cancelado" };
 /** Preço POR MENSAGEM: com duas casas, R$0,0350 vira "R$0,04" — que é
  *  exatamente o arredondamento que fez a conta ficar 14% maior. */
 const brlUn = (n: number) =>
@@ -391,9 +392,41 @@ export default function Disparar() {
   const [conectando, setConectando] = useState(false);
   const { data: numerosCasa, isLoading: carregandoCasa } = useNumerosCasa(!data?.config);
   const { data: painel, isLoading: carregandoPainel } = usePainelDisparo(userId, periodo);
+  const { data: painelMes } = usePainelDisparo(userId, 30); // orçamento é sempre do mês, independente do período escolhido
   const { data: usoNumeros } = useMeusNumeros(userId, periodo);
   const { data: contasWA } = useContasWA(etapa === "bm");
   const { data: tplCasa } = useTemplatesDaCasa(30, etapa === "tpl");
+  // Bilhetagem: teto mensal do gerente (system_settings.teto_disparo_equipe, RPC salvar_teto_disparo)
+  const [editTeto, setEditTeto] = useState(false);
+  const [tetoInput, setTetoInput] = useState("");
+  const { data: tetoMap } = useQuery({
+    queryKey: ["teto-disparo"],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data: r } = await supabase.from("system_settings").select("value").eq("key", "teto_disparo_equipe").maybeSingle();
+      const raw = (r as any)?.value; return (typeof raw === "string" ? JSON.parse(raw || "{}") : (raw || {})) as Record<string, number>;
+    },
+  });
+  const teto = Number((tetoMap ?? {})[userId] ?? 0);
+  const gastoMes = painelMes?.custo?.gasto ?? 0;
+  const salvarTeto = async () => {
+    try {
+      const { error } = await supabase.rpc("salvar_teto_disparo", { p_gerente: userId, p_valor: Number(tetoInput.replace(",", ".")) || 0 });
+      if (error) throw error;
+      setEditTeto(false); qc.invalidateQueries({ queryKey: ["teto-disparo"] }); toast.success("Teto do mês atualizado.");
+    } catch (e: any) { toast.error(e?.message || "Não deu para salvar o teto."); }
+  };
+  const baixarExtrato = () => {
+    const linhas = (data?.campanhas ?? []).filter((c) => (c.enviadas ?? 0) > 0);
+    const cab = ["Data", "Campanha", "Alvos", "Enviadas", "Entregues", "Respostas", "Custo (R$)", "Status"];
+    const corpo = linhas.map((c) => [
+      c.criadaEm ? new Date(c.criadaEm).toLocaleDateString("pt-BR") : "", `"${(c.nome ?? "").replace(/"/g, "''")}"`,
+      c.alvos ?? 0, c.enviadas ?? 0, c.entregues ?? 0, c.respostas ?? 0, (c.custo ?? 0).toFixed(2).replace(".", ","), c.status ?? "",
+    ].join(";"));
+    const csv = "﻿" + [cab.join(";"), ...corpo].join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    a.download = `fatura_disparos_${new Date().toLocaleDateString("en-CA")}.csv`; a.click();
+  };
   const [copiando, setCopiando] = useState<string | null>(null);
 
   async function copiar(t: TemplateCasa) {
@@ -1309,6 +1342,33 @@ export default function Disparar() {
               </div>
             </div>
 
+            {/* Orçamento do mês — teto configurável × gasto real da Meta (sempre do mês) */}
+            <div className="bl-orc">
+              <div className="bl-orc-top">
+                <div><b>💳 Orçamento do mês</b><i>o que a Meta cobrou no cartão vs. o teto que você definiu</i></div>
+                {editTeto ? (
+                  <span className="bl-orc-ed">
+                    <span className="bl-pre">R$</span>
+                    <input type="number" min={0} step={50} value={tetoInput} onChange={(e) => setTetoInput(e.target.value)} placeholder="teto" autoFocus />
+                    <button className="bl-save" onClick={salvarTeto}>Salvar</button>
+                    <button className="bl-x" onClick={() => setEditTeto(false)}>✕</button>
+                  </span>
+                ) : (
+                  <button className="bl-def" onClick={() => { setTetoInput(teto ? String(teto) : ""); setEditTeto(true); }}>⚙️ {teto ? "Alterar teto" : "Definir teto"}</button>
+                )}
+              </div>
+              {teto > 0 ? (
+                <>
+                  <div className="bl-bar"><span style={{ width: `${Math.min(100, (gastoMes / teto) * 100)}%`, background: gastoMes > teto ? "#F43F5E" : gastoMes > teto * 0.8 ? "#F59E0B" : "#10B981" }} /></div>
+                  <div className="bl-orc-n">
+                    <b>{brl(gastoMes)}</b> <span>de {brl(teto)}</span> · {Math.round((gastoMes / teto) * 100)}% do teto · {gastoMes >= teto ? <em className="bl-estourou">teto estourado</em> : <>restam <b>{brl(teto - gastoMes)}</b></>}
+                  </div>
+                </>
+              ) : (
+                <div className="bl-orc-n"><span>Gasto no mês: <b>{brl(gastoMes)}</b>. Defina um teto para acompanhar o consumo e não estourar o cartão.</span></div>
+              )}
+            </div>
+
             {!painel ? (
               <div className="box"><p className="vars-n" style={{ margin: 0 }}>
                 {carregandoPainel ? "Somando…" : "Sem dado neste período."}</p></div>
@@ -1451,6 +1511,32 @@ export default function Disparar() {
                       </div>
                     ))}
                   </div>
+                </details>
+
+                {/* Extrato financeiro por campanha + baixar fatura */}
+                <details className="dobra">
+                  <summary>Extrato por campanha — quanto cada disparo custou</summary>
+                  {(() => { const camps = (data?.campanhas ?? []).filter((c) => (c.enviadas ?? 0) > 0).sort((a, b2) => new Date(b2.criadaEm ?? 0).getTime() - new Date(a.criadaEm ?? 0).getTime()); return !camps.length ? (
+                    <p className="vars-n">Nenhuma campanha com envio ainda.</p>
+                  ) : (
+                    <div className="bl-ext">
+                      <div className="bl-ext-top"><span>{camps.length} campanha(s)</span><button className="bl-def" onClick={baixarExtrato}>📥 Baixar fatura (CSV)</button></div>
+                      <div className="bl-tb">
+                        <div className="bl-tr bl-th"><span>Data</span><span>Campanha</span><span className="n">Alvos</span><span className="n">Entregues</span><span className="n">Respostas</span><span className="n">Custo</span><span>Status</span></div>
+                        {camps.map((c) => (
+                          <div className="bl-tr" key={c.id}>
+                            <span className="bl-dt">{c.criadaEm ? new Date(c.criadaEm).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "—"}</span>
+                            <span className="bl-nm">{c.nome}</span>
+                            <span className="n">{(c.alvos ?? 0).toLocaleString("pt-BR")}</span>
+                            <span className="n">{(c.entregues ?? 0).toLocaleString("pt-BR")}{c.enviadas ? <i> ({pct(c.entregues, c.enviadas)})</i> : null}</span>
+                            <span className="n">{(c.respostas ?? 0).toLocaleString("pt-BR")}{c.enviadas ? <i> ({pct(c.respostas, c.enviadas)})</i> : null}</span>
+                            <span className="n bl-cu">{brl(c.custo ?? 0)}</span>
+                            <span><em className={`bl-st bl-${(c.status ?? "").toLowerCase()}`}>{STATUS_PT[c.status ?? ""] ?? c.status ?? "—"}</em></span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ); })()}
                 </details>
               </>
             )}
