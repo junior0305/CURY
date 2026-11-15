@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase as sb } from "@/integrations/supabase/client";
+import { chaveNome } from "@/hooks/useDiretoria";
 
 type Props = {
   brokerId: string;
@@ -41,14 +42,18 @@ export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, past
   }, []);
   const desde14 = dias14[0]?.iso;
 
-  // Check-ins de plantão do corretor (espelho c2s_plantao, por profile_id)
+  // Check-ins de plantão do corretor. c2s_plantao é casado por NOME no resto do app
+  // (profile_id só existe nas linhas espelhadas de check-in); então casa por nome OU profile_id.
+  const primeiro = (nome || "").trim().split(/\s+/)[0] || "";
   const { data: plantoes } = useQuery({
-    queryKey: ["rxp-plantao", brokerId, desde14],
+    queryKey: ["rxp-plantao", brokerId, nome, desde14],
     enabled: !!brokerId && !!desde14,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data } = await sb.from("c2s_plantao").select("created_at,tipos").eq("profile_id", brokerId).gte("created_at", desde14 + "T00:00:00");
-      return (data ?? []) as { created_at: string; tipos: string | null }[];
+      const q = sb.from("c2s_plantao").select("created_at,tipos,corretor,profile_id").gte("created_at", desde14 + "T00:00:00");
+      const { data } = primeiro ? await q.or(`profile_id.eq.${brokerId},corretor.ilike.${primeiro}%`) : await q.eq("profile_id", brokerId);
+      const alvo = chaveNome(nome);
+      return ((data ?? []) as any[]).filter((r) => r.profile_id === brokerId || chaveNome(r.corretor) === alvo) as { created_at: string; tipos: string | null }[];
     },
   });
   // mapa dia -> primeira hora de check-in
