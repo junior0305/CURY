@@ -50,26 +50,34 @@ export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, past
     enabled: !!brokerId && !!desde14,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const q = sb.from("c2s_plantao").select("created_at,tipos,corretor,profile_id").gte("created_at", desde14 + "T00:00:00");
+      const q = sb.from("c2s_plantao").select("dia,check_in,estande,corretor,profile_id").gte("dia", desde14);
       const { data } = primeiro ? await q.or(`profile_id.eq.${brokerId},corretor.ilike.${primeiro}%`) : await q.eq("profile_id", brokerId);
       const alvo = chaveNome(nome);
-      return ((data ?? []) as any[]).filter((r) => r.profile_id === brokerId || chaveNome(r.corretor) === alvo) as { created_at: string; tipos: string | null }[];
+      return ((data ?? []) as any[]).filter((r) => r.profile_id === brokerId || chaveNome(r.corretor) === alvo) as { dia: string; check_in: string | null; estande: string | null }[];
     },
   });
-  // mapa dia -> primeira hora de check-in
+  // check_in pode vir "HH:MM:SS", "HH:MM" ou timestamp ISO
+  const fmtCheck = (v: string | null): string => {
+    if (!v) return "";
+    if (/^\d{1,2}:\d{2}/.test(v)) return v.slice(0, 5);
+    const d = new Date(v.includes("T") || v.includes(" ") ? v : v + "T00:00:00");
+    return isNaN(d.getTime()) ? "" : horaSP(d.toISOString());
+  };
+  // mapa dia (YYYY-MM-DD) -> primeira hora de check-in
   const porDia = useMemo(() => {
     const m = new Map<string, string>();
     (plantoes ?? []).forEach((p) => {
-      const d = diaSP(new Date(p.created_at));
-      const h = horaSP(p.created_at);
-      if (!m.has(d) || h < m.get(d)!) m.set(d, h);
+      const d = (p.dia || "").slice(0, 10);
+      if (!d) return;
+      const h = fmtCheck(p.check_in) || "✓";
+      if (!m.has(d) || (h < m.get(d)! && h !== "✓")) m.set(d, h);
     });
     return m;
   }, [plantoes]);
   const presentes = dias14.filter((d) => porDia.has(d.iso)).length;
   const pct = Math.round((presentes / 14) * 100);
   const corFreq = pct >= 70 ? "#10B981" : pct >= 40 ? "#FCD34D" : "#FDA4AF";
-  const standCheck = useMemo(() => (plantoes ?? []).map((p) => p.tipos).find(Boolean) || stand || null, [plantoes, stand]);
+  const standCheck = useMemo(() => (plantoes ?? []).map((p) => p.estande).find(Boolean) || stand || null, [plantoes, stand]);
 
   // SLA médio do mês (atribuído -> primeiro contato) dos leads do corretor
   const { data: sla } = useQuery({
@@ -98,7 +106,7 @@ export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, past
           <div key={d.iso} className={`rxp-cell${d.weekend ? " wk" : ""}${d.hoje ? " hoje" : ""}`}>
             <span className="rxp-sig">{d.sigla}</span>
             <span className={`rxp-pill ${h ? "pres" : "folga"}`}>{h ? "✓" : "–"}</span>
-            <span className="rxp-hora">{h || "—"}</span>
+            <span className="rxp-hora">{h && h !== "✓" ? h : "—"}</span>
           </div>
         );
       })}
