@@ -260,11 +260,23 @@ export default function CockpitGeral() {
         vendas: vendas.filter((v) => v.corretor === chaveNome(b.first_name) && v.dia >= iniMes).length,
         online: !!pr?.online, roleta: pr?.roleta ?? true, plantao: !!pl, estande: pl?.estande ?? null, horaPlantao: pl?.hora ?? null,
         atendendo: atendendoIds.has(b.id),
+        leadsHoje: meus.filter((l) => diaSP(new Date(l.created_at)) === hoje).length,
       };
     }).sort((a, b) => b.semToque - a.semToque || b.carteira - a.carteira);
   }, [brokers, ativos, presenca, vendas, plantaoHoje, atendendoIds]);
   const naRoleta = tropa.filter((t) => t.roleta).length;
   const pedindoRoleta = useMemo(() => tropa.filter((t) => t.plantao && !t.roleta), [tropa]);
+  // filtro de pílulas da tabela da tropa (como no mockup)
+  type FT = "todos" | "stand" | "pedindo" | "atend" | "pausado" | "semcheckin";
+  const [ftropa, setFtropa] = useState<FT>("todos");
+  const casaFiltro = (t: typeof tropa[number], f: FT) =>
+    f === "todos" ? true : f === "stand" ? t.plantao : f === "pedindo" ? (t.plantao && !t.roleta)
+      : f === "atend" ? t.atendendo : f === "pausado" ? !t.roleta : /* semcheckin */ !t.plantao;
+  const PILLS: [FT, string][] = [
+    ["todos", "Todos"], ["stand", "No stand agora"], ["pedindo", "Pedindo roleta"],
+    ["atend", "Em atendimento"], ["semcheckin", "Sem check-in"], ["pausado", "Pausados"],
+  ];
+  const tropaFiltrada = tropa.filter((t) => casaFiltro(t, ftropa));
 
   const ricos: CorretorRico[] = useMemo(() => tropa.map((t) => ({
     id: t.id, nome: t.nome, carteira: t.carteira, contato: t.contato, avanca: t.avanca, online: t.online, plantao: t.plantao,
@@ -449,18 +461,25 @@ export default function CockpitGeral() {
           <div className="cg-panel-h">
             <div><h3>Presença da tropa &amp; roleta</h3><span>{naRoleta} de {brokers.length} na roleta · ligue/pause com 1 clique</span></div>
           </div>
+          <div className="cg-pills">
+            {PILLS.map(([f, lb]) => {
+              const n = tropa.filter((t) => casaFiltro(t, f)).length;
+              return <button key={f} className={`cg-pill${ftropa === f ? " on" : ""}`} onClick={() => setFtropa(f)}>{lb} <i>{n}</i></button>;
+            })}
+          </div>
           <div className="cg-tbl">
             <div className="cg-tr cg-th">
-              <span>Corretor</span><span>Plantão</span><span>No sistema</span><span>Produção</span><span>Roleta</span><span className="r">Ações rápidas</span>
+              <span>Corretor &amp; stand</span><span>Presença (C2S)</span><span>No sistema</span><span className="r">Leads hoje</span><span>Produção</span><span>Roleta</span><span className="r">Ações</span>
             </div>
-            {tropa.map((t) => (
+            {tropaFiltrada.map((t) => (
               <div className="cg-tr" key={t.id}>
                 <span className="cg-corr">
                   <span className="cg-av" style={{ borderColor: t.online ? "#10B981" : "var(--cv-border,#2A3A58)" }}>{ini2(t.nome)}</span>
-                  <span><b>{t.nome}</b><small>{t.carteira} na carteira{t.semToque ? ` · ${t.semToque} sem toque` : ""}</small></span>
+                  <span><b>{t.nome}</b><small>{t.estande ? `🏢 ${t.estande}` : `${t.carteira} na carteira`}{t.semToque ? ` · ${t.semToque} sem toque` : ""}</small></span>
                 </span>
-                <span>{t.plantao ? <em className="cg-b azul" title={t.horaPlantao ? `check-in às ${hhmm(t.horaPlantao)}` : ""}>🏢 {t.estande || "no stand"}{t.horaPlantao ? ` · ${hhmm(t.horaPlantao)}` : ""}</em> : <em className="cg-b cinza">—</em>}</span>
-                <span>{t.online ? <em className="cg-b verde">● online</em> : <em className="cg-b cinza">○ ausente</em>}</span>
+                <span>{t.plantao ? <em className="cg-b azul" title={t.horaPlantao ? `check-in às ${hhmm(t.horaPlantao)}` : ""}>🏢 check-in{t.horaPlantao ? ` ${hhmm(t.horaPlantao)}` : ""}</em> : <em className="cg-b cinza">sem check-in</em>}</span>
+                <span>{t.atendendo ? <em className="cg-b roxoB">💬 atendendo</em> : t.online ? <em className="cg-b verde">● online</em> : <em className="cg-b cinza">○ ausente</em>}</span>
+                <span className="r cg-lh"><b>{t.leadsHoje}</b></span>
                 <span className="cg-prod"><b>{t.vendas}</b> venda{t.vendas !== 1 ? "s" : ""}{t.contato != null ? <small> · {t.contato}% contato</small> : null}</span>
                 <span>
                   <button className={`cg-rol${t.roleta ? " on" : " off"}`} disabled={ocupado === t.id} onClick={() => alternarRoleta(t.id, t.nome, t.roleta)}>
@@ -474,7 +493,7 @@ export default function CockpitGeral() {
                 </span>
               </div>
             ))}
-            {!tropa.length && <div className="cg-vazio">Sem corretores na equipe.</div>}
+            {!tropaFiltrada.length && <div className="cg-vazio">Nenhum corretor neste filtro.</div>}
           </div>
         </section>
       </main>
@@ -652,7 +671,14 @@ const CSS = `
 .cg-panel-h{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--bd)}
 .cg-panel-h h3{font-size:18.5px;font-weight:800;color:var(--tx)}.cg-panel-h span{font-size:13px;color:var(--tm)}
 .cg-tbl{display:flex;flex-direction:column}
-.cg-tr{display:grid;grid-template-columns:minmax(0,1.6fr) 110px 110px minmax(0,1.3fr) 140px minmax(0,1.6fr);gap:10px;align-items:center;padding:13px 20px;border-top:1px solid var(--bds);font-size:14.5px;color:var(--tx)}
+.cg-tr{display:grid;grid-template-columns:minmax(0,1.5fr) 120px 105px 72px minmax(0,1fr) 125px minmax(0,1.3fr);gap:10px;align-items:center;padding:13px 20px;border-top:1px solid var(--bds);font-size:14px;color:var(--tx)}
+.cg-pills{display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--bds)}
+.cgx .cg-pill{font:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;border:1px solid var(--bd);background:var(--surf);color:var(--tm);cursor:pointer;transition:all .15s}
+.cgx .cg-pill:hover{color:var(--tx);border-color:var(--td)}
+.cgx .cg-pill.on{background:var(--brand,#0EA5E9);border-color:var(--brand,#0EA5E9);color:#fff}
+.cg-pill i{font-style:normal;font-weight:800;opacity:.75;margin-left:3px}
+.cg-b.roxoB{color:#C084FC;background:rgba(168,85,247,.16)}
+.cg-lh b{font-family:"JetBrains Mono",monospace;font-weight:800;font-size:15px}
 .cg-tr:hover{background:rgba(255,255,255,.02)}
 .cg-th{border:0;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--tm);font-weight:800;background:var(--sub);background:color-mix(in srgb,var(--cgbg) 60%,var(--card))}
 .cg-tr .r{text-align:right}
