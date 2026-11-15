@@ -29,6 +29,7 @@ const TIPOS: Record<Tipo, { ic: string; cor: string; bg: string; lb: string }> =
 };
 
 export default function TarefasV4({ managerId, como }: { managerId: string; como?: string | null }) {
+  const [vista, setVista] = useState<"hoje" | "corretores">("hoje");
   const [filtro, setFiltro] = useState<Filtro>("tudo");
   const [gaveta, setGaveta] = useState<string | null>(null);
   const [cobrando, setCobrando] = useState(false);
@@ -39,7 +40,7 @@ export default function TarefasV4({ managerId, como }: { managerId: string; como
     refetchInterval: 120_000,
     staleTime: 60_000,
     queryFn: async () => {
-      const cs = (await sb.from("profiles").select("id,first_name,last_name").eq("manager_id", managerId).eq("role", "BROKER").eq("is_active", true)).data ?? [];
+      const cs = (await sb.from("profiles").select("id,first_name,last_name,last_seen_at").eq("manager_id", managerId).eq("role", "BROKER").eq("is_active", true)).data ?? [];
       const nome = new Map<string, string>(cs.map((p: any) => [p.id, [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || "—"]));
       nome.set(managerId, "Você");
       const ids = [...cs.map((p: any) => p.id), managerId];
@@ -75,13 +76,31 @@ export default function TarefasV4({ managerId, como }: { managerId: string; como
       const corretores: Corretor[] = cs.map((p: any) => ({ id: p.id, nome: nome.get(p.id) ?? "—", roleta: true }));
       const carteira = new Map<string, number>();
       for (const l of leads) if (l.broker_id) carteira.set(l.broker_id, (carteira.get(l.broker_id) ?? 0) + 1);
-      return { compromissos: out, corretores, carteira };
+      // análise por corretor: quem está agendando (visitas + retornos futuros) e um sinal de atividade de hoje
+      const futuro = now + 14 * 864e5, hoje = diaSP();
+      const tarefas = (tarefasR.data ?? []) as any[];
+      const porCorretor = cs.map((p: any) => {
+        const agVis = leads.filter((l) => l.broker_id === p.id && l.visit_scheduled_at && new Date(l.visit_scheduled_at).getTime() > now - 2 * 3.6e6 && new Date(l.visit_scheduled_at).getTime() <= futuro).length;
+        const agRet = tarefas.filter((t) => t.user_id === p.id && new Date(t.due_at).getTime() > now).length;
+        const tocou = leads.filter((l) => l.broker_id === p.id && l.last_broker_whatsapp_at && diaSP(new Date(l.last_broker_whatsapp_at)) === hoje).length;
+        return { id: p.id, nome: nome.get(p.id) ?? "—", agVis, agRet, agendados: agVis + agRet, tocou, visto: p.last_seen_at as string | null };
+      }).sort((a, b) => b.agendados - a.agendados || b.tocou - a.tocou || a.nome.localeCompare(b.nome));
+      return { compromissos: out, corretores, carteira, porCorretor };
     },
   });
 
   const compromissos = data?.compromissos ?? [];
   const corretores = data?.corretores ?? [];
   const carteira = data?.carteira ?? new Map<string, number>();
+  const porCorretor = data?.porCorretor ?? [];
+  const semAgendar = porCorretor.filter((c) => c.agendados === 0).length;
+  const vistoLabel = (iso: string | null) => {
+    if (!iso) return "nunca entrou";
+    const ms = Date.now() - new Date(iso).getTime();
+    if (ms < 15 * 60_000) return "ativo agora";
+    if (diaSP(new Date(iso)) === diaSP()) return `visto há ${ha(ms)}`;
+    return `sumido · há ${ha(ms)}`;
+  };
   const urgente = (c: Compromisso) => c.tipo === "esperando" || (c.tipo === "retorno" && c.atraso);
   const ordenados = useMemo(() => [...compromissos].sort((a, b) => {
     const ua = urgente(a), ub = urgente(b);
@@ -118,6 +137,33 @@ export default function TarefasV4({ managerId, como }: { managerId: string; como
     <section className="ag">
       <style>{CSS}</style><style>{LEADS_CSS}</style>
 
+      <div className="ag-toggle">
+        <button className={`ag-tg${vista === "hoje" ? " on" : ""}`} onClick={() => setVista("hoje")}>📋 Hoje · compromissos</button>
+        <button className={`ag-tg${vista === "corretores" ? " on" : ""}`} onClick={() => setVista("corretores")}>👥 Por corretor · quem agenda</button>
+      </div>
+
+      {vista === "corretores" ? (
+        <>
+          {semAgendar > 0 && <div className="ag-alerta">⚠️ <b>{semAgendar}</b> de {porCorretor.length} corretores sem nenhum compromisso agendado para os próximos dias.</div>}
+          <div className="ag-corr-tbl">
+            <div className="ag-corr-h"><span>Corretor</span><span className="r">Agendados (7 dias)</span><span className="r">Tocou hoje</span><span>Atividade</span></div>
+            {isLoading ? <div className="ag-vazio">Carregando…</div> : !porCorretor.length ? <div className="ag-vazio">Sem corretores na equipe.</div> : porCorretor.map((c) => {
+              const ativo = c.visto && Date.now() - new Date(c.visto).getTime() < 15 * 60_000;
+              return (
+                <div className={`ag-corr-row${c.agendados === 0 ? " zero" : ""}`} key={c.id}>
+                  <span className="ag-corr-nome">{c.nome}</span>
+                  <span className="r">{c.agendados === 0
+                    ? <em className="ag-tag amb">não agendou</em>
+                    : <b className="ag-mono">{c.agVis}<small> vis</small> · {c.agRet}<small> ret</small></b>}</span>
+                  <span className="r ag-mono">{c.tocou}</span>
+                  <span><em className={`ag-tag ${ativo ? "verde" : c.visto && diaSP(new Date(c.visto)) === diaSP() ? "cinza" : "ros"}`}>{vistoLabel(c.visto)}</em></span>
+                </div>
+              );
+            })}
+            <div className="ag-vazio" style={{ textAlign: "left", padding: "12px 2px", fontSize: 12 }}>Agendados = visitas marcadas + retornos com data nos próximos 7 dias. Para a análise de produção (visitas, pastas, vendas) use a aba <b>Tropa &amp; presença</b>.</div>
+          </div>
+        </>
+      ) : (<>
       <div className="ag-stats">
         <div className="ag-stat"><b style={{ color: "#0EA5E9" }}>{visitasHoje}</b><span>visitas hoje</span></div>
         <div className="ag-stat"><b style={{ color: retornosVencidos ? "#A855F7" : undefined }}>{retornosVencidos}</b><span>retornos vencidos</span></div>
@@ -154,6 +200,7 @@ export default function TarefasV4({ managerId, como }: { managerId: string; como
           })}
         {lista.length > 14 && <div className="ag-vazio">+{lista.length - 14} compromissos. Priorizei os mais urgentes.</div>}
       </div>
+      </>)}
 
       {gaveta && <LeadGaveta leadId={gaveta} como={como ?? null} corretores={corretores} carteira={carteira} onFechar={() => setGaveta(null)} />}
     </section>
@@ -185,5 +232,21 @@ const CSS = `
 .mgr10 .ag-b.cob:hover:not(:disabled){background:#10B981;color:#fff}
 .mgr10 .ag-b:disabled{opacity:.45;cursor:not-allowed}
 .ag-vazio{padding:26px 6px;font-size:14px;color:var(--cv-text-muted,#6B7A90);text-align:center}
+.ag-toggle{display:inline-flex;gap:3px;background:var(--cv-sunk,#EEF2F8);border:1px solid var(--cv-border,#E7EDF6);border-radius:11px;padding:3px;width:fit-content}
+.mgr10 .ag-tg{font:inherit;font-size:13px;font-weight:700;padding:7px 14px;border-radius:8px;border:0;background:transparent;color:var(--cv-text-muted,#5B6B80);cursor:pointer;transition:all .15s}
+.mgr10 .ag-tg.on{background:var(--cv-surface,#fff);color:var(--cv-text-main,#1a2435);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.ag-alerta{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);color:var(--cv-text-main,#1a2435);border-radius:12px;padding:12px 15px;font-size:13.5px}
+.ag-alerta b{color:#E8912B}
+.ag-corr-tbl{background:var(--cv-surface,#fff);border:1px solid var(--cv-border,#E7EDF6);border-radius:14px;overflow:hidden}
+.ag-corr-h,.ag-corr-row{display:grid;grid-template-columns:minmax(0,1.5fr) 150px 100px minmax(0,1.2fr);gap:10px;align-items:center;padding:12px 16px}
+.ag-corr-h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--cv-text-muted,#6B7A90);font-weight:800;background:var(--cv-sunk,#F7F9FC);border-bottom:1px solid var(--cv-border,#E7EDF6)}
+.ag-corr-row{border-top:1px solid var(--cv-border,#EEF2F8);font-size:14px}
+.ag-corr-row:first-of-type{border-top:0}
+.ag-corr-row.zero{background:rgba(245,158,11,.04)}
+.ag-corr-nome{font-weight:700;color:var(--cv-text-main,#1a2435)}
+.ag .r{text-align:right}.ag-mono{font-family:"JetBrains Mono",monospace;font-weight:800}.ag-mono small{font-weight:500;font-size:11px;opacity:.75}
+.ag-tag{font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px}
+.ag-tag.amb{color:#E8912B;background:rgba(245,158,11,.14)}.ag-tag.verde{color:#0D7C66;background:rgba(16,185,129,.14)}.ag-tag.cinza{color:var(--cv-text-muted,#6B7A90);background:var(--cv-sunk,#EEF2F8)}.ag-tag.ros{color:#B4322A;background:rgba(244,63,94,.12)}
+@media (max-width:760px){.ag-corr-h{display:none}.ag-corr-row{grid-template-columns:1fr auto;gap:6px}}
 @media (max-width:760px){.ag-stats{grid-template-columns:1fr 1fr}.ag-row{grid-template-columns:auto 1fr auto;gap:8px}.ag-quando{grid-column:2/-1;order:3}}
 `;
