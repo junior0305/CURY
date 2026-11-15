@@ -1,0 +1,195 @@
+// Raio-X do corretor no visual do mockup (Tropa harmonizado): Produção do Mês,
+// Assiduidade de Plantão (14 dias com horário de check-in real), Diagnóstico e Ações.
+// Dado real: c2s_plantao (espelho do check-in, por profile_id) + leads do corretor (SLA) + vendas do mês.
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase as sb } from "@/integrations/supabase/client";
+
+type Props = {
+  brokerId: string;
+  nome: string;
+  stand?: string | null;
+  vendas: number;
+  pastas: number;
+  visitas: number;
+  diag: string;
+  onClose: () => void;
+};
+
+const SP = "America/Sao_Paulo";
+const diaSP = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: SP }); // YYYY-MM-DD
+const horaSP = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { timeZone: SP, hour: "2-digit", minute: "2-digit" });
+const ini2 = (n: string) => (n || "?").trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+const SIGLA = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
+
+export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, pastas, visitas, diag, onClose }: Props) {
+  const [aberto, setAberto] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setAberto(true), 10); return () => clearTimeout(t); }, []);
+  const fechar = () => { setAberto(false); setTimeout(onClose, 260); };
+
+  // Janela de 14 dias (hoje - 13 … hoje), em SP
+  const dias14 = useMemo(() => {
+    const out: { iso: string; sigla: string; weekend: boolean; hoje: boolean }[] = [];
+    const hojeIso = diaSP(new Date());
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86400000);
+      const iso = diaSP(d);
+      const dow = new Date(iso + "T12:00:00").getDay();
+      out.push({ iso, sigla: i === 0 ? "HOJE" : SIGLA[dow], weekend: dow === 0 || dow === 6, hoje: iso === hojeIso });
+    }
+    return out;
+  }, []);
+  const desde14 = dias14[0]?.iso;
+
+  // Check-ins de plantão do corretor (espelho c2s_plantao, por profile_id)
+  const { data: plantoes } = useQuery({
+    queryKey: ["rxp-plantao", brokerId, desde14],
+    enabled: !!brokerId && !!desde14,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data } = await sb.from("c2s_plantao").select("created_at,tipos").eq("profile_id", brokerId).gte("created_at", desde14 + "T00:00:00");
+      return (data ?? []) as { created_at: string; tipos: string | null }[];
+    },
+  });
+  // mapa dia -> primeira hora de check-in
+  const porDia = useMemo(() => {
+    const m = new Map<string, string>();
+    (plantoes ?? []).forEach((p) => {
+      const d = diaSP(new Date(p.created_at));
+      const h = horaSP(p.created_at);
+      if (!m.has(d) || h < m.get(d)!) m.set(d, h);
+    });
+    return m;
+  }, [plantoes]);
+  const presentes = dias14.filter((d) => porDia.has(d.iso)).length;
+  const pct = Math.round((presentes / 14) * 100);
+  const corFreq = pct >= 70 ? "#10B981" : pct >= 40 ? "#FCD34D" : "#FDA4AF";
+  const standCheck = useMemo(() => (plantoes ?? []).map((p) => p.tipos).find(Boolean) || stand || null, [plantoes, stand]);
+
+  // SLA médio do mês (atribuído -> primeiro contato) dos leads do corretor
+  const { data: sla } = useQuery({
+    queryKey: ["rxp-sla", brokerId],
+    enabled: !!brokerId,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const mesIni = diaSP(new Date()).slice(0, 8) + "01";
+      const { data } = await sb.from("leads").select("atribuido_em,primeiro_contato_em").eq("broker_id", brokerId).gte("atribuido_em", mesIni + "T00:00:00").not("primeiro_contato_em", "is", null).limit(1000);
+      const difs = (data ?? []).map((l: any) => (new Date(l.primeiro_contato_em).getTime() - new Date(l.atribuido_em).getTime()) / 1000).filter((s) => s >= 0 && s < 86400 * 3);
+      if (!difs.length) return null;
+      return Math.round(difs.reduce((a, b) => a + b, 0) / difs.length);
+    },
+  });
+  const fmtSla = (s: number | null | undefined) => s == null ? "—" : s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
+
+  const mesNome = new Date().toLocaleDateString("pt-BR", { timeZone: SP, month: "long" });
+  const semanaA = dias14.slice(0, 7), semanaB = dias14.slice(7);
+  const rangeLabel = (arr: typeof dias14) => `${arr[0].iso.slice(8)}/${arr[0].iso.slice(5, 7)} a ${arr[6].iso.slice(8)}/${arr[6].iso.slice(5, 7)}`;
+
+  const Strip = ({ arr }: { arr: typeof dias14 }) => (
+    <div className="rxp-strip">
+      {arr.map((d) => {
+        const h = porDia.get(d.iso);
+        return (
+          <div key={d.iso} className={`rxp-cell${d.weekend ? " wk" : ""}${d.hoje ? " hoje" : ""}`}>
+            <span className="rxp-sig">{d.sigla}</span>
+            <span className={`rxp-pill ${h ? "pres" : "folga"}`}>{h ? "✓" : "–"}</span>
+            <span className="rxp-hora">{h || "—"}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div className="rxp-root">
+      <style>{CSS}</style>
+      <div className={`rxp-back${aberto ? " on" : ""}`} onClick={fechar} />
+      <aside className={`rxp-drawer${aberto ? " open" : ""}`}>
+        <div className="rxp-head">
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div className="rxp-av">{ini2(nome)}</div>
+            <div>
+              <b style={{ fontSize: 16, color: "#FFF", display: "block" }}>{nome}</b>
+              <span style={{ fontSize: 12, color: "#8A94A6" }}>Corretor{standCheck ? ` · ${standCheck}` : ""}</span>
+            </div>
+          </div>
+          <button className="rxp-x" onClick={fechar}>✕</button>
+        </div>
+
+        <div className="rxp-body">
+          <div className="rxp-card">
+            <div className="rxp-ct"><span>📊</span> Produção do Mês ({mesNome.charAt(0).toUpperCase() + mesNome.slice(1)})</div>
+            <div className="rxp-prod">
+              <div><span>Vendas</span><b style={{ color: "#10B981" }}>{vendas} un</b></div>
+              <div><span>Pastas</span><b style={{ color: "#C084FC" }}>{pastas}</b></div>
+              <div><span>Visitas</span><b style={{ color: "#38BDF8" }}>{visitas}</b></div>
+              <div><span>SLA Médio</span><b style={{ color: "#FCD34D", fontSize: 15 }}>{fmtSla(sla)}</b></div>
+            </div>
+          </div>
+
+          <div className="rxp-card">
+            <div className="rxp-ct" style={{ justifyContent: "space-between" }}>
+              <span><span>🏢</span> Assiduidade de Plantão (14 dias)</span>
+              <span style={{ fontSize: 11.5, color: corFreq, fontWeight: 800 }}>{presentes}/14 ({pct}%)</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
+              <div>
+                <span className="rxp-wklab">Semana passada ({rangeLabel(semanaA)})</span>
+                <Strip arr={semanaA} />
+              </div>
+              <div>
+                <span className="rxp-wklab">Semana atual ({rangeLabel(semanaB)})</span>
+                <Strip arr={semanaB} />
+              </div>
+            </div>
+            <p className="rxp-nota">Horário = primeiro check-in do dia por localização. Dia sem check-in fica neutro (pode ser folga).</p>
+          </div>
+
+          <div className="rxp-card">
+            <div className="rxp-ct"><span>🧠</span> Diagnóstico do Copiloto</div>
+            <p style={{ fontSize: 12.5, color: "#C4CCD8", lineHeight: 1.45, margin: 0 }}>{diag}</p>
+          </div>
+
+          <div className="rxp-card">
+            <div className="rxp-ct"><span>⚡</span> Ações rápidas</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <a className="rxp-act ver" href={`/manager/leads?corretor=${brokerId}`}>👁️ Ver os leads do corretor</a>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+const CSS = `
+.rxp-back{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);z-index:2200;opacity:0;transition:opacity .25s}
+.rxp-back.on{opacity:1}
+.rxp-drawer{position:fixed;top:0;right:-540px;width:500px;max-width:94vw;height:100vh;background:#0B1322;border-left:1px solid #1E293B;box-shadow:-10px 0 40px rgba(0,0,0,.8);z-index:2300;display:flex;flex-direction:column;transition:right .3s cubic-bezier(.16,1,.3,1);font-family:'Archivo',system-ui,sans-serif}
+.rxp-drawer.open{right:0}
+.rxp-head{padding:18px 22px;border-bottom:1px solid #1E293B;display:flex;justify-content:space-between;align-items:center;background:#080E1C}
+.rxp-av{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(135deg,#0EA5B7,#2563EB);border:1px solid rgba(255,255,255,.15)}
+.rxp-x{background:none;border:none;color:#8A94A6;font-size:20px;cursor:pointer;line-height:1}
+.rxp-body{padding:22px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:16px}
+.rxp-card{background:#0F1A2E;border:1px solid #1E293B;border-radius:12px;padding:16px}
+.rxp-ct{font-size:13.5px;font-weight:800;color:#FFF;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.rxp-prod{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.rxp-prod>div{background:#0A1220;padding:8px;border-radius:6px;text-align:center}
+.rxp-prod span{font-size:11px;color:#6B7688;display:block}
+.rxp-prod b{font-size:18px;font-family:'JetBrains Mono',monospace}
+.rxp-wklab{font-size:10px;color:#6B7688;text-transform:uppercase;font-weight:700;margin-bottom:4px;display:block}
+.rxp-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.rxp-cell{background:#0A1220;border:1px solid #1A2435;border-radius:6px;padding:6px 3px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px}
+.rxp-cell.wk{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.05)}
+.rxp-cell.hoje{border:1.5px solid #38BDF8;box-shadow:0 0 8px rgba(56,189,248,.4)}
+.rxp-sig{font-size:10px;font-weight:800;color:#8A94A6;text-transform:uppercase}
+.rxp-cell.wk .rxp-sig{color:#FCD34D}
+.rxp-pill{width:100%;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
+.rxp-pill.pres{background:rgba(16,185,129,.22);color:#10B981;border:1px solid #10B981}
+.rxp-pill.folga{background:rgba(255,255,255,.05);color:#55617A}
+.rxp-hora{font-size:9.5px;color:#8A94A6;font-family:'JetBrains Mono',monospace}
+.rxp-nota{font-size:10.5px;color:#55617A;margin:10px 0 0;line-height:1.4}
+.rxp-act{display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border-radius:8px;font-size:12.5px;font-weight:700;text-decoration:none;cursor:pointer;border:1px solid #1E293B;color:#C4CCD8;background:#0A1220}
+.rxp-act.ver:hover{border-color:#38BDF8;color:#38BDF8}
+@media(max-width:560px){.rxp-drawer{width:100vw}}
+`;

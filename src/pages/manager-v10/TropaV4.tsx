@@ -19,7 +19,7 @@ import { useDadosEquipe, type LeadH } from "@/hooks/useDadosEquipe";
 import { usePastas } from "@/hooks/usePastas";
 import { getSegunda } from "@/hooks/usePeriodo";
 import { atendido } from "@/lib/situacaoLead";
-import RaioXCorretorDrawer from "@/components/manager-v10/RaioXCorretorDrawer";
+import RaioXPlantaoDrawer from "@/components/manager-v10/RaioXPlantaoDrawer";
 
 const sb = supabase as any;
 const diaSP = (d: Date | number = new Date()) => new Date(d).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
@@ -474,7 +474,9 @@ export default function TropaV4() {
         </>)}
       </main>
 
-      {verRaiox && <RaioXCorretorDrawer brokerId={verRaiox} managerId={gerente} onClose={() => setVerRaiox(null)} />}
+      {verRaiox && (() => { const c = raiox.find((r) => r.id === verRaiox); return c ? (
+        <RaioXPlantaoDrawer brokerId={c.id} nome={c.nome} vendas={c.vendas} pastas={c.pastas} visitas={c.visitas} diag={c.diag} onClose={() => setVerRaiox(null)} />
+      ) : null; })()}
     </div>
   );
 }
