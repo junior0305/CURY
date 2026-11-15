@@ -75,10 +75,17 @@ export default function CockpitGeral() {
       ]);
       const kg = chaveGerente((ger as any)?.first_name);
       const daEquipe = (plantao as any[]).filter((r) => r.created_at?.slice(0, 10) >= hoje && chaveGerente(gerenteC2S(r.gerente)) === kg);
-      return new Set(daEquipe.map((r) => chaveNome(r.corretor)));
+      const m = new Map<string, { estande: string | null; hora: string }>();
+      for (const r of daEquipe) {
+        const k = chaveNome(r.corretor);
+        if (!m.has(k)) m.set(k, { estande: (r.tipos || "").toString().trim() || null, hora: r.created_at });
+      }
+      return m;
     },
   });
   const noPlantao = (nome: string | null) => !!plantaoHoje?.has(chaveNome(nome));
+  const plantaoDe = (nome: string | null) => plantaoHoje?.get(chaveNome(nome));
+  const hhmm = (iso?: string | null) => (iso ? new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }) : "");
 
   // ── presença ao vivo (online/roleta) de cada corretor ──
   const { data: presenca } = useQuery({
@@ -246,11 +253,12 @@ export default function CockpitGeral() {
       const adv = meus.filter((l) => AVANCOU.has(l.status ?? "")).length;
       const semToque = meus.filter((l) => !atendido(l)).length;
       const pr = presenca?.get(b.id);
+      const pl = plantaoDe(b.first_name);
       return {
         id: b.id, nome: b.first_name ?? "—",
         carteira: meus.length, semToque, contato: pctN(toc, meus.length), avanca: pctN(adv, Math.max(1, toc)),
         vendas: vendas.filter((v) => v.corretor === chaveNome(b.first_name) && v.dia >= iniMes).length,
-        online: !!pr?.online, roleta: pr?.roleta ?? true, plantao: noPlantao(b.first_name),
+        online: !!pr?.online, roleta: pr?.roleta ?? true, plantao: !!pl, estande: pl?.estande ?? null, horaPlantao: pl?.hora ?? null,
         atendendo: atendendoIds.has(b.id),
       };
     }).sort((a, b) => b.semToque - a.semToque || b.carteira - a.carteira);
@@ -450,7 +458,7 @@ export default function CockpitGeral() {
                   <span className="cg-av" style={{ borderColor: t.online ? "#10B981" : "var(--cv-border,#2A3A58)" }}>{ini2(t.nome)}</span>
                   <span><b>{t.nome}</b><small>{t.carteira} na carteira{t.semToque ? ` · ${t.semToque} sem toque` : ""}</small></span>
                 </span>
-                <span>{t.plantao ? <em className="cg-b azul">🏢 no stand</em> : <em className="cg-b cinza">—</em>}</span>
+                <span>{t.plantao ? <em className="cg-b azul" title={t.horaPlantao ? `check-in às ${hhmm(t.horaPlantao)}` : ""}>🏢 {t.estande || "no stand"}{t.horaPlantao ? ` · ${hhmm(t.horaPlantao)}` : ""}</em> : <em className="cg-b cinza">—</em>}</span>
                 <span>{t.online ? <em className="cg-b verde">● online</em> : <em className="cg-b cinza">○ ausente</em>}</span>
                 <span className="cg-prod"><b>{t.vendas}</b> venda{t.vendas !== 1 ? "s" : ""}{t.contato != null ? <small> · {t.contato}% contato</small> : null}</span>
                 <span>
@@ -514,7 +522,7 @@ export default function CockpitGeral() {
                     return (
                       <div className="cg-lrow" key={b.id}>
                         <span className="cg-av sm" style={{ borderColor: cor }}>{ini2(b.first_name ?? "?")}</span>
-                        <span className="cg-lrow-i"><b>{b.first_name ?? "—"}</b><small>{t ? `${t.carteira} na carteira${t.semToque ? ` · ${t.semToque} sem toque` : ""}` : ""}</small></span>
+                        <span className="cg-lrow-i"><b>{b.first_name ?? "—"}</b><small>{painel === "plantao" && t?.plantao ? `🏢 ${t.estande || "no stand"}${t.horaPlantao ? ` · check-in ${hhmm(t.horaPlantao)}` : ""}` : t ? `${t.carteira} na carteira${t.semToque ? ` · ${t.semToque} sem toque` : ""}` : ""}</small></span>
                         {t && <span className="cg-b" style={{ color: cor, background: "transparent" }}>{t.roleta ? "na roleta" : "pausado"}</span>}
                       </div>
                     );
@@ -660,6 +668,9 @@ const CSS = `
 .cgx .cg-rol.off{background:rgba(244,63,94,.12);border-color:rgba(244,63,94,.35);color:#FDA4AF}
 .cgx .cg-rol.off:hover{background:rgba(16,185,129,.2);border-color:#10B981;color:#10B981}
 .cgx .cg-rol:disabled{opacity:.5}
+.cgx .cg-rol.on:hover::after{content:" · pausar";font-weight:800;opacity:.85}
+.cgx .cg-rol.off:hover::after{content:" · ativar";font-weight:800;opacity:.85}
+.cgx .cg-act:hover{transform:translateY(-1px)}
 .cg-acts{display:inline-flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
 .cgx .cg-act{display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:13px;font-weight:700;padding:6px 11px;border-radius:8px;cursor:pointer;border:1px solid transparent;text-decoration:none;white-space:nowrap;transition:all .15s}
 .cgx .cg-act.rep{background:rgba(14,165,233,.12);color:#38BDF8;border-color:rgba(14,165,233,.3)}.cgx .cg-act.rep:hover{background:#0EA5E9;color:#fff}
