@@ -19,6 +19,7 @@ import { useDadosEquipe, type LeadH } from "@/hooks/useDadosEquipe";
 import { usePastas } from "@/hooks/usePastas";
 import { getSegunda } from "@/hooks/usePeriodo";
 import { atendido } from "@/lib/situacaoLead";
+import RaioXCorretorDrawer from "@/components/manager-v10/RaioXCorretorDrawer";
 
 const sb = supabase as any;
 const diaSP = (d: Date | number = new Date()) => new Date(d).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
@@ -112,6 +113,42 @@ export default function TropaV4() {
   const { leads: leadsEq, metricas, vendas: vendasEq } = useDadosEquipe(gerente, segPassada);
   const { data: pastasData } = usePastas(gerente);
   const pastasG = pastasData?.minhas ?? [];
+  const [verRaiox, setVerRaiox] = useState<string | null>(null);
+  const { data: rendimento } = useQuery({
+    queryKey: ["tropav4-rendimento", gerente],
+    enabled: !!gerente && modo === "gestao",
+    staleTime: 5 * 60_000,
+    queryFn: async () => (await sb.rpc("rendimento_equipe", { p_dono: gerente })).data as any[] ?? [],
+  });
+  // Raio-X por corretor: rampa (5 marcos) + diagnóstico + risco, sobre rendimento_equipe + vendas por nome
+  const raiox = useMemo(() => {
+    const semana = (ini: string, fim: string) => (c: string) => (vendasEq ?? []).filter((v: any) => v.corretor === c && v.dia >= ini && v.dia <= fim).length;
+    const hojeStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+    const vSem = semana(segAtual, hojeStr), vAnt = semana(segPassada, domPassado);
+    const vMes = (c: string) => (vendasEq ?? []).filter((v: any) => v.corretor === c).length;
+    return (rendimento ?? []).filter((r: any) => r.vinculado).map((r: any) => {
+      const ch = chaveNome((r.nome || "").split(" ")[0]);
+      const vendas = vMes(ch), wow = vSem(ch) - vAnt(ch);
+      const marcos = [((r.plantao_dias ?? 0) > 0), (r.atendidos > 0), (r.visitas > 0), (r.pastas > 0), vendas > 0];
+      const feito = marcos.filter(Boolean).length;
+      const prox = marcos.indexOf(false); // -1 = tudo feito
+      const dsp = r.dias_sem_plantao ?? 0, dias = r.dias_casa ?? 0;
+      // diagnóstico por regra
+      let diag = "Referência · pode apadrinhar novatos", bom = true;
+      if (prox === 0) { diag = `Não vai ao plantão (${dsp}d sem check-in)`; bom = false; }
+      else if (prox === 1) { diag = "Não atende os leads que recebe"; bom = false; }
+      else if (prox === 2) { diag = "Atende mas não marca visita"; bom = false; }
+      else if (prox === 3) { diag = `Travado no marco 4: ${r.visitas} visitas → 0 pastas (documentação Caixa?)`; bom = false; }
+      else if (prox === 4) { diag = `${r.pastas} pasta(s) aberta(s), falta fechar a 1ª venda`; bom = false; }
+      // risco real (nível, não %)
+      let risco: "estavel" | "atencao" | "risco" = "estavel";
+      if (dsp >= 10 || (r.visitas > 0 && r.pastas === 0 && dias < 60) || (r.dias_sem_pasta ?? 0) >= 45) risco = "risco";
+      else if (dsp >= 5 || (r.dias_sem_pasta ?? 0) >= 25 || (prox >= 0 && dias < 45)) risco = "atencao";
+      const nivel = dias < 45 ? `Novato · ${dias}d` : dias < 180 ? "Pleno" : "Sênior";
+      return { id: r.id, nome: r.nome || "—", nivel, vendas, wow, pastas: r.pastas, visitas: r.visitas, marcos, feito, diag, bom, risco };
+    }).sort((a, b) => ({ risco: 0, atencao: 1, estavel: 2 } as any)[a.risco] - ({ risco: 0, atencao: 1, estavel: 2 } as any)[b.risco] || a.feito - b.feito);
+  }, [rendimento, vendasEq, segAtual, segPassada, domPassado]);
+  const RISCO: Record<string, [string, string]> = { estavel: ["Estável", "#10B981"], atencao: ["Atenção", "#F59E0B"], risco: ["Risco", "#F43F5E"] };
 
   // SLA: minutos entre atribuição e 1º contato, nos leads dos últimos 14 dias
   const sla = useMemo(() => {
@@ -322,6 +359,24 @@ export default function TropaV4() {
               </div>
             </section>
 
+            {/* Raio-X por corretor: rampa + diagnóstico + risco + Ver Raio-X */}
+            <section className="tv-panel" style={{ marginTop: 16 }}>
+              <div className="tv-panel-h2"><b>📈 Raio-X de pessoas &amp; rampa por corretor</b><span style={{ fontSize: 12, color: "var(--tm)" }}>identifique o gargalo antes de virar desligamento</span></div>
+              <div className="tv-tbl">
+                <div className="tv-rx tv-th"><span>Corretor</span><span>Produção</span><span>Rampa (5 marcos)</span><span>Diagnóstico do copiloto</span><span>Risco</span><span className="r">Ações</span></div>
+                {!raiox.length ? <div className="tv-vazio">Sem corretores vinculados para o raio-x.</div> : raiox.map((c) => (
+                  <div className="tv-rx" key={c.id}>
+                    <span className="tv-corr"><span className="tv-av">{ini2(c.nome)}</span><span><b>{c.nome}</b><small>{c.nivel}</small></span></span>
+                    <span className="tv-dim2"><b className={c.wow > 0 ? "verde" : ""} style={{ fontFamily: '"JetBrains Mono",monospace' }}>{c.vendas} venda{c.vendas !== 1 ? "s" : ""}</b>{c.wow !== 0 && <small style={{ color: c.wow > 0 ? "#10B981" : "#F43F5E" }}> ({c.wow > 0 ? "+" : ""}{c.wow} WoW)</small>}<br /><small>{c.pastas} pastas · {c.visitas} visitas</small></span>
+                    <span className="tv-rampa">{c.marcos.map((ok, i) => <span key={i} className={`tv-marco${ok ? " ok" : i === c.feito ? " atual" : ""}`}>{i + 1}</span>)}</span>
+                    <span className="tv-dim2" style={{ color: c.bom ? "#10B981" : "#F59E0B", whiteSpace: "normal" }}>{c.diag}</span>
+                    <span><em className="tv-b" style={{ color: RISCO[c.risco][1], background: `${RISCO[c.risco][1]}22` }}>{RISCO[c.risco][0]}</em></span>
+                    <span className="r"><button className="tv-rol on" onClick={() => setVerRaiox(c.id)}>🔍 Ver Raio-X</button></span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
             {sumidos.length > 0 && (
               <section className="tv-panel" style={{ marginTop: 16 }}>
                 <div className="tv-panel-h2"><b>🚪 Em risco de churn (sem acesso há +20 dias)</b></div>
@@ -418,6 +473,8 @@ export default function TropaV4() {
         <p className="tv-nota">SLA médio por corretor e comparação semana a semana (WoW) entram quando a fonte de tempo de resposta estiver ligada — não mostramos número estimado. Para o raio-X de pessoas, use a aba <Link to="/manager?aba=time">Tropa &amp; presença</Link>.</p>
         </>)}
       </main>
+
+      {verRaiox && <RaioXCorretorDrawer brokerId={verRaiox} managerId={gerente} onClose={() => setVerRaiox(null)} />}
     </div>
   );
 }
@@ -502,6 +559,14 @@ const CSS = `
 .tv-tr2.tv-th{border:0}.tv-tr2.alerta{background:rgba(244,63,94,.05)}.tv-tr2 .r{text-align:right}
 .tv-dim2{font-size:12.5px;color:var(--tm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tv-b.roxoB{color:#C084FC;background:rgba(168,85,247,.16)}
+.tv-rx{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) 170px minmax(0,1.5fr) 88px 130px;gap:12px;align-items:center;padding:13px 18px;border-top:1px solid var(--bds);font-size:13px;color:var(--tx)}
+.tv-rx.tv-th{border:0}.tv-rx .r{text-align:right}
+.tv-rampa{display:flex;align-items:center;gap:5px}
+.tv-marco{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:800;font-family:"JetBrains Mono",monospace;background:var(--sub);color:var(--td);border:1px solid var(--bd);position:relative}
+.tv-marco:not(:last-child)::after{content:"";position:absolute;right:-6px;width:5px;height:2px;background:var(--bd)}
+.tv-marco.ok{background:#10B981;color:#fff;border-color:#10B981}
+.tv-marco.atual{background:#F59E0B;color:#fff;border-color:#F59E0B}
+@media(max-width:1100px){.tv-rx{grid-template-columns:1fr auto}.tv-rx>span:nth-child(3),.tv-rx>span:nth-child(4){grid-column:1/-1}}
 .tv-wow{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--bd)}
 .tv-wcol{background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:5px}
 .tv-wk{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--tm)}
