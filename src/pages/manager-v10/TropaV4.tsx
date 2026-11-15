@@ -21,6 +21,7 @@ import { getSegunda } from "@/hooks/usePeriodo";
 import { atendido } from "@/lib/situacaoLead";
 import RaioXPlantaoDrawer from "@/components/manager-v10/RaioXPlantaoDrawer";
 import RendimentoEquipe from "@/components/equipe/RendimentoEquipe";
+import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 
 const sb = supabase as any;
 const diaSP = (d: Date | number = new Date()) => new Date(d).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
@@ -116,6 +117,7 @@ export default function TropaV4() {
   const pastasG = pastasData?.minhas ?? [];
   const [verRaiox, setVerRaiox] = useState<string | null>(null);
   const [focoLead, setFocoLead] = useState<string | null>(null);
+  const [cadastrar, setCadastrar] = useState(false);
   // Ledger "Repasses de hoje": guarda o que ESTE gestor repassou aqui (localStorage por gestor/dia; distribution_logs é só admin)
   type Repasse = { lead: string; de: string; para: string; hora: string };
   const chaveRepasses = `cmd_repasses_${gerente}_${new Date().toLocaleDateString("en-CA")}`;
@@ -271,6 +273,7 @@ export default function TropaV4() {
               <span className="tv-badge"><span className="tv-dot verde" /> <b>{online} logados</b> no CRM</span>
               <span className="tv-badge"><span className="tv-dot ambar" /> <b>{atendendo} em atendimento</b></span>
               {pedindo > 0 && <span className="tv-badge pulso"><span className="tv-dot roxo" /> <b>✋ {pedindo} pedindo roleta</b></span>}
+              <button className="tv-addcorr" onClick={() => setCadastrar(true)}>➕ Adicionar corretor</button>
             </div>
           </div>
         </header>
@@ -516,6 +519,10 @@ export default function TropaV4() {
         const lista = tropa.map((x) => ({ id: x.id, nome: x.nome }));
         return <RaioXPlantaoDrawer brokerId={verRaiox} nome={nome} stand={t?.estande} vendas={g?.vendas} pastas={g?.pastas} visitas={g?.visitas} diag={g?.diag} corretores={lista} como={como} focoLeadId={focoLead} onRepasse={registrarRepasse} onClose={() => { setVerRaiox(null); setFocoLead(null); }} />;
       })()}
+
+      {cadastrar && (
+        <CadastrarCorretor managerId={gerente} onFechar={() => setCadastrar(false)} onPronto={() => { setCadastrar(false); qc.invalidateQueries({ queryKey: ["tropav4"] }); qc.invalidateQueries({ queryKey: ["dados-equipe"] }); }} />
+      )}
     </div>
   );
 }
@@ -530,6 +537,8 @@ const CSS = `
 .tv-top p{font-size:13px;color:var(--tm);margin-top:3px}
 .tv-agora{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}
 .tv-agora-lbl{font-size:12px;color:var(--tm);font-weight:700}
+.tvx .tv-addcorr{margin-left:auto;font:inherit;font-size:12px;font-weight:800;padding:6px 13px;border-radius:999px;cursor:pointer;color:#fff;background:linear-gradient(135deg,#0EA5B7,#2563EB);border:1px solid transparent;white-space:nowrap}
+.tvx .tv-addcorr:hover{filter:brightness(1.08)}
 .tv-badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;background:var(--surf);border:1px solid var(--bd);color:var(--tx);padding:5px 11px;border-radius:999px}
 .tv-badge.pulso{border-color:#A855F7;background:rgba(168,85,247,.16);animation:tvpulse 2.2s infinite}
 @keyframes tvpulse{0%,100%{box-shadow:0 0 8px rgba(168,85,247,.3)}50%{box-shadow:0 0 18px rgba(168,85,247,.6)}}
