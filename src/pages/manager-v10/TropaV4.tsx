@@ -277,9 +277,9 @@ export default function TropaV4() {
 
         <div className="tv-modos">
           <button className={`tv-modo${modo === "plantao" ? " on" : ""}`} onClick={() => setModo("plantao")}><span>🛰️</span> Modo Plantão <small>tempo real</small></button>
-          <button className={`tv-modo${modo === "contratacao" ? " on" : ""}`} onClick={() => setModo("contratacao")}><span>🧩</span> Funil de Contratação <small>recrutamento</small></button>
           <button className={`tv-modo${modo === "gestao" ? " on" : ""}`} onClick={() => setModo("gestao")}><span>📈</span> Gestão &amp; Estratégia <small>SLA · WoW · churn</small></button>
           <button className={`tv-modo${modo === "rendimento" ? " on" : ""}`} onClick={() => setModo("rendimento")}><span>🏭</span> Rendimento da equipe <small>onde cada um trava</small></button>
+          <button className={`tv-modo${modo === "contratacao" ? " on" : ""}`} onClick={() => setModo("contratacao")}><span>🧩</span> Funil de Contratação <small>recrutamento</small></button>
         </div>
 
         {modo === "contratacao" ? (
