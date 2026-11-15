@@ -203,6 +203,10 @@ export default function ManagerV10() {
 
   if (semDrill) return <Navigate to={abaInicial === "time" || abaInicial === "bi" ? `/super?aba=${abaInicial}` : "/super"} replace />;
 
+  // 15/11: a aba "Cockpit geral" do gerente abre o Cockpit Geral novo (/manager/cockpit).
+  // A HojeGerente antiga continua no código — reverter esta linha a traz de volta na aba tempo.
+  if (view === "tempo") return <Navigate to={`/manager/cockpit${window.location.search}`} replace />;
+
   if (!userId || isLoading || !data || !calc) {
     return (
       <div className="mgr10">
