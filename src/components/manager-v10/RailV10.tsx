@@ -130,9 +130,9 @@ export function RailV10({ atual, sub, mode, toggle, onAba, pip }: {
       <style>{CSS(recolhido)}</style>
 
       <div className="sb-brand">
-        <img className="sb-logo" src="/comandra-lobo.png" alt="Comandra" />
+        <img className="sb-logo" src="/comandra-lobo.png" alt="Comandra" onClick={recolhido ? toggleRecolher : undefined} style={recolhido ? { cursor: "pointer" } : undefined} title={recolhido ? "Expandir menu" : undefined} />
         <div className="sb-bt"><b>Comandra</b>{sub ? <i>{sub}</i> : null}</div>
-        <button className="sb-recolher" onClick={toggleRecolher} title={recolhido ? "Expandir menu" : "Recolher menu"} aria-label="Recolher menu">
+        <button className="sb-recolher" onClick={toggleRecolher} title={recolhido ? "Expandir menu" : "Recolher menu"} aria-label={recolhido ? "Expandir menu" : "Recolher menu"}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d={recolhido ? "M9 6l6 6-6 6" : "M15 6l-6 6 6 6"} /></svg>
         </button>
       </div>
@@ -201,8 +201,8 @@ const CSS = (recolhido: boolean) => `
 /* recolhido = só ícones */
 .sbnav.recolhido .sb-bt,.sbnav.recolhido .sb-gh,.sbnav.recolhido .sb-lb,.sbnav.recolhido .sb-badge,.sbnav.recolhido .sb-ut{display:none}
 .sbnav.recolhido .sb-item{justify-content:center;padding:11px 0}
-.sbnav.recolhido .sb-brand{justify-content:center;padding:16px 6px 12px}
-.sbnav.recolhido .sb-recolher{position:absolute;top:18px;right:8px}
+.sbnav.recolhido .sb-brand{flex-direction:column;justify-content:center;align-items:center;gap:8px;padding:14px 6px 10px}
+.sbnav.recolhido .sb-recolher{background:rgba(255,255,255,.07);color:#fff;width:34px;height:30px;display:flex;align-items:center;justify-content:center}
 .sbnav.recolhido .sb-user{justify-content:center;padding:8px 0;background:none}
 .sbnav.recolhido .sb-fbtns{flex-direction:column}
 @media(max-width:860px){.mgr10.app2{grid-template-columns:72px 1fr}
