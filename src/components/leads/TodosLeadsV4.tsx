@@ -6,7 +6,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
-import { usePeriodo } from "@/hooks/usePeriodo";
 import { cobrarFila } from "@/hooks/useLeads";
 import LeadGaveta from "@/components/leads2/LeadGaveta";
 import { CSS as LEADS_CSS, type Corretor } from "@/components/leads2/comum";
@@ -61,7 +60,6 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
   const { session } = useAuth();
   const eu = session?.user?.id ?? "";
   const qc = useQueryClient();
-  const { periodo: per } = usePeriodo();
   const [pil, setPil] = useState<Pilula>("todos");
   const [busca, setBusca] = useState("");
   const [fCor, setFCor] = useState("");
@@ -71,10 +69,13 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
   const [redis, setRedis] = useState(false);
   const [destino, setDestino] = useState<Set<string>>(new Set());
 
+  // A carteira é estado atual, não período: pega o backlog inteiro (bate com o Diagnóstico), não "esta semana".
+  const deCarteira = new Date(Date.now() - 180 * 864e5).toISOString().slice(0, 10);
+  const ateCarteira = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
   const { data, isLoading } = useQuery({
-    queryKey: ["tl4", como, per.de, per.ate],
+    queryKey: ["tl4", como],
     refetchInterval: 120_000,
-    queryFn: async () => (await sb.rpc("leads_origem", { p_como: como || null, p_de: per.de, p_ate: per.ate })).data as Painel,
+    queryFn: async () => (await sb.rpc("leads_origem", { p_como: como || null, p_de: deCarteira, p_ate: ateCarteira })).data as Painel,
   });
   const { data: nomeCamp } = useQuery({
     queryKey: ["tl4-nomes"],
