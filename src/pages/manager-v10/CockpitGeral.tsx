@@ -487,9 +487,9 @@ export default function CockpitGeral() {
                   </button>
                 </span>
                 <span className="r cg-acts">
-                  <button className="cg-act rep" onClick={() => abrirRepassar(t.id, t.nome)}>⚡ Repassar</button>
-                  <button className="cg-act cob" onClick={() => cobrar(ativos.filter((l) => l.broker_id === t.id && !atendido(l)).map((l) => l.id), t.nome)}>💬 Cobrar</button>
-                  <Link className="cg-act ver" to={`/manager/leads?corretor=${t.id}`}>👁️ Ver</Link>
+                  <button className="cg-act rep" title="Repassar os leads deste corretor" onClick={() => abrirRepassar(t.id, t.nome)}>⚡</button>
+                  <button className="cg-act cob" title="Cobrar no WhatsApp" onClick={() => cobrar(ativos.filter((l) => l.broker_id === t.id && !atendido(l)).map((l) => l.id), t.nome)}>💬</button>
+                  <Link className="cg-act ver" title="Ver a carteira" to={`/manager/leads?corretor=${t.id}`}>👁️</Link>
                 </span>
               </div>
             ))}
@@ -671,7 +671,7 @@ const CSS = `
 .cg-panel-h{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--bd)}
 .cg-panel-h h3{font-size:18.5px;font-weight:800;color:var(--tx)}.cg-panel-h span{font-size:13px;color:var(--tm)}
 .cg-tbl{display:flex;flex-direction:column}
-.cg-tr{display:grid;grid-template-columns:minmax(0,1.5fr) 120px 105px 72px minmax(0,1fr) 125px minmax(0,1.3fr);gap:10px;align-items:center;padding:13px 20px;border-top:1px solid var(--bds);font-size:14px;color:var(--tx)}
+.cg-tr{display:grid;grid-template-columns:minmax(0,1.5fr) 116px 100px 66px minmax(0,0.9fr) 118px 108px;gap:10px;align-items:center;padding:13px 20px;border-top:1px solid var(--bds);font-size:14px;color:var(--tx)}
 .cg-pills{display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--bds)}
 .cgx .cg-pill{font:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;border:1px solid var(--bd);background:var(--surf);color:var(--tm);cursor:pointer;transition:all .15s}
 .cgx .cg-pill:hover{color:var(--tx);border-color:var(--td)}
@@ -698,8 +698,8 @@ const CSS = `
 .cgx .cg-rol.on:hover::after{content:" · pausar";font-weight:800;opacity:.85}
 .cgx .cg-rol.off:hover::after{content:" · ativar";font-weight:800;opacity:.85}
 .cgx .cg-act:hover{transform:translateY(-1px)}
-.cg-acts{display:inline-flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
-.cgx .cg-act{display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:13px;font-weight:700;padding:6px 11px;border-radius:8px;cursor:pointer;border:1px solid transparent;text-decoration:none;white-space:nowrap;transition:all .15s}
+.cg-acts{display:inline-flex;gap:5px;justify-content:flex-end;flex-wrap:nowrap}
+.cgx .cg-act{display:inline-flex;align-items:center;justify-content:center;gap:5px;font:inherit;font-size:14px;font-weight:700;padding:6px 8px;min-width:32px;border-radius:8px;cursor:pointer;border:1px solid transparent;text-decoration:none;white-space:nowrap;transition:all .15s}
 .cgx .cg-act.rep{background:rgba(14,165,233,.12);color:#38BDF8;border-color:rgba(14,165,233,.3)}.cgx .cg-act.rep:hover{background:#0EA5E9;color:#fff}
 .cgx .cg-act.cob{background:rgba(16,185,129,.12);color:#10B981;border-color:rgba(16,185,129,.3)}.cgx .cg-act.cob:hover{background:#10B981;color:#fff}
 .cgx .cg-act.ver{background:rgba(148,163,184,.12);color:var(--tm);border-color:var(--bd)}.cgx .cg-act.ver:hover{background:var(--sub);color:var(--tx)}
