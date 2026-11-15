@@ -8,7 +8,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { cobrarFila } from "@/hooks/useLeads";
 import LeadGaveta from "@/components/leads2/LeadGaveta";
+import RedistribuirDrawer, { type CorretorRico } from "@/components/leads/RedistribuirDrawer";
 import { CSS as LEADS_CSS, type Corretor } from "@/components/leads2/comum";
+
+const AVANCOU = new Set(["VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED", "NEGOTIATING", "CONCLUDED"]);
+const pctN = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : null);
 
 const sb = supabase as any;
 type Lead = {
@@ -66,8 +70,7 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [gaveta, setGaveta] = useState<string | null>(null);
   const [indo, setIndo] = useState(false);
-  const [redis, setRedis] = useState(false);
-  const [destino, setDestino] = useState<Set<string>>(new Set());
+  const [abreDrawer, setAbreDrawer] = useState(false);
 
   // A carteira é estado atual, não período: pega o backlog inteiro (bate com o Diagnóstico), não "esta semana".
   const deCarteira = new Date(Date.now() - 180 * 864e5).toISOString().slice(0, 10);
@@ -101,6 +104,37 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
   const carteira = useMemo(() => { const m = new Map<string, number>(); for (const l of leads) if (l.corretor && !descartado(l)) m.set(l.corretor, (m.get(l.corretor) ?? 0) + 1); return m; }, [leads]);
   const recarregar = () => qc.invalidateQueries({ queryKey: ["tl4"] });
 
+  // presença (online/plantão) dos corretores, para o painel de redistribuição sugerir
+  const { data: presenca } = useQuery({
+    queryKey: ["tl4-presenca", corretores.map((c) => c.id).join(",")],
+    enabled: corretores.length > 0, staleTime: 60_000,
+    queryFn: async () => {
+      const r = (await sb.from("profiles").select("id,last_seen_at,lead_assignment_enabled,roleta_entrou_em").in("id", corretores.map((c) => c.id))).data ?? [];
+      const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+      const m = new Map<string, { online: boolean; plantao: boolean }>();
+      for (const p of r) m.set(p.id, {
+        online: !!p.last_seen_at && (Date.now() - new Date(p.last_seen_at).getTime()) < 15 * 60_000,
+        plantao: !!p.lead_assignment_enabled || (!!p.roleta_entrou_em && String(p.roleta_entrou_em).slice(0, 10) === hoje),
+      });
+      return m;
+    },
+  });
+  // estatística de cada corretor para a sugestão (carteira, % contato, % que avança)
+  const ricos: CorretorRico[] = useMemo(() => {
+    const st = new Map<string, { cart: number; toc: number; adv: number }>();
+    for (const l of leads) {
+      if (!l.corretor || descartado(l)) continue;
+      const s = st.get(l.corretor) ?? { cart: 0, toc: 0, adv: 0 };
+      s.cart++; if (l.tocado) s.toc++; if (AVANCOU.has(l.status)) s.adv++;
+      st.set(l.corretor, s);
+    }
+    return corretores.map((c) => {
+      const s = st.get(c.id) ?? { cart: 0, toc: 0, adv: 0 };
+      const pr = presenca?.get(c.id);
+      return { id: c.id, nome: c.nome, carteira: s.cart, contato: pctN(s.toc, s.cart), avanca: pctN(s.adv, s.toc), online: !!pr?.online, plantao: !!pr?.plantao };
+    });
+  }, [corretores, leads, presenca]);
+
   const conta = (p: Pilula) => leads.filter((l) => pertence(l, p)).length;
   const lista = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -119,14 +153,14 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
       toast.success(ok ? "Cobrado no WhatsApp." : "Cobrança registrada."); setSel(new Set()); }
     catch (e: any) { toast.error(e?.message ?? "Não consegui cobrar."); } finally { setIndo(false); }
   }
-  async function redistribuir() {
-    if (!sel.size || !destino.size || indo) return; setIndo(true);
+  async function redistribuir(destinoIds: string[]) {
+    if (!sel.size || !destinoIds.length || indo) return; setIndo(true);
     try {
-      const { data: r, error } = await sb.rpc("redistribuir_lote", { p_leads: [...sel], p_para: [...destino], p_como: como || null, p_motivo: "Redistribuição em lote (Central de Leads)" });
+      const { data: r, error } = await sb.rpc("redistribuir_lote", { p_leads: [...sel], p_para: destinoIds, p_como: como || null, p_motivo: "Redistribuição em lote (Central de Leads)" });
       if (error) throw error;
       const feitos = r?.feitos ?? 0, pulados = r?.pulados ?? 0;
       toast.success(`${feitos} redistribuído(s)${pulados ? ` · ${pulados} pulado(s)` : ""}.`);
-      setSel(new Set()); setDestino(new Set()); setRedis(false); recarregar();
+      setSel(new Set()); setAbreDrawer(false); recarregar();
     } catch (e: any) { toast.error(e?.message ?? "Não consegui redistribuir."); } finally { setIndo(false); }
   }
 
@@ -182,29 +216,20 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
         {lista.length > 80 && <div className="tl4-vazio">Mostrando 80 de {lista.length}. Use a busca ou os filtros para refinar.</div>}
       </div>
 
-      {/* BARRA FLUTUANTE DE LOTE */}
+      {/* BARRA FLUTUANTE DE LOTE — 1 clique abre o painel de redistribuição */}
       {sel.size > 0 && (
         <div className="tl4-bar">
           <span className="tl4-bar-n"><b>{sel.size}</b> selecionado(s)</span>
-          {!selMesma && <span className="tl4-bar-av">⚠️ selecione leads da mesma equipe para agir em lote</span>}
-          {redis ? (
-            <>
-              <select className="tl4-bar-sel" value="" onChange={(e) => e.target.value && setDestino((d) => new Set(d).add(e.target.value))}>
-                <option value="">+ corretor destino…</option>
-                {corretores.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-              {[...destino].map((id) => <span key={id} className="tl4-chip" onClick={() => setDestino((d) => { const n = new Set(d); n.delete(id); return n; })}>{corretores.find((c) => c.id === id)?.nome ?? "—"} ✕</span>)}
-              <button className="tl4-bar-b azul" disabled={!destino.size || indo} onClick={redistribuir}>Confirmar</button>
-              <button className="tl4-bar-b" onClick={() => { setRedis(false); setDestino(new Set()); }}>Cancelar</button>
-            </>
-          ) : (
-            <>
-              <button className="tl4-bar-b azul" disabled={!selMesma} onClick={() => setRedis(true)}>⚡ Redistribuir</button>
-              <button className="tl4-bar-b" disabled={indo} onClick={cobrarSel}>💬 Cobrar no WhatsApp</button>
-              <button className="tl4-bar-x" onClick={() => setSel(new Set())} aria-label="Limpar seleção">✕</button>
-            </>
-          )}
+          {!selMesma && <span className="tl4-bar-av">⚠️ mesma equipe para redistribuir</span>}
+          <button className="tl4-bar-b azul" disabled={!selMesma} onClick={() => setAbreDrawer(true)}>⚡ Redistribuir</button>
+          <button className="tl4-bar-b" disabled={indo} onClick={cobrarSel}>💬 Cobrar no WhatsApp</button>
+          <button className="tl4-bar-x" onClick={() => setSel(new Set())} aria-label="Limpar seleção">✕</button>
         </div>
+      )}
+
+      {abreDrawer && (
+        <RedistribuirDrawer n={sel.size} corretores={ricos} indo={indo}
+          onConfirm={(ids) => redistribuir(ids)} onFechar={() => setAbreDrawer(false)} />
       )}
 
       {gaveta && <LeadGaveta leadId={gaveta} como={como ?? null} corretores={corretores} carteira={carteira} onFechar={() => setGaveta(null)} />}
