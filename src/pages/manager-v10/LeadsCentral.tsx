@@ -116,7 +116,7 @@ export default function LeadsCentral() {
 
         <section className="lc-conteudo">
           {aba === "funil" && <FunilV4 managerId={gerente} como={como ?? null} />}
-          {aba === "campanhas" && <CampanhasV4 donoId={gerente} />}
+          {aba === "campanhas" && <CampanhasV4 donoId={gerente} como={como ?? null} />}
           {aba === "leads" && <TodosLeadsV4 como={como ?? null} />}
           {aba === "tarefas" && <TarefasV4 managerId={gerente} />}
         </section>

@@ -1,9 +1,10 @@
 // Campanhas & Mídia no visual V4 (Junior, 14/11): "robô atualizado há X" + 3 cartões de decisão + tabela executiva.
 // Dado real = fb_saude (dono_id do gerente). CPL = gasto/leads. Painel completo (alertas, comparar, pixel) fica a 1 clique.
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import FilasFormulario from "@/components/leads/FilasFormulario";
 
 const sb = supabase as any;
 const brl = (n: number) => "R$ " + (n || 0).toLocaleString("pt-BR", { maximumFractionDigits: n >= 100 ? 0 : 2 });
@@ -16,7 +17,8 @@ const haMin = (iso?: string | null) => {
 };
 type Camp = { nome: string; gasto: number; leads: number; status: string; cpl: number | null };
 
-export default function CampanhasV4({ donoId }: { donoId: string }) {
+export default function CampanhasV4({ donoId, como }: { donoId: string; como?: string | null }) {
+  const [verFilas, setVerFilas] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ["campv4", donoId],
     enabled: !!donoId,
@@ -55,8 +57,19 @@ export default function CampanhasV4({ donoId }: { donoId: string }) {
       <div className="cv4-top">
         <div><h2>Campanhas &amp; mídia</h2>
           <p>Cruzamento da conta Meta com o Comandra. <span className="cv4-fresh">● robô fb_saude {haMin(data?.atualizado)}</span></p></div>
-        <Link className="cv4-link" to="/manager/anuncios">Painel completo (alertas · comparar · pixel) →</Link>
+        <div className="cv4-acoes">
+          <button className={`cv4-btn${verFilas ? " on" : ""}`} onClick={() => setVerFilas((v) => !v)}>🔁 Gerenciar filas de leads</button>
+          <Link className="cv4-btn ghost" to="/manager/anuncios">Painel completo · alertas · pixel →</Link>
+        </div>
       </div>
+
+      {verFilas && (
+        <div className="cv4-filas">
+          <div className="cv4-filas-h"><b>Filas por formulário</b> — escolha quem recebe os leads de cada anúncio.
+            <button className="cv4-fechar" onClick={() => setVerFilas(false)}>fechar ✕</button></div>
+          <FilasFormulario como={como ?? null} abrir="*" semCartao />
+        </div>
+      )}
 
       {isLoading ? <p className="cv4-vazio">Carregando…</p> : !info.comGasto.length ? (
         <p className="cv4-vazio">Nenhuma campanha ativa com investimento nos últimos dias. Conecte ou ligue a conta de anúncio em Configurar.</p>
@@ -105,7 +118,14 @@ const CSS = `
 .cv4-top h2{margin:0;font-size:19px;font-weight:800}
 .cv4-top p{margin:3px 0 0;font-size:13px;color:var(--cv-text-muted,#6B7A90)}
 .cv4-fresh{color:#0D7C66;font-weight:600;font-family:"JetBrains Mono",monospace;font-size:12px;margin-left:6px}
-.cv4-link{font-size:13px;font-weight:700;color:#1f63e0;text-decoration:none}
+.cv4-acoes{display:flex;gap:10px;flex-wrap:wrap}
+.mgr10 .cv4-btn{display:inline-flex;align-items:center;min-height:42px;padding:0 16px;border-radius:11px;border:0;background:#1f63e0;color:#fff;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;text-decoration:none}
+.mgr10 .cv4-btn.on{background:#0F1B2D}
+.mgr10 .cv4-btn.ghost{background:var(--cv-surface,#fff);color:#1f63e0;border:1px solid var(--cv-border,#CFE0F7)}
+.cv4-filas{border:1px solid var(--cv-border,#DCE6F5);border-radius:14px;padding:14px 16px;background:var(--cv-sunk,#F7FAFF)}
+.cv4-filas-h{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:10px;flex-wrap:wrap}
+.cv4-filas-h b{font-weight:800}
+.cv4-fechar{margin-left:auto;background:none;border:0;color:var(--cv-text-muted,#6B7A90);font:inherit;font-size:13px;cursor:pointer}
 .cv4-vazio{padding:28px 6px;font-size:14px;color:var(--cv-text-muted,#6B7A90)}
 .cv4-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .cv4-card{background:var(--cv-surface,#fff);border:1px solid var(--cv-border,#E7EDF6);border-top-width:3px;border-radius:14px;padding:15px 16px}
