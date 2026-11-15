@@ -41,6 +41,7 @@ import AnunciosV10 from "./pages/manager-v10/Anuncios";
 import LeadsV10 from "./pages/manager-v10/Leads";
 import LeadsNova from "./pages/manager-v10/LeadsNova";
 import LeadsCentral from "./pages/manager-v10/LeadsCentral";
+import CockpitGeral from "./pages/manager-v10/CockpitGeral";
 import DispararV10 from "./pages/manager-v10/Disparar";
 import PastasV10 from "./pages/manager-v10/Pastas";
 import EstrategiaV10 from "./pages/manager-v10/Estrategia";
@@ -234,6 +235,8 @@ const App = () => (
             <Route path="/manager-v10" element={<ProtectedManagerRoute><Boundary><ManagerV10 /></Boundary></ProtectedManagerRoute>} />
             {/* 14/11: Central de Leads & Performance (mockup V5). A de 6 abas fica em /manager/leads-nova; a antiga em /manager/leads-antiga */}
             <Route path="/manager/leads" element={<ProtectedManagerRoute><LeadsCentral /></ProtectedManagerRoute>} />
+            {/* 15/11: Cockpit Geral de Comando (mockup aprovado). Rota própria p/ ver no ar sem derrubar a HojeGerente da aba Tempo real. */}
+            <Route path="/manager/cockpit" element={<ProtectedManagerRoute><CockpitGeral /></ProtectedManagerRoute>} />
             <Route path="/manager/leads-nova" element={<ProtectedManagerRoute><LeadsNova /></ProtectedManagerRoute>} />
             <Route path="/manager/leads-antiga" element={<ProtectedManagerRoute><LeadsV10 /></ProtectedManagerRoute>} />
             <Route path="/manager/pastas" element={<ProtectedManagerRoute><PastasV10 /></ProtectedManagerRoute>} />
