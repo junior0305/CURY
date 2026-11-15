@@ -171,16 +171,17 @@ export default function FunilV4({ managerId, como }: { managerId: string; como?:
 const CSS = `
 .fv4{display:flex;flex-direction:column;gap:16px}
 .fv4-funil{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
-.mgr10 .fv4-et{text-align:left;padding:13px 14px;border-radius:12px;border:1px solid var(--cv-border,#E7EDF6);background:var(--cv-surface,#fff);cursor:pointer;display:flex;flex-direction:column;gap:3px;transition:transform .08s}
+.mgr10 .fv4-et{text-align:left;padding:15px 16px;border-radius:12px;border:1px solid var(--cv-border,#E7EDF6);background:var(--cv-surface,#fff);cursor:pointer;display:flex;flex-direction:column;gap:5px;transition:all .12s}
+.mgr10 .fv4-et:hover{transform:translateY(-2px);border-color:#38BDF8}
 .mgr10 .fv4-et:active{transform:scale(.99)}
-.mgr10 .fv4-et.on{border-color:#1f63e0;box-shadow:0 0 0 2px rgba(31,99,224,.25)}
-.mgr10 .fv4-et.fim{background:#E8F4EE}
-.fv4-et-h{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--cv-text-muted,#6B7A90);display:flex;justify-content:space-between;gap:6px}
-.fv4-et-h i{font-style:normal;color:#A8322A}
-.fv4-et.fim .fv4-et-h i{color:#1D6B45}
-.fv4-et-n{font-size:13.5px;font-weight:800;line-height:1.15}
-.fv4-et-v{font-family:"JetBrains Mono",monospace;font-size:26px;font-weight:700;color:#1f63e0}
-.fv4-et.fim .fv4-et-v{color:#1D6B45}
+.mgr10 .fv4-et.on{border-color:#0EA5E9;box-shadow:0 0 0 2px rgba(14,165,233,.25)}
+.mgr10 .fv4-et.fim{background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.35)}
+.fv4-et-h{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--cv-text-muted,#6B7A90);display:flex;justify-content:space-between;gap:6px}
+.fv4-et-h i{font-style:normal;color:#E8912B}
+.fv4-et.fim .fv4-et-h i{color:#10B981}
+.fv4-et-n{font-size:14px;font-weight:800;line-height:1.15;color:var(--cv-text-main,#1a2435)}
+.fv4-et-v{font-family:"JetBrains Mono",monospace;font-size:30px;font-weight:800;color:#0EA5E9}
+.fv4-et.fim .fv4-et-v{color:#10B981}
 .fv4-grid{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(0,1fr);gap:14px}
 .fv4-lista,.fv4-parados{background:var(--cv-surface,#fff);border:1px solid var(--cv-border,#E7EDF6);border-radius:14px;padding:16px}
 .fv4-lh{margin-bottom:10px}
