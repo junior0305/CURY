@@ -256,6 +256,7 @@ export default function CockpitGeral() {
     }).sort((a, b) => b.semToque - a.semToque || b.carteira - a.carteira);
   }, [brokers, ativos, presenca, vendas, plantaoHoje, atendendoIds]);
   const naRoleta = tropa.filter((t) => t.roleta).length;
+  const pedindoRoleta = useMemo(() => tropa.filter((t) => t.plantao && !t.roleta), [tropa]);
 
   const ricos: CorretorRico[] = useMemo(() => tropa.map((t) => ({
     id: t.id, nome: t.nome, carteira: t.carteira, contato: t.contato, avanca: t.avanca, online: t.online, plantao: t.plantao,
@@ -310,6 +311,11 @@ export default function CockpitGeral() {
               <button className="cg-badge" onClick={() => setPainel("plantao")}><span className="cg-dot azul" /> <b>{noPlantaoLista.length} no plantão</b> <span className="cg-ver">ver ▾</span></button>
               <button className="cg-badge" onClick={() => setPainel("online")}><span className="cg-dot verde" /> <b>{online.length} logados</b> <span className="cg-ver">ver ▾</span></button>
               <button className="cg-badge" onClick={() => setPainel("atendimento")}><span className="cg-dot ambar" /> <b>{atendendoLista.length} em atendimento</b> <span className="cg-ver">ver ▾</span></button>
+              {pedindoRoleta.length > 0 && (
+                <button className="cg-badge cg-pulse" onClick={() => setPainel("plantao")}>
+                  <span className="cg-dot roxo" /> <b>✋ {pedindoRoleta.length} no plantão fora da roleta</b> <span className="cg-mini">ativar</span>
+                </button>
+              )}
             </div>
           </div>
           <SeletorPeriodo />
@@ -556,6 +562,16 @@ const CSS = `
 .cgx .cg-badge:hover{border-color:#38BDF8;transform:translateY(-1px)}
 .cg-dot{width:7px;height:7px;border-radius:50%;flex:none}
 .cg-dot.azul{background:#38BDF8;box-shadow:0 0 8px #38BDF8}.cg-dot.verde{background:#10B981;box-shadow:0 0 8px #10B981}.cg-dot.ambar{background:#F59E0B;box-shadow:0 0 8px #F59E0B}
+.cg-dot.roxo{background:#C084FC;box-shadow:0 0 8px #C084FC}
+@keyframes cgPulse{0%,100%{box-shadow:0 0 10px rgba(168,85,247,.35)}50%{box-shadow:0 0 22px rgba(168,85,247,.7)}}
+@keyframes cgDot{0%,100%{opacity:1}50%{opacity:.4}}
+.cg-dot{animation:cgDot 2s infinite}
+.cgx .cg-badge.cg-pulse{background:linear-gradient(135deg,rgba(168,85,247,.22),rgba(245,158,11,.18));border:1.5px solid #A855F7;color:var(--tx);animation:cgPulse 2.4s infinite}
+.cgx .cg-badge.cg-pulse:hover{background:rgba(168,85,247,.35);border-color:#C084FC;transform:translateY(-1px)}
+.cg-mini{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;background:#A855F7;color:#fff;padding:2px 7px;border-radius:999px}
+.cgx .cg-act:active,.cgx .cg-rol:active,.cgx .cg-badge:active,.cgx .cg-lead-b:active{transform:scale(.96)}
+.cgx.cgx-dark .cg-card:hover{box-shadow:0 10px 30px rgba(0,0,0,.5),0 0 0 1px rgba(59,130,246,.35)}
+.cgx.cgx-dark .cg-card.hero{box-shadow:0 4px 24px rgba(16,185,129,.22)}
 .cg-ver{font-size:11px;color:var(--td);font-weight:800;text-transform:uppercase;letter-spacing:.03em}
 
 /* cartões */
