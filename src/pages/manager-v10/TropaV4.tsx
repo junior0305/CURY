@@ -33,6 +33,8 @@ export default function TropaV4() {
   const gerente = useEffectiveManagerId() ?? session?.user?.id ?? "";
   const [ft, setFt] = useState<FT>("todos");
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const [modo, setModo] = useState<"plantao" | "contratacao">("plantao");
+  const como = gerente !== session?.user?.id ? gerente : null;
   loadFonts();
 
   const { data } = useQuery({
@@ -59,6 +61,45 @@ export default function TropaV4() {
       return { brokers: (brokersR.data ?? []) as any[], leads: (leadsR.data ?? []) as any[], plMap };
     },
   });
+
+  // ── Modo Contratação: candidatos (recrutamento) + vagas (system_settings) ──
+  const { data: cand } = useQuery({
+    queryKey: ["tropav4-cand", gerente, como],
+    enabled: !!gerente && modo === "contratacao",
+    refetchInterval: 120_000,
+    queryFn: async () => (await sb.rpc("candidatos_lista", { p_como: como })).data as any[] ?? [],
+  });
+  const { data: vagas } = useQuery({
+    queryKey: ["tropav4-vagas", gerente],
+    enabled: !!gerente && modo === "contratacao",
+    staleTime: 60_000,
+    queryFn: async () => {
+      const r = (await sb.from("system_settings").select("value").eq("key", "vagas_equipe").maybeSingle()).data;
+      try { const m = r?.value ? JSON.parse(r.value) : {}; return Number(m?.[gerente] ?? 0); } catch { return 0; }
+    },
+  });
+  const candidatos = (cand ?? []) as any[];
+  const parado24 = (c: any) => c.etapa === "em_contato" && !c.contatado_em && Date.now() - new Date(c.criado_em).getTime() > 864e5;
+  const funil = useMemo(() => {
+    const m: Record<string, number> = { em_contato: 0, entrevista: 0, contratado: 0, nao_seguiu: 0 };
+    for (const c of candidatos) m[c.etapa] = (m[c.etapa] ?? 0) + 1;
+    return m;
+  }, [candidatos]);
+  const emEsteira = candidatos.filter((c) => c.etapa === "em_contato" || c.etapa === "entrevista")
+    .sort((a, b) => Number(parado24(b)) - Number(parado24(a)) || new Date(a.criado_em).getTime() - new Date(b.criado_em).getTime());
+  const semContato24 = candidatos.filter(parado24).length;
+  const chamarCand = (c: any) => {
+    const d = (c.telefone ?? "").replace(/\D/g, "");
+    if (d) window.open(`https://wa.me/${d.startsWith("55") ? d : `55${d}`}`, "_blank", "noopener");
+    if (!c.contatado_em) sb.rpc("candidato_mover", { p_id: c.id, p_acao: "chamei" }).then(() => qc.invalidateQueries({ queryKey: ["tropav4-cand"] })).catch(() => {});
+  };
+  const [editVaga, setEditVaga] = useState(false);
+  const [metaVaga, setMetaVaga] = useState("");
+  const salvarVagas = async () => {
+    try { const { error } = await sb.rpc("salvar_vagas", { p_gerente: gerente, p_meta: Number(metaVaga) || 0 }); if (error) throw error;
+      toast.success("Vagas atualizadas."); setEditVaga(false); qc.invalidateQueries({ queryKey: ["tropav4-vagas", gerente] }); }
+    catch (e: any) { toast.error(e?.message?.includes("salvar_vagas") || e?.code === "PGRST202" ? "Rode o SQL de vagas no servidor primeiro." : (e?.message ?? "Não consegui salvar.")); }
+  };
 
   const now = Date.now();
   const tropa = useMemo(() => {
@@ -137,6 +178,57 @@ export default function TropaV4() {
           </div>
         </header>
 
+        <div className="tv-modos">
+          <button className={`tv-modo${modo === "plantao" ? " on" : ""}`} onClick={() => setModo("plantao")}><span>🛰️</span> Modo Plantão <small>tempo real</small></button>
+          <button className={`tv-modo${modo === "contratacao" ? " on" : ""}`} onClick={() => setModo("contratacao")}><span>🧩</span> Funil de Contratação <small>recrutamento</small></button>
+        </div>
+
+        {modo === "contratacao" ? (
+          <>
+            {/* capacidade / vagas */}
+            <div className="tv-vagas">
+              <div className="tv-vagas-tx">
+                <b>Capacidade da equipe</b>
+                {typeof vagas === "number" && vagas > 0
+                  ? <span><b className="tv-mono">{tropa.length}</b> / {vagas} vagas · <b className={tropa.length < vagas ? "verde" : "amb"}>{Math.max(0, vagas - tropa.length)} abertas</b></span>
+                  : <span>Defina quantas vagas (posições) a equipe tem para calcular as abertas.</span>}
+              </div>
+              {typeof vagas === "number" && vagas > 0 && (
+                <div className="tv-vagas-bar"><div className="tv-vagas-fill" style={{ width: `${Math.min(100, Math.round((tropa.length / vagas) * 100))}%` }} /></div>
+              )}
+              {editVaga
+                ? <span className="tv-vagas-ed"><input type="number" min={0} value={metaVaga} onChange={(e) => setMetaVaga(e.target.value)} placeholder="vagas" /><button className="tv-garg-b" onClick={salvarVagas}>Salvar</button><button className="tv-act ver" onClick={() => setEditVaga(false)}>✕</button></span>
+                : <button className="tv-modo" onClick={() => { setMetaVaga(String(vagas || "")); setEditVaga(true); }}>⚙️ Definir vagas</button>}
+            </div>
+
+            {/* funil */}
+            <section className="tv-cards">
+              <article className="tv-card azul"><div className="tv-card-h"><span>Em contato</span></div><div className="tv-val"><b className="azul">{funil.em_contato}</b><i>candidatos</i></div><div className="tv-card-f">gerente já falando / a chamar</div></article>
+              <article className="tv-card roxoC"><div className="tv-card-h"><span>Entrevista</span></div><div className="tv-val"><b className="roxo">{funil.entrevista}</b><i>marcadas</i></div><div className="tv-card-f">com dia, hora e local</div></article>
+              <article className="tv-card verde"><div className="tv-card-h"><span>Contratados</span></div><div className="tv-val"><b className="verde">{funil.contratado}</b><i>viraram corretor</i></div><div className="tv-card-f">Comandra acompanha 1º acesso/check-in</div></article>
+              <article className="tv-card rose"><div className="tv-card-h"><span>Sem contato +24h</span><span className="tv-tag amb">atenção</span></div><div className="tv-val"><b className={semContato24 ? "rose" : "verde"}>{semContato24}</b><i>candidatos</i></div><div className="tv-card-f">entraram e ninguém chamou ainda</div></article>
+            </section>
+
+            <section className="tv-panel">
+              <div className="tv-panel-h2"><b>📋 Esteira de contratação</b><Link to="/manager?aba=time" className="tv-act ver" style={{ width: "auto", padding: "6px 12px", fontSize: 13 }}>Entrevistar / contratar na esteira completa →</Link></div>
+              <div className="tv-tbl">
+                <div className="tv-tr2 tv-th"><span>Candidato</span><span>Origem / região</span><span>Etapa</span><span>Gerente</span><span>Entrou / status</span><span className="r">Ação</span></div>
+                {!emEsteira.length ? <div className="tv-vazio">Nenhum candidato em contato ou entrevista agora.</div> : emEsteira.slice(0, 20).map((c) => (
+                  <div className={`tv-tr2${parado24(c) ? " alerta" : ""}`} key={c.id}>
+                    <span className="tv-corr"><span className="tv-av">{ini2(c.nome ?? "?")}</span><span><b>{c.nome || "Candidato"}</b><small>{c.telefone || ""}</small></span></span>
+                    <span className="tv-dim2">{c.campanha || c.formulario || "—"}{c.regiao ? ` · ${c.regiao}` : ""}</span>
+                    <span>{c.etapa === "entrevista" ? <em className="tv-b roxoB">entrevista</em> : <em className="tv-b azul">em contato</em>}</span>
+                    <span className="tv-dim2">{c.gerente || "—"}</span>
+                    <span className="tv-dim2">{parado24(c) ? <b className="tv-red">🚨 {Math.round((Date.now() - new Date(c.criado_em).getTime()) / 36e5)}h sem chamar</b> : c.etapa === "entrevista" && c.entrevista_em ? `entrevista ${hhmm(c.entrevista_em)}${c.entrevista_local ? ` · ${c.entrevista_local}` : ""}` : `entrou há ${Math.round((Date.now() - new Date(c.criado_em).getTime()) / 36e5)}h`}</span>
+                    <span className="r"><button className="tv-rol on" onClick={() => chamarCand(c)}>📲 Chamar</button></span>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <p className="tv-nota">Fonte real: formulário de contratação → roleta de gerentes → esteira (em contato · entrevista · contratado · não seguiu). O <b>checklist CRECI</b> do mockup ainda não tem campo — fica para depois. Entrevista e contratação (abrem cadastro) ficam na esteira completa.</p>
+          </>
+        ) : (<>
+
         {/* 4 top cards */}
         <section className="tv-cards">
           <article className="tv-card azul">
@@ -212,7 +304,8 @@ export default function TropaV4() {
           </div>
         </section>
 
-        <p className="tv-nota">SLA médio por corretor e comparação semana a semana (WoW) entram quando a fonte de tempo de resposta estiver ligada — não mostramos número estimado. Para contratação e raio-X, use a aba <Link to="/manager?aba=time">Tropa &amp; presença</Link>.</p>
+        <p className="tv-nota">SLA médio por corretor e comparação semana a semana (WoW) entram quando a fonte de tempo de resposta estiver ligada — não mostramos número estimado. Para o raio-X de pessoas, use a aba <Link to="/manager?aba=time">Tropa &amp; presença</Link>.</p>
+        </>)}
       </main>
     </div>
   );
@@ -281,5 +374,22 @@ const CSS = `
 .tv-vazio{padding:24px 18px;font-size:13.5px;color:var(--tm)}
 .tv-nota{font-size:12px;color:var(--td);margin-top:14px;line-height:1.5}
 .tv-nota a{color:#38BDF8}
+.tv-modos{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.tvx .tv-modo{display:inline-flex;align-items:center;gap:8px;font:inherit;font-size:13.5px;font-weight:700;padding:11px 16px;border-radius:12px;border:1px solid var(--bd);background:var(--surf);color:var(--tm);cursor:pointer;transition:all .15s}
+.tvx .tv-modo small{font-weight:600;font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.04em}
+.tvx .tv-modo:hover{color:var(--tx)}
+.tvx .tv-modo.on{background:#0EA5E9;border-color:#0EA5E9;color:#fff}.tvx .tv-modo.on small{opacity:.85}
+.tv-vagas{display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:15px 18px;margin-bottom:18px}
+.tv-vagas-tx{display:flex;flex-direction:column;gap:2px}.tv-vagas-tx>b{font-size:14px;font-weight:800}.tv-vagas-tx span{font-size:13px;color:var(--tm)}
+.tv-vagas-bar{flex:1;min-width:140px;height:8px;border-radius:999px;background:var(--sub);overflow:hidden}
+.tv-vagas-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#10B981,#0EA5E9)}
+.tv-vagas-ed{display:inline-flex;align-items:center;gap:6px}
+.tv-vagas-ed input{min-height:38px;width:90px;border:1px solid var(--bd);border-radius:9px;background:var(--surf);color:inherit;font:inherit;padding:0 10px}
+.tv-mono{font-family:"JetBrains Mono",monospace;font-weight:800}
+.tv-panel-h2{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--bd)}.tv-panel-h2 b{font-size:15px;font-weight:800}
+.tv-tr2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.1fr) 110px minmax(0,0.9fr) minmax(0,1.2fr) 120px;gap:12px;align-items:center;padding:13px 18px;border-top:1px solid var(--bds);font-size:13.5px;color:var(--tx)}
+.tv-tr2.tv-th{border:0}.tv-tr2.alerta{background:rgba(244,63,94,.05)}.tv-tr2 .r{text-align:right}
+.tv-dim2{font-size:12.5px;color:var(--tm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tv-b.roxoB{color:#C084FC;background:rgba(168,85,247,.16)}
 @media (max-width:1050px){.tvx .shell2.tv-main{padding:0 16px 80px;zoom:1}.tv-cards{grid-template-columns:1fr 1fr}.tv-th{display:none}.tv-tr{grid-template-columns:1fr auto;gap:6px}.tv-corr{grid-column:1/-1}.tv-lead{grid-column:1/-1}}
 `;
