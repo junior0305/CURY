@@ -17,7 +17,7 @@ import FunilV4 from "@/components/manager-v10/FunilV4";
 import TodosLeadsV4 from "@/components/leads/TodosLeadsV4";
 import TarefasV4 from "@/components/manager-v10/TarefasV4";
 import CampanhasV4 from "@/components/manager-v10/CampanhasV4";
-import FilasFormulario from "@/components/leads/FilasFormulario";
+import FilasV4 from "@/components/manager-v10/FilasV4";
 
 const sb = supabase as any;
 type Aba = "funil" | "campanhas" | "filas" | "leads" | "tarefas";
@@ -180,7 +180,7 @@ export default function LeadsCentral() {
         <section className="lx-conteudo">
           {aba === "funil" && <FunilV4 managerId={gerente} como={como ?? null} />}
           {aba === "campanhas" && <CampanhasV4 donoId={gerente} como={como ?? null} />}
-          {aba === "filas" && <FilasFormulario como={como ?? null} abrir="*" semCartao />}
+          {aba === "filas" && <FilasV4 donoId={gerente} como={como ?? null} />}
           {aba === "leads" && <TodosLeadsV4 como={como ?? null} />}
           {aba === "tarefas" && <TarefasV4 managerId={gerente} />}
         </section>
