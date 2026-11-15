@@ -2,7 +2,8 @@
 // Assiduidade de Plantão (14 dias com horário de check-in real), Diagnóstico e Ações.
 // Dado real: c2s_plantao (espelho do check-in, por profile_id) + leads do corretor (SLA) + vendas do mês.
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase as sb } from "@/integrations/supabase/client";
 import { chaveNome } from "@/hooks/useDiretoria";
 
@@ -10,10 +11,12 @@ type Props = {
   brokerId: string;
   nome: string;
   stand?: string | null;
-  vendas: number;
-  pastas: number;
-  visitas: number;
-  diag: string;
+  vendas?: number;
+  pastas?: number;
+  visitas?: number;
+  diag?: string;
+  corretores?: { id: string; nome: string }[];
+  como?: string | null;
   onClose: () => void;
 };
 
@@ -23,8 +26,26 @@ const horaSP = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { time
 const ini2 = (n: string) => (n || "?").trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 const SIGLA = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 
-export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, pastas, visitas, diag, onClose }: Props) {
+export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, pastas, visitas, diag, corretores, como, onClose }: Props) {
+  const qc = useQueryClient();
+  const temProd = vendas !== undefined;
   const [aberto, setAberto] = useState(false);
+  const [repassando, setRepassando] = useState<string | null>(null); // leadId em repasse
+  const [alvoRep, setAlvoRep] = useState("");
+  const [movidos, setMovidos] = useState<Record<string, string>>({}); // leadId -> nome destino
+  const outros = (corretores ?? []).filter((c) => c.id !== brokerId);
+  const repassar = async (leadId: string) => {
+    if (!alvoRep) return;
+    const destino = outros.find((c) => c.id === alvoRep);
+    try {
+      const { error } = await sb.rpc("redistribuir_lote", { p_leads: [leadId], p_para: [alvoRep], p_como: como ?? null, p_motivo: "raio-x do corretor" });
+      if (error) throw error;
+      setMovidos((m) => ({ ...m, [leadId]: destino?.nome?.split(" ")[0] ?? "outro" }));
+      setRepassando(null); setAlvoRep("");
+      toast.success(`Lead repassado para ${destino?.nome?.split(" ")[0] ?? "o corretor"}.`);
+      qc.invalidateQueries({ queryKey: ["tropav4"] });
+    } catch (e: any) { toast.error(e?.message || "Não deu para repassar."); }
+  };
   useEffect(() => { const t = setTimeout(() => setAberto(true), 10); return () => clearTimeout(t); }, []);
   const fechar = () => { setAberto(false); setTimeout(onClose, 260); };
 
@@ -154,6 +175,7 @@ export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, past
         </div>
 
         <div className="rxp-body">
+          {temProd && (
           <div className="rxp-card">
             <div className="rxp-ct"><span>📊</span> Produção do Mês ({mesNome.charAt(0).toUpperCase() + mesNome.slice(1)})</div>
             <div className="rxp-prod">
@@ -163,6 +185,7 @@ export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, past
               <div><span>SLA Médio</span><b style={{ color: "#FCD34D", fontSize: 15 }}>{fmtSla(sla)}</b></div>
             </div>
           </div>
+          )}
 
           <div className="rxp-card">
             <div className="rxp-ct" style={{ justifyContent: "space-between" }}>
@@ -182,10 +205,12 @@ export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, past
             <p className="rxp-nota">Horário = primeiro check-in do dia por localização. Dia sem check-in fica neutro (pode ser folga).</p>
           </div>
 
+          {diag && (
           <div className="rxp-card">
             <div className="rxp-ct"><span>🧠</span> Diagnóstico do Copiloto</div>
             <p style={{ fontSize: 12.5, color: "#C4CCD8", lineHeight: 1.45, margin: 0 }}>{diag}</p>
           </div>
+          )}
 
           <div className="rxp-card">
             <div className="rxp-ct" style={{ justifyContent: "space-between" }}>
@@ -200,11 +225,24 @@ export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, past
               <p className="rxp-nota" style={{ margin: 0 }}>Nenhum lead com esse corretor.</p>
             ) : (
               <div className="rxp-leads">
-                {leadsCorr.map((l) => { const [sit, cor] = situaLead(l); return (
+                {leadsCorr.map((l) => { const [sit, cor] = situaLead(l); const movido = movidos[l.id]; return (
                   <div className="rxp-lead" key={l.id}>
-                    <span className="rxp-ln">{l.name || "Sem nome"}</span>
-                    <span className="rxp-ls" style={{ color: cor, background: cor + "1E" }}>{sit}</span>
-                    <span className="rxp-lt">{haQuanto(l.created_at)}</span>
+                    <div className="rxp-lrow">
+                      <span className="rxp-ln">{l.name || "Sem nome"}</span>
+                      {movido ? <span className="rxp-ls" style={{ color: "#38BDF8", background: "#38BDF81E" }}>→ {movido}</span>
+                        : <span className="rxp-ls" style={{ color: cor, background: cor + "1E" }}>{sit}</span>}
+                      <span className="rxp-lt">{haQuanto(l.created_at)}</span>
+                      {!movido && outros.length > 0 && <button className="rxp-rep" title="Repassar para outro corretor" onClick={() => { setRepassando(repassando === l.id ? null : l.id); setAlvoRep(""); }}>⇄</button>}
+                    </div>
+                    {repassando === l.id && !movido && (
+                      <div className="rxp-repbox">
+                        <select value={alvoRep} onChange={(e) => setAlvoRep(e.target.value)}>
+                          <option value="">Repassar para…</option>
+                          {outros.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                        </select>
+                        <button className="rxp-repok" disabled={!alvoRep} onClick={() => repassar(l.id)}>Repassar</button>
+                      </div>
+                    )}
                   </div>
                 ); })}
               </div>
@@ -247,7 +285,14 @@ const CSS = `
 .rxp-act.ver{width:100%}
 .rxp-act.ver:hover{border-color:#38BDF8;color:#38BDF8}
 .rxp-leads{display:flex;flex-direction:column;gap:5px;max-height:320px;overflow-y:auto}
-.rxp-lead{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:7px 10px;background:#0A1220;border:1px solid #1A2435;border-radius:7px}
+.rxp-lead{padding:7px 10px;background:#0A1220;border:1px solid #1A2435;border-radius:7px}
+.rxp-lrow{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center}
+.rxp-rep{background:#121C30;border:1px solid #27354B;color:#8FB7FF;width:24px;height:24px;border-radius:6px;cursor:pointer;font-size:13px;line-height:1;padding:0}
+.rxp-rep:hover{border-color:#38BDF8;color:#38BDF8}
+.rxp-repbox{display:flex;gap:6px;margin-top:7px}
+.rxp-repbox select{flex:1;background:#0A1220;border:1px solid #27354B;color:#DCE3EC;border-radius:6px;padding:6px 8px;font-size:12px}
+.rxp-repok{background:#2563EB;border:none;color:#fff;border-radius:6px;padding:0 12px;font-size:12px;font-weight:800;cursor:pointer}
+.rxp-repok:disabled{opacity:.45;cursor:default}
 .rxp-ln{font-size:12.5px;color:#DCE3EC;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rxp-ls{font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;white-space:nowrap}
 .rxp-lt{font-size:10.5px;color:#6B7688;font-family:'JetBrains Mono',monospace;min-width:30px;text-align:right}

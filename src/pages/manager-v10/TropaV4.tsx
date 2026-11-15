@@ -385,7 +385,7 @@ export default function TropaV4() {
                     <div className="tv-tr2" key={s.id} style={{ gridTemplateColumns: "minmax(0,1.5fr) 1fr auto" }}>
                       <span className="tv-corr"><span className="tv-av">{ini2(s.nome)}</span><b>{s.nome}</b></span>
                       <span className="tv-dim2">{s.visto ? `visto há ${haCurto(now - new Date(s.visto).getTime())}` : "nunca entrou"}</span>
-                      <span className="r"><Link className="tv-act ver" to={`/manager/leads?corretor=${s.id}`}>👁️</Link></span>
+                      <span className="r"><button className="tv-act ver" onClick={() => setVerRaiox(s.id)} title="Ver os leads e repassar">👁️</button></span>
                     </div>
                   ))}
                 </div>
@@ -463,7 +463,7 @@ export default function TropaV4() {
                   <button className={`tv-rol${t.roleta ? " on" : " off"}`} disabled={ocupado === t.id} onClick={() => alternar(t.id, t.nome, t.roleta)}>{t.roleta ? "● Na roleta" : "○ Pausado"}</button>
                 </span>
                 <span className="r tv-acts">
-                  <Link className="tv-act ver" to={`/manager/leads?corretor=${t.id}`} title="Ver a carteira">👁️</Link>
+                  <button className="tv-act ver" onClick={() => setVerRaiox(t.id)} title="Ver os leads e repassar">👁️</button>
                 </span>
               </div>
             ))}
@@ -474,9 +474,13 @@ export default function TropaV4() {
         </>)}
       </main>
 
-      {verRaiox && (() => { const c = raiox.find((r) => r.id === verRaiox); return c ? (
-        <RaioXPlantaoDrawer brokerId={c.id} nome={c.nome} vendas={c.vendas} pastas={c.pastas} visitas={c.visitas} diag={c.diag} onClose={() => setVerRaiox(null)} />
-      ) : null; })()}
+      {verRaiox && (() => {
+        const g = raiox.find((r) => r.id === verRaiox);
+        const t = tropa.find((x) => x.id === verRaiox);
+        const nome = g?.nome ?? t?.nome; if (!nome) return null;
+        const lista = tropa.map((x) => ({ id: x.id, nome: x.nome }));
+        return <RaioXPlantaoDrawer brokerId={verRaiox} nome={nome} stand={t?.estande} vendas={g?.vendas} pastas={g?.pastas} visitas={g?.visitas} diag={g?.diag} corretores={lista} como={como} onClose={() => setVerRaiox(null)} />;
+      })()}
     </div>
   );
 }
