@@ -20,6 +20,7 @@ import { usePastas } from "@/hooks/usePastas";
 import { getSegunda } from "@/hooks/usePeriodo";
 import { atendido } from "@/lib/situacaoLead";
 import RaioXPlantaoDrawer from "@/components/manager-v10/RaioXPlantaoDrawer";
+import RendimentoEquipe from "@/components/equipe/RendimentoEquipe";
 
 const sb = supabase as any;
 const diaSP = (d: Date | number = new Date()) => new Date(d).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
@@ -38,7 +39,7 @@ export default function TropaV4() {
   const gerente = useEffectiveManagerId() ?? session?.user?.id ?? "";
   const [ft, setFt] = useState<FT>("todos");
   const [ocupado, setOcupado] = useState<string | null>(null);
-  const [modo, setModo] = useState<"plantao" | "contratacao" | "gestao">("plantao");
+  const [modo, setModo] = useState<"plantao" | "contratacao" | "gestao" | "rendimento">("plantao");
   const como = gerente !== session?.user?.id ? gerente : null;
   loadFonts();
 
@@ -262,8 +263,8 @@ export default function TropaV4() {
       <main className="shell2 tv-main">
         <header className="tv-top">
           <div>
-            <h1>Tropa &amp; Plantão <span className="tv-mode">{modo === "plantao" ? "Modo Plantão · tempo real" : modo === "contratacao" ? "Funil de Contratação" : "Gestão & Estratégia"}</span></h1>
-            <p>{modo === "plantao" ? "Plantão ao vivo: check-in, ociosidade e o lead que cada corretor está segurando agora." : modo === "contratacao" ? "Esteira de recrutamento: do formulário de contratação até virar corretor." : "SLA real, semana a semana e risco de churn da equipe."}</p>
+            <h1>Tropa &amp; Plantão <span className="tv-mode">{modo === "plantao" ? "Modo Plantão · tempo real" : modo === "contratacao" ? "Funil de Contratação" : modo === "rendimento" ? "Rendimento da Equipe" : "Gestão & Estratégia"}</span></h1>
+            <p>{modo === "plantao" ? "Plantão ao vivo: check-in, ociosidade e o lead que cada corretor está segurando agora." : modo === "contratacao" ? "Esteira de recrutamento: do formulário de contratação até virar corretor." : modo === "rendimento" ? "Onde cada corretor trava na esteira dos últimos 30 dias: plantão → lead → atendeu → visita → pasta." : "SLA real, semana a semana e risco de churn da equipe."}</p>
             <div className="tv-agora">
               <span className="tv-agora-lbl">● Dados de agora:</span>
               <span className="tv-badge"><span className="tv-dot azul" /> <b>{noStand} no stand</b> (check-in C2S)</span>
@@ -278,6 +279,7 @@ export default function TropaV4() {
           <button className={`tv-modo${modo === "plantao" ? " on" : ""}`} onClick={() => setModo("plantao")}><span>🛰️</span> Modo Plantão <small>tempo real</small></button>
           <button className={`tv-modo${modo === "contratacao" ? " on" : ""}`} onClick={() => setModo("contratacao")}><span>🧩</span> Funil de Contratação <small>recrutamento</small></button>
           <button className={`tv-modo${modo === "gestao" ? " on" : ""}`} onClick={() => setModo("gestao")}><span>📈</span> Gestão &amp; Estratégia <small>SLA · WoW · churn</small></button>
+          <button className={`tv-modo${modo === "rendimento" ? " on" : ""}`} onClick={() => setModo("rendimento")}><span>🏭</span> Rendimento da equipe <small>onde cada um trava</small></button>
         </div>
 
         {modo === "contratacao" ? (
@@ -401,6 +403,10 @@ export default function TropaV4() {
             )}
             <p className="tv-nota">SLA = minutos entre o lead cair no corretor (atribuição) e o 1º contato real (dado dos últimos 14 dias). Semana comercial seg→dom; nada estimado. <b>Rampa de novos</b> (1º plantão/lead/visita/pasta/venda por corretor) fica na aba <Link to="/manager?aba=time">Tropa &amp; presença</Link>, que já tem.</p>
           </>
+        ) : modo === "rendimento" ? (
+          <section className="tv-panel" style={{ padding: 0, overflow: "hidden" }}>
+            <RendimentoEquipe donoId={gerente} onRaioX={(id) => abrirDrawer(id)} />
+          </section>
         ) : (<>
 
         {/* 4 top cards */}
