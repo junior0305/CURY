@@ -13,6 +13,7 @@ import { atendido } from "@/lib/situacaoLead";
 import { cobrarFila } from "@/hooks/useLeads";
 import { COLS_LEAD, VISITA, ENCERRADO, ha, situacao, SIT, CSS as LEADS_CSS, type LeadN, type Corretor } from "@/components/leads2/comum";
 import LeadGaveta from "@/components/leads2/LeadGaveta";
+import { origemLabel } from "@/components/leads/TodosLeadsV4";
 
 const sb = supabase as any;
 const nf = (n: number) => n.toLocaleString("pt-BR");
@@ -47,6 +48,19 @@ export default function FunilV4({ managerId, como }: { managerId: string; como?:
     },
   });
   const leads = ld ?? [];
+  const { data: nomeCamp } = useQuery({
+    queryKey: ["fv4-nomes"], staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const [c, f] = await Promise.all([
+        sb.from("fb_campanhas_nome").select("id,nome").limit(8000),
+        sb.from("formularios_catalogo").select("form_id,nome").limit(8000),
+      ]);
+      const m = new Map<string, string>();
+      for (const r of (c.data ?? [])) if (r.id && r.nome) m.set(String(r.id), r.nome as string);
+      for (const r of (f.data ?? [])) if (r.form_id && r.nome) m.set(String(r.form_id), r.nome as string);
+      return m;
+    },
+  });
   const noPeriodo = (l: LeadN) => { const d = diaSP(new Date(l.created_at)); return d >= per.de && d <= per.ate; };
   const periodo = useMemo(() => leads.filter(noPeriodo), [leads, per.de, per.ate]);
   const nomeBroker = (id: string | null) => brokers.find((b) => b.id === id)?.first_name ?? (id === managerId ? "você" : "—");
@@ -121,7 +135,7 @@ export default function FunilV4({ managerId, como }: { managerId: string; como?:
                 return (
                   <div key={l.id} className="fv4-row">
                     <div className="fv4-cli"><b>{l.name || "—"}</b><small>{l.phone || ""}</small></div>
-                    <div className="fv4-org">{l.campanha_nome || (l.source === "lista" ? "" : l.source) || "—"}</div>
+                    <div className="fv4-org">{origemLabel(l, nomeCamp)}</div>
                     <div className="fv4-cor">{nomeBroker(l.broker_id)}
                       <span className="fv4-sit" style={{ color: SIT[s.k]?.[0], background: SIT[s.k]?.[1] }}>{s.txt}</span></div>
                     <div className="fv4-tmp">{ha(l.last_broker_whatsapp_at ?? l.created_at)}</div>

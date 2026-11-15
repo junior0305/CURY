@@ -35,6 +35,23 @@ const ha = (iso?: string | null) => {
   return `${Math.round(h / 24)} dias`;
 };
 
+const FONTE: Record<string, string> = {
+  facebook_make: "Facebook", facebook: "Facebook", fb_leadgen: "Facebook", meta: "Facebook",
+  cold_pool: "Pescaria", pool: "Pescaria", pescado: "Pescaria",
+  lista: "Lista", disparo: "Disparo", disparo_ana: "Disparo",
+  resgate: "Resgate", recrutamento: "Recrutamento",
+  manual: "Manual", broker_manual: "Manual", manual_test: "Teste", duplicated: "Duplicado",
+};
+// nome legível da campanha/origem: nome resolvido > nome pelo id (view/catálogo) > fonte amigável
+export const origemLabel = (l: { campanha?: string | null; campanha_nome?: string | null; fb_campaign?: string | null; source?: string | null }, mapa?: Map<string, string>) => {
+  const camp = (l.campanha ?? l.campanha_nome ?? l.fb_campaign ?? "").trim();
+  if (/^DISPARO/i.test(camp)) return "Disparo";
+  if (camp && camp !== "(sem campanha)" && !/^\d{6,}$/.test(camp)) return camp;
+  const nome = camp && mapa?.get(camp);
+  if (nome) return nome;
+  return FONTE[(l.source || "").toLowerCase()] || l.source || "—";
+};
+
 type Pilula = "todos" | "zero" | "vacuo" | "desc";
 const descartado = (l: Lead) => l.status === "ABANDONED" || l.status === "LOST";
 const pertence = (l: Lead, p: Pilula) =>
@@ -58,6 +75,20 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
     queryKey: ["tl4", como, per.de, per.ate],
     refetchInterval: 120_000,
     queryFn: async () => (await sb.rpc("leads_origem", { p_como: como || null, p_de: per.de, p_ate: per.ate })).data as Painel,
+  });
+  const { data: nomeCamp } = useQuery({
+    queryKey: ["tl4-nomes"],
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const [c, f] = await Promise.all([
+        sb.from("fb_campanhas_nome").select("id,nome").limit(8000),
+        sb.from("formularios_catalogo").select("form_id,nome").limit(8000),
+      ]);
+      const m = new Map<string, string>();
+      for (const r of (c.data ?? [])) if (r.id && r.nome) m.set(String(r.id), r.nome as string);
+      for (const r of (f.data ?? [])) if (r.form_id && r.nome) m.set(String(r.form_id), r.nome as string);
+      return m;
+    },
   });
   const leads = data?.leads ?? [];
   const corretores: Corretor[] = useMemo(() => {
@@ -136,7 +167,7 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
               <div key={l.id} className={`tl4-row${sel.has(l.id) ? " sel" : ""}`}>
                 <span className="tl4-chk"><input type="checkbox" checked={sel.has(l.id)} onChange={() => toggle(l.id)} aria-label={`Selecionar ${l.nome}`} /></span>
                 <div className="tl4-cli"><b>{l.nome || "—"}</b><small>{l.telefone || ""}</small></div>
-                <div className="tl4-org">{l.campanha || (l.source === "lista" ? "" : l.source) || "—"}</div>
+                <div className="tl4-org">{origemLabel(l, nomeCamp)}</div>
                 <div className="tl4-cor"><span className="tl4-av">{ini(l.corretor_nome)}</span>{l.corretor_nome?.split(" ")[0] ?? "sem corretor"}</div>
                 <div><span className="tl4-sit" style={{ color: s[1], background: s[2] }}>{s[0]}</span></div>
                 <div className="tl4-tmp">{ha(l.ultimo_contato ?? l.atribuido_em)}</div>
