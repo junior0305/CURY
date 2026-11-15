@@ -13,7 +13,7 @@ import { atendido } from "@/lib/situacaoLead";
 import { cobrarFila } from "@/hooks/useLeads";
 import { COLS_LEAD, VISITA, ENCERRADO, ha, situacao, SIT, CSS as LEADS_CSS, type LeadN, type Corretor } from "@/components/leads2/comum";
 import LeadGaveta from "@/components/leads2/LeadGaveta";
-import { origemLabel } from "@/components/leads/TodosLeadsV4";
+import { origemLabel, ORIGKEY, ORIGENS } from "@/components/leads/TodosLeadsV4";
 
 const sb = supabase as any;
 const nf = (n: number) => n.toLocaleString("pt-BR");
@@ -30,6 +30,7 @@ export default function FunilV4({ managerId, como }: { managerId: string; como?:
   const { data: pastasData } = usePastas(managerId);
   const pastas = pastasData?.minhas ?? [];
   const [etapa, setEtapa] = useState(0);
+  const [fOrig, setFOrig] = useState("todos");
   const [gaveta, setGaveta] = useState<string | null>(null);
   const [cobrando, setCobrando] = useState(false);
 
@@ -86,6 +87,9 @@ export default function FunilV4({ managerId, como }: { managerId: string; como?:
     if (etapa === 2) return periodo.filter((l) => VISITA.has(l.status ?? ""));
     return [] as LeadN[]; // pasta (3) não liga lead↔Junix
   }, [etapa, periodo]);
+  // filtro de origem (anúncio/disparo/gotejamento/pescaria/resgate) — "saber o que está acontecendo"
+  const porOrig = useMemo(() => { const m = new Map<string, number>(); for (const l of listaEtapa) m.set(ORIGKEY((l as any).source), (m.get(ORIGKEY((l as any).source)) ?? 0) + 1); return m; }, [listaEtapa]);
+  const listaFiltrada = useMemo(() => fOrig === "todos" ? listaEtapa : listaEtapa.filter((l) => ORIGKEY((l as any).source) === fOrig), [listaEtapa, fOrig]);
 
   // onde os leads estão parados: por corretor, leads ativos sem toque
   const parados = useMemo(() => {
@@ -124,13 +128,23 @@ export default function FunilV4({ managerId, como }: { managerId: string; como?:
             <div><h3>Leads na etapa {etapa + 1}: {ETAPAS[etapa]} ({nf(funil[etapa])})</h3>
               <p>Clique em qualquer etapa do funil acima para inspecionar.</p></div>
           </div>
+          {etapa !== 2 && etapa !== 3 && listaEtapa.length > 0 && (
+            <div className="fv4-orig">
+              <span className="fv4-orig-lbl">Origem:</span>
+              {ORIGENS.map(([k, lb]) => {
+                const n = k === "todos" ? listaEtapa.length : (porOrig.get(k) ?? 0);
+                if (k !== "todos" && n === 0) return null;
+                return <button key={k} className={`fv4-opill${fOrig === k ? " on" : ""}`} onClick={() => setFOrig(k)}>{lb} <b>{n}</b></button>;
+              })}
+            </div>
+          )}
           {etapa === 2 || etapa === 3 ? (
             <div className="fv4-vazio">Esta etapa vem do {etapa === 2 ? "plantão (C2S)" : "Junix"}, que não liga a visita/pasta a um lead específico. Veja os leads nas etapas 1 e 2, e o detalhe em {etapa === 2 ? "Equipe hoje" : "Pastas"}.</div>
-          ) : !listaEtapa.length ? (
-            <div className="fv4-vazio">Nenhum lead nesta etapa no período.</div>
+          ) : !listaFiltrada.length ? (
+            <div className="fv4-vazio">{fOrig === "todos" ? "Nenhum lead nesta etapa no período." : "Nenhum lead dessa origem nesta etapa."}</div>
           ) : (
             <div className="fv4-rows">
-              {listaEtapa.slice(0, 40).map((l) => {
+              {listaFiltrada.slice(0, 40).map((l) => {
                 const s = situacao(l);
                 return (
                   <div key={l.id} className="fv4-row">
@@ -188,6 +202,12 @@ const CSS = `
 .fv4-lista h3,.fv4-parados h3{margin:0;font-size:15px;font-weight:800}
 .fv4-lh p,.fv4-parados p{margin:3px 0 0;font-size:12.5px;color:var(--cv-text-muted,#6B7A90)}
 .fv4-vazio{padding:18px 4px;font-size:13.5px;color:var(--cv-text-muted,#6B7A90)}
+.fv4-orig{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 0 12px}
+.fv4-orig-lbl{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--cv-text-dim,#8A97A8);margin-right:2px}
+.mgr10 .fv4-opill{min-height:30px;padding:0 12px;border-radius:99px;border:1px solid var(--cv-border,#E1E6EE);background:var(--cv-sunk,#F6F8FB);font:inherit;font-size:12.5px;font-weight:700;color:var(--cv-text-muted,#5B6B80);cursor:pointer;transition:all .15s}
+.mgr10 .fv4-opill:hover{color:var(--cv-text-main,#27364B)}
+.mgr10 .fv4-opill.on{background:#0F1B2D;border-color:#0F1B2D;color:#fff}
+.fv4-opill b{font-weight:800;opacity:.8;margin-left:2px}
 .fv4-rows{display:flex;flex-direction:column}
 .fv4-row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.1fr) auto auto;gap:10px;align-items:center;padding:11px 0;border-top:1px solid var(--cv-border,#EEF2F8)}
 .fv4-row:first-child{border-top:0}

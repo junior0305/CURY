@@ -10,6 +10,9 @@ import { cobrarFila } from "@/hooks/useLeads";
 import LeadGaveta from "@/components/leads2/LeadGaveta";
 import RedistribuirDrawer, { type CorretorRico } from "@/components/leads/RedistribuirDrawer";
 import { CSS as LEADS_CSS, type Corretor } from "@/components/leads2/comum";
+import { resolver, type Preset } from "@/hooks/usePeriodo";
+
+const DATAS: [Preset, string][] = [["hoje", "Hoje"], ["ontem", "Ontem"], ["esta_semana", "Esta semana"], ["semana_passada", "Semana passada"], ["este_mes", "Este mês"]];
 
 const AVANCOU = new Set(["VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED", "NEGOTIATING", "CONCLUDED"]);
 const pctN = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : null);
@@ -55,6 +58,17 @@ export const origemLabel = (l: { campanha?: string | null; campanha_nome?: strin
   return FONTE[(l.source || "").toLowerCase()] || l.source || "—";
 };
 
+// origem crua do lead → chave de filtro (anúncio = Facebook; gotejamento = lista; pescaria = pool)
+export const ORIGKEY = (s: string | null) => {
+  const x = (s || "").toLowerCase();
+  if (x.includes("disparo")) return "disparo";
+  if (x === "lista") return "gotejamento";
+  if (x === "cold_pool" || x === "pool" || x === "pescado") return "pescaria";
+  if (x === "resgate") return "resgate";
+  if (x.includes("facebook") || x === "meta" || x === "fb_leadgen" || x === "site") return "anuncio";
+  return "outro";
+};
+export const ORIGENS: [string, string][] = [["todos", "Todas as origens"], ["anuncio", "Anúncio"], ["disparo", "Disparo"], ["gotejamento", "Gotejamento"], ["pescaria", "Pescaria"], ["resgate", "Resgate"]];
 type Pilula = "todos" | "zero" | "vacuo" | "desc";
 const descartado = (l: Lead) => l.status === "ABANDONED" || l.status === "LOST";
 const pertence = (l: Lead, p: Pilula) =>
@@ -67,18 +81,21 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
   const [pil, setPil] = useState<Pilula>("todos");
   const [busca, setBusca] = useState("");
   const [fCor, setFCor] = useState("");
+  const [fOrig, setFOrig] = useState("todos");
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [gaveta, setGaveta] = useState<string | null>(null);
   const [indo, setIndo] = useState(false);
   const [abreDrawer, setAbreDrawer] = useState(false);
+  // filtro de data próprio desta aba (Junior 15/11): respeita hoje/ontem/semana/mês/escolher. Padrão: este mês.
+  const [preset, setPreset] = useState<Preset>("este_mes");
+  const [deC, setDeC] = useState("");
+  const [ateC, setAteC] = useState("");
+  const jan = useMemo(() => resolver(preset === "custom" && (!deC || !ateC) ? "este_mes" : preset, deC || undefined, ateC || undefined), [preset, deC, ateC]);
 
-  // A carteira é estado atual, não período: pega o backlog inteiro (bate com o Diagnóstico), não "esta semana".
-  const deCarteira = new Date(Date.now() - 180 * 864e5).toISOString().slice(0, 10);
-  const ateCarteira = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
   const { data, isLoading } = useQuery({
-    queryKey: ["tl4", como],
+    queryKey: ["tl4", como, jan.de, jan.ate],
     refetchInterval: 120_000,
-    queryFn: async () => (await sb.rpc("leads_origem", { p_como: como || null, p_de: deCarteira, p_ate: ateCarteira })).data as Painel,
+    queryFn: async () => (await sb.rpc("leads_origem", { p_como: como || null, p_de: jan.de, p_ate: jan.ate })).data as Painel,
   });
   const { data: nomeCamp } = useQuery({
     queryKey: ["tl4-nomes"],
@@ -138,9 +155,10 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
   const conta = (p: Pilula) => leads.filter((l) => pertence(l, p)).length;
   const lista = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return leads.filter((l) => pertence(l, pil) && (!fCor || l.corretor === fCor) &&
+    return leads.filter((l) => pertence(l, pil) && (!fCor || l.corretor === fCor) && (fOrig === "todos" || ORIGKEY(l.source) === fOrig) &&
       (!q || (l.nome || "").toLowerCase().includes(q) || (l.telefone || "").includes(q) || (l.campanha || "").toLowerCase().includes(q)));
-  }, [leads, pil, fCor, busca]);
+  }, [leads, pil, fCor, fOrig, busca]);
+  const porOrigem = useMemo(() => { const m = new Map<string, number>(); for (const l of leads) if (!descartado(l)) m.set(ORIGKEY(l.source), (m.get(ORIGKEY(l.source)) ?? 0) + 1); return m; }, [leads]);
 
   function toggle(id: string) { setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
   const selMesma = useMemo(() => { // só dá para agir em lote se forem da mesma equipe
@@ -173,12 +191,35 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
     <section className="tl4">
       <style>{CSS}</style><style>{LEADS_CSS}</style>
 
+      <div className="tl4-datas">
+        {DATAS.map(([k, lb]) => (
+          <button key={k} className={`tl4-data${preset === k ? " on" : ""}`} onClick={() => setPreset(k)}>{lb}</button>
+        ))}
+        <button className={`tl4-data${preset === "custom" ? " on" : ""}`} onClick={() => setPreset("custom")}>Escolher data</button>
+        {preset === "custom" && (
+          <span className="tl4-range">
+            <input type="date" value={deC} onChange={(e) => setDeC(e.target.value)} />
+            <span>→</span>
+            <input type="date" value={ateC} onChange={(e) => setAteC(e.target.value)} />
+          </span>
+        )}
+        <span className="tl4-rot">{jan.rotulo}</span>
+      </div>
+
       <div className="tl4-pils" role="tablist">
         {PILS.map(([k, lb, cor]) => (
           <button key={k} className={`tl4-pil${pil === k ? " on" : ""}`} onClick={() => { setPil(k); setSel(new Set()); }} role="tab" aria-selected={pil === k}>
             <span className="tl4-ball" style={{ background: cor }} />{lb} <b>{conta(k)}</b>
           </button>
         ))}
+      </div>
+
+      <div className="tl4-orig">
+        <span className="tl4-orig-lbl">Origem:</span>
+        {ORIGENS.map(([k, lb]) => {
+          const n = k === "todos" ? null : (porOrigem.get(k) ?? 0);
+          return <button key={k} className={`tl4-opill${fOrig === k ? " on" : ""}`} onClick={() => setFOrig(k)}>{lb}{n != null && <b> {n}</b>}</button>;
+        })}
       </div>
 
       <div className="tl4-filtros">
@@ -239,6 +280,19 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
 
 const CSS = `
 .tl4{display:flex;flex-direction:column;gap:14px;padding-bottom:70px}
+.tl4-datas{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mgr10 .tl4-data{min-height:34px;padding:0 13px;border-radius:9px;border:1px solid var(--cv-border,#E1E6EE);background:var(--cv-surface,#fff);font:inherit;font-size:13px;font-weight:700;color:var(--cv-text-muted,#5B6B80);cursor:pointer;transition:all .15s}
+.mgr10 .tl4-data:hover{color:var(--cv-text-main,#27364B)}
+.mgr10 .tl4-data.on{background:#0EA5E9;border-color:#0EA5E9;color:#fff}
+.tl4-range{display:inline-flex;align-items:center;gap:6px}
+.tl4-range input{min-height:34px;border:1px solid var(--cv-border,#DCE3EE);border-radius:8px;background:var(--cv-surface,#fff);color:inherit;font:inherit;font-size:13px;padding:0 8px}
+.tl4-rot{font-size:12.5px;color:var(--cv-text-muted,#6B7A90);font-family:"JetBrains Mono",monospace;margin-left:auto}
+.tl4-orig{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tl4-orig-lbl{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--cv-text-dim,#8A97A8);margin-right:2px}
+.mgr10 .tl4-opill{min-height:30px;padding:0 12px;border-radius:99px;border:1px solid var(--cv-border,#E1E6EE);background:var(--cv-sunk,#F6F8FB);font:inherit;font-size:12.5px;font-weight:700;color:var(--cv-text-muted,#5B6B80);cursor:pointer;transition:all .15s}
+.mgr10 .tl4-opill:hover{color:var(--cv-text-main,#27364B)}
+.mgr10 .tl4-opill.on{background:#0F1B2D;border-color:#0F1B2D;color:#fff}
+.tl4-opill b{font-weight:800;opacity:.8;margin-left:2px}
 .tl4-pils{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
 .mgr10 .tl4-pil{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;min-height:40px;padding:0 15px;border-radius:99px;border:1px solid var(--cv-border,#E1E6EE);background:var(--cv-surface,#fff);font-size:13.5px;font-weight:600;color:var(--cv-text-main,#27364B);cursor:pointer}
 .mgr10 .tl4-pil.on{border-color:#1f63e0;box-shadow:0 0 0 1px #1f63e0}
