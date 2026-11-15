@@ -17,9 +17,10 @@ import FunilV4 from "@/components/manager-v10/FunilV4";
 import TodosLeadsV4 from "@/components/leads/TodosLeadsV4";
 import TarefasV4 from "@/components/manager-v10/TarefasV4";
 import CampanhasV4 from "@/components/manager-v10/CampanhasV4";
+import FilasFormulario from "@/components/leads/FilasFormulario";
 
 const sb = supabase as any;
-type Aba = "funil" | "campanhas" | "leads" | "tarefas";
+type Aba = "funil" | "campanhas" | "filas" | "leads" | "tarefas";
 type Canal = "todos" | "urgencia" | "oportunidade" | "trafego";
 const dias = (iso?: string | null) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 864e5) : 0);
 const brl = (n: number) => "R$ " + (n || 0).toLocaleString("pt-BR", { maximumFractionDigits: n >= 100 ? 0 : 2 });
@@ -164,11 +165,13 @@ export default function LeadsCentral() {
           {([
             ["funil", "📊", "Funil comercial interativo", "5 etapas", ""],
             ["campanhas", "🎯", "Campanhas & mídia", diag.nAtivas ? `${diag.nAtivas} ativas` : "mídia", "amber"],
-            ["leads", "📋", "Todos os leads & ação", diag.semToque ? `${diag.semToque} sem toque` : "a carteira", "rose"],
+            ["filas", "🔄", "Filas & roletas de anúncios", data?.forms ? `${data.forms} formulários` : "filas", "brand"],
+            ["leads", "📋", "Todos os leads & ação em lote", diag.semToque ? `${diag.semToque} sem toque` : "a carteira", "rose"],
             ["tarefas", "✅", "Tarefas da equipe", data?.tarefas?.length ? `${data.tarefas.length} abertas` : "em dia", ""],
           ] as [Aba, string, string, string, string][]).map(([k, ic, lb, badge, cor]) => (
             <button key={k} role="tab" aria-selected={aba === k} className={`lx-tab${aba === k ? " on" : ""}`} onClick={() => setAba(k)}>
-              <span>{ic}</span> {lb}
+              <span className="lx-tab-ic">{ic}</span>
+              <span className="lx-tab-lb">{lb}</span>
               <span className={`lx-badge ${cor}`}>{badge}</span>
             </button>
           ))}
@@ -177,6 +180,7 @@ export default function LeadsCentral() {
         <section className="lx-conteudo">
           {aba === "funil" && <FunilV4 managerId={gerente} como={como ?? null} />}
           {aba === "campanhas" && <CampanhasV4 donoId={gerente} como={como ?? null} />}
+          {aba === "filas" && <FilasFormulario como={como ?? null} abrir="*" semCartao />}
           {aba === "leads" && <TodosLeadsV4 como={como ?? null} />}
           {aba === "tarefas" && <TarefasV4 managerId={gerente} />}
         </section>
@@ -196,7 +200,7 @@ const CSS = `
   --text-main:#0F172A;--text-muted:#475569;--text-dim:#94A3B8;--brand:#0284C7;--brand-hover:#0369A1;
 }
 .lx{--cv-surface:var(--surface-card);--cv-border:var(--border);--cv-text-main:var(--text-main);--cv-text-muted:var(--text-muted);--cv-text-dim:var(--text-dim);--cv-sunk:var(--surface-subtle)}
-.lx .shell2.lx-main{background:var(--bg);color:var(--text-main);font-family:Archivo,system-ui,sans-serif;padding:0 32px 90px;zoom:1.06}
+.lx .shell2.lx-main{background:var(--bg);color:var(--text-main);font-family:Archivo,system-ui,sans-serif;padding:0 32px 90px;zoom:1.1}
 .lx .mono{font-family:"JetBrains Mono",monospace}
 
 .lx-top{position:sticky;top:0;z-index:30;background:var(--bg);background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(14px);display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;padding:18px 0 14px;border-bottom:1px solid var(--border);margin-bottom:22px}
@@ -232,14 +236,17 @@ const CSS = `
 .lx .lx-act.ver:hover{background:var(--surface-subtle);color:var(--text-main)}
 
 /* abas */
-.lx-tabs{display:flex;gap:8px;border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:22px;flex-wrap:wrap}
-.lx .lx-tab{display:inline-flex;align-items:center;gap:8px;font:inherit;background:var(--surface);border:1px solid var(--border);border-radius:12px;color:var(--text-muted);padding:10px 18px;font-size:13.5px;font-weight:700;cursor:pointer;transition:all .15s}
+.lx-tabs{display:flex;gap:8px;border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:22px}
+.lx .lx-tab{flex:1;min-width:0;display:inline-flex;align-items:center;gap:10px;font:inherit;background:var(--surface);border:1px solid var(--border);border-radius:12px;color:var(--text-muted);padding:12px 15px;font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;text-align:left}
 .lx .lx-tab:hover{background:var(--surface-subtle);color:var(--text-main);border-color:var(--text-dim)}
 .lx .lx-tab.on{background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:0 4px 12px rgba(14,165,233,.35)}
-.lx-badge{font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:var(--surface-subtle);color:var(--text-muted)}
+.lx-tab-ic{font-size:18px;flex:none;line-height:1}
+.lx-tab-lb{flex:1;min-width:0;line-height:1.2;font-weight:800;font-size:13.5px}
+.lx-badge{flex:none;font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;background:var(--surface-subtle);color:var(--text-muted);white-space:nowrap}
 .lx-tab.on .lx-badge{background:rgba(255,255,255,.22);color:#fff}
-.lx-badge.amber{background:rgba(245,158,11,.18);color:#F59E0B}.lx-badge.rose{background:rgba(244,63,94,.16);color:#F43F5E}
-.lx-tab.on .lx-badge.amber,.lx-tab.on .lx-badge.rose{background:rgba(255,255,255,.22);color:#fff}
+.lx-badge.amber{background:rgba(245,158,11,.18);color:#F59E0B}.lx-badge.rose{background:rgba(244,63,94,.16);color:#F43F5E}.lx-badge.brand{background:rgba(14,165,233,.16);color:#38BDF8}
+.lx-tab.on .lx-badge.amber,.lx-tab.on .lx-badge.rose,.lx-tab.on .lx-badge.brand{background:rgba(255,255,255,.22);color:#fff}
+@media (max-width:900px){.lx-tabs{flex-wrap:wrap}.lx .lx-tab{flex:1 1 45%}}
 
 .lx-conteudo{min-height:320px}
 @media (max-width:1000px){.lx-suss-grid{grid-template-columns:1fr}.lx-tabs{overflow-x:auto}.lx .shell2.lx-main{padding:0 16px 80px;zoom:1}}
