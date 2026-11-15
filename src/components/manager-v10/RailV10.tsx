@@ -103,6 +103,7 @@ export function RailV10({ atual, sub, mode, toggle, onAba }: {
   const destino = (a: { k: Aba; to: string }) => {
     if (ehSuper) return a.to;
     if (role === "DIRECTOR" || role === "ADMIN") return a.k === "tempo" ? "/diretor" : a.k === "time" ? "/super?aba=time" : a.to;
+    if (a.k === "time") return "/manager/tropa"; // "Tropa & presença" abre a nova Tropa & Plantão (TropaV4). A antiga segue em /manager?aba=time.
     return a.to;
   };
 
@@ -117,7 +118,7 @@ export function RailV10({ atual, sub, mode, toggle, onAba }: {
   if (role === "ADMIN" || role === "DIRECTOR") itens.push({ key: "diretoria", to: "/diretor", on: false, grupo: "Sistema", label: "Diretoria", icon: svg("M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6") });
   if (role === "ADMIN") itens.push({ key: "admin", to: "/admin", on: false, grupo: "Sistema", label: "Admin", icon: svg("M15 18l-6-6 6-6") });
 
-  const usaAba = (aba?: Aba, to?: string) => onAba && aba && ((ehSuper && (to ?? "").startsWith("/super")) || (!ehSuper && (aba === "tempo" || aba === "time" || aba === "bi")));
+  const usaAba = (aba?: Aba, to?: string) => onAba && aba && ((ehSuper && (to ?? "").startsWith("/super")) || (!ehSuper && (aba === "tempo" || aba === "bi"))); // "time" saiu: vira link para /manager/tropa
   const Item = (it: It) => {
     const conteudo = <>{it.icon}<span className="sb-lb">{it.label}</span>{it.badge ? <i className="sb-badge">{it.badge}</i> : null}</>;
     return usaAba(it.aba, it.to)
