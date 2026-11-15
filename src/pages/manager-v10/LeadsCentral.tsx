@@ -167,7 +167,7 @@ export default function LeadsCentral() {
             ["campanhas", "🎯", "Campanhas & mídia", diag.nAtivas ? `${diag.nAtivas} ativas` : "mídia", "amber"],
             ["filas", "🔄", "Filas & roletas de anúncios", data?.forms ? `${data.forms} formulários` : "filas", "brand"],
             ["leads", "📋", "Todos os leads & ação em lote", diag.semToque ? `${diag.semToque} sem toque` : "a carteira", "rose"],
-            ["tarefas", "✅", "Tarefas da equipe", data?.tarefas?.length ? `${data.tarefas.length} abertas` : "em dia", ""],
+            ["tarefas", "🗓️", "Agenda da equipe", "compromissos", ""],
           ] as [Aba, string, string, string, string][]).map(([k, ic, lb, badge, cor]) => (
             <button key={k} role="tab" aria-selected={aba === k} className={`lx-tab${aba === k ? " on" : ""}`} onClick={() => setAba(k)}>
               <span className="lx-tab-ic">{ic}</span>
@@ -182,7 +182,7 @@ export default function LeadsCentral() {
           {aba === "campanhas" && <CampanhasV4 donoId={gerente} como={como ?? null} />}
           {aba === "filas" && <FilasV4 donoId={gerente} como={como ?? null} />}
           {aba === "leads" && <TodosLeadsV4 como={como ?? null} />}
-          {aba === "tarefas" && <TarefasV4 managerId={gerente} />}
+          {aba === "tarefas" && <TarefasV4 managerId={gerente} como={como ?? null} />}
         </section>
       </main>
     </div>
