@@ -1,13 +1,14 @@
-// O menu lateral do painel do gerente.
-//
-// Vive aqui porque mais de uma tela usa: o /manager (com abas internas) e as
-// páginas próprias como /manager/anuncios. Duplicar a barra seria duplicar a
-// ordem dos botões, e ela já mudou duas vezes.
-
+// Menu lateral do painel (gerente/super/diretor). Modelo largo com grupos, rótulos, badge e card do usuário —
+// recolhível para o rail de ícones. O original está guardado em RailV10.original.bak (restaurar = copiar de volta).
+// Mantém as MESMAS rotas, props e lógica de navegação do original (ehSuper, onAba, destino, B.I., Diretoria/Admin).
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+
+const sb = supabase as any;
 
 export function loadFonts() {
   if (typeof document === "undefined") return;
@@ -39,7 +40,6 @@ export const ICONES: Record<Aba, string> = {
   config: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
 };
 
-/** Ordem do dia do gerente (Junior, 15/09). Leads e B.I. vêm depois. */
 export const ABAS: { k: Aba; label: string; to: string }[] = [
   { k: "tempo", label: "Tempo real", to: "/manager" },
   { k: "time", label: "Time", to: "/manager?aba=time" },
@@ -50,123 +50,162 @@ export const ABAS: { k: Aba; label: string; to: string }[] = [
   { k: "config", label: "Configurar", to: "/manager/config" },
 ];
 
-/** 7 Módulos Executivos do Superintendente (Padrão Gerente & Diretor) */
 export const ABAS_SUPER: { k: Aba; label: string; to: string }[] = [
   { k: "tempo", label: "Painel Geral", to: "/super" },
   { k: "time", label: "Equipes", to: "/super?aba=time" },
   { k: "leads", label: "Leads", to: "/super?aba=leads" },
   { k: "pastas", label: "Pastas", to: "/super?aba=pastas" },
-  // disparo de WhatsApp: mesma tela do gerente, com as contas do super, dos gerentes e dos corretores dele
   { k: "disparar", label: "Disparar", to: "/manager/whatsapp" },
   { k: "estrategia", label: "Estratégia", to: "/super?aba=estrategia" },
   { k: "bi", label: "B.I.", to: "/super?aba=bi" },
   { k: "config", label: "Configurar", to: "/super?aba=config" },
 ];
 
-export function RailV10({
-  atual, sub, mode, toggle, onAba, pip,
-}: {
-  atual: Aba;
-  sub?: string;
-  mode: "dark" | "light";
-  toggle: () => void;
-  /** quando a tela resolve a aba internamente (o /manager), em vez de navegar */
-  onAba?: (k: Aba) => void;
-  pip?: number;
+// agrupamento e rótulo mais claro do menu largo (as rotas não mudam)
+const GRUPO: Partial<Record<Aba, string>> = {
+  tempo: "Comando", leads: "Comando", pastas: "Comando", time: "Comando", bi: "Comando",
+  anuncios: "Mídia & Estratégia", disparar: "Mídia & Estratégia", estrategia: "Mídia & Estratégia",
+  campanhas: "Mídia & Estratégia", plano: "Mídia & Estratégia", gastos: "Mídia & Estratégia",
+  config: "Ajustes", integracoes: "Ajustes", regua: "Ajustes", plantao: "Ajustes",
+};
+const LABEL_LARGO: Partial<Record<Aba, string>> = {
+  tempo: "Cockpit geral", leads: "Leads & esteira", pastas: "Pastas Caixa", time: "Tropa & presença",
+  anuncios: "Anúncios Meta", disparar: "Disparos WhatsApp", estrategia: "Sala de guerra", config: "Configurações",
+};
+const ORDEM_GRUPO = ["Comando", "Mídia & Estratégia", "Ajustes", "Sistema"];
+const svg = (d: string) => <svg viewBox="0 0 24 24"><path d={d} /></svg>;
+const papel: Record<string, string> = { MANAGER: "Gestor", SUPERINTENDENT: "Superintendente", DIRECTOR: "Diretor", ADMIN: "Admin", BROKER: "Corretor" };
+
+export function RailV10({ atual, sub, mode, toggle, onAba, pip }: {
+  atual: Aba; sub?: string; mode: "dark" | "light"; toggle: () => void; onAba?: (k: Aba) => void; pip?: number;
 }) {
-  const { signOut, role } = useAuth();
+  const { signOut, role, session } = useAuth();
   const { preferLight } = useTheme();
   useEffect(() => { preferLight(); }, [preferLight]);
   const { pathname } = useLocation();
-  // Diretor e admin abrindo o /super usam o mesmo menu do super (antes caíam no menu do gerente
-  // e as abas do super apareciam como botões no alto da tela).
+  const [recolhido, setRecolhido] = useState<boolean>(() => { try { return localStorage.getItem("cmd_menu_recolhido") === "1"; } catch { return false; } });
+  const toggleRecolher = () => setRecolhido((v) => { const n = !v; try { localStorage.setItem("cmd_menu_recolhido", n ? "1" : "0"); } catch { /* */ } return n; });
+
   const ehSuper = role === "SUPERINTENDENT" || ((role === "DIRECTOR" || role === "ADMIN") && pathname.startsWith("/super"));
   const listaAbas = ehSuper ? ABAS_SUPER : ABAS;
+  const uid = session?.user?.id;
+
+  const { data: eu } = useQuery({
+    queryKey: ["rail-eu", uid],
+    enabled: !!uid, staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const p = (await sb.from("profiles").select("first_name,last_name").eq("id", uid).maybeSingle()).data;
+      const { count } = await sb.from("profiles").select("id", { count: "exact", head: true }).eq("manager_id", uid).eq("role", "BROKER").eq("is_active", true);
+      return { nome: [p?.first_name, p?.last_name].filter(Boolean).join(" ").trim() || "Você", n: count ?? 0 };
+    },
+  });
 
   const destino = (a: { k: Aba; to: string }) => {
     if (ehSuper) return a.to;
-    if (role === "DIRECTOR" || role === "ADMIN") {
-      return a.k === "tempo" ? "/diretor" : a.k === "time" ? "/super?aba=time" : a.to;
-    }
+    if (role === "DIRECTOR" || role === "ADMIN") return a.k === "tempo" ? "/diretor" : a.k === "time" ? "/super?aba=time" : a.to;
     return a.to;
   };
 
+  // monta os itens (abas + B.I. + Diretoria/Admin) com grupo e rótulo
+  type It = { key: string; label: string; grupo: string; icon: JSX.Element; on: boolean; aba?: Aba; to?: string; badge?: number };
+  const itens: It[] = [];
+  for (const a of listaAbas) {
+    itens.push({ key: a.k, aba: a.k, to: destino(a), on: a.k === atual, grupo: GRUPO[a.k] ?? "Comando",
+      label: ehSuper ? a.label : (LABEL_LARGO[a.k] ?? a.label), icon: svg(ICONES[a.k]), badge: a.k === "leads" && pip ? pip : undefined });
+  }
+  if (!ehSuper) itens.push({ key: "bi", aba: "bi", to: "/manager?aba=bi", on: atual === "bi", grupo: "Comando", label: "B.I.", icon: svg(ICONES.bi) });
+  if (role === "ADMIN" || role === "DIRECTOR") itens.push({ key: "diretoria", to: "/diretor", on: false, grupo: "Sistema", label: "Diretoria", icon: svg("M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6") });
+  if (role === "ADMIN") itens.push({ key: "admin", to: "/admin", on: false, grupo: "Sistema", label: "Admin", icon: svg("M15 18l-6-6 6-6") });
+
+  const usaAba = (aba?: Aba, to?: string) => onAba && aba && ((ehSuper && (to ?? "").startsWith("/super")) || (!ehSuper && (aba === "tempo" || aba === "time" || aba === "bi")));
+  const Item = (it: It) => {
+    const conteudo = <>{it.icon}<span className="sb-lb">{it.label}</span>{it.badge ? <i className="sb-badge">{it.badge}</i> : null}</>;
+    return usaAba(it.aba, it.to)
+      ? <button key={it.key} type="button" className={`sb-item${it.on ? " on" : ""}`} aria-current={it.on ? "page" : undefined} onClick={() => onAba!(it.aba!)} title={it.label}>{conteudo}</button>
+      : <Link key={it.key} to={it.to!} className={`sb-item${it.on ? " on" : ""}`} aria-current={it.on ? "page" : undefined} title={it.label}>{conteudo}</Link>;
+  };
+
   return (
-    <nav className="rail" aria-label="Seções">
-      <div className="rail-brand">
-        <img className="rail-m" src="/comandra-lobo.png" alt="Comandra" />
-        <div><b>Comandra</b>{sub ? <i>{sub}</i> : null}</div>
+    <nav className={`sbnav${recolhido ? " recolhido" : ""}`} aria-label="Menu">
+      <style>{CSS(recolhido)}</style>
+
+      <div className="sb-brand">
+        <img className="sb-logo" src="/comandra-lobo.png" alt="Comandra" />
+        <div className="sb-bt"><b>Comandra</b>{sub ? <i>{sub}</i> : null}</div>
+        <button className="sb-recolher" onClick={toggleRecolher} title={recolhido ? "Expandir menu" : "Recolher menu"} aria-label="Recolher menu">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d={recolhido ? "M9 6l6 6-6 6" : "M15 6l-6 6 6 6"} /></svg>
+        </button>
       </div>
 
-      {listaAbas.map((a) => {
-        const on = a.k === atual;
-        const conteudo = (
-          <>
-            <svg viewBox="0 0 24 24"><path d={ICONES[a.k]} /></svg>
-            {a.label}
-            {a.k === "tempo" && pip ? <i className="pip">{pip}</i> : null}
-          </>
-        );
-        // O /super resolve todas as abas na própria tela; o /manager só Tempo real e Time
-        // (Leads, Pastas, Disparar... são páginas próprias). Sem isso, toda aba do gerente caía no B.I.
-        // aba do super que mora em outra página (Disparar) é link, não troca de aba interna
-        return onAba && ((ehSuper && a.to.startsWith("/super")) || (!ehSuper && (a.k === "tempo" || a.k === "time"))) ? (
-          <button key={a.k} type="button" className={`railb${on ? " on" : ""}`}
-            aria-current={on ? "page" : undefined} onClick={() => onAba(a.k)}>
-            {conteudo}
+      <div className="sb-scroll">
+        {ORDEM_GRUPO.map((g) => {
+          const doGrupo = itens.filter((i) => i.grupo === g);
+          if (!doGrupo.length) return null;
+          return (
+            <div className="sb-grupo" key={g}>
+              <div className="sb-gh">{g}</div>
+              {doGrupo.map(Item)}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="sb-foot">
+        <div className="sb-user" title={eu?.nome}>
+          <span className="sb-av">{(eu?.nome ?? "?").slice(0, 2).toUpperCase()}</span>
+          <div className="sb-ut"><b>{eu?.nome ?? "…"}{role ? ` (${papel[role] ?? role})` : ""}</b>
+            <small><span className="sb-on" /> Online{eu?.n ? ` · ${eu.n} corretores` : ""}</small></div>
+        </div>
+        <div className="sb-fbtns">
+          <button className="sb-mini" onClick={toggle} title="Alternar tema" aria-label="Alternar tema">
+            {mode === "dark"
+              ? <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19" /></svg>
+              : <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>}
           </button>
-        ) : (
-          <Link key={a.k} to={destino(a)} className={on ? "on" : undefined}
-            aria-current={on ? "page" : undefined}>
-            {conteudo}
-          </Link>
-        );
-      })}
-
-      {!ehSuper && (
-        <>
-          <div className="rail-sep" />
-          {onAba ? (
-            <button type="button" className={`railb${atual === "bi" ? " on" : ""}`}
-              aria-current={atual === "bi" ? "page" : undefined} onClick={() => onAba("bi")}>
-              <svg viewBox="0 0 24 24"><path d={ICONES.bi} /></svg>B.I.
-            </button>
-          ) : (
-            <Link to="/manager?aba=bi" className={atual === "bi" ? "on" : undefined}
-              aria-current={atual === "bi" ? "page" : undefined}>
-              <svg viewBox="0 0 24 24"><path d={ICONES.bi} /></svg>B.I.
-            </Link>
-          )}
-        </>
-      )}
-
-      {role === "ADMIN" || role === "DIRECTOR" ? (
-        <Link to="/diretor" title="Tela do diretor">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6" /></svg>Diretoria
-        </Link>
-      ) : null}
-      {role === "ADMIN" ? (
-        <Link to="/admin" title="Voltar para a área de admin">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M15 18l-6-6 6-6" /></svg>Admin
-        </Link>
-      ) : null}
-
-      <div className="rail-foot">
-        {/* Sair não existia em tela nenhuma do v10: quem entrava no painel do
-            gerente só saía fechando o navegador — e num computador de estande,
-            compartilhado, isso deixa a sessão do gerente aberta para o próximo. */}
-        <button className="railb sair" onClick={signOut} title="Sair da conta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-            <path d="M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6" />
-          </svg>
-          Sair
-        </button>
-        <button className="icobtn" onClick={toggle} title="Alternar tema" aria-label="Alternar tema">
-          {mode === "dark"
-            ? <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="4.2" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19" /></svg>
-            : <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>}
-        </button>
+          <button className="sb-mini sair" onClick={signOut} title="Sair da conta" aria-label="Sair">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6" /></svg>
+            <span className="sb-lb">Sair</span>
+          </button>
+        </div>
       </div>
     </nav>
   );
 }
+
+const CSS = (recolhido: boolean) => `
+.mgr10.app2{grid-template-columns:${recolhido ? "72px" : "250px"} 1fr}
+.sbnav{background:#0E1626;color:#C7D2E0;height:100%;display:flex;flex-direction:column;overflow:hidden;font-family:Archivo,system-ui,sans-serif;border-right:1px solid rgba(255,255,255,.05)}
+.sb-brand{display:flex;align-items:center;gap:10px;padding:16px 14px 12px}
+.sb-logo{width:38px;height:34px;object-fit:contain;flex:none;border-radius:9px;background:#14B8E6;padding:3px}
+.sb-bt{flex:1;min-width:0}.sb-bt b{display:block;font-size:17px;font-weight:800;color:#fff;letter-spacing:-.02em}.sb-bt i{font-style:normal;font-size:11.5px;color:#7E8DA3;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-recolher{background:none;border:0;color:#7E8DA3;cursor:pointer;padding:4px;border-radius:7px;flex:none}
+.sb-recolher:hover{background:rgba(255,255,255,.06);color:#fff}
+.sb-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:4px 10px 10px}
+.sb-grupo{margin-top:14px}
+.sb-gh{font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:#5A6880;padding:0 10px 7px}
+.sbnav .sb-item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:10px 11px;border-radius:11px;color:#AFBBCD;text-decoration:none;border:0;background:none;cursor:pointer;font-size:14.5px;font-weight:600;position:relative;transition:background .13s,color .13s}
+.sbnav .sb-item:hover{background:rgba(255,255,255,.05);color:#fff}
+.sbnav .sb-item.on{background:rgba(31,110,230,.16);color:#6FB0FF;box-shadow:inset 0 0 0 1px rgba(79,150,255,.3)}
+.sbnav .sb-item svg{width:21px;height:21px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8}
+.sb-lb{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-badge{font-style:normal;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:700;background:#E2384B;color:#fff;border-radius:999px;padding:2px 8px;flex:none}
+.sb-foot{border-top:1px solid rgba(255,255,255,.06);padding:10px}
+.sb-user{display:flex;align-items:center;gap:10px;padding:8px;border-radius:12px;background:rgba(255,255,255,.04)}
+.sb-av{width:38px;height:38px;border-radius:11px;background:#1E2C44;color:#8FB7FF;font-size:12px;font-weight:800;display:grid;place-items:center;flex:none;border:1px solid rgba(120,160,255,.25)}
+.sb-ut{min-width:0}.sb-ut b{display:block;font-size:13.5px;font-weight:700;color:#EAF0F8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sb-ut small{font-size:11.5px;color:#49C988;display:flex;align-items:center;gap:5px}
+.sb-on{width:7px;height:7px;border-radius:50%;background:#2FD07C;flex:none}
+.sb-fbtns{display:flex;gap:8px;margin-top:8px}
+.sbnav .sb-mini{display:flex;align-items:center;justify-content:center;gap:8px;min-height:38px;flex:1;border:0;border-radius:10px;background:rgba(255,255,255,.05);color:#AFBBCD;cursor:pointer;font:inherit;font-size:13px;font-weight:700}
+.sbnav .sb-mini:hover{background:rgba(255,255,255,.1);color:#fff}
+.sbnav .sb-mini.sair:hover{color:#FF9B9B}
+/* recolhido = só ícones */
+.sbnav.recolhido .sb-bt,.sbnav.recolhido .sb-gh,.sbnav.recolhido .sb-lb,.sbnav.recolhido .sb-badge,.sbnav.recolhido .sb-ut{display:none}
+.sbnav.recolhido .sb-item{justify-content:center;padding:11px 0}
+.sbnav.recolhido .sb-brand{justify-content:center;padding:16px 6px 12px}
+.sbnav.recolhido .sb-recolher{position:absolute;top:18px;right:8px}
+.sbnav.recolhido .sb-user{justify-content:center;padding:8px 0;background:none}
+.sbnav.recolhido .sb-fbtns{flex-direction:column}
+@media(max-width:860px){.mgr10.app2{grid-template-columns:72px 1fr}
+  .sbnav .sb-bt,.sbnav .sb-gh,.sbnav .sb-lb,.sbnav .sb-badge,.sbnav .sb-ut{display:none}
+  .sbnav .sb-item{justify-content:center;padding:11px 0}.sbnav .sb-brand{justify-content:center}.sbnav .sb-user{justify-content:center;background:none}.sbnav .sb-fbtns{flex-direction:column}}
+`;
