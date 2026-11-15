@@ -69,7 +69,7 @@ export default function LeadsCentral() {
   const irCampanhas = () => setAba("campanhas");
 
   return (
-    <div className="mgr10">
+    <div className="mgr10 app2">
       <style>{CSS}</style>
       <RailV10 atual={"leads" as any} mode={mode} toggle={toggle} />
       <main className="shell2">
