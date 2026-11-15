@@ -11,12 +11,13 @@ import SeletorPeriodo from "@/components/manager-v10/SeletorPeriodo";
 import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { atendido, ehTeste } from "@/lib/situacaoLead";
 import { COLS_LEAD, type LeadN } from "@/components/leads2/comum";
-import FunilCompleto from "@/components/manager-v10/FunilCompleto";
+import FunilV4 from "@/components/manager-v10/FunilV4";
 import AnunciosGerente from "@/components/anuncios/AnunciosGerente";
 import LeadsOrigem from "@/components/leads/LeadsOrigem";
+import { Link } from "react-router-dom";
 
 const sb = supabase as any;
-type Aba = "funil" | "campanhas" | "leads";
+type Aba = "funil" | "campanhas" | "leads" | "tarefas";
 const dias = (iso?: string | null) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 864e5) : 0);
 
 export default function LeadsCentral() {
@@ -44,7 +45,10 @@ export default function LeadsCentral() {
       const ativos = ((ativosR.data ?? []) as LeadN[]).filter((l) => !ehTeste(l));
       const nome = new Map(((csR.data ?? []) as any[]).map((p) => [p.id, [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || "—"]));
       const campanhas = ((saudeR.data ?? []) as any[]).flatMap((s) => s.dados?.campanhas ?? []).filter((c: any) => c.status === "ACTIVE");
-      return { ativos, nome, campanhas, forms: (formsR.data ?? []).length };
+      const ids = [...((csR.data ?? []) as any[]).map((p) => p.id), gerente];
+      const tarefas = (await sb.from("tasks").select("id,title,due_at,status,user_id,lead_id").in("user_id", ids)
+        .eq("status", "OPEN").lte("due_at", new Date(Date.now() + 7 * 864e5).toISOString()).order("due_at").limit(300)).data ?? [];
+      return { ativos, nome, campanhas, forms: (formsR.data ?? []).length, tarefas: tarefas as any[] };
     },
   });
 
@@ -82,6 +86,7 @@ export default function LeadsCentral() {
             ["funil", "📊", "Funil comercial", "5 etapas"],
             ["campanhas", "🎯", "Campanhas & mídia", diag.nAtivas ? `${diag.nAtivas} ativas` : "mídia"],
             ["leads", "📋", "Todos os leads & ação", diag.semToque ? `${diag.semToque} sem toque` : "a carteira"],
+            ["tarefas", "✅", "Tarefas da equipe", data?.tarefas?.length ? `${data.tarefas.length} abertas` : "em dia"],
           ] as [Aba, string, string, string][]).map(([k, ic, lb, sub]) => (
             <button key={k} role="tab" aria-selected={aba === k} className={`lc-aba${aba === k ? " on" : ""}`} onClick={() => setAba(k)}>
               <span className="lc-aba-ic">{ic}</span>
@@ -109,9 +114,29 @@ export default function LeadsCentral() {
         </section>
 
         <section className="lc-conteudo">
-          {aba === "funil" && <FunilCompleto managerId={gerente} />}
+          {aba === "funil" && <FunilV4 managerId={gerente} como={como ?? null} />}
           {aba === "campanhas" && <AnunciosGerente embutido donoId={gerente} />}
           {aba === "leads" && <LeadsOrigem como={como ?? null} />}
+          {aba === "tarefas" && (
+            <div className="lc-tarefas">
+              <h3>Tarefas da equipe · próximos 7 dias</h3>
+              {!data?.tarefas?.length ? <p className="lc-t-vazio">Nenhuma tarefa aberta para os próximos dias. ✅</p> : (
+                <div className="lc-t-rows">
+                  {data.tarefas.map((t) => {
+                    const atrasada = new Date(t.due_at).getTime() < Date.now();
+                    return (
+                      <div key={t.id} className={`lc-t-row${atrasada ? " atr" : ""}`}>
+                        <span className="lc-t-quando">{new Date(t.due_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}{atrasada && " · atrasada"}</span>
+                        <span className="lc-t-tit">{t.title || "Tarefa"}</span>
+                        <span className="lc-t-quem">{data.nome.get(t.user_id)?.split(" ")[0] ?? "—"}</span>
+                        {t.lead_id ? <Link className="lc-t-ver" to={`/manager/leads-nova?lead=${t.lead_id}`}>Ver lead</Link> : <span />}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </section>
       </main>
     </div>
@@ -123,7 +148,19 @@ const CSS = `
 .lc-top h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.02em}
 .lc-top p{margin:4px 0 0;font-size:13.5px;color:var(--cv-text-muted,#5B6B80)}
 .lc-top-dir{display:flex;gap:10px;align-items:center}
-.lc-abas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.lc-abas{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.lc-tarefas{background:var(--cv-surface,#fff);border:1px solid var(--cv-border,#E7EDF6);border-radius:14px;padding:16px}
+.lc-tarefas h3{margin:0 0 10px;font-size:15px;font-weight:800}
+.lc-t-vazio{font-size:13.5px;color:var(--cv-text-muted,#6B7A90)}
+.lc-t-rows{display:flex;flex-direction:column}
+.lc-t-row{display:grid;grid-template-columns:150px minmax(0,1fr) 110px 80px;gap:10px;align-items:center;padding:11px 0;border-top:1px solid var(--cv-border,#EEF2F8);font-size:13.5px}
+.lc-t-row:first-child{border-top:0}
+.lc-t-quando{font-size:12px;color:var(--cv-text-muted,#6B7A90);font-family:"JetBrains Mono",monospace}
+.lc-t-row.atr .lc-t-quando{color:#A8322A;font-weight:700}
+.lc-t-tit{font-weight:600;min-width:0}
+.lc-t-quem{font-size:12.5px;color:var(--cv-text-muted,#6B7A90)}
+.lc-t-ver{font-size:12.5px;font-weight:700;color:#1f63e0;text-decoration:none}
+@media (max-width:700px){.lc-t-row{grid-template-columns:1fr auto;gap:4px}.lc-t-quem{display:none}}
 .lc-aba{display:flex;align-items:center;gap:10px;text-align:left;padding:13px 16px;border-radius:12px;border:1px solid var(--cv-border,#E7EDF6);background:var(--cv-surface,#fff);cursor:pointer;transition:transform .08s ease}
 .lc-aba:active{transform:scale(.99)}
 .lc-aba.on{background:#1f63e0;border-color:#1f63e0}
@@ -140,5 +177,5 @@ const CSS = `
 .lc-diag-b{flex:none;min-height:44px;padding:0 18px;border-radius:10px;border:0;background:#1f63e0;color:#fff;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
 .lc-diag-b:active{transform:scale(.99)}
 .lc-conteudo{min-height:300px}
-@media (max-width:900px){.lc-abas{grid-template-columns:1fr}.lc-diag{flex-direction:column;align-items:flex-start}.lc-diag-b{width:100%}}
+@media (max-width:900px){.lc-abas{grid-template-columns:1fr 1fr}.lc-diag{flex-direction:column;align-items:flex-start}.lc-diag-b{width:100%}}
 `;
