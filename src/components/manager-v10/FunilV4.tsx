@@ -11,7 +11,7 @@ import { useDadosEquipe } from "@/hooks/useDadosEquipe";
 import { usePastas } from "@/hooks/usePastas";
 import { atendido } from "@/lib/situacaoLead";
 import { cobrarFila } from "@/hooks/useLeads";
-import { COLS_LEAD, VISITA, ENCERRADO, ha, situacao, SIT, type LeadN, type Corretor } from "@/components/leads2/comum";
+import { COLS_LEAD, VISITA, ENCERRADO, ha, situacao, SIT, CSS as LEADS_CSS, type LeadN, type Corretor } from "@/components/leads2/comum";
 import LeadGaveta from "@/components/leads2/LeadGaveta";
 
 const sb = supabase as any;
@@ -90,7 +90,7 @@ export default function FunilV4({ managerId, como }: { managerId: string; como?:
 
   return (
     <section className="fv4">
-      <style>{CSS}</style>
+      <style>{CSS}</style><style>{LEADS_CSS}</style>
 
       {/* FUNIL — 5 etapas clicáveis */}
       <div className="fv4-funil">

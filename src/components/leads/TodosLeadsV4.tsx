@@ -9,7 +9,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { usePeriodo } from "@/hooks/usePeriodo";
 import { cobrarFila } from "@/hooks/useLeads";
 import LeadGaveta from "@/components/leads2/LeadGaveta";
-import type { Corretor } from "@/components/leads2/comum";
+import { CSS as LEADS_CSS, type Corretor } from "@/components/leads2/comum";
 
 const sb = supabase as any;
 type Lead = {
@@ -60,7 +60,12 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
     queryFn: async () => (await sb.rpc("leads_origem", { p_como: como || null, p_de: per.de, p_ate: per.ate })).data as Painel,
   });
   const leads = data?.leads ?? [];
-  const corretores: Corretor[] = (data?.equipes ?? []).flatMap((e) => e.corretores).map((c) => ({ id: c.id, nome: c.nome, roleta: true }));
+  const corretores: Corretor[] = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of data?.equipes ?? []) for (const c of e.corretores) m.set(c.id, c.nome);
+    for (const l of leads) if (l.corretor) m.set(l.corretor, l.corretor_nome ?? l.corretor);
+    return [...m.entries()].map(([id, nome]) => ({ id, nome, roleta: true })).sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [data, leads]);
   const carteira = useMemo(() => { const m = new Map<string, number>(); for (const l of leads) if (l.corretor && !descartado(l)) m.set(l.corretor, (m.get(l.corretor) ?? 0) + 1); return m; }, [leads]);
   const recarregar = () => qc.invalidateQueries({ queryKey: ["tl4"] });
 
@@ -100,7 +105,7 @@ export default function TodosLeadsV4({ como }: { como?: string | null }) {
 
   return (
     <section className="tl4">
-      <style>{CSS}</style>
+      <style>{CSS}</style><style>{LEADS_CSS}</style>
 
       <div className="tl4-pils" role="tablist">
         {PILS.map(([k, lb, cor]) => (
