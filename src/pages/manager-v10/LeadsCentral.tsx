@@ -13,7 +13,7 @@ import { atendido, ehTeste } from "@/lib/situacaoLead";
 import { COLS_LEAD, type LeadN } from "@/components/leads2/comum";
 import FunilV4 from "@/components/manager-v10/FunilV4";
 import AnunciosGerente from "@/components/anuncios/AnunciosGerente";
-import LeadsOrigem from "@/components/leads/LeadsOrigem";
+import TodosLeadsV4 from "@/components/leads/TodosLeadsV4";
 import { Link } from "react-router-dom";
 
 const sb = supabase as any;
@@ -116,7 +116,7 @@ export default function LeadsCentral() {
         <section className="lc-conteudo">
           {aba === "funil" && <FunilV4 managerId={gerente} como={como ?? null} />}
           {aba === "campanhas" && <AnunciosGerente embutido donoId={gerente} />}
-          {aba === "leads" && <LeadsOrigem como={como ?? null} />}
+          {aba === "leads" && <TodosLeadsV4 como={como ?? null} />}
           {aba === "tarefas" && (
             <div className="lc-tarefas">
               <h3>Tarefas da equipe · próximos 7 dias</h3>
