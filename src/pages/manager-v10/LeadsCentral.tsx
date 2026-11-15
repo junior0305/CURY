@@ -12,9 +12,10 @@ import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { atendido, ehTeste } from "@/lib/situacaoLead";
 import { COLS_LEAD, type LeadN } from "@/components/leads2/comum";
 import FunilV4 from "@/components/manager-v10/FunilV4";
-import AnunciosGerente from "@/components/anuncios/AnunciosGerente";
 import TodosLeadsV4 from "@/components/leads/TodosLeadsV4";
-import { Link } from "react-router-dom";
+import TarefasV4 from "@/components/manager-v10/TarefasV4";
+import CampanhasV4 from "@/components/manager-v10/CampanhasV4";
+
 
 const sb = supabase as any;
 type Aba = "funil" | "campanhas" | "leads" | "tarefas";
@@ -115,28 +116,9 @@ export default function LeadsCentral() {
 
         <section className="lc-conteudo">
           {aba === "funil" && <FunilV4 managerId={gerente} como={como ?? null} />}
-          {aba === "campanhas" && <AnunciosGerente embutido donoId={gerente} />}
+          {aba === "campanhas" && <CampanhasV4 donoId={gerente} />}
           {aba === "leads" && <TodosLeadsV4 como={como ?? null} />}
-          {aba === "tarefas" && (
-            <div className="lc-tarefas">
-              <h3>Tarefas da equipe · próximos 7 dias</h3>
-              {!data?.tarefas?.length ? <p className="lc-t-vazio">Nenhuma tarefa aberta para os próximos dias. ✅</p> : (
-                <div className="lc-t-rows">
-                  {data.tarefas.map((t) => {
-                    const atrasada = new Date(t.due_at).getTime() < Date.now();
-                    return (
-                      <div key={t.id} className={`lc-t-row${atrasada ? " atr" : ""}`}>
-                        <span className="lc-t-quando">{new Date(t.due_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}{atrasada && " · atrasada"}</span>
-                        <span className="lc-t-tit">{t.title || "Tarefa"}</span>
-                        <span className="lc-t-quem">{data.nome.get(t.user_id)?.split(" ")[0] ?? "—"}</span>
-                        {t.lead_id ? <Link className="lc-t-ver" to={`/manager/leads-nova?lead=${t.lead_id}`}>Ver lead</Link> : <span />}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+          {aba === "tarefas" && <TarefasV4 managerId={gerente} />}
         </section>
       </main>
     </div>
