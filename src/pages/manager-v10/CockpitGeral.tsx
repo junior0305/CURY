@@ -50,7 +50,7 @@ export default function CockpitGeral() {
   const [metrica, setMetrica] = useState<Metrica>("leads");
   const [painel, setPainel] = useState<PainelTipo | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
-  const [repassar, setRepassar] = useState<{ nome: string; leadIds: string[] } | null>(null);
+  const [repassar, setRepassar] = useState<{ nome: string; leadIds: string[]; fromId?: string } | null>(null);
   const [indo, setIndo] = useState(false);
 
   const hoje = diaSP(new Date());
@@ -280,9 +280,10 @@ export default function CockpitGeral() {
     } catch (e: any) { toast.error(`Não consegui mudar: ${e?.message ?? e}`); } finally { setOcupado(null); }
   };
   const abrirRepassar = (brokerId: string, nome: string) => {
-    const ids = ativos.filter((l) => l.broker_id === brokerId && !atendido(l)).map((l) => l.id);
-    if (!ids.length) { toast.info(`${nome} não tem lead sem atendimento para repassar.`); return; }
-    setRepassar({ nome, leadIds: ids });
+    // repassa TODOS os leads ativos do corretor — você escolhe os corretores que recebem no painel
+    const ids = ativos.filter((l) => l.broker_id === brokerId).map((l) => l.id);
+    if (!ids.length) { toast.info(`${nome} não tem lead na carteira para repassar.`); return; }
+    setRepassar({ nome, leadIds: ids, fromId: brokerId });
   };
   const confirmarRepasse = async (destinoIds: string[]) => {
     if (!repassar || !destinoIds.length || indo) return;
@@ -450,7 +451,7 @@ export default function CockpitGeral() {
           </div>
           <div className="cg-tbl">
             <div className="cg-tr cg-th">
-              <span>Corretor</span><span>Plantão</span><span>CRM</span><span>Produção</span><span>Roleta</span><span className="r">Ações rápidas</span>
+              <span>Corretor</span><span>Plantão</span><span>No sistema</span><span>Produção</span><span>Roleta</span><span className="r">Ações rápidas</span>
             </div>
             {tropa.map((t) => (
               <div className="cg-tr" key={t.id}>
@@ -536,7 +537,7 @@ export default function CockpitGeral() {
 
       {/* ── drawer de repasse (escolhe 1+ corretores) ── */}
       {repassar && (
-        <RedistribuirDrawer n={repassar.leadIds.length} corretores={ricos} indo={indo}
+        <RedistribuirDrawer n={repassar.leadIds.length} corretores={ricos.filter((c) => c.id !== repassar.fromId)} indo={indo}
           onConfirm={(ids) => confirmarRepasse(ids)} onFechar={() => setRepassar(null)} />
       )}
     </div>
