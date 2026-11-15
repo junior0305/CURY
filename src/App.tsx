@@ -40,6 +40,7 @@ import { Boundary } from "./components/manager-v10/Boundary";
 import AnunciosV10 from "./pages/manager-v10/Anuncios";
 import LeadsV10 from "./pages/manager-v10/Leads";
 import LeadsNova from "./pages/manager-v10/LeadsNova";
+import LeadsCentral from "./pages/manager-v10/LeadsCentral";
 import DispararV10 from "./pages/manager-v10/Disparar";
 import PastasV10 from "./pages/manager-v10/Pastas";
 import EstrategiaV10 from "./pages/manager-v10/Estrategia";
@@ -231,8 +232,9 @@ const App = () => (
             <Route path="/manager-v3" element={<ProtectedManagerRoute><ManagerV3 /></ProtectedManagerRoute>} />
             {/* v10 em construção — o /manager de produção segue intocado. */}
             <Route path="/manager-v10" element={<ProtectedManagerRoute><Boundary><ManagerV10 /></Boundary></ProtectedManagerRoute>} />
-            {/* 10/11: tela nova de Leads (protótipo aprovado); a antiga fica em /manager/leads-antiga */}
-            <Route path="/manager/leads" element={<ProtectedManagerRoute><LeadsNova /></ProtectedManagerRoute>} />
+            {/* 14/11: Central de Leads & Performance (mockup V5). A de 6 abas fica em /manager/leads-nova; a antiga em /manager/leads-antiga */}
+            <Route path="/manager/leads" element={<ProtectedManagerRoute><LeadsCentral /></ProtectedManagerRoute>} />
+            <Route path="/manager/leads-nova" element={<ProtectedManagerRoute><LeadsNova /></ProtectedManagerRoute>} />
             <Route path="/manager/leads-antiga" element={<ProtectedManagerRoute><LeadsV10 /></ProtectedManagerRoute>} />
             <Route path="/manager/pastas" element={<ProtectedManagerRoute><PastasV10 /></ProtectedManagerRoute>} />
             <Route path="/manager/config" element={<ProtectedManagerRoute><ConfiguracoesGerente /></ProtectedManagerRoute>} />
