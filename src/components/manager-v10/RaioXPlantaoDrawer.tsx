@@ -17,6 +17,8 @@ type Props = {
   diag?: string;
   corretores?: { id: string; nome: string }[];
   como?: string | null;
+  focoLeadId?: string | null;
+  onRepasse?: (r: { lead: string; de: string; para: string; hora: string }) => void;
   onClose: () => void;
 };
 
@@ -26,23 +28,25 @@ const horaSP = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { time
 const ini2 = (n: string) => (n || "?").trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 const SIGLA = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 
-export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, pastas, visitas, diag, corretores, como, onClose }: Props) {
+export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, pastas, visitas, diag, corretores, como, focoLeadId, onRepasse, onClose }: Props) {
   const qc = useQueryClient();
   const temProd = vendas !== undefined;
   const [aberto, setAberto] = useState(false);
   const [repassando, setRepassando] = useState<string | null>(null); // leadId em repasse
   const [alvoRep, setAlvoRep] = useState("");
+  const [confirmar, setConfirmar] = useState(false);
   const [movidos, setMovidos] = useState<Record<string, string>>({}); // leadId -> nome destino
   const outros = (corretores ?? []).filter((c) => c.id !== brokerId);
-  const repassar = async (leadId: string) => {
+  const repassar = async (leadId: string, leadNome: string) => {
     if (!alvoRep) return;
     const destino = outros.find((c) => c.id === alvoRep);
     try {
       const { error } = await sb.rpc("redistribuir_lote", { p_leads: [leadId], p_para: [alvoRep], p_como: como ?? null, p_motivo: "raio-x do corretor" });
       if (error) throw error;
       setMovidos((m) => ({ ...m, [leadId]: destino?.nome?.split(" ")[0] ?? "outro" }));
-      setRepassando(null); setAlvoRep("");
+      setRepassando(null); setAlvoRep(""); setConfirmar(false);
       toast.success(`Lead repassado para ${destino?.nome?.split(" ")[0] ?? "o corretor"}.`);
+      onRepasse?.({ lead: leadNome || "Lead", de: nome, para: destino?.nome ?? "outro", hora: new Date().toLocaleTimeString("pt-BR", { timeZone: SP, hour: "2-digit", minute: "2-digit" }) });
       qc.invalidateQueries({ queryKey: ["tropav4"] });
     } catch (e: any) { toast.error(e?.message || "Não deu para repassar."); }
   };
@@ -115,18 +119,30 @@ export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, past
   });
   const fmtSla = (s: number | null | undefined) => s == null ? "—" : s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
 
-  // Leads do corretor — abrem AQUI dentro (sem sair da tela)
-  const [verLeads, setVerLeads] = useState(false);
-  const { data: leadsCorr, isLoading: carregandoLeads } = useQuery({
+  // Leads do corretor — abrem AQUI dentro (sem sair da tela). Abre já se veio de um lead focado.
+  const [verLeads, setVerLeads] = useState(!!focoLeadId);
+  const { data: leadsRaw, isLoading: carregandoLeads } = useQuery({
     queryKey: ["rxp-leads", brokerId, verLeads],
     enabled: !!brokerId && verLeads,
     staleTime: 2 * 60_000,
     queryFn: async () => {
-      const { data } = await sb.from("leads").select("id,name,status,created_at,primeiro_contato_em,last_broker_whatsapp_at,last_lead_response_at,visit_scheduled_at")
-        .eq("broker_id", brokerId).order("created_at", { ascending: false }).limit(80);
+      const { data } = await sb.from("leads").select("id,name,status,created_at,atribuido_em,primeiro_contato_em,last_broker_whatsapp_at,last_lead_response_at,visit_scheduled_at")
+        .eq("broker_id", brokerId).order("created_at", { ascending: false }).limit(120);
       return (data ?? []) as any[];
     },
   });
+  const semContato = (l: any) => !l.last_broker_whatsapp_at || (l.atribuido_em && new Date(l.last_broker_whatsapp_at) < new Date(l.atribuido_em));
+  const esperaMs = (l: any) => Date.now() - new Date(l.atribuido_em || l.created_at).getTime();
+  // ordena: lead focado primeiro, depois sem contato mais antigo primeiro, depois recentes
+  const leadsCorr = useMemo(() => {
+    const arr = [...(leadsRaw ?? [])];
+    return arr.sort((a, b) => {
+      if (a.id === focoLeadId) return -1; if (b.id === focoLeadId) return 1;
+      const sa = semContato(a) ? 1 : 0, sb2 = semContato(b) ? 1 : 0;
+      if (sa !== sb2) return sb2 - sa;
+      return sa ? esperaMs(b) - esperaMs(a) : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [leadsRaw, focoLeadId]);
   const haQuanto = (iso?: string | null) => {
     if (!iso) return "";
     const h = Math.floor((Date.now() - new Date(iso).getTime()) / 3600000);
@@ -135,8 +151,8 @@ export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, past
   const situaLead = (l: any): [string, string] => {
     if (l.last_lead_response_at) return ["Respondeu", "#10B981"];
     if (l.visit_scheduled_at) return ["Visita marcada", "#38BDF8"];
-    if (l.primeiro_contato_em || l.last_broker_whatsapp_at) return ["Em contato", "#FCD34D"];
-    return ["Sem contato", "#FDA4AF"];
+    if (semContato(l)) return [`🚨 ${haQuanto(l.atribuido_em || l.created_at)} sem 1º contato`, "#FDA4AF"];
+    return ["Em contato", "#FCD34D"];
   };
 
   const mesNome = new Date().toLocaleDateString("pt-BR", { timeZone: SP, month: "long" });
@@ -225,23 +241,33 @@ export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, past
               <p className="rxp-nota" style={{ margin: 0 }}>Nenhum lead com esse corretor.</p>
             ) : (
               <div className="rxp-leads">
-                {leadsCorr.map((l) => { const [sit, cor] = situaLead(l); const movido = movidos[l.id]; return (
-                  <div className="rxp-lead" key={l.id}>
+                {leadsCorr.map((l) => { const [sit, cor] = situaLead(l); const movido = movidos[l.id]; const foco = l.id === focoLeadId; const alvoNome = outros.find((c) => c.id === alvoRep)?.nome?.split(" ")[0]; return (
+                  <div className={`rxp-lead${foco ? " foco" : ""}`} key={l.id}>
                     <div className="rxp-lrow">
-                      <span className="rxp-ln">{l.name || "Sem nome"}</span>
+                      <span className="rxp-ln">{foco && "📌 "}{l.name || "Sem nome"}</span>
                       {movido ? <span className="rxp-ls" style={{ color: "#38BDF8", background: "#38BDF81E" }}>→ {movido}</span>
                         : <span className="rxp-ls" style={{ color: cor, background: cor + "1E" }}>{sit}</span>}
                       <span className="rxp-lt">{haQuanto(l.created_at)}</span>
-                      {!movido && outros.length > 0 && <button className="rxp-rep" title="Repassar para outro corretor" onClick={() => { setRepassando(repassando === l.id ? null : l.id); setAlvoRep(""); }}>⇄</button>}
+                      {!movido && outros.length > 0 && <button className="rxp-rep" title="Repassar para outro corretor" onClick={() => { setRepassando(repassando === l.id ? null : l.id); setAlvoRep(""); setConfirmar(false); }}>⇄</button>}
                     </div>
                     {repassando === l.id && !movido && (
+                      !confirmar ? (
                       <div className="rxp-repbox">
                         <select value={alvoRep} onChange={(e) => setAlvoRep(e.target.value)}>
                           <option value="">Repassar para…</option>
                           {outros.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                         </select>
-                        <button className="rxp-repok" disabled={!alvoRep} onClick={() => repassar(l.id)}>Repassar</button>
+                        <button className="rxp-repok" disabled={!alvoRep} onClick={() => setConfirmar(true)}>Repassar</button>
                       </div>
+                      ) : (
+                      <div className="rxp-confirm">
+                        <span>Passar <b>{l.name || "este lead"}</b> → <b style={{ color: "#38BDF8" }}>{alvoNome}</b>?</span>
+                        <div className="rxp-cbtns">
+                          <button className="rxp-cok" onClick={() => repassar(l.id, l.name)}>✓ Confirmar</button>
+                          <button className="rxp-cno" onClick={() => setConfirmar(false)}>Cancelar</button>
+                        </div>
+                      </div>
+                      )
                     )}
                   </div>
                 ); })}
@@ -293,6 +319,12 @@ const CSS = `
 .rxp-repbox select{flex:1;background:#0A1220;border:1px solid #27354B;color:#DCE3EC;border-radius:6px;padding:6px 8px;font-size:12px}
 .rxp-repok{background:#2563EB;border:none;color:#fff;border-radius:6px;padding:0 12px;font-size:12px;font-weight:800;cursor:pointer}
 .rxp-repok:disabled{opacity:.45;cursor:default}
+.rxp-lead.foco{border-color:#F59E0B;background:rgba(245,158,11,.08)}
+.rxp-confirm{margin-top:8px;padding:9px 10px;background:#0A1220;border:1px solid #F59E0B55;border-radius:7px;font-size:12px;color:#DCE3EC}
+.rxp-confirm b{color:#fff}
+.rxp-cbtns{display:flex;gap:6px;margin-top:8px}
+.rxp-cok{flex:1;background:#10B981;border:none;color:#04121F;border-radius:6px;padding:7px;font-size:12px;font-weight:800;cursor:pointer}
+.rxp-cno{background:#121C30;border:1px solid #27354B;color:#8A94A6;border-radius:6px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer}
 .rxp-ln{font-size:12.5px;color:#DCE3EC;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rxp-ls{font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;white-space:nowrap}
 .rxp-lt{font-size:10.5px;color:#6B7688;font-family:'JetBrains Mono',monospace;min-width:30px;text-align:right}

@@ -114,6 +114,14 @@ export default function TropaV4() {
   const { data: pastasData } = usePastas(gerente);
   const pastasG = pastasData?.minhas ?? [];
   const [verRaiox, setVerRaiox] = useState<string | null>(null);
+  const [focoLead, setFocoLead] = useState<string | null>(null);
+  // Ledger "Repasses de hoje": guarda o que ESTE gestor repassou aqui (localStorage por gestor/dia; distribution_logs é só admin)
+  type Repasse = { lead: string; de: string; para: string; hora: string };
+  const chaveRepasses = `cmd_repasses_${gerente}_${new Date().toLocaleDateString("en-CA")}`;
+  const [repasses, setRepasses] = useState<Repasse[]>(() => { try { return JSON.parse(localStorage.getItem(chaveRepasses) || "[]"); } catch { return []; } });
+  const [verRepasses, setVerRepasses] = useState(false);
+  const registrarRepasse = (r: Repasse) => setRepasses((xs) => { const n = [r, ...xs].slice(0, 100); try { localStorage.setItem(chaveRepasses, JSON.stringify(n)); } catch {} return n; });
+  const abrirDrawer = (brokerId: string, leadId?: string | null) => { setFocoLead(leadId ?? null); setVerRaiox(brokerId); };
   const { data: rendimento } = useQuery({
     queryKey: ["tropav4-rendimento", gerente],
     enabled: !!gerente && modo === "gestao",
@@ -207,12 +215,12 @@ export default function TropaV4() {
       const atendendo = ativos.some((l) => l.last_broker_whatsapp_at && now - new Date(l.last_broker_whatsapp_at).getTime() < 60 * 60_000);
       // lead em andamento = o mais urgente (não contatado mais antigo) OU o último tocado
       const lead = naoContatados[0] ?? ativos.sort((a, b2) => new Date(b2.last_broker_whatsapp_at || b2.created_at).getTime() - new Date(a.last_broker_whatsapp_at || a.created_at).getTime())[0] ?? null;
-      let leadInfo: { nome: string; tempoMs: number; contatado: boolean; estourado: boolean } | null = null;
+      let leadInfo: { id: string; nome: string; tempoMs: number; contatado: boolean; estourado: boolean } | null = null;
       if (lead) {
         const t0 = new Date(lead.atribuido_em || lead.created_at).getTime();
         const cont = !!contatado(lead);
         const tempoMs = now - (cont ? new Date(lead.last_broker_whatsapp_at).getTime() : t0);
-        leadInfo = { nome: lead.name || "Cliente", tempoMs, contatado: cont, estourado: !cont && (now - t0) > 10 * 60_000 };
+        leadInfo = { id: lead.id, nome: lead.name || "Cliente", tempoMs, contatado: cont, estourado: !cont && (now - t0) > 10 * 60_000 };
       }
       return { id: b.id, nome, estande: pl?.estande ?? null, hora: pl?.hora ?? null, plantao: !!pl, online, visto: b.last_seen_at as string | null, roleta, atendendo, lead: leadInfo, naoContatados: naoContatados.length };
     }).sort((a, b) => Number(b.lead?.estourado ?? false) - Number(a.lead?.estourado ?? false) || Number(b.plantao) - Number(a.plantao) || a.nome.localeCompare(b.nome));
@@ -371,7 +379,7 @@ export default function TropaV4() {
                     <span className="tv-rampa">{c.marcos.map((ok, i) => <span key={i} className={`tv-marco${ok ? " ok" : i === c.feito ? " atual" : ""}`}>{i + 1}</span>)}</span>
                     <span className="tv-dim2" style={{ color: c.bom ? "#10B981" : "#F59E0B", whiteSpace: "normal" }}>{c.diag}</span>
                     <span><em className="tv-b" style={{ color: RISCO[c.risco][1], background: `${RISCO[c.risco][1]}22` }}>{RISCO[c.risco][0]}</em></span>
-                    <span className="r"><button className="tv-rol on" onClick={() => setVerRaiox(c.id)}>🔍 Ver Raio-X</button></span>
+                    <span className="r"><button className="tv-rol on" onClick={() => abrirDrawer(c.id)}>🔍 Ver Raio-X</button></span>
                   </div>
                 ))}
               </div>
@@ -385,7 +393,7 @@ export default function TropaV4() {
                     <div className="tv-tr2" key={s.id} style={{ gridTemplateColumns: "minmax(0,1.5fr) 1fr auto" }}>
                       <span className="tv-corr"><span className="tv-av">{ini2(s.nome)}</span><b>{s.nome}</b></span>
                       <span className="tv-dim2">{s.visto ? `visto há ${haCurto(now - new Date(s.visto).getTime())}` : "nunca entrou"}</span>
-                      <span className="r"><button className="tv-act ver" onClick={() => setVerRaiox(s.id)} title="Ver os leads e repassar">👁️</button></span>
+                      <span className="r"><button className="tv-act ver" onClick={() => abrirDrawer(s.id)} title="Ver os leads e repassar">👁️</button></span>
                     </div>
                   ))}
                 </div>
@@ -432,6 +440,27 @@ export default function TropaV4() {
           </div>
         )}
 
+        {/* Repasses de hoje — controle do que o gestor passou */}
+        {repasses.length > 0 && (
+          <div className="tv-rep-strip">
+            <button className="tv-rep-h" onClick={() => setVerRepasses((v) => !v)}>
+              <b>↪ Repasses de hoje <i>{repasses.length}</i></b>
+              <span>{verRepasses ? "ocultar" : "ver o que você passou"} {verRepasses ? "▲" : "▼"}</span>
+            </button>
+            {verRepasses && (
+              <div className="tv-rep-list">
+                {repasses.map((r, i) => (
+                  <div className="tv-rep-i" key={i}>
+                    <span className="tv-rep-l">{r.lead}</span>
+                    <span className="tv-rep-x">{r.de.split(" ")[0]} <b>→ {r.para.split(" ")[0]}</b></span>
+                    <span className="tv-rep-t">{r.hora}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* pílulas */}
         <div className="tv-pills">
           {PILLS.map(([f, lb]) => { const n = tropa.filter((t) => casa(t, f)).length; return <button key={f} className={`tv-pill${ft === f ? " on" : ""}`} onClick={() => setFt(f)}>{lb} <i>{n}</i></button>; })}
@@ -452,18 +481,18 @@ export default function TropaV4() {
                 <span>{t.plantao ? <em className="tv-b azul">🏢 {hhmm(t.hora)} · OK</em> : <em className="tv-b cinza">✕ sem check-in</em>}</span>
                 <span>{t.atendendo ? <em className="tv-b ambar">💬 em atendimento</em> : t.online ? <em className="tv-b verde">🟢 online / livre</em> : <em className="tv-b vermelho">🔴 offline{t.visto ? ` · há ${haCurto(now - new Date(t.visto).getTime())}` : ""}</em>}</span>
                 <span className="tv-lead">
-                  {t.lead ? <>
+                  {t.lead ? <button className="tv-leadbtn" onClick={() => abrirDrawer(t.id, t.lead!.id)} title="Abrir este lead e repassar">
                     <b>{t.lead.nome}</b>
                     <small className={t.lead.estourado ? "tv-red" : t.lead.contatado ? "tv-ok" : "tv-amb"}>
                       {t.lead.estourado ? `🚨 ${mmss(t.lead.tempoMs)} sem 1º contato` : t.lead.contatado ? `✓ há ${mmss(t.lead.tempoMs)} no contato` : `⏳ ${mmss(t.lead.tempoMs)} esperando 1º toque`}
                     </small>
-                  </> : <small className="tv-dim">sem lead ativo{t.plantao ? " · pronto p/ receber" : ""}</small>}
+                  </button> : <small className="tv-dim">sem lead ativo{t.plantao ? " · pronto p/ receber" : ""}</small>}
                 </span>
                 <span>
                   <button className={`tv-rol${t.roleta ? " on" : " off"}`} disabled={ocupado === t.id} onClick={() => alternar(t.id, t.nome, t.roleta)}>{t.roleta ? "● Na roleta" : "○ Pausado"}</button>
                 </span>
                 <span className="r tv-acts">
-                  <button className="tv-act ver" onClick={() => setVerRaiox(t.id)} title="Ver os leads e repassar">👁️</button>
+                  <button className="tv-act ver" onClick={() => abrirDrawer(t.id, t.lead?.id)} title="Ver os leads e repassar">👁️</button>
                 </span>
               </div>
             ))}
@@ -479,7 +508,7 @@ export default function TropaV4() {
         const t = tropa.find((x) => x.id === verRaiox);
         const nome = g?.nome ?? t?.nome; if (!nome) return null;
         const lista = tropa.map((x) => ({ id: x.id, nome: x.nome }));
-        return <RaioXPlantaoDrawer brokerId={verRaiox} nome={nome} stand={t?.estande} vendas={g?.vendas} pastas={g?.pastas} visitas={g?.visitas} diag={g?.diag} corretores={lista} como={como} onClose={() => setVerRaiox(null)} />;
+        return <RaioXPlantaoDrawer brokerId={verRaiox} nome={nome} stand={t?.estande} vendas={g?.vendas} pastas={g?.pastas} visitas={g?.visitas} diag={g?.diag} corretores={lista} como={como} focoLeadId={focoLead} onRepasse={registrarRepasse} onClose={() => { setVerRaiox(null); setFocoLead(null); }} />;
       })()}
     </div>
   );
@@ -538,6 +567,19 @@ const CSS = `
 .tv-lead b{font-size:13.5px;font-weight:700;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tv-lead small{font-size:11.5px;font-family:"JetBrains Mono",monospace;display:block;margin-top:1px}
 .tv-red{color:#F87171;font-weight:700}.tv-ok{color:#10B981}.tv-amb{color:#F59E0B}.tv-dim{color:var(--td);font-size:12px}
+.tvx .tv-leadbtn{font:inherit;text-align:left;background:none;border:none;padding:0;cursor:pointer;display:flex;flex-direction:column;gap:2px;width:100%}
+.tvx .tv-leadbtn:hover b{text-decoration:underline}
+.tvx .tv-leadbtn b{color:var(--tx)}
+.tvx .tv-rep-strip{margin:14px 0 4px;border:1px solid rgba(56,189,248,.28);background:rgba(56,189,248,.06);border-radius:12px;overflow:hidden}
+.tvx .tv-rep-h{width:100%;display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:none;border:none;cursor:pointer;color:var(--tx);font:inherit}
+.tvx .tv-rep-h b{font-size:13px;display:flex;align-items:center;gap:8px}
+.tvx .tv-rep-h b i{font-style:normal;background:#38BDF8;color:#04121F;font-size:11px;font-weight:800;padding:1px 8px;border-radius:999px}
+.tvx .tv-rep-h span{font-size:11.5px;color:var(--tm)}
+.tvx .tv-rep-list{padding:4px 10px 10px;display:flex;flex-direction:column;gap:4px}
+.tvx .tv-rep-i{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 8px;background:var(--sub);border-radius:7px;font-size:12px}
+.tvx .tv-rep-l{color:var(--tx);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tvx .tv-rep-x{color:var(--tm)}.tvx .tv-rep-x b{color:#38BDF8}
+.tvx .tv-rep-t{color:var(--td);font-family:"JetBrains Mono",monospace;font-size:11px}
 .tvx .tv-rol{font:inherit;font-size:11.5px;font-weight:800;padding:6px 11px;border-radius:999px;cursor:pointer;border:1px solid transparent;white-space:nowrap}
 .tvx .tv-rol.on{background:rgba(16,185,129,.14);border-color:rgba(16,185,129,.4);color:#10B981}
 .tvx .tv-rol.off{background:rgba(244,63,94,.1);border-color:rgba(244,63,94,.3);color:#FDA4AF}
