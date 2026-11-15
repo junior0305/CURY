@@ -21,113 +21,104 @@
       
       --brand: #0EA5E9;
       --brand-light: rgba(14, 165, 233, 0.15);
-      --brand-hover: #38BDF8;
-
       --green: #10B981;
       --green-light: rgba(16, 185, 129, 0.15);
-      --green-border: rgba(16, 185, 129, 0.35);
-
-      --rose: #F43F5E;
-      --rose-light: rgba(244, 63, 94, 0.15);
-      --rose-border: rgba(244, 63, 94, 0.35);
-
       --amber: #F59E0B;
       --amber-light: rgba(245, 158, 11, 0.15);
-      --amber-border: rgba(245, 158, 11, 0.35);
-
+      --rose: #F43F5E;
+      --rose-light: rgba(244, 63, 94, 0.15);
       --purple: #A855F7;
       --purple-light: rgba(168, 85, 247, 0.15);
-      --purple-border: rgba(168, 85, 247, 0.35);
-
-      --blue: #3B82F6;
-      --blue-light: rgba(59, 130, 246, 0.15);
-      --blue-border: rgba(59, 130, 246, 0.35);
+      --blue: #38BDF8;
+      --blue-light: rgba(56, 189, 248, 0.15);
 
       --radius-sm: 8px;
       --radius-md: 12px;
-      --radius-lg: 16px;
+      --radius-lg: 18px;
       --radius-full: 9999px;
-
-      --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
-      --shadow-md: 0 4px 14px rgba(0,0,0,0.45);
-      --shadow-lg: 0 14px 36px rgba(0,0,0,0.6);
+      
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+      --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
-      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
+      background-color: var(--bg);
       color: var(--text-main);
-      -webkit-font-smoothing: antialiased;
+      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+      font-size: 14px;
       line-height: 1.45;
     }
 
-    .mono { font-family: 'JetBrains Mono', monospace; }
-
-    /* LAYOUT GERAL COM MENU PRETO À ESQUERDA */
-    .app-layout {
-      display: grid;
-      grid-template-columns: 240px 1fr;
-      min-height: 100vh;
-      max-width: 1760px;
-      margin: 0 auto;
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
     }
 
-    /* MENU LATERAL PRETO OFICIAL (RAIL V10) */
+    .app-layout {
+      display: flex;
+      width: 100vw;
+      min-height: 100vh;
+    }
+
+    /* ── MENU LATERAL PRETO OFICIAL (RAIL V10) ── */
     .rail-sidebar {
-      background: #090D18;
-      border-right: 1px solid #1A2742;
-      padding: 24px 16px;
+      width: 250px;
+      min-width: 250px;
+      background: #090E1A;
+      border-right: 1px solid var(--border-subtle);
       display: flex;
       flex-direction: column;
-      gap: 28px;
-      position: sticky;
-      top: 0;
-      height: 100vh;
-      overflow-y: auto;
-      z-index: 950;
+      padding: 20px 14px;
+      gap: 16px;
+      z-index: 1000;
     }
     .rail-brand {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 0 8px;
+      padding: 6px 10px 16px;
+      border-bottom: 1px solid var(--border-subtle);
     }
     .brand-mark {
-      width: 38px;
-      height: 38px;
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
       background: linear-gradient(135deg, #0EA5E9 0%, #2563EB 100%);
-      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 900;
-      font-size: 20px;
-      color: #FFFFFF;
-      box-shadow: 0 4px 14px rgba(14, 165, 233, 0.4);
+      color: #FFF;
+      font-size: 16px;
+      box-shadow: 0 0 12px rgba(14, 165, 233, 0.4);
     }
     .brand-title {
       font-weight: 800;
-      font-size: 17px;
+      font-size: 16px;
       letter-spacing: -0.02em;
       color: #F8FAFC;
       display: block;
     }
     .brand-sub {
       font-size: 11px;
-      font-weight: 600;
-      color: #64748B;
+      color: var(--text-muted);
       display: block;
-      margin-top: -2px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
     }
 
     .rail-nav {
       display: flex;
       flex-direction: column;
       gap: 4px;
+      flex: 1;
     }
     .nav-section-title {
       font-size: 10.5px;
@@ -199,14 +190,16 @@
       color: #F8FAFC;
     }
 
-    /* CONTEÚDO PRINCIPAL COM SCROLL */
+    /* CONTEÚDO PRINCIPAL */
     .main-content {
+      flex: 1;
       padding: 0 36px 90px;
       overflow-y: auto;
+      height: 100vh;
     }
 
     /* ══════════════════════════════════════════════════════════════════════
-       CABEÇALHO FIXO COM SELETOR DE PERÍODO & PULSO DE "DADOS DE AGORA"
+       CABEÇALHO FIXO COM SELETOR DE PERÍODO & DADOS DE AGORA
        ══════════════════════════════════════════════════════════════════════ */
     .sticky-header-bar {
       position: sticky;
@@ -227,26 +220,36 @@
       font-weight: 900;
       letter-spacing: -0.02em;
     }
+    .leads-subtitle {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .leads-subtitle b {
+      color: var(--amber);
+    }
 
-    /* PULSO DA TROPA AGORA */
+    /* DADOS DE AGORA */
     .live-tropa-pulse {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       font-size: 12px;
       color: var(--text-muted);
-      margin-top: 4px;
+      margin-top: 6px;
+      flex-wrap: wrap;
     }
     .live-badge-item {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
       background: var(--surface);
       border: 1px solid var(--border);
-      padding: 3px 8px;
+      padding: 3px 10px;
       border-radius: var(--radius-full);
       font-weight: 700;
       color: #FFF;
+      font-size: 11.5px;
     }
     .dot-live {
       width: 7px;
@@ -289,19 +292,111 @@
     }
 
     /* ══════════════════════════════════════════════════════════════════════
-       MOTOR PREDITIVO DE VENDAS (PROBABILIDADE & ESTIMATIVA COM IA)
-       Baseado em Leads, Visitas e Pastas ativas
+       1. VENDAS ATUAIS & META DO LÍDER (ACIMA DA ANÁLISE PREDITIVA)
+       ══════════════════════════════════════════════════════════════════════ */
+    .top-cards-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .top-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.2s;
+    }
+    .top-card:hover {
+      border-color: #3b82f6;
+      transform: translateY(-2px);
+    }
+    .top-card.hero-meta {
+      border: 2px solid #10B981;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(14, 165, 233, 0.08) 100%);
+      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.15);
+    }
+    .card-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .card-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .badge-meta-tag {
+      font-size: 10.5px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      background: rgba(16, 185, 129, 0.2);
+      color: #10B981;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .card-value {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin: 2px 0;
+    }
+    .card-value b {
+      font-size: 34px;
+      font-weight: 900;
+      line-height: 1;
+      color: #FFF;
+    }
+    .card-value i {
+      font-style: normal;
+      font-size: 15px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+    .progress-bar-bg {
+      height: 8px;
+      border-radius: var(--radius-full);
+      background: var(--surface-subtle);
+      overflow: hidden;
+      margin: 4px 0;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: var(--radius-full);
+      background: var(--green);
+      transition: width 0.4s ease;
+    }
+    .card-footer-info {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .card-footer-info b {
+      color: #FFF;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       2. MOTOR PREDITIVO DE VENDAS (IA & PROBABILIDADE)
        ══════════════════════════════════════════════════════════════════════ */
     .predictive-engine-card {
-      background: linear-gradient(135deg, rgba(14, 165, 233, 0.12) 0%, rgba(16, 185, 129, 0.12) 50%, rgba(168, 85, 247, 0.08) 100%);
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(16, 185, 129, 0.08) 50%, rgba(168, 85, 247, 0.06) 100%);
       border: 1px solid rgba(16, 185, 129, 0.35);
       border-radius: var(--radius-lg);
-      padding: 22px 26px;
+      padding: 20px 24px;
       margin-bottom: 22px;
-      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.12);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
       display: grid;
-      grid-template-columns: 1.2fr 2fr;
-      gap: 24px;
+      grid-template-columns: 1.15fr 2fr;
+      gap: 22px;
       align-items: center;
     }
     .predictive-score-box {
@@ -309,7 +404,7 @@
       padding-right: 20px;
     }
     .predictive-title {
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 800;
       color: var(--green);
       text-transform: uppercase;
@@ -317,7 +412,7 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     .predictive-val {
       font-size: 32px;
@@ -363,67 +458,291 @@
     }
 
     /* ══════════════════════════════════════════════════════════════════════
-       PLACAR DOS 3 PILARES (VENDAS, PASTAS, VISITAS)
+       3. ESTA SEMANA X SEMANA PASSADA (PACING COM BARRAS DE PROCESSO)
        ══════════════════════════════════════════════════════════════════════ */
-    .kpi-three-grid {
+    .section-pacing-box {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 22px;
+    }
+    .pacing-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 14px;
+    }
+    .pacing-header h2 {
+      font-size: 15px;
+      font-weight: 800;
+      color: #FFF;
+    }
+    .pacing-header p {
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+    .pacing-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+    }
+    .pacing-col {
+      background: var(--surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .pacing-col-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .pacing-col-num {
+      font-size: 18px;
+      font-weight: 900;
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+    .pacing-col-num i {
+      font-style: normal;
+      font-size: 13px;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+    .pacing-bar {
+      height: 6px;
+      border-radius: var(--radius-full);
+      background: var(--surface-subtle);
+      overflow: hidden;
+    }
+    .pacing-bar-fill {
+      height: 100%;
+      border-radius: var(--radius-full);
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       4. GRÁFICO "SEMANA A SEMANA" + "O QUE FAZER PARA SALVAR A SEMANA"
+       ══════════════════════════════════════════════════════════════════════ */
+    .semana-grid-duas {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 18px;
       margin-bottom: 24px;
     }
-    .pillar-card {
+    .box-semana {
       background: var(--surface-card);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       padding: 18px 20px;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
-      gap: 8px;
-      box-shadow: var(--shadow-sm);
-      transition: all 0.2s;
+      gap: 14px;
     }
-    .pillar-card:hover {
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-md);
-    }
-    .pillar-card.vendas { border-left: 4px solid var(--green); }
-    .pillar-card.pastas { border-left: 4px solid var(--purple); }
-    .pillar-card.visitas { border-left: 4px solid var(--blue); }
-
-    .pillar-top {
+    .box-top-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-    .pillar-label {
-      font-size: 12px;
+    .box-top-row h2 {
+      font-size: 16px;
       font-weight: 800;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .pillar-delta {
-      font-size: 11px;
-      font-weight: 800;
-      padding: 2px 7px;
-      border-radius: var(--radius-full);
-      background: var(--green-light);
-      color: var(--green);
-    }
-    .pillar-num {
-      font-size: 32px;
-      font-weight: 900;
-      line-height: 1.1;
       color: #FFF;
     }
-    .pillar-desc {
+    .box-top-row span {
       font-size: 12px;
       color: var(--text-muted);
     }
 
+    /* TABS DE MÉTRICAS */
+    .metric-tabs {
+      display: inline-flex;
+      background: var(--surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 3px;
+      gap: 2px;
+      width: fit-content;
+    }
+    .tab-metric-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-metric-btn:hover {
+      color: #FFF;
+      background: var(--surface-subtle);
+    }
+    .tab-metric-btn.active {
+      background: #1E293B;
+      color: #38BDF8;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      font-weight: 800;
+    }
+
+    /* BARRAS DO GRÁFICO */
+    .chart-bars-wrap {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      align-items: end;
+      height: 140px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      gap: 12px;
+    }
+    .chart-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .chart-bar-val {
+      font-size: 13px;
+      font-weight: 800;
+      color: #FFF;
+    }
+    .chart-pillar {
+      width: 100%;
+      max-width: 48px;
+      border-radius: 6px 6px 0 0;
+      background: #1E3A8A;
+      display: flex;
+      flex-direction: column-reverse;
+      overflow: hidden;
+      transition: height 0.3s ease;
+      position: relative;
+    }
+    .chart-pillar.atual {
+      border: 2px solid #38BDF8;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+      background: #0284C7;
+    }
+    .pillar-slice-anuncio { background: #0284C7; }
+    .pillar-slice-disparo { background: #0D9488; }
+    .pillar-slice-plantao { background: #3B82F6; }
+
+    .chart-labels-row {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+      text-align: center;
+    }
+    .chart-lbl-item b {
+      display: block;
+      font-size: 12px;
+      color: #F8FAFC;
+    }
+    .chart-lbl-item i {
+      font-style: normal;
+      font-size: 11px;
+      color: var(--text-dim);
+      display: block;
+    }
+    .chart-lbl-item em {
+      font-style: normal;
+      font-size: 10.5px;
+      color: var(--brand);
+      font-weight: 700;
+      display: block;
+      margin-top: 2px;
+    }
+
+    /* LEGENDA DE ORIGENS */
+    .chart-legend-row {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 10px;
+    }
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+    }
+
+    /* O QUE FAZER PARA SALVAR A SEMANA (ALERTAS) */
+    .salvar-acoes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .salvar-acao-card {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      border-left: 4px solid transparent;
+      background: var(--surface);
+      border-top: 1px solid var(--border-subtle);
+      border-right: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+      gap: 12px;
+    }
+    .salvar-acao-card.laranja {
+      border-left-color: var(--amber);
+      background: rgba(245, 158, 11, 0.05);
+    }
+    .salvar-acao-card.azul {
+      border-left-color: var(--brand);
+      background: rgba(14, 165, 233, 0.05);
+    }
+    .salvar-acao-card.roxo {
+      border-left-color: var(--purple);
+      background: rgba(168, 85, 247, 0.05);
+    }
+    .acao-txt b {
+      display: block;
+      font-size: 13px;
+      color: #FFF;
+    }
+    .acao-txt i {
+      font-style: normal;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+    .acao-link-btn {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--brand);
+      text-decoration: none;
+      white-space: nowrap;
+      cursor: pointer;
+      background: rgba(14, 165, 233, 0.12);
+      padding: 5px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(14, 165, 233, 0.3);
+      transition: all 0.15s;
+    }
+    .acao-link-btn:hover {
+      background: var(--brand);
+      color: #FFF;
+    }
+
     /* ══════════════════════════════════════════════════════════════════════
-       TABELA DE CONTROLE DA TROPA: DADOS DE AGORA & ROLETA RÁPIDA (1-CLIQUE)
+       5. TABELA DE PRESENÇA DA TROPA: DADOS DE AGORA & ROLETA (1 CLIQUE)
        ══════════════════════════════════════════════════════════════════════ */
     .panel-box {
       background: var(--surface-card);
@@ -431,7 +750,7 @@
       border-radius: var(--radius-md);
       overflow: hidden;
       box-shadow: var(--shadow-sm);
-      margin-bottom: 24px;
+      margin-bottom: 40px;
     }
     .panel-header {
       padding: 16px 20px;
@@ -439,47 +758,45 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: var(--surface);
     }
     .panel-header h3 {
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 800;
       display: flex;
       align-items: center;
       gap: 8px;
     }
-
     .tropa-table {
       width: 100%;
       border-collapse: collapse;
       text-align: left;
+      font-size: 13px;
     }
     .tropa-table th {
-      background: var(--surface-subtle);
-      border-bottom: 1px solid var(--border);
       padding: 12px 16px;
-      font-size: 11.5px;
+      font-size: 11px;
       font-weight: 800;
-      color: var(--text-dim);
+      color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.05em;
+      background: #0B1220;
+      border-bottom: 1px solid var(--border);
     }
     .tropa-table td {
-      padding: 13px 16px;
+      padding: 14px 16px;
       border-bottom: 1px solid var(--border-subtle);
-      font-size: 13px;
       vertical-align: middle;
     }
     .tropa-table tr:hover {
-      background: var(--surface-subtle);
+      background: rgba(255, 255, 255, 0.02);
     }
 
-    /* TOGGLE RÁPIDO DA ROLETA (1 CLIQUE) */
+    /* BOTÃO DE ROLETA EM 1 CLIQUE */
     .roleta-toggle-btn {
       display: inline-flex;
       align-items: center;
-      gap: 7px;
-      padding: 5px 12px;
+      gap: 6px;
+      padding: 6px 12px;
       border-radius: var(--radius-full);
       font-size: 11.5px;
       font-weight: 800;
@@ -519,7 +836,7 @@
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      padding: 2px 7px;
+      padding: 3px 8px;
       border-radius: 4px;
       font-size: 11px;
       font-weight: 700;
@@ -556,7 +873,7 @@
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      padding: 5px 10px;
+      padding: 6px 11px;
       border-radius: var(--radius-sm);
       font-size: 12px;
       font-weight: 700;
@@ -593,6 +910,21 @@
       color: var(--text-main);
     }
 
+    /* EXPANSÍVEL DE PASTAS QUENTES */
+    #box-pastas-fechamento {
+      display: none;
+      background: #0B1322;
+      border: 1px solid var(--purple);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 22px;
+      animation: fadeIn 0.2s ease-in;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     /* TOAST */
     .toast-box {
       position: fixed;
@@ -601,7 +933,7 @@
       transform: translateX(-50%);
       background: #10B981;
       color: #FFFFFF;
-      padding: 10px 20px;
+      padding: 10px 22px;
       border-radius: var(--radius-full);
       font-size: 13px;
       font-weight: 800;
@@ -610,11 +942,6 @@
       display: none;
       align-items: center;
       gap: 8px;
-      animation: toastIn 0.25s ease-out;
-    }
-    @keyframes toastIn {
-      from { transform: translate(-50%, -20px); opacity: 0; }
-      to { transform: translate(-50%, 0); opacity: 1; }
     }
   </style>
 </head>
@@ -638,7 +965,7 @@
           <div class="rail-item-left">
             <span>⚡</span> Cockpit Geral
           </div>
-          <span class="rail-pip">86% Meta</span>
+          <span class="rail-pip">80% Meta</span>
         </a>
         <a class="rail-item" href="mockup_leads_v4.html">
           <div class="rail-item-left">
@@ -687,6 +1014,9 @@
           <div style="display: flex; align-items: center; gap: 12px;">
             <h1>Cockpit Geral de Comando</h1>
           </div>
+          <p class="leads-subtitle">
+            Semana de 09/11 a 15/11 · <b>a semana fecha hoje à meia-noite</b>
+          </p>
           
           <!-- DADOS DE AGORA: CHECKIN, LOGADO, TRABALHANDO -->
           <div class="live-tropa-pulse">
@@ -719,10 +1049,165 @@
       </header>
 
       <!-- ══════════════════════════════════════════════════════════════════════
-           1. MOTOR PREDITIVO DE VENDAS COM PROBABILIDADE (IA & MATEMÁTICA)
-           Baseado nos Leads recebidos, Visitas agendadas e Pastas ativas
+           1. VENDAS ATUAIS & META DO LÍDER (ACIMA DA ANÁLISE PREDITIVA)
            ══════════════════════════════════════════════════════════════════════ -->
-      <div class="predictive-engine-card">
+      <section class="top-cards-grid">
+        
+        <!-- CARD HERO: VENDAS DO MÊS + META DO LÍDER ATRIBUÍDA -->
+        <div class="top-card hero-meta">
+          <div class="card-label-row">
+            <span class="card-label" style="color: #10B981;">Vendas do Mês & Meta</span>
+            <span class="badge-meta-tag">Meta: 15 un</span>
+          </div>
+          <div>
+            <div class="card-value mono">
+              <b>12</b> <i>/ 15 un</i>
+            </div>
+            <!-- BARRA DE PROGRESSO DA META -->
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" style="width: 80%;"></div>
+            </div>
+            <div class="card-footer-info" style="margin-top: 4px;">
+              <span>VGV <b>R$ 3.540.000</b></span>
+              <span style="color: #10B981; font-weight: 800;">80% atingido</span>
+            </div>
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); border-top: 1px solid rgba(16, 185, 129, 0.2); padding-top: 6px;">
+            Faltam <b>3 vendas</b> para bater 100% da Meta
+          </div>
+        </div>
+
+        <!-- CARD 2: PROJEÇÃO DO MÊS -->
+        <div class="top-card">
+          <div class="card-label-row">
+            <span class="card-label">Projeção do Mês</span>
+            <span style="font-size: 11px; color: var(--amber); font-weight: 800;">106% da Meta</span>
+          </div>
+          <div>
+            <div class="card-value mono">
+              <b style="color: #F59E0B;">16</b> <i>vendas</i>
+            </div>
+            <div class="card-footer-info" style="margin-top: 6px;">
+              <span>Ritmo necessário:</span>
+              <b class="mono" style="color: #F8FAFC;">0,5 un/dia útil</b>
+            </div>
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted);">
+            Restam 6 dias úteis no mês
+          </div>
+        </div>
+
+        <!-- CARD 3: EM FECHAMENTO (PASTAS CAIXA) -->
+        <div class="top-card" style="cursor: pointer;" onclick="togglePastasFechamento()">
+          <div class="card-label-row">
+            <span class="card-label">Em Fechamento</span>
+            <span style="font-size: 11px; color: var(--purple); font-weight: 800;">Pastas Quentes</span>
+          </div>
+          <div>
+            <div class="card-value mono">
+              <b style="color: var(--purple);">18</b> <i>pastas</i>
+            </div>
+            <div class="card-footer-info" style="margin-top: 6px;">
+              <span>Crédito Aprovado:</span>
+              <b class="mono" style="color: #FFF;">R$ 5.310.000</b>
+            </div>
+          </div>
+          <div style="font-size: 11.5px; color: var(--brand); font-weight: 700;">
+            7 em proposta ou emissão ▾
+          </div>
+        </div>
+
+        <!-- CARD 4: PLANTÃO HOJE (C2S) -->
+        <div class="top-card">
+          <div class="card-label-row">
+            <span class="card-label">Plantão Hoje (C2S)</span>
+            <span style="font-size: 11px; color: var(--blue); font-weight: 800;">Físico Stand</span>
+          </div>
+          <div>
+            <div class="card-value mono">
+              <b style="color: var(--blue);">8</b> <i>check-ins</i>
+            </div>
+            <div class="card-footer-info" style="margin-top: 6px;">
+              <span>No time: <b>18 corretores</b></span>
+            </div>
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted);">
+            Semana: <b>24 de 18</b> esperados · Roleta: 15
+          </div>
+        </div>
+
+        <!-- CARD 5: LEADS SEM CONTATO -->
+        <div class="top-card">
+          <div class="card-label-row">
+            <span class="card-label">Leads sem Contato</span>
+            <span style="font-size: 11px; color: #10B981; font-weight: 800;">SLA Sob Controle</span>
+          </div>
+          <div>
+            <div class="card-value mono">
+              <b style="color: #10B981;">6</b> <i>de 554</i>
+            </div>
+            <div class="card-footer-info" style="margin-top: 6px;">
+              <span>Taxa de Resposta:</span>
+              <b class="mono" style="color: #10B981;">98,9%</b>
+            </div>
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted);">
+            Nenhum lead &gt; 2h sem atendimento
+          </div>
+        </div>
+
+      </section>
+
+      <!-- GAVETA EXPANSÍVEL: PASTAS EM FECHAMENTO -->
+      <div id="box-pastas-fechamento">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h3 style="font-size: 14.5px; color: #FFF;">📁 Pastas que podem virar venda até Domingo (Emissão / Proposta)</h3>
+          <button class="act-btn ver" onclick="togglePastasFechamento()">Fechar ✕</button>
+        </div>
+        <table class="tropa-table" style="background: transparent;">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Corretor</th>
+              <th>Empreendimento</th>
+              <th>Etapa Junix</th>
+              <th>Valor Financiado</th>
+              <th>Parada há</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Rodrigo Alves de Souza</b></td>
+              <td>Diego</td>
+              <td>Cury Mooca Prime</td>
+              <td><span class="badge-agora online">Emissão de Contrato</span></td>
+              <td class="mono">R$ 295.000</td>
+              <td class="mono" style="color: #10B981;">1 dia</td>
+            </tr>
+            <tr>
+              <td><b>Mariana Castilho Santos</b></td>
+              <td>Alba</td>
+              <td>Cury Vila Maria Park</td>
+              <td><span class="badge-agora trampo">Proposta Assinada</span></td>
+              <td class="mono">R$ 310.000</td>
+              <td class="mono">2 dias</td>
+            </tr>
+            <tr>
+              <td><b>Felipe Nogueira Silva</b></td>
+              <td>Pedro</td>
+              <td>Cury Itaquera Trend</td>
+              <td><span class="badge-agora online">Laudo Aprovado</span></td>
+              <td class="mono">R$ 278.000</td>
+              <td class="mono">1 dia</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════════
+           2. MOTOR PREDITIVO DE VENDAS (IA & PROBABILIDADE)
+           ══════════════════════════════════════════════════════════════════════ -->
+      <section class="predictive-engine-card">
         
         <div class="predictive-score-box">
           <div class="predictive-title">
@@ -767,64 +1252,240 @@
           </div>
         </div>
 
-      </div>
+      </section>
 
       <!-- ══════════════════════════════════════════════════════════════════════
-           2. OS 3 PILARES DO COCKPIT (VENDAS JUNIX · PASTAS CAIXA · VISITAS STAND)
+           3. ESTA SEMANA X SEMANA PASSADA (PACING COMPARATIVO)
            ══════════════════════════════════════════════════════════════════════ -->
-      <div class="kpi-three-grid">
+      <section class="section-pacing-box">
+        <div class="pacing-header">
+          <div>
+            <h2>Esta semana × semana passada</h2>
+            <p>Semana de segunda a domingo. A barra é quanto já foi feito do total da semana passada inteira.</p>
+          </div>
+          <span style="font-size: 11.5px; color: var(--text-muted);" class="mono">
+            Esta: 09/11 → hoje · Passada: 02/11 a 08/11
+          </span>
+        </div>
+
+        <div class="pacing-grid">
+          
+          <div class="pacing-col">
+            <span class="pacing-col-title">Leads Pagos</span>
+            <div class="pacing-col-num mono" style="color: var(--brand);">
+              19 <i>/ 6</i>
+            </div>
+            <div class="pacing-bar">
+              <div class="pacing-bar-fill" style="width: 100%; background: var(--brand);"></div>
+            </div>
+          </div>
+
+          <div class="pacing-col">
+            <span class="pacing-col-title">Com Contato</span>
+            <div class="pacing-col-num mono" style="color: var(--green);">
+              84% <i>/ 67%</i>
+            </div>
+            <div class="pacing-bar">
+              <div class="pacing-bar-fill" style="width: 84%; background: var(--green);"></div>
+            </div>
+          </div>
+
+          <div class="pacing-col">
+            <span class="pacing-col-title">Visitas</span>
+            <div class="pacing-col-num mono" style="color: var(--blue);">
+              85 <i>/ 71</i>
+            </div>
+            <div class="pacing-bar">
+              <div class="pacing-bar-fill" style="width: 100%; background: var(--blue);"></div>
+            </div>
+          </div>
+
+          <div class="pacing-col">
+            <span class="pacing-col-title">Check-ins</span>
+            <div class="pacing-col-num mono" style="color: var(--blue);">
+              9 <i>/ 4</i>
+            </div>
+            <div class="pacing-bar">
+              <div class="pacing-bar-fill" style="width: 100%; background: var(--blue);"></div>
+            </div>
+          </div>
+
+          <div class="pacing-col">
+            <span class="pacing-col-title">Pastas</span>
+            <div class="pacing-col-num mono" style="color: var(--purple);">
+              32 <i>/ 24</i>
+            </div>
+            <div class="pacing-bar">
+              <div class="pacing-bar-fill" style="width: 100%; background: var(--purple);"></div>
+            </div>
+          </div>
+
+          <div class="pacing-col">
+            <span class="pacing-col-title">Vendas</span>
+            <div class="pacing-col-num mono" style="color: var(--green);">
+              12 <i>/ 9</i>
+            </div>
+            <div class="pacing-bar">
+              <div class="pacing-bar-fill" style="width: 100%; background: var(--green);"></div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ══════════════════════════════════════════════════════════════════════
+           4. GRÁFICO "SEMANA A SEMANA" + "O QUE FAZER PARA SALVAR A SEMANA"
+           ══════════════════════════════════════════════════════════════════════ -->
+      <div class="semana-grid-duas">
         
-        <!-- PILAR 1: VENDAS -->
-        <div class="pillar-card vendas">
-          <div class="pillar-top">
-            <span class="pillar-label">1. Vendas Junix Confirmadas</span>
-            <span class="pillar-delta">▲ +3 un (+33% WoW)</span>
+        <!-- COLUNA ESQUERDA: GRÁFICO DE BARRAS POR SEMANA -->
+        <div class="box-semana">
+          <div class="box-top-row">
+            <h2>Novembro semana a semana</h2>
+            <span>segunda a domingo</span>
           </div>
-          <div>
-            <div class="pillar-num mono" style="color: var(--green);">12 <span style="font-size: 18px; color: var(--text-muted);">/ 15 un</span></div>
-            <span style="font-size: 13.5px; font-weight: 800; color: #FFF;">R$ 3.540.000 VGV</span>
+
+          <!-- SELETOR DE MÉTRICA DO GRÁFICO -->
+          <div class="metric-tabs">
+            <button class="tab-metric-btn active" onclick="trocarMetricaGrafico('leads', this)">Leads</button>
+            <button class="tab-metric-btn" onclick="trocarMetricaGrafico('checkins', this)">Check-ins</button>
+            <button class="tab-metric-btn" onclick="trocarMetricaGrafico('visitas', this)">Visitas</button>
+            <button class="tab-metric-btn" onclick="trocarMetricaGrafico('pastas', this)">Pastas</button>
+            <button class="tab-metric-btn" onclick="trocarMetricaGrafico('vendas', this)">Vendas</button>
           </div>
-          <div class="pillar-desc">
-            80% da meta atingida · Faltam <b>3 vendas</b> para bater 100%
+
+          <!-- ÁREA DO GRÁFICO -->
+          <div class="chart-bars-wrap" id="chart-bars-container">
+            <!-- SEMANA 1 -->
+            <div class="chart-col">
+              <span class="chart-bar-val mono" id="val-sem-1">25</span>
+              <div class="chart-pillar" id="pillar-sem-1" style="height: 105px;">
+                <span class="pillar-slice-anuncio" style="flex: 23;"></span>
+                <span class="pillar-slice-disparo" style="flex: 2;"></span>
+              </div>
+            </div>
+            <!-- SEMANA 2 -->
+            <div class="chart-col">
+              <span class="chart-bar-val mono" id="val-sem-2">6</span>
+              <div class="chart-pillar" id="pillar-sem-2" style="height: 32px;">
+                <span class="pillar-slice-anuncio" style="flex: 6;"></span>
+              </div>
+            </div>
+            <!-- SEMANA 3 (ATUAL) -->
+            <div class="chart-col">
+              <span class="chart-bar-val mono" id="val-sem-3" style="color: #38BDF8;">19</span>
+              <div class="chart-pillar atual" id="pillar-sem-3" style="height: 82px;">
+                <span class="pillar-slice-anuncio" style="flex: 19;"></span>
+              </div>
+            </div>
+            <!-- SEMANA 4 -->
+            <div class="chart-col">
+              <span class="chart-bar-val mono" id="val-sem-4" style="color: var(--text-dim);">—</span>
+              <div class="chart-pillar" id="pillar-sem-4" style="height: 3px; background: var(--border-subtle);"></div>
+            </div>
+            <!-- SEMANA 5 -->
+            <div class="chart-col">
+              <span class="chart-bar-val mono" id="val-sem-5" style="color: var(--text-dim);">—</span>
+              <div class="chart-pillar" id="pillar-sem-5" style="height: 3px; background: var(--border-subtle);"></div>
+            </div>
+            <!-- SEMANA 6 -->
+            <div class="chart-col">
+              <span class="chart-bar-val mono" id="val-sem-6" style="color: var(--text-dim);">—</span>
+              <div class="chart-pillar" id="pillar-sem-6" style="height: 3px; background: var(--border-subtle);"></div>
+            </div>
+          </div>
+
+          <!-- RÓTULOS DAS SEMANAS -->
+          <div class="chart-labels-row">
+            <div class="chart-lbl-item">
+              <b>Semana 1</b>
+              <i>26/10–01/11</i>
+              <em id="sub-sem-1">Anúncio 23</em>
+            </div>
+            <div class="chart-lbl-item">
+              <b>Semana 2</b>
+              <i>02/11–08/11</i>
+              <em id="sub-sem-2">Anúncio 6</em>
+            </div>
+            <div class="chart-lbl-item">
+              <b style="color: #38BDF8;">Semana 3</b>
+              <i>09/11–15/11 · agora</i>
+              <em id="sub-sem-3" style="color: #38BDF8;">Anúncio 19</em>
+            </div>
+            <div class="chart-lbl-item">
+              <b style="color: var(--text-dim);">Semana 4</b>
+              <i>16/11–22/11</i>
+              <em style="color: var(--text-dim);">—</em>
+            </div>
+            <div class="chart-lbl-item">
+              <b style="color: var(--text-dim);">Semana 5</b>
+              <i>23/11–29/11</i>
+              <em style="color: var(--text-dim);">—</em>
+            </div>
+            <div class="chart-lbl-item">
+              <b style="color: var(--text-dim);">Semana 6</b>
+              <i>30/11–06/12</i>
+              <em style="color: var(--text-dim);">—</em>
+            </div>
+          </div>
+
+          <!-- LEGENDA -->
+          <div class="chart-legend-row" id="chart-legend-box">
+            <span class="legend-item"><span class="legend-dot" style="background: #0284C7;"></span> Anúncio Meta</span>
+            <span class="legend-item"><span class="legend-dot" style="background: #0D9488;"></span> Disparo WhatsApp</span>
+            <span class="legend-item"><span class="legend-dot" style="background: #3B82F6;"></span> Plantão C2S</span>
           </div>
         </div>
 
-        <!-- PILAR 2: PASTAS CAIXA -->
-        <div class="pillar-card pastas">
-          <div class="pillar-top">
-            <span class="pillar-label">2. Pastas Caixa em Análise</span>
-            <span class="pillar-delta" style="background: var(--purple-light); color: var(--purple);">▲ +8 pastas</span>
+        <!-- COLUNA DIREITA: O QUE FAZER PARA SALVAR A SEMANA -->
+        <div class="box-semana">
+          <div class="box-top-row">
+            <h2>O que fazer para salvar a semana</h2>
+            <span style="color: var(--amber); font-weight: 700;">3 Ações Críticas</span>
           </div>
-          <div>
-            <div class="pillar-num mono" style="color: var(--purple);">32 <span style="font-size: 18px; color: var(--text-muted);">pastas</span></div>
-            <span style="font-size: 13.5px; font-weight: 800; color: #FFF;">R$ 9.440.000 em crédito</span>
-          </div>
-          <div class="pillar-desc">
-            6 pastas travadas aguardando documentação há &gt;4 dias
-          </div>
-        </div>
 
-        <!-- PILAR 3: VISITAS -->
-        <div class="pillar-card visitas">
-          <div class="pillar-top">
-            <span class="pillar-label">3. Visitas no Estande</span>
-            <span class="pillar-delta" style="background: var(--blue-light); color: var(--blue);">▲ +14 visitas</span>
+          <div class="salvar-acoes-list">
+            
+            <!-- ALERTA 1: CORRETORES SEM ENTRAR COM LEAD -->
+            <div class="salvar-acao-card laranja">
+              <div class="acao-txt">
+                <b>3 corretores com lead na mão sem entrar hoje</b>
+                <i>Xande (3) · Aparecido (2) · Claudete (1)</i>
+              </div>
+              <a class="acao-link-btn" onclick="filtrarTropaPor('sem-entrar')">Ver equipe</a>
+            </div>
+
+            <!-- ALERTA 2: PLANTÃO VAZIO -->
+            <div class="salvar-acao-card azul">
+              <div class="acao-txt">
+                <b>Ninguém bateu ponto no plantão hoje no Stand Mooca</b>
+                <i>Semana passada a equipe teve 4 check-ins nesse mesmo horário</i>
+              </div>
+              <a class="acao-link-btn" onclick="filtrarTropaPor('checkin-no')">Ver equipe</a>
+            </div>
+
+            <!-- ALERTA 3: PASTAS PARADAS -->
+            <div class="salvar-acao-card roxo">
+              <div class="acao-txt">
+                <b>6 pastas paradas há 4 dias ou mais na Caixa</b>
+                <i>Documentação ou análise pendente de regularização</i>
+              </div>
+              <a class="acao-link-btn" onclick="togglePastasFechamento()">Ver pastas</a>
+            </div>
+
           </div>
-          <div>
-            <div class="pillar-num mono" style="color: var(--blue);">85 <span style="font-size: 18px; color: var(--text-muted);">feitas</span></div>
-            <span style="font-size: 13.5px; font-weight: 800; color: #FFF;">42 agendadas p/ Sáb e Dom</span>
-          </div>
-          <div class="pillar-desc">
-            Ritmo acelerado no estande (+20% vs semana anterior)
+
+          <div style="font-size: 11.5px; color: var(--text-dim); margin-top: auto;">
+            💡 O co-piloto Comandra atualiza essas pendências a cada 60 segundos com base nos registros do Junix e C2S.
           </div>
         </div>
 
       </div>
 
       <!-- ══════════════════════════════════════════════════════════════════════
-           3. TROPA EM TEMPO REAL: CHECK-IN, LOGIN, TRABALHANDO & TOGGLE DA ROLETA
+           5. TROPA EM TEMPO REAL: CHECK-IN, LOGIN, TRABALHANDO & TOGGLE DA ROLETA
            ══════════════════════════════════════════════════════════════════════ -->
-      <div class="panel-box">
+      <div class="panel-box" id="secao-tropa">
         <div class="panel-header">
           <div>
             <h3><span>👥</span> Presença da Tropa & Controle Rápido de Roleta</h3>
@@ -853,7 +1514,7 @@
           <tbody>
             
             <!-- CORRETOR 1: DIEGO -->
-            <tr>
+            <tr class="linha-corretor" data-status="checkin-ok">
               <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <div class="avatar-clean" style="width: 30px; height: 30px; font-size: 11px; border-color: var(--green);">DI</div>
@@ -890,7 +1551,7 @@
             </tr>
 
             <!-- CORRETOR 2: ALBA -->
-            <tr>
+            <tr class="linha-corretor" data-status="checkin-ok">
               <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <div class="avatar-clean" style="width: 30px; height: 30px; font-size: 11px; border-color: var(--green);">AL</div>
@@ -927,7 +1588,7 @@
             </tr>
 
             <!-- CORRETOR 3: PEDRO -->
-            <tr>
+            <tr class="linha-corretor" data-status="checkin-ok">
               <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <div class="avatar-clean" style="width: 30px; height: 30px; font-size: 11px;">PE</div>
@@ -963,8 +1624,46 @@
               </td>
             </tr>
 
-            <!-- CORRETOR 4: LISANDRA (ALERTA) -->
-            <tr>
+            <!-- CORRETOR 4: XANDE (ALERTA SALVAR A SEMANA) -->
+            <tr class="linha-corretor" data-status="sem-entrar" style="background: rgba(245, 158, 11, 0.04);">
+              <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div class="avatar-clean" style="width: 30px; height: 30px; font-size: 11px; border-color: var(--amber);">XA</div>
+                  <div>
+                    <b style="font-size: 13.5px;">Xande</b>
+                    <span style="display: block; font-size: 11px; color: var(--amber);">3 leads novos sem entrar hoje</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="badge-agora checkin-no">❌ Sem Check-in Hoje</span>
+              </td>
+              <td>
+                <span class="badge-agora offline">○ Visto há 5 horas</span>
+              </td>
+              <td>
+                <span class="badge-agora" style="color: var(--amber); background: var(--amber-light);">⚠️ 3 sem toque</span>
+              </td>
+              <td class="mono">
+                <b>1 venda</b> · 2 pastas · 5 visitas
+              </td>
+              <td>
+                <!-- TOGGLE 1 CLIQUE: PAUSADO -->
+                <button class="roleta-toggle-btn pausado" onclick="toggleRoleta(this, 'Xande')">
+                  <span>○</span> <span class="txt-status">Pausado</span>
+                </button>
+              </td>
+              <td style="text-align: right;">
+                <div class="action-btn-group">
+                  <button class="act-btn repassar" onclick="showToast('3 leads do Xande redistribuídos!')">⚡ Repassar</button>
+                  <button class="act-btn cobrar" onclick="showToast('Cobrança enviada para Xande!')">💬 Cobrar</button>
+                  <button class="act-btn ver">👁️ Ver</button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- CORRETOR 5: LISANDRA (ALERTA) -->
+            <tr class="linha-corretor" data-status="sem-entrar">
               <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <div class="avatar-clean" style="width: 30px; height: 30px; font-size: 11px; border-color: var(--amber);">LI</div>
@@ -1001,8 +1700,8 @@
               </td>
             </tr>
 
-            <!-- CORRETOR 5: RIOS (CRÍTICO) -->
-            <tr style="background: rgba(244, 63, 94, 0.04);">
+            <!-- CORRETOR 6: RIOS (CRÍTICO) -->
+            <tr class="linha-corretor" data-status="checkin-no" style="background: rgba(244, 63, 94, 0.04);">
               <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <div class="avatar-clean" style="width: 30px; height: 30px; font-size: 11px; border-color: var(--rose);">RI</div>
@@ -1055,10 +1754,82 @@
   </div>
 
   <script>
+    // DADOS DAS MÉTRICAS DO GRÁFICO SEMANA A SEMANA
+    const DADOS_GRAFICO = {
+      leads: {
+        sem1: { val: '25', h: 105, sub: 'Anúncio 23 · Disparo 2', p1: 23, p2: 2 },
+        sem2: { val: '6', h: 32, sub: 'Anúncio 6', p1: 6, p2: 0 },
+        sem3: { val: '19', h: 82, sub: 'Anúncio 19 · agora', p1: 19, p2: 0 },
+        sem4: { val: '—', h: 3, sub: '—' },
+        sem5: { val: '—', h: 3, sub: '—' },
+        sem6: { val: '—', h: 3, sub: '—' }
+      },
+      checkins: {
+        sem1: { val: '18', h: 80, sub: 'Stand Mooca 12', p1: 18, p2: 0 },
+        sem2: { val: '4', h: 25, sub: 'Stand Mooca 4', p1: 4, p2: 0 },
+        sem3: { val: '9', h: 50, sub: 'Stand Mooca 9 · agora', p1: 9, p2: 0 },
+        sem4: { val: '—', h: 3, sub: '—' },
+        sem5: { val: '—', h: 3, sub: '—' },
+        sem6: { val: '—', h: 3, sub: '—' }
+      },
+      visitas: {
+        sem1: { val: '64', h: 95, sub: 'C2S 48 · Comandra 16', p1: 48, p2: 16 },
+        sem2: { val: '71', h: 110, sub: 'C2S 55 · Comandra 16', p1: 55, p2: 16 },
+        sem3: { val: '85', h: 130, sub: 'C2S 62 · Comandra 23 · agora', p1: 62, p2: 23 },
+        sem4: { val: '—', h: 3, sub: '—' },
+        sem5: { val: '—', h: 3, sub: '—' },
+        sem6: { val: '—', h: 3, sub: '—' }
+      },
+      pastas: {
+        sem1: { val: '22', h: 75, sub: 'Anúncio 18 · Disparo 4', p1: 18, p2: 4 },
+        sem2: { val: '24', h: 85, sub: 'Anúncio 20 · Disparo 4', p1: 20, p2: 4 },
+        sem3: { val: '32', h: 115, sub: 'Anúncio 27 · Disparo 5 · agora', p1: 27, p2: 5 },
+        sem4: { val: '—', h: 3, sub: '—' },
+        sem5: { val: '—', h: 3, sub: '—' },
+        sem6: { val: '—', h: 3, sub: '—' }
+      },
+      vendas: {
+        sem1: { val: '8', h: 65, sub: 'Anúncio 7 · Disparo 1', p1: 7, p2: 1 },
+        sem2: { val: '9', h: 75, sub: 'Anúncio 8 · Disparo 1', p1: 8, p2: 1 },
+        sem3: { val: '12', h: 100, sub: 'Anúncio 11 · Disparo 1 · agora', p1: 11, p2: 1 },
+        sem4: { val: '—', h: 3, sub: '—' },
+        sem5: { val: '—', h: 3, sub: '—' },
+        sem6: { val: '—', h: 3, sub: '—' }
+      }
+    };
+
+    function trocarMetricaGrafico(tipo, btn) {
+      document.querySelectorAll('.tab-metric-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const data = DADOS_GRAFICO[tipo];
+      for (let i = 1; i <= 6; i++) {
+        const item = data['sem' + i];
+        const valEl = document.getElementById('val-sem-' + i);
+        const pilEl = document.getElementById('pillar-sem-' + i);
+        const subEl = document.getElementById('sub-sem-' + i);
+
+        if (valEl) valEl.innerText = item.val;
+        if (pilEl) pilEl.style.height = item.h + 'px';
+        if (subEl) subEl.innerText = item.sub;
+      }
+      showToast('📊 Gráfico atualizado para: ' + tipo.toUpperCase());
+    }
+
+    function togglePastasFechamento() {
+      const el = document.getElementById('box-pastas-fechamento');
+      if (el.style.display === 'block') {
+        el.style.display = 'none';
+      } else {
+        el.style.display = 'block';
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
     function selecionarPeriodo(nome, btn) {
       document.querySelectorAll('.per-chip').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      showToast('📅 Cockpit atualizado para: ' + nome);
+      showToast('📅 Período atualizado para: ' + nome);
     }
 
     // TOGGLE RÁPIDO DA ROLETA (1 CLIQUE)
@@ -1067,13 +1838,25 @@
         btn.classList.remove('ativo');
         btn.classList.add('pausado');
         btn.innerHTML = '<span>○</span> <span class="txt-status">Pausado</span>';
-        showToast('⏸️ Corretor ' + corretor + ' foi PAUSADO da roleta de novos leads!');
+        showToast('⏸️ Corretor ' + corretor + ' foi PAUSADO da roleta!');
       } else {
         btn.classList.remove('pausado');
         btn.classList.add('ativo');
         btn.innerHTML = '<span>●</span> <span class="txt-status">Na Roleta</span>';
-        showToast('🟢 Corretor ' + corretor + ' foi ATIVADO na roleta de novos leads!');
+        showToast('🟢 Corretor ' + corretor + ' foi ATIVADO na roleta!');
       }
+    }
+
+    function filtrarTropaPor(status) {
+      const secao = document.getElementById('secao-tropa');
+      secao.scrollIntoView({ behavior: 'smooth' });
+      document.querySelectorAll('.linha-corretor').forEach(row => {
+        if (row.getAttribute('data-status') === status) {
+          row.style.outline = '2px solid #F59E0B';
+          setTimeout(() => { row.style.outline = 'none'; }, 2500);
+        }
+      });
+      showToast('🔍 Filtrando corretores pendentes na tabela!');
     }
 
     function showToast(txt) {

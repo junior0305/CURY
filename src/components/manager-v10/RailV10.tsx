@@ -76,7 +76,7 @@ const ORDEM_GRUPO = ["Comando", "Mídia & Estratégia", "Ajustes", "Sistema"];
 const svg = (d: string) => <svg viewBox="0 0 24 24"><path d={d} /></svg>;
 const papel: Record<string, string> = { MANAGER: "Gestor", SUPERINTENDENT: "Superintendente", DIRECTOR: "Diretor", ADMIN: "Admin", BROKER: "Corretor" };
 
-export function RailV10({ atual, sub, mode, toggle, onAba, pip }: {
+export function RailV10({ atual, sub, mode, toggle, onAba }: {
   atual: Aba; sub?: string; mode: "dark" | "light"; toggle: () => void; onAba?: (k: Aba) => void; pip?: number;
 }) {
   const { signOut, role, session } = useAuth();
@@ -111,7 +111,7 @@ export function RailV10({ atual, sub, mode, toggle, onAba, pip }: {
   const itens: It[] = [];
   for (const a of listaAbas) {
     itens.push({ key: a.k, aba: a.k, to: destino(a), on: a.k === atual, grupo: GRUPO[a.k] ?? "Comando",
-      label: ehSuper ? a.label : (LABEL_LARGO[a.k] ?? a.label), icon: svg(ICONES[a.k]), badge: a.k === "leads" && pip ? pip : undefined });
+      label: ehSuper ? a.label : (LABEL_LARGO[a.k] ?? a.label), icon: svg(ICONES[a.k]) });
   }
   if (!ehSuper) itens.push({ key: "bi", aba: "bi", to: "/manager?aba=bi", on: atual === "bi", grupo: "Comando", label: "B.I.", icon: svg(ICONES.bi) });
   if (role === "ADMIN" || role === "DIRECTOR") itens.push({ key: "diretoria", to: "/diretor", on: false, grupo: "Sistema", label: "Diretoria", icon: svg("M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6") });
@@ -130,7 +130,7 @@ export function RailV10({ atual, sub, mode, toggle, onAba, pip }: {
       <style>{CSS(recolhido)}</style>
 
       <div className="sb-brand">
-        <img className="sb-logo" src="/comandra-lobo.png" alt="Comandra" onClick={recolhido ? toggleRecolher : undefined} style={recolhido ? { cursor: "pointer" } : undefined} title={recolhido ? "Expandir menu" : undefined} />
+        <div className="sb-logo" onClick={recolhido ? toggleRecolher : undefined} style={recolhido ? { cursor: "pointer" } : undefined} title={recolhido ? "Expandir menu" : "Comandra"} aria-label="Comandra">C</div>
         <div className="sb-bt"><b>Comandra</b>{sub ? <i>{sub}</i> : null}</div>
         <button className="sb-recolher" onClick={toggleRecolher} title={recolhido ? "Expandir menu" : "Recolher menu"} aria-label={recolhido ? "Expandir menu" : "Recolher menu"}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d={recolhido ? "M9 6l6 6-6 6" : "M15 6l-6 6 6 6"} /></svg>
@@ -176,7 +176,7 @@ const CSS = (recolhido: boolean) => `
 .mgr10.app2{grid-template-columns:${recolhido ? "72px" : "250px"} 1fr}
 .sbnav{background:#0E1626;color:#C7D2E0;height:100%;display:flex;flex-direction:column;overflow:hidden;font-family:Archivo,system-ui,sans-serif;border-right:1px solid rgba(255,255,255,.05)}
 .sb-brand{display:flex;align-items:center;gap:10px;padding:16px 14px 12px}
-.sb-logo{width:38px;height:34px;object-fit:contain;flex:none;border-radius:9px;background:#14B8E6;padding:3px}
+.sb-logo{width:40px;height:40px;flex:none;border-radius:12px;background:linear-gradient(135deg,#1CC6F2,#0E8FE0);color:#fff;font-size:22px;font-weight:800;display:grid;place-items:center;font-family:Archivo,sans-serif;box-shadow:0 3px 12px rgba(20,184,230,.4);user-select:none}
 .sb-bt{flex:1;min-width:0}.sb-bt b{display:block;font-size:17px;font-weight:800;color:#fff;letter-spacing:-.02em}.sb-bt i{font-style:normal;font-size:11.5px;color:#7E8DA3;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sb-recolher{background:none;border:0;color:#7E8DA3;cursor:pointer;padding:4px;border-radius:7px;flex:none}
 .sb-recolher:hover{background:rgba(255,255,255,.06);color:#fff}
