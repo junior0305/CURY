@@ -15,6 +15,10 @@ import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 import { definirRecebimento } from "@/hooks/useTempoReal";
 import { buscarPlantao } from "@/utils/c2sMatching";
 import { chaveNome, chaveGerente, gerenteC2S } from "@/hooks/useDiretoria";
+import { useDadosEquipe, type LeadH } from "@/hooks/useDadosEquipe";
+import { usePastas } from "@/hooks/usePastas";
+import { getSegunda } from "@/hooks/usePeriodo";
+import { atendido } from "@/lib/situacaoLead";
 
 const sb = supabase as any;
 const diaSP = (d: Date | number = new Date()) => new Date(d).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
@@ -33,7 +37,7 @@ export default function TropaV4() {
   const gerente = useEffectiveManagerId() ?? session?.user?.id ?? "";
   const [ft, setFt] = useState<FT>("todos");
   const [ocupado, setOcupado] = useState<string | null>(null);
-  const [modo, setModo] = useState<"plantao" | "contratacao">("plantao");
+  const [modo, setModo] = useState<"plantao" | "contratacao" | "gestao">("plantao");
   const como = gerente !== session?.user?.id ? gerente : null;
   loadFonts();
 
@@ -47,7 +51,7 @@ export default function TropaV4() {
       const [gerR, brokersR, leadsR, plantao] = await Promise.all([
         sb.from("profiles").select("first_name").eq("id", gerente).maybeSingle(),
         sb.from("profiles").select("id,first_name,last_name,last_seen_at,lead_assignment_enabled,roleta_entrou_em").eq("manager_id", gerente).eq("role", "BROKER").eq("is_active", true),
-        sb.from("leads").select("id,name,broker_id,status,created_at,atribuido_em,last_broker_whatsapp_at,last_lead_response_at").eq("manager_id", gerente).gte("created_at", desde14).limit(4000),
+        sb.from("leads").select("id,name,broker_id,status,created_at,atribuido_em,primeiro_contato_em,last_broker_whatsapp_at,last_lead_response_at").eq("manager_id", gerente).gte("created_at", desde14).limit(4000),
         buscarPlantao(`${hoje}T03:00:00Z`).catch(() => [] as any[]),
       ]);
       const kg = chaveGerente((gerR.data as any)?.first_name);
@@ -75,7 +79,7 @@ export default function TropaV4() {
     staleTime: 60_000,
     queryFn: async () => {
       const r = (await sb.from("system_settings").select("value").eq("key", "vagas_equipe").maybeSingle()).data;
-      try { const m = r?.value ? JSON.parse(r.value) : {}; return Number(m?.[gerente] ?? 0); } catch { return 0; }
+      try { const raw = r?.value; const m = typeof raw === "string" ? JSON.parse(raw) : (raw || {}); return Number(m?.[gerente] ?? 0); } catch { return 0; }
     },
   });
   const candidatos = (cand ?? []) as any[];
@@ -101,7 +105,54 @@ export default function TropaV4() {
     catch (e: any) { toast.error(e?.message?.includes("salvar_vagas") || e?.code === "PGRST202" ? "Rode o SQL de vagas no servidor primeiro." : (e?.message ?? "Não consegui salvar.")); }
   };
 
+  // ── Modo Gestão: SLA real (atribuido_em→primeiro_contato_em) + semana × semana (WoW) + churn ──
+  const segAtual = getSegunda(new Date());
+  const segPassada = new Date(Date.parse(segAtual + "T12:00:00Z") - 7 * 864e5).toISOString().slice(0, 10);
+  const domPassado = new Date(Date.parse(segAtual + "T12:00:00Z") - 864e5).toISOString().slice(0, 10);
+  const { leads: leadsEq, metricas, vendas: vendasEq } = useDadosEquipe(gerente, segPassada);
+  const { data: pastasData } = usePastas(gerente);
+  const pastasG = pastasData?.minhas ?? [];
+
+  // SLA: minutos entre atribuição e 1º contato, nos leads dos últimos 14 dias
+  const sla = useMemo(() => {
+    const ls = (data?.leads ?? []).filter((l: any) => l.atribuido_em && l.primeiro_contato_em);
+    const mins = ls.map((l: any) => (new Date(l.primeiro_contato_em).getTime() - new Date(l.atribuido_em).getTime()) / 60000).filter((m) => m >= 0 && m < 7 * 1440);
+    if (!mins.length) return null;
+    const media = mins.reduce((s, m) => s + m, 0) / mins.length;
+    const dentro = mins.filter((m) => m <= 2).length;
+    // por corretor
+    const porC = new Map<string, number[]>();
+    for (const l of ls) { const a = porC.get(l.broker_id) ?? []; a.push((new Date(l.primeiro_contato_em).getTime() - new Date(l.atribuido_em).getTime()) / 60000); porC.set(l.broker_id, a); }
+    const med = [...porC.entries()].map(([id, arr]) => ({ id, m: arr.reduce((s, x) => s + x, 0) / arr.length, n: arr.length })).filter((x) => x.n >= 3).sort((a, b) => a.m - b.m);
+    return { media, pctDentro: Math.round((dentro / mins.length) * 100), total: mins.length, melhor: med[0] ?? null, pior: med.length > 1 ? med[med.length - 1] : null };
+  }, [data]);
+  const nomeBrokerG = (id: string | null) => (data?.brokers ?? []).find((b: any) => b.id === id);
+  const fmtSla = (m: number) => m < 1 ? `${Math.round(m * 60)}s` : `${Math.floor(m)}m${String(Math.round((m % 1) * 60)).padStart(2, "0")}`;
+
+  // WoW: leads/contato/visitas/check-ins/pastas/vendas — esta semana × passada
+  const wow = useMemo(() => {
+    const entre = (d: string, a: string, b: string) => d >= a && d <= b;
+    const diaL = (l: LeadH) => new Date(l.created_at).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+    const pagos = (leadsEq ?? []).filter((l) => !["manual_test"].includes((l.source || "")));
+    const janela = (a: string, b: string) => {
+      const ls = pagos.filter((l) => entre(diaL(l), a, b));
+      const ms = (metricas ?? []).filter((m: any) => entre(m.data, a, b));
+      return {
+        leads: ls.length,
+        contato: ls.length ? Math.round((ls.filter((l) => atendido(l as any)).length / ls.length) * 100) : 0,
+        visitas: ms.reduce((s: number, m: any) => s + (m.atendimentos || 0), 0),
+        checkins: ms.reduce((s: number, m: any) => s + (m.checkins || 0), 0),
+        pastas: pastasG.filter((p: any) => p.cadastradaEm && entre(new Date(p.cadastradaEm).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }), a, b)).length,
+        vendas: (vendasEq ?? []).filter((v: any) => entre(v.dia, a, b)).length,
+      };
+    };
+    const hojeStr = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+    return { sem: janela(segAtual, hojeStr), ant: janela(segPassada, domPassado) };
+  }, [leadsEq, metricas, vendasEq, pastasG, segAtual, segPassada, domPassado]);
+
   const now = Date.now();
+  const sumidos = useMemo(() => (data?.brokers ?? []).filter((b: any) => !b.last_seen_at || now - new Date(b.last_seen_at).getTime() > 20 * 864e5).map((b: any) => ({ id: b.id, nome: [b.first_name, b.last_name].filter(Boolean).join(" ").trim() || "—", visto: b.last_seen_at })), [data, now]);
+
   const tropa = useMemo(() => {
     const brokers = data?.brokers ?? [];
     const leads = data?.leads ?? [];
@@ -181,6 +232,7 @@ export default function TropaV4() {
         <div className="tv-modos">
           <button className={`tv-modo${modo === "plantao" ? " on" : ""}`} onClick={() => setModo("plantao")}><span>🛰️</span> Modo Plantão <small>tempo real</small></button>
           <button className={`tv-modo${modo === "contratacao" ? " on" : ""}`} onClick={() => setModo("contratacao")}><span>🧩</span> Funil de Contratação <small>recrutamento</small></button>
+          <button className={`tv-modo${modo === "gestao" ? " on" : ""}`} onClick={() => setModo("gestao")}><span>📈</span> Gestão &amp; Estratégia <small>SLA · WoW · churn</small></button>
         </div>
 
         {modo === "contratacao" ? (
@@ -226,6 +278,65 @@ export default function TropaV4() {
               </div>
             </section>
             <p className="tv-nota">Fonte real: formulário de contratação → roleta de gerentes → esteira (em contato · entrevista · contratado · não seguiu). O <b>checklist CRECI</b> do mockup ainda não tem campo — fica para depois. Entrevista e contratação (abrem cadastro) ficam na esteira completa.</p>
+          </>
+        ) : modo === "gestao" ? (
+          <>
+            {/* SLA real */}
+            <section className="tv-cards">
+              <article className="tv-card azul">
+                <div className="tv-card-h"><span>SLA médio de 1º contato</span><span className="tv-tag">14 dias</span></div>
+                <div className="tv-val"><b className={sla && sla.media <= 2 ? "verde" : "amb"}>{sla ? fmtSla(sla.media) : "—"}</b><i>atribuição → toque</i></div>
+                <div className="tv-card-f">{sla ? <>{sla.pctDentro}% dentro da meta (&lt;2min) · {sla.total} leads</> : "sem leads com 1º contato ainda"}</div>
+              </article>
+              <article className="tv-card verde">
+                <div className="tv-card-h"><span>Mais rápido</span></div>
+                <div className="tv-val"><b className="verde">{sla?.melhor ? fmtSla(sla.melhor.m) : "—"}</b></div>
+                <div className="tv-card-f">{sla?.melhor ? `${nomeBrokerG(sla.melhor.id)?.first_name ?? "—"} · ${sla.melhor.n} leads` : "—"}</div>
+              </article>
+              <article className="tv-card rose">
+                <div className="tv-card-h"><span>Mais lento</span><span className="tv-tag amb">cobrar</span></div>
+                <div className="tv-val"><b className="rose">{sla?.pior ? fmtSla(sla.pior.m) : "—"}</b></div>
+                <div className="tv-card-f">{sla?.pior ? `${nomeBrokerG(sla.pior.id)?.first_name ?? "—"} · ${sla.pior.n} leads` : "—"}</div>
+              </article>
+              <article className="tv-card roxoC">
+                <div className="tv-card-h"><span>Churn / sumidos</span><span className="tv-tag amb">risco</span></div>
+                <div className="tv-val"><b className={sumidos.length ? "rose" : "verde"}>{sumidos.length}</b><i>corretores</i></div>
+                <div className="tv-card-f">sem acessar o Comandra há +20 dias</div>
+              </article>
+            </section>
+
+            {/* WoW: esta semana × passada */}
+            <section className="tv-panel">
+              <div className="tv-panel-h2"><b>📊 Esta semana × semana passada</b><span style={{ fontSize: 12, color: "var(--tm)" }}>seg → hoje vs. semana anterior inteira</span></div>
+              <div className="tv-wow">
+                {([["Leads", wow.sem.leads, wow.ant.leads], ["Com contato", wow.sem.contato, wow.ant.contato, "%"], ["Visitas", wow.sem.visitas, wow.ant.visitas], ["Check-ins", wow.sem.checkins, wow.ant.checkins], ["Pastas", wow.sem.pastas, wow.ant.pastas], ["Vendas", wow.sem.vendas, wow.ant.vendas]] as [string, number, number, string?][]).map(([k, a, b, suf]) => {
+                  const d = b > 0 ? Math.round(((a - b) / b) * 100) : a > 0 ? 100 : 0;
+                  return (
+                    <div className="tv-wcol" key={k}>
+                      <span className="tv-wk">{k}</span>
+                      <div className="tv-wn"><b>{a}{suf || ""}</b> <i>/ {b}{suf || ""}</i></div>
+                      <span className={`tv-wd ${d > 0 ? "up" : d < 0 ? "down" : ""}`}>{d > 0 ? "▲" : d < 0 ? "▼" : "="} {Math.abs(d)}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {sumidos.length > 0 && (
+              <section className="tv-panel" style={{ marginTop: 16 }}>
+                <div className="tv-panel-h2"><b>🚪 Em risco de churn (sem acesso há +20 dias)</b></div>
+                <div className="tv-tbl">
+                  {sumidos.slice(0, 12).map((s) => (
+                    <div className="tv-tr2" key={s.id} style={{ gridTemplateColumns: "minmax(0,1.5fr) 1fr auto" }}>
+                      <span className="tv-corr"><span className="tv-av">{ini2(s.nome)}</span><b>{s.nome}</b></span>
+                      <span className="tv-dim2">{s.visto ? `visto há ${haCurto(now - new Date(s.visto).getTime())}` : "nunca entrou"}</span>
+                      <span className="r"><Link className="tv-act ver" to={`/manager/leads?corretor=${s.id}`}>👁️</Link></span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            <p className="tv-nota">SLA = minutos entre o lead cair no corretor (atribuição) e o 1º contato real (dado dos últimos 14 dias). Semana comercial seg→dom; nada estimado. <b>Rampa de novos</b> (1º plantão/lead/visita/pasta/venda por corretor) fica na aba <Link to="/manager?aba=time">Tropa &amp; presença</Link>, que já tem.</p>
           </>
         ) : (<>
 
@@ -391,5 +502,11 @@ const CSS = `
 .tv-tr2.tv-th{border:0}.tv-tr2.alerta{background:rgba(244,63,94,.05)}.tv-tr2 .r{text-align:right}
 .tv-dim2{font-size:12.5px;color:var(--tm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tv-b.roxoB{color:#C084FC;background:rgba(168,85,247,.16)}
+.tv-wow{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--bd)}
+.tv-wcol{background:var(--card);padding:14px 16px;display:flex;flex-direction:column;gap:5px}
+.tv-wk{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--tm)}
+.tv-wn{font-family:"JetBrains Mono",monospace;font-size:19px;font-weight:900}.tv-wn i{font-style:normal;font-size:12px;color:var(--td);font-weight:600}
+.tv-wd{font-size:12px;font-weight:800;font-family:"JetBrains Mono",monospace;color:var(--tm)}.tv-wd.up{color:#10B981}.tv-wd.down{color:#F43F5E}
+@media(max-width:900px){.tv-wow{grid-template-columns:repeat(3,1fr)}}
 @media (max-width:1050px){.tvx .shell2.tv-main{padding:0 16px 80px;zoom:1}.tv-cards{grid-template-columns:1fr 1fr}.tv-th{display:none}.tv-tr{grid-template-columns:1fr auto;gap:6px}.tv-corr{grid-column:1/-1}.tv-lead{grid-column:1/-1}}
 `;
