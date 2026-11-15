@@ -94,6 +94,30 @@ export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, past
   });
   const fmtSla = (s: number | null | undefined) => s == null ? "—" : s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
 
+  // Leads do corretor — abrem AQUI dentro (sem sair da tela)
+  const [verLeads, setVerLeads] = useState(false);
+  const { data: leadsCorr, isLoading: carregandoLeads } = useQuery({
+    queryKey: ["rxp-leads", brokerId, verLeads],
+    enabled: !!brokerId && verLeads,
+    staleTime: 2 * 60_000,
+    queryFn: async () => {
+      const { data } = await sb.from("leads").select("id,name,status,created_at,primeiro_contato_em,last_broker_whatsapp_at,last_lead_response_at,visit_scheduled_at")
+        .eq("broker_id", brokerId).order("created_at", { ascending: false }).limit(80);
+      return (data ?? []) as any[];
+    },
+  });
+  const haQuanto = (iso?: string | null) => {
+    if (!iso) return "";
+    const h = Math.floor((Date.now() - new Date(iso).getTime()) / 3600000);
+    return h < 1 ? "agora" : h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`;
+  };
+  const situaLead = (l: any): [string, string] => {
+    if (l.last_lead_response_at) return ["Respondeu", "#10B981"];
+    if (l.visit_scheduled_at) return ["Visita marcada", "#38BDF8"];
+    if (l.primeiro_contato_em || l.last_broker_whatsapp_at) return ["Em contato", "#FCD34D"];
+    return ["Sem contato", "#FDA4AF"];
+  };
+
   const mesNome = new Date().toLocaleDateString("pt-BR", { timeZone: SP, month: "long" });
   const semanaA = dias14.slice(0, 7), semanaB = dias14.slice(7);
   const rangeLabel = (arr: typeof dias14) => `${arr[0].iso.slice(8)}/${arr[0].iso.slice(5, 7)} a ${arr[6].iso.slice(8)}/${arr[6].iso.slice(5, 7)}`;
@@ -164,10 +188,27 @@ export default function RaioXPlantaoDrawer({ brokerId, nome, stand, vendas, past
           </div>
 
           <div className="rxp-card">
-            <div className="rxp-ct"><span>⚡</span> Ações rápidas</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <a className="rxp-act ver" href={`/manager/leads?corretor=${brokerId}`}>👁️ Ver os leads do corretor</a>
+            <div className="rxp-ct" style={{ justifyContent: "space-between" }}>
+              <span><span>👁️</span> Leads do corretor</span>
+              {verLeads && leadsCorr && <span style={{ fontSize: 11.5, color: "#8A94A6", fontWeight: 700 }}>{leadsCorr.length}</span>}
             </div>
+            {!verLeads ? (
+              <button className="rxp-act ver" onClick={() => setVerLeads(true)}>👁️ Ver os leads aqui</button>
+            ) : carregandoLeads ? (
+              <p className="rxp-nota" style={{ margin: 0 }}>Carregando…</p>
+            ) : !leadsCorr?.length ? (
+              <p className="rxp-nota" style={{ margin: 0 }}>Nenhum lead com esse corretor.</p>
+            ) : (
+              <div className="rxp-leads">
+                {leadsCorr.map((l) => { const [sit, cor] = situaLead(l); return (
+                  <div className="rxp-lead" key={l.id}>
+                    <span className="rxp-ln">{l.name || "Sem nome"}</span>
+                    <span className="rxp-ls" style={{ color: cor, background: cor + "1E" }}>{sit}</span>
+                    <span className="rxp-lt">{haQuanto(l.created_at)}</span>
+                  </div>
+                ); })}
+              </div>
+            )}
           </div>
         </div>
       </aside>
@@ -203,6 +244,12 @@ const CSS = `
 .rxp-hora{font-size:9.5px;color:#8A94A6;font-family:'JetBrains Mono',monospace}
 .rxp-nota{font-size:10.5px;color:#55617A;margin:10px 0 0;line-height:1.4}
 .rxp-act{display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border-radius:8px;font-size:12.5px;font-weight:700;text-decoration:none;cursor:pointer;border:1px solid #1E293B;color:#C4CCD8;background:#0A1220}
+.rxp-act.ver{width:100%}
 .rxp-act.ver:hover{border-color:#38BDF8;color:#38BDF8}
+.rxp-leads{display:flex;flex-direction:column;gap:5px;max-height:320px;overflow-y:auto}
+.rxp-lead{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:7px 10px;background:#0A1220;border:1px solid #1A2435;border-radius:7px}
+.rxp-ln{font-size:12.5px;color:#DCE3EC;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rxp-ls{font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;white-space:nowrap}
+.rxp-lt{font-size:10.5px;color:#6B7688;font-family:'JetBrains Mono',monospace;min-width:30px;text-align:right}
 @media(max-width:560px){.rxp-drawer{width:100vw}}
 `;
