@@ -166,8 +166,8 @@ export default function TropaV4() {
       <main className="shell2 tv-main">
         <header className="tv-top">
           <div>
-            <h1>Tropa &amp; Plantão <span className="tv-mode">Modo Plantão · tempo real</span></h1>
-            <p>Plantão ao vivo: check-in, ociosidade e o lead que cada corretor está segurando agora.</p>
+            <h1>Tropa &amp; Plantão <span className="tv-mode">{modo === "plantao" ? "Modo Plantão · tempo real" : "Funil de Contratação"}</span></h1>
+            <p>{modo === "plantao" ? "Plantão ao vivo: check-in, ociosidade e o lead que cada corretor está segurando agora." : "Esteira de recrutamento: do formulário de contratação até virar corretor."}</p>
             <div className="tv-agora">
               <span className="tv-agora-lbl">● Dados de agora:</span>
               <span className="tv-badge"><span className="tv-dot azul" /> <b>{noStand} no stand</b> (check-in C2S)</span>
