@@ -847,16 +847,18 @@ export default function Disparar() {
         return ehNomeVar(k) ? nome : (valores[k]?.trim() || `[${chaveVar(k)}]`); });
     return (
       <div className="fone">
+        <div className="fone-sbar"><span>9:41</span><span className="r">5G <span className="bat" /></span></div>
         <div className="fone-top">
+          <span className="fone-back">‹</span>
           <div className="fone-av">{ini(data?.config?.label ?? (empresa().nome || "C"))}</div>
-          <div><b>{data?.config?.label ?? (empresa().nome_comercial || "Conta comercial")}</b><span>conta comercial</span></div>
+          <div><b>{data?.config?.label ?? (empresa().nome_comercial || "Conta comercial")}</b><span>conta comercial · online</span></div>
         </div>
         <div className="fone-corpo">
           <div className="bolha">
-            {foto ? <img src={foto} alt="" /> : <div className="semimg">sem imagem</div>}
+            {foto ? <img src={foto} alt="" /> : <div className="semimg">🖼 sua imagem</div>}
             <p>{corpo}</p>
             {rod ? <span className="rod">{rod}</span> : null}
-            <span className="hora">14:32</span>
+            <span className="hora">14:32 ✓✓</span>
           </div>
           <div className="bolha-bt">
             {bts.filter(Boolean).map((b) => <div className="bt" key={b}>{b}</div>)}

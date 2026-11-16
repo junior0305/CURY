@@ -509,3 +509,35 @@
 .mgr10.disparar .bz-st.bz-paused{color:var(--warn);background:var(--warn-soft)}
 .mgr10.disparar .bz-st.bz-failed,.mgr10.disparar .bz-st.bz-canceled,.mgr10.disparar .bz-st.bz-cancelled{color:var(--red);background:var(--red-air)}
 @media(max-width:860px){.mgr10.disparar .bz-cards{grid-template-columns:repeat(2,1fr)}.mgr10.disparar .bz-duo{grid-template-columns:1fr}.mgr10.disparar .bz-tr{grid-template-columns:46px 1fr 78px 80px}.mgr10.disparar .bz-tr>span:nth-child(4),.mgr10.disparar .bz-tr>span:nth-child(5){display:none}}
+
+/* ── celular realista (iPhone) — pedido do Junior 16/11 ─────────────────
+   O preview da aba Disparar vira um iPhone de verdade: moldura preta, notch
+   e barra de status, tela do WhatsApp no escuro. "É exatamente assim que vai
+   chegar no cliente." Overrides do bloco ".fone" lá de cima (mesma
+   especificidade, declarado depois → vence). O conteúdo segue dinâmico. */
+.mgr10.disparar .fone{box-sizing:border-box;width:320px;background:#000;border:12px solid #0a0a0c;
+  border-radius:50px;box-shadow:0 26px 70px -18px rgba(0,0,0,.62),inset 0 0 0 2px #2a2a2e}
+.mgr10.disparar .fone::before{content:"";position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  width:116px;height:27px;background:#0a0a0c;border-radius:0 0 16px 16px;z-index:5}
+.mgr10.disparar .fone-sbar{display:flex;justify-content:space-between;align-items:center;
+  padding:12px 24px 6px;font:700 12px Archivo,sans-serif;color:#fff;background:#0b141a}
+.mgr10.disparar .fone-sbar .r{display:flex;gap:6px;align-items:center;font-size:11px}
+.mgr10.disparar .fone-sbar .bat{position:relative;display:inline-block;width:22px;height:11px;
+  border:1.4px solid rgba(255,255,255,.75);border-radius:3px;margin-right:3px}
+.mgr10.disparar .fone-sbar .bat::after{content:"";position:absolute;left:1.5px;top:1.5px;bottom:1.5px;right:3px;background:#fff;border-radius:1px}
+.mgr10.disparar .fone-sbar .bat::before{content:"";position:absolute;right:-4px;top:3px;width:2px;height:5px;background:rgba(255,255,255,.75);border-radius:0 2px 2px 0}
+.mgr10.disparar .fone-top{background:#111b21;padding:8px 14px 11px;border-bottom:1px solid rgba(255,255,255,.06)}
+.mgr10.disparar .fone-back{color:#8696a0;font-size:21px;line-height:1;margin-right:2px}
+.mgr10.disparar .fone-av{background:#0EA5B7;color:#fff;width:36px;height:36px}
+.mgr10.disparar .fone-top b,html[data-theme="dark"] .mgr10.disparar .fone-top b{color:#fff}
+.mgr10.disparar .fone-top span{color:#8696a0;opacity:1}
+.mgr10.disparar .fone-corpo{background:#0b141a;background-image:none;padding:16px 13px 20px}
+.mgr10.disparar .bolha,html[data-theme="dark"] .bolha{background:#005c4b;border-radius:10px 10px 10px 2px;
+  box-shadow:0 1px 2px rgba(0,0,0,.3);max-width:92%}
+.mgr10.disparar .bolha p,html[data-theme="dark"] .bolha p{color:#E9EDEF}
+.mgr10.disparar .bolha .rod,html[data-theme="dark"] .bolha .rod{color:rgba(233,237,239,.6)}
+.mgr10.disparar .bolha .hora{color:#8696a0}
+.mgr10.disparar .bolha .semimg{height:150px;aspect-ratio:auto;background:linear-gradient(120deg,#1f3b2e,#17506b);
+  color:rgba(255,255,255,.6);font-size:12px}
+.mgr10.disparar .bt{background:#0b141a;color:#53bdeb;border:1px solid rgba(83,189,235,.28);
+  border-radius:8px;margin-top:7px;padding:11px}
