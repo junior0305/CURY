@@ -189,10 +189,13 @@ export default function Diretoria() {
             {aba === "leads" && <Leads dias={dias} deP={periodo.de} supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
             {aba === "pastas" && <>
               <FechamentoAcelerador />
-              <PastasPainel diretorId={diretorId!} supers={supers} pastas={dir.pastas} />
-              <button className="dir-btn" style={{ alignSelf: "flex-start" }} onClick={() => tog("tabela-pastas")}>
-                {aberto["tabela-pastas"] ? "▾ Esconder a árvore completa" : "▸ Árvore completa: super → gerente → corretor → cliente"}</button>
-              {aberto["tabela-pastas"] ? <Pastas supers={supers} pastas={dir.pastas} aberto={aberto} tog={tog} /> : null}
+              <details className="fech-old">
+                <summary>📂 Painel de pastas completo do Junix — pipeline, valor (R$), ataque de hoje e limpeza detalhada</summary>
+                <PastasPainel diretorId={diretorId!} supers={supers} pastas={dir.pastas} />
+                <button className="dir-btn" style={{ alignSelf: "flex-start" }} onClick={() => tog("tabela-pastas")}>
+                  {aberto["tabela-pastas"] ? "▾ Esconder a árvore completa" : "▸ Árvore completa: super → gerente → corretor → cliente"}</button>
+                {aberto["tabela-pastas"] ? <Pastas supers={supers} pastas={dir.pastas} aberto={aberto} tog={tog} /> : null}
+              </details>
             </>}
             {aba === "bi" && <BiTab scope="super" managerId={diretorId ?? undefined} />}
             {aba === "estrategia" && diretorId && <Estrategia diretorId={diretorId} supers={supers} pastas={dir.pastas} />}

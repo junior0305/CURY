@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
 import { toast } from "sonner";
 import "@/styles/fechamento.css";
 
@@ -109,14 +110,24 @@ export default function FechamentoAcelerador({ podeSubir = true }: { podeSubir?:
     const pe = et(2);
     if (pe?.n) { const pior = [...porEquipe].sort((a, b) => b.pend - a.pend)[0]; out.push({ cls: "pend", ico: "📎", big: pe.n, t: `<b>${pe.n} com pendência</b> travando o banco${pior?.pend ? ` — a maior parte na equipe <b>${pior.nome}</b>` : ""}. Resolver documento/renda destrava.`, rot: "Ver pendências", go: () => setEtapaSel(2) }); }
     const rev = (faxinaD.revisao ?? [])[0];
-    if (rev?.n) out.push({ cls: "clean", ico: "🧹", big: rev.n, t: `<b>${rev.n} pastas paradas há +60 dias</b> na equipe ${rev.nome} inflando a meta. Não é cobrança — é decisão de distrato.`, rot: `Pedir revisão a ${rev.nome}`, go: () => toast.message(`Revisão em lote para ${rev.nome} (${rev.n}) — a Régua entra na próxima etapa.`) });
+    if (rev?.n) out.push({ cls: "clean", ico: "🧹", big: rev.n, t: `<b>${rev.n} pastas paradas há +60 dias</b> na equipe ${rev.nome} inflando a meta. Não é cobrança — é decisão de distrato.`, rot: `Pedir revisão a ${rev.nome}`, go: () => pedirRevisao(rev.nome, rev.n) });
     return out.slice(0, 3);
   }, [porEtapa, porEquipe, faxinaD]);
 
   const delta = (a: number, b: number) => { const x = (a ?? 0) - (b ?? 0); return <b className={x >= 0 ? "gud" : "bad"}>{a ?? 0}</b>; };
+  // Cobra o corretor da pasta pelo WhatsApp do próprio líder (cobrar-pessoa resolve
+  // nome→chip; cai no chip reserva se o seu estiver off). Mesmo motor do Kanban.
   function cobrar(s: any) {
-    const txt = `Cobrança de fechamento — ${s.cliente} (${s.etapa})\nCorretor: ${s.corretor}\nAção: ${ACAO[s.dono] ?? s.etapa}\nParada há ${s.dias} dia(s).`;
-    navigator.clipboard?.writeText(txt).then(() => toast.success("Texto de cobrança copiado. (Régua automática na próxima etapa.)"), () => toast.message(txt));
+    const prim = (s.corretor || "").trim().split(" ")[0];
+    if (!prim) { toast.error("Essa pasta está sem corretor no arquivo."); return; }
+    const msg = `Fechamento: a pasta de ${s.cliente} está em "${s.etapa}" há ${s.dias} dia(s). ${ACAO[s.dono] ?? ""}. Consegue destravar?`;
+    enviarPeloMeuChip({ paraNome: prim, rotulo: s.corretor, mensagem: msg, motivo: "pasta em fechamento" });
+  }
+  // Pede revisão do backlog ao super/gerente responsável.
+  function pedirRevisao(nome: string, n: number) {
+    const prim = (nome || "").trim().split(" ")[0];
+    if (!prim) return;
+    enviarPeloMeuChip({ paraNome: prim, rotulo: nome, mensagem: `Revisão de pipeline: ${n} pastas da sua equipe estão paradas há +60 dias e inflando a meta. Dá pra revisar quais distratar ou arquivar no Junix?`, motivo: "revisão de pipeline" });
   }
 
   const etSel = porEtapa.find((e) => e.ordem === etapaSel);
@@ -235,7 +246,7 @@ export default function FechamentoAcelerador({ podeSubir = true }: { podeSubir?:
           <div className="body">
             <p style={{ fontSize: 12.5, color: "var(--ink-3)", margin: "2px 0 8px" }}>Revisão em lote para quem decide — sem listar uma a uma.</p>
             {(faxinaD.revisao ?? []).map((r: any) => (
-              <button className="rev" key={r.chave} onClick={() => toast.message(`Revisão em lote para ${r.nome} (${r.n}) — a Régua entra na próxima etapa.`)}>Pedir revisão a {r.nome} ({r.n})</button>
+              <button className="rev" key={r.chave} onClick={() => pedirRevisao(r.nome, r.n)}>Pedir revisão a {r.nome} ({r.n})</button>
             ))}
           </div>
         </details>

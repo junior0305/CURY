@@ -104,3 +104,15 @@ html[data-theme="dark"] .fech{
 .fech .fax .rev{display:inline-flex;gap:6px;margin:4px 8px 0 0;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);border:none;padding:7px 12px;border-radius:9px;cursor:pointer}
 
 @media(max-width:860px){.fech .cop-g{grid-template-columns:1fr}.fech .pipe{grid-template-columns:1fr 1fr}.fech .eq th:nth-child(4),.fech .eq td:nth-child(4){display:none}}
+
+/* Pastas antigo (Junix) colapsado abaixo do painel novo — Diretoria.tsx */
+.fech-old{margin-top:10px;border:1px solid #e2e8f1;border-radius:14px;background:#fff}
+html[data-theme="dark"] .fech-old{border-color:#223450;background:#111e34}
+.fech-old>summary{list-style:none;cursor:pointer;padding:12px 16px;font:600 13px Archivo,sans-serif;color:#44546c}
+.fech-old>summary::-webkit-details-marker{display:none}
+.fech-old>summary::before{content:"▸ ";color:#8593a8}
+.fech-old[open]>summary::before{content:"▾ "}
+html[data-theme="dark"] .fech-old>summary{color:#a9b7cf}
+.fech-old[open]>summary{border-bottom:1px solid #eef2f7}
+html[data-theme="dark"] .fech-old[open]>summary{border-color:#1a2942}
+.fech-old>:not(summary){padding:12px 14px}
