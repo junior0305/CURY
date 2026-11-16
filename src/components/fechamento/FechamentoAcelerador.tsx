@@ -3,72 +3,61 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import "@/styles/fechamento.css";
 
-/* Aceleração de Fechamento — topo da aba Pastas.
-   Fonte: export diário "Pesquisa" (Cury), ingerido por fechamento_ingerir;
-   leitura por fechamento_painel. Hierarquia v1 = colunas do próprio arquivo
-   (Diretor→Gerente→Corretor). Cobrar = copia o texto por enquanto; a Régua
-   entra na Fase 4 (precisa casar nome→perfil). */
+/* Aceleração de Fechamento — "Onde as vendas estão paradas".
+   Fonte: export diário "Pesquisa" (Junix/Cury), ingerido por fechamento_ingerir
+   (evento datado pela DataContato); leitura por fechamento_painel. Cobrar copia
+   o texto por enquanto (Régua = fase seguinte). */
 
 type Periodo = "sem" | "mes" | "d7";
 const sb = supabase as any;
 
-// ---- datas (semana seg–dom, padrão da casa) ----
 function janela(p: Periodo): [string, string] {
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   if (p === "mes") return [iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1)), iso(hoje)];
   if (p === "d7") { const d = new Date(hoje); d.setDate(d.getDate() - 6); return [iso(d), iso(hoje)]; }
-  const dow = (hoje.getDay() + 6) % 7; // 0 = segunda
-  const seg = new Date(hoje); seg.setDate(seg.getDate() - dow);
+  const dow = (hoje.getDay() + 6) % 7; const seg = new Date(hoje); seg.setDate(seg.getDate() - dow);
   return [iso(seg), iso(hoje)];
 }
 const CMP: Record<Periodo, string> = { sem: "a semana passada", mes: "o mês passado", d7: "os 7 dias anteriores" };
-
-const ACAO: Record<number, string> = {
-  1: "completar a pasta (faltam docs)", 2: "resolver pendência (doc/renda)",
-  3: "cobrar retorno do banco", 4: "emitir contrato · secretaria", 5: "confirmar escritura",
-};
+const EM: Record<number, string> = { 1: "📁", 2: "📎", 3: "🏦", 4: "✅", 5: "✍️" };
+const VAL: Record<number, string> = { 1: "pasta em montagem", 2: "falta doc/renda", 3: "na Caixa", 4: "contrato a emitir", 5: "quase venda" };
+const ACAO: Record<string, string> = { corretor: "cobrar o corretor a completar a pasta", cliente: "cobrar o doc/renda do cliente", banco: "cobrar o retorno da Caixa", secretaria: "cobrar a secretaria a emitir", "-": "acompanhar" };
 const ini = (s: string) => (s || "").slice(0, 2).toUpperCase();
+const faixa = (d: number) => (d <= 7 ? "f" : d <= 30 ? "m" : "v");
 
-// ---- leitura de CSV (UTF-8 com fallback 1252, como a Base de contatos) ----
 async function lerCsv(f: File): Promise<string[][]> {
   const buf = await f.arrayBuffer();
   let txt: string;
-  try { txt = new TextDecoder("utf-8", { fatal: true }).decode(buf); }
-  catch { txt = new TextDecoder("windows-1252").decode(buf); }
+  try { txt = new TextDecoder("utf-8", { fatal: true }).decode(buf); } catch { txt = new TextDecoder("windows-1252").decode(buf); }
   txt = txt.replace(/^﻿/, "").replace(/\r/g, "");
-  const sep = (txt.split("\n")[0].match(/;/g)?.length ?? 0) >= (txt.split("\n")[0].match(/,/g)?.length ?? 0) ? ";" : ",";
+  const h = txt.split("\n")[0];
+  const sep = (h.match(/;/g)?.length ?? 0) >= (h.match(/,/g)?.length ?? 0) ? ";" : ",";
   return txt.split("\n").filter((l) => l.trim()).map((l) => l.split(sep).map((c) => c.trim().replace(/^"|"$/g, "")));
 }
-// "DD/MM/AAAA HH:MM:SS" -> ISO; vazio -> null
 function dt(s: string): string | null {
   const m = (s || "").match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}):(\d{2}))?/);
-  if (!m) return null;
-  return `${m[3]}-${m[2]}-${m[1]}T${m[4] ?? "00"}:${m[5] ?? "00"}:${m[6] ?? "00"}`;
+  return m ? `${m[3]}-${m[2]}-${m[1]}T${m[4] ?? "00"}:${m[5] ?? "00"}:${m[6] ?? "00"}` : null;
 }
 function dataDoArquivo(nome: string): string {
-  const m = nome.match(/(\d{2})(\d{2})(\d{2})/); // PesquisaDDMMYY
-  if (m) return `20${m[3]}-${m[2]}-${m[1]}`;
-  return new Date().toISOString().slice(0, 10);
+  const m = nome.match(/(\d{2})(\d{2})(\d{2})/);
+  return m ? `20${m[3]}-${m[2]}-${m[1]}` : new Date().toISOString().slice(0, 10);
 }
 
 export default function FechamentoAcelerador({ podeSubir = true }: { podeSubir?: boolean }) {
   const [periodo, setPeriodo] = useState<Periodo>("sem");
   const [dir, setDir] = useState<string | null>(null);
   const [ger, setGer] = useState<string | null>(null);
-  const [etapaSel, setEtapaSel] = useState<number | null>(4); // começa nas aprovadas (dinheiro)
+  const [etapaSel, setEtapaSel] = useState<number>(4);
   const [d, setD] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [subindo, setSubindo] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-
   const [de, ate] = useMemo(() => janela(periodo), [periodo]);
 
   async function carregar() {
     setCarregando(true);
-    const { data, error } = await sb.rpc("fechamento_painel", {
-      p_de: de, p_ate: ate, p_diretor: dir, p_gerente: ger, p_etapa: etapaSel,
-    });
+    const { data, error } = await sb.rpc("fechamento_painel", { p_de: de, p_ate: ate, p_diretor: dir, p_gerente: ger, p_etapa: etapaSel });
     setCarregando(false);
     if (error) { toast.error("Não consegui ler o painel: " + error.message); return; }
     setD(data);
@@ -76,206 +65,180 @@ export default function FechamentoAcelerador({ podeSubir = true }: { podeSubir?:
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [de, ate, dir, ger, etapaSel]);
 
   async function subir(f?: File) {
-    if (!f) return;
-    setSubindo(true);
+    if (!f) return; setSubindo(true);
     try {
       const linhas = await lerCsv(f);
-      const corpo = linhas.slice(1).filter((c) => c.length >= 13 && c[1]?.trim());
-      const rows = corpo.map((c) => ({
-        cod: c[1], cliente: c[2], emp: c[3], bloco: c[4], uni: c[5],
-        corr: c[6], ger: c[7], dir: c[8], status: c[12],
-        cadastro: dt(c[0]), contato: dt(c[10]),
+      const head = (linhas[0] ?? []).map((h) => h.toLowerCase().replace(/\s/g, ""));
+      if (!(head[0]?.includes("datacadastro") && head[1]?.includes("codproposta") && head.some((h) => h.includes("statusproposta")))) {
+        toast.error("Esse arquivo não é o export Pesquisa (colunas em outra ordem). Baixe o Pesquisa do dia."); setSubindo(false); if (fileRef.current) fileRef.current.value = ""; return;
+      }
+      const rows = linhas.slice(1).filter((c) => c.length >= 13 && c[1]?.trim()).map((c) => ({
+        cod: c[1], cliente: c[2], emp: c[3], bloco: c[4], uni: c[5], corr: c[6], ger: c[7], dir: c[8],
+        status: c[12], cadastro: dt(c[0]), contato: dt(c[10]),
       }));
       if (!rows.length) { toast.error("Arquivo sem linhas válidas."); setSubindo(false); return; }
       const pData = dataDoArquivo(f.name);
       const { data, error } = await sb.rpc("fechamento_ingerir", { p_data: pData, p_rows: rows });
       if (error) throw error;
       const r = Array.isArray(data) ? data[0] : data;
-      toast.success(`Pesquisa de ${pData.split("-").reverse().join("/")} carregado: ${r?.linhas ?? rows.length} linhas · ${r?.mudancas ?? 0} mudanças`);
+      toast.success(`Pesquisa de ${pData.split("-").reverse().join("/")}: ${r?.linhas ?? rows.length} linhas · ${r?.mudancas ?? 0} mudanças`);
       await carregar();
-    } catch (e: any) {
-      toast.error("Falha ao carregar: " + (e?.message ?? e));
-    } finally {
-      setSubindo(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
+    } catch (e: any) { toast.error("Falha ao carregar: " + (e?.message ?? e)); }
+    finally { setSubindo(false); if (fileRef.current) fileRef.current.value = ""; }
   }
 
   const fluxo = d?.fluxo ?? {};
-  const funil = d?.funil ?? {};
   const porEtapa: any[] = d?.por_etapa ?? [];
-  const ranking: any[] = d?.ranking ?? [];
+  const porEquipe: any[] = d?.por_equipe ?? [];
   const salvar: any[] = d?.salvar ?? [];
+  const faxinaD = d?.faxina ?? {};
   const nivel = d?.nivel ?? "diretor";
   const temFilho = nivel !== "corretor";
 
-  // ---- desenho da semana (sugestões por regra, do dado real) ----
-  const sugestoes = useMemo(() => {
-    const byO = (o: number) => porEtapa.find((e) => e.ordem === o)?.n ?? 0;
-    const out: [string, string][] = [];
-    if (byO(4)) out.push(["💰", `<b>${byO(4)} aprovadas sem contrato</b> esperando emissão — cobrar a secretaria é o fechamento mais rápido.`]);
-    if (byO(2)) out.push(["📎", `<b>${byO(2)} com pendência</b> travando o banco — resolver documento/renda destrava.`]);
-    if (byO(3)) out.push(["🏦", `<b>${byO(3)} em análise bancária</b> — cobrar o retorno da Caixa pelas mais antigas.`]);
-    if (!out.length) out.push(["📥", "Suba o <b>Pesquisa de hoje</b> pra ver o que a equipe moveu e o que dá pra salvar."]);
-    return out;
+  const gargaloOrdem = useMemo(() => {
+    const bloq = porEtapa.filter((e) => [1, 2, 3].includes(e.ordem));
+    if (!bloq.length) return null;
+    return bloq.reduce((a, b) => (b.v > a.v ? b : a)).ordem;
   }, [porEtapa]);
 
-  const delta = (a: number, b: number) => {
-    const x = (a ?? 0) - (b ?? 0);
-    return <span className={x >= 0 ? "gud" : "bad"}>{x >= 0 ? "▲ +" : "▼ −"}{Math.abs(x)}</span>;
-  };
-  const conv = (a: number, b: number) => (a ? Math.round((b / a) * 100) : 0);
+  const copiloto = useMemo(() => {
+    const et = (o: number) => porEtapa.find((e) => e.ordem === o);
+    const out: any[] = [];
+    const ap = et(4);
+    if (ap?.n) out.push({ cls: "money", ico: "💰", big: ap.n, t: `<b>${ap.n} aprovadas sem contrato</b> — a Caixa aprovou, falta a secretaria emitir.${ap.v ? ` ${ap.v} passaram de 30 dias.` : ""} É o fechamento mais rápido.`, rot: "Cobrar a secretaria", go: () => setEtapaSel(4) });
+    const pe = et(2);
+    if (pe?.n) { const pior = [...porEquipe].sort((a, b) => b.pend - a.pend)[0]; out.push({ cls: "pend", ico: "📎", big: pe.n, t: `<b>${pe.n} com pendência</b> travando o banco${pior?.pend ? ` — a maior parte na equipe <b>${pior.nome}</b>` : ""}. Resolver documento/renda destrava.`, rot: "Ver pendências", go: () => setEtapaSel(2) }); }
+    const rev = (faxinaD.revisao ?? [])[0];
+    if (rev?.n) out.push({ cls: "clean", ico: "🧹", big: rev.n, t: `<b>${rev.n} pastas paradas há +60 dias</b> na equipe ${rev.nome} inflando a meta. Não é cobrança — é decisão de distrato.`, rot: `Pedir revisão a ${rev.nome}`, go: () => toast.message(`Revisão em lote para ${rev.nome} (${rev.n}) — a Régua entra na próxima etapa.`) });
+    return out.slice(0, 3);
+  }, [porEtapa, porEquipe, faxinaD]);
 
+  const delta = (a: number, b: number) => { const x = (a ?? 0) - (b ?? 0); return <b className={x >= 0 ? "gud" : "bad"}>{a ?? 0}</b>; };
   function cobrar(s: any) {
-    const txt = `Cobrança de fechamento — ${s.cliente} (${s.etapa})\nCorretor: ${s.corretor}\nO que falta: ${ACAO[s.ordem] ?? s.etapa}\nParada há ${s.dias} dia(s).`;
-    navigator.clipboard?.writeText(txt).then(
-      () => toast.success("Texto de cobrança copiado. (A Régua automática entra na próxima etapa.)"),
-      () => toast.message(txt),
-    );
+    const txt = `Cobrança de fechamento — ${s.cliente} (${s.etapa})\nCorretor: ${s.corretor}\nAção: ${ACAO[s.dono] ?? s.etapa}\nParada há ${s.dias} dia(s).`;
+    navigator.clipboard?.writeText(txt).then(() => toast.success("Texto de cobrança copiado. (Régua automática na próxima etapa.)"), () => toast.message(txt));
   }
 
-  const crumb = (() => {
-    const parts: { nome: string; onClick?: () => void }[] = [{ nome: "Diretoria", onClick: () => { setDir(null); setGer(null); } }];
-    if (dir) parts.push({ nome: dir, onClick: () => setGer(null) });
-    if (ger) parts.push({ nome: ger });
-    return parts;
-  })();
-  const nivelLabel = nivel === "diretor" ? "VENDO POR SUPERINTENDÊNCIA" : nivel === "gerente" ? "VENDO POR GERÊNCIA" : "VENDO POR CORRETOR";
+  const etSel = porEtapa.find((e) => e.ordem === etapaSel);
+  const nivelLabel = nivel === "diretor" ? "superintendências · clique p/ ver gerências" : nivel === "gerente" ? "gerências · clique p/ ver corretores" : "corretores desta gerência";
 
   return (
     <div className="fech">
-      <div className="ftop">
+      <div className="head">
         <div>
-          <h2 className="ftit">🚀 Aceleração de Fechamento</h2>
-          <p className="fsub">O que a equipe moveu e o que dá pra salvar. Pasta sem movimento há +60 dias fica na faxina.</p>
+          <h2 className="ftit">Onde as vendas estão paradas</h2>
+          <p className="fsub">O pipeline da equipe agora — datas reais do Junix (última movimentação). +60 dias vira faxina.</p>
+          <p className="bc">
+            <button className={dir || ger ? "" : "cur"} onClick={() => { setDir(null); setGer(null); }}>Diretoria</button>
+            {dir ? <> › <button className={ger ? "" : "cur"} onClick={() => setGer(null)}>{dir}</button></> : null}
+            {ger ? <> › <button className="cur">{ger}</button></> : null}
+          </p>
         </div>
-        <div>
+        <div className="hd-r">
           <div className="per">
-            {(["sem", "mes", "d7"] as Periodo[]).map((p) => (
-              <b key={p} className={periodo === p ? "on" : ""} onClick={() => setPeriodo(p)}>
-                {p === "sem" ? "Esta semana" : p === "mes" ? "Este mês" : "7 dias"}
-              </b>
-            ))}
+            {(["sem", "mes", "d7"] as Periodo[]).map((p) => <b key={p} className={periodo === p ? "on" : ""} onClick={() => setPeriodo(p)}>{p === "sem" ? "Semana" : p === "mes" ? "Mês" : "7 dias"}</b>)}
           </div>
-          <div className="cmp">comparando com <b>{CMP[periodo]}</b></div>
           {podeSubir && (
             <div className="up">
-              <button onClick={() => fileRef.current?.click()} disabled={subindo}>
-                {subindo ? "Carregando…" : "⬆ Enviar o Pesquisa de hoje"}
-              </button>
+              <button onClick={() => fileRef.current?.click()} disabled={subindo}>{subindo ? "Carregando…" : "⬆ Subir Pesquisa (Junix)"}</button>
               <input ref={fileRef} type="file" accept=".csv,text/csv,text/plain" hidden onChange={(e) => subir(e.target.files?.[0])} />
-              <small>{d?.ultima_carga ? `último dia carregado: ${String(d.ultima_carga).split("-").reverse().join("/")} · ${d.dias_de_dado} dia(s) de histórico` : "nenhum arquivo carregado ainda"}</small>
+              <small>{d?.ultima_carga ? `último: ${String(d.ultima_carga).split("-").reverse().join("/")}` : "nada carregado"}</small>
             </div>
           )}
         </div>
       </div>
 
-      {/* breadcrumb */}
-      <div className="bc">
-        {crumb.map((c, i) => (
-          <span key={i} style={{ display: "contents" }}>
-            <b className={i === crumb.length - 1 ? "cur" : ""} onClick={c.onClick}>{c.nome}</b>
-            {i < crumb.length - 1 ? <span>›</span> : null}
-          </span>
-        ))}
-        <span className="lv">{nivelLabel}</span>
+      {/* movimento — datas reais */}
+      <div className="mov">
+        <div className="m">{delta(fluxo.avancaram, fluxo.avancaram_ant)}<span>avançaram</span></div><div className="sep" />
+        <div className="m"><b className="gud">{fluxo.assinaram ?? 0}</b><span>assinaram</span></div><div className="sep" />
+        <div className="m"><b>{fluxo.novas ?? 0}</b><span>novas</span></div><div className="sep" />
+        <div className="m"><b className="bad">{fluxo.reprovaram ?? 0}</b><span>reprovaram</span></div>
+        <span className="tag">{de.split("-").reverse().slice(0, 2).join("/")}–{ate.split("-").reverse().slice(0, 2).join("/")} · vs {CMP[periodo]}</span>
       </div>
 
-      {/* desenho da semana */}
-      <div className="plan">
-        <h3>🗺️ Desenho da semana <span className="pill">sugestões por regra</span></h3>
-        <ul>
-          {sugestoes.map((s, i) => (
-            <li key={i}><span>{s[0]}</span><span dangerouslySetInnerHTML={{ __html: s[1] }} /></li>
-          ))}
-        </ul>
-      </div>
-
-      {/* 3 números */}
-      <div className="hero">
-        <div className="hc s1"><div className="lbl">Subiram p/ análise</div><div className="big">{fluxo.subiram ?? 0}</div>
-          <div className="d">{delta(fluxo.subiram, fluxo.subiram_ant)}<span className="prev">· antes {fluxo.subiram_ant ?? 0}</span></div></div>
-        <div className="hc s2"><div className="lbl">Aprovaram (SICAQ)</div><div className="big">{fluxo.aprovaram ?? 0}</div>
-          <div className="d">{delta(fluxo.aprovaram, fluxo.aprovaram_ant)}<span className="prev">· antes {fluxo.aprovaram_ant ?? 0}</span></div></div>
-        <div className="hc s3"><div className="lbl">Assinaram contrato</div><div className="big">{fluxo.assinaram ?? 0}</div>
-          <div className="d">{delta(fluxo.assinaram, fluxo.assinaram_ant)}<span className="prev">· antes {fluxo.assinaram_ant ?? 0}</span></div></div>
-      </div>
-
-      {/* dois quadros */}
-      <div className="quad">
-        <div className="card">
-          <div className="ch"><h3>📈 O que subiu</h3><span className="hint">fluxo do período</span></div>
-          <div className="funil">
-            <div className="fl">
-              <div className="fstep"><div className="n">{funil.entraram ?? 0}</div><div className="t">Entraram</div></div>
-              <div className="conv"><div className="pct">{conv(funil.entraram, funil.subiram)}%</div><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></svg></div>
-              <div className="fstep"><div className="n">{funil.subiram ?? 0}</div><div className="t">Subiram</div></div>
-              <div className="conv bad"><div className="pct">{conv(funil.subiram, funil.aprovadas)}%</div><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></svg></div>
-              <div className="fstep"><div className="n">{funil.aprovadas ?? 0}</div><div className="t">Aprovadas</div></div>
-              <div className="conv"><div className="pct">{conv(funil.aprovadas, funil.assinadas)}%</div><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></svg></div>
-              <div className="fstep"><div className="n">{funil.assinadas ?? 0}</div><div className="t">Assinadas</div></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="ch"><h3>📍 Onde está parado</h3><span className="hint">etapas do Junix · clique p/ filtrar</span></div>
-          <div className="mapa">
-            {porEtapa.length ? porEtapa.map((e) => (
-              <button key={e.ordem} className={`stg ${e.ordem === 4 ? "money" : ""} ${etapaSel === e.ordem ? "sel" : ""}`} onClick={() => setEtapaSel(e.ordem)}>
-                <span className="em">{({ 1: "📁", 2: "📎", 3: "🏦", 4: "✅", 5: "✍️" } as any)[e.ordem] ?? "•"}</span>
-                <span className="snm"><b>{e.etapa}</b><span>{ACAO[e.ordem]}</span></span>
-                <span className="ct">{e.n}</span>
-                <span className={`own ${e.dono === "-" ? "none" : e.dono}`}>{e.dono === "-" ? "—" : e.dono}</span>
-              </button>
-            )) : <div className="vazio">{carregando ? "Carregando…" : "Sem pasta viva no recorte. Suba o Pesquisa de hoje."}</div>}
-          </div>
-        </div>
-      </div>
-
-      {/* ranking + salvar */}
-      <div className="grid">
-        <div className="card">
-          <div className="ch"><h3>Como a equipe está indo</h3><span className="hint">{temFilho ? "clique p/ entrar" : "corretores"}</span></div>
-          <div className="rk">
-            <table>
-              <thead><tr><th>Quem</th><th>Subiu</th><th>Análise</th><th>Aprovou</th><th>Assinou</th></tr></thead>
-              <tbody>
-                {ranking.length ? ranking.map((r) => (
-                  <tr key={r.chave} className={temFilho ? "has" : ""} onClick={() => { if (!temFilho) return; nivel === "diretor" ? setDir(r.chave) : setGer(r.chave); }}>
-                    <td><span className="nm2"><span className="av">{ini(r.nome || r.chave)}</span>{r.nome || r.chave}{temFilho ? <span className="drill">entrar ›</span> : null}</span></td>
-                    <td className={r.subiu ? "" : "z"}>{r.subiu}</td>
-                    <td className={r.analise ? "" : "z"}>{r.analise}</td>
-                    <td className={r.aprovou ? "" : "z"}>{r.aprovou}</td>
-                    <td className={r.assinou ? "assv" : "z"}>{r.assinou}</td>
-                  </tr>
-                )) : <tr><td colSpan={5} className="z" style={{ textAlign: "center", padding: 16 }}>
-                  {carregando ? "Carregando…" : "O ranking enche conforme os dias vão sendo carregados (precisa de 2+ dias de diff)."}
-                </td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="ch"><h3>Pra salvar</h3><span className="hint">só pasta viva</span></div>
-          <div className="save">
-            {salvar.length ? salvar.map((s) => (
-              <div className="row" key={s.cod}>
-                <div className="who"><b>{s.cliente}</b><span>c/ {s.corretor} · {s.etapa}</span></div>
-                <span className="act">{ACAO[s.ordem] ?? s.etapa}</span>
-                <span className={`dias ${s.dias > 10 ? "red" : ""}`}>{s.dias} d</span>
-                <button className={`cob ${s.ordem === 4 ? "allg" : ""}`} onClick={() => cobrar(s)}>⚡ Cobrar</button>
+      {/* copiloto */}
+      {copiloto.length > 0 && (
+        <div className="cop">
+          <div className="cop-h"><b>🧠 Copiloto — decida agora</b><span className="lb">por regra, sem achismo</span></div>
+          <div className="cop-g">
+            {copiloto.map((c, i) => (
+              <div className={`dc ${c.cls}`} key={i}>
+                <span className="ico">{c.ico}</span><div className="big">{c.big}</div>
+                <div className="t" dangerouslySetInnerHTML={{ __html: c.t }} />
+                <button onClick={c.go}>{c.rot} →</button>
               </div>
-            )) : <div className="vazio">{carregando ? "Carregando…" : "Nada pendente no recorte."}</div>}
+            ))}
           </div>
         </div>
+      )}
+
+      {/* pipeline */}
+      <div className="sec-h"><h3>🩺 Onde entope</h3><span>tamanho = quantas · barra = há quanto tempo paradas · clique p/ detalhe</span></div>
+      <div className="pipe">
+        {porEtapa.length ? porEtapa.map((e) => {
+          const t = e.f + e.m + e.v || 1;
+          return (
+            <button key={e.ordem} className={`stage ${gargaloOrdem === e.ordem ? "gargalo" : ""} ${etapaSel === e.ordem ? "sel" : ""}`} onClick={() => setEtapaSel(e.ordem)}>
+              {gargaloOrdem === e.ordem ? <span className="gbadge">🔴 gargalo</span> : null}
+              <div className="top"><span className="em">{EM[e.ordem] ?? "•"}</span><span className={`dono ${e.dono === "-" ? "none" : e.dono}`}>{e.dono === "-" ? "—" : e.dono}</span></div>
+              <div className="ct">{e.n}</div><div className="nm">{e.etapa}</div><div className="val">{VAL[e.ordem] ?? ""}</div>
+              <div className="age"><i className="f" style={{ width: `${(e.f / t) * 100}%` }} /><i className="m" style={{ width: `${(e.m / t) * 100}%` }} /><i className="v" style={{ width: `${(e.v / t) * 100}%` }} /></div>
+              <div className="age-l"><span>{e.f} novas</span><span style={{ color: "var(--red)" }}>{e.v} velhas</span></div>
+            </button>
+          );
+        }) : <div className="vazio" style={{ gridColumn: "1/-1" }}>{carregando ? "Carregando…" : "Sem pasta viva. Suba o Pesquisa do dia."}</div>}
       </div>
 
-      {(d?.backlog ?? 0) > 0 && (
-        <div className="faxina">
-          <div className="t">🧹 <b>{d.backlog} pastas</b> sem movimento há +60 dias — decisão de distrato/arquivo, não cobrança.</div>
+      {/* detalhe do estágio: sub-etapas + lista */}
+      {etSel && (
+        <div className="det">
+          <div className="det-h"><span className="em">{EM[etSel.ordem]}</span><b>{etSel.etapa} · {etSel.n} paradas</b>
+            <span className="do">Ação: {ACAO[etSel.dono] ?? etSel.etapa}</span></div>
+          {(etSel.subs ?? []).length ? (
+            <div className="subs">{etSel.subs.map((s: any) => <span className="sb" key={s.status}>{s.status.toLowerCase()} <b>{s.n}</b></span>)}</div>
+          ) : null}
+          {salvar.length ? salvar.map((r) => (
+            <div className="row" key={r.cod}>
+              <div className="who"><b>{r.cliente}</b><span>c/ {r.corretor}{r.gerente ? ` · ${r.gerente}` : ""}</span></div>
+              <span className={`dias ${faixa(r.dias)}`}>{r.dias} d</span>
+              <button className={`cob ${etSel.dono === "secretaria" ? "g" : ""}`} onClick={() => cobrar(r)}>⚡ Cobrar</button>
+            </div>
+          )) : <div className="vazio">Nada parado neste estágio.</div>}
+          {salvar.length >= 60 ? <div className="det-f">mostrando as 60 mais paradas</div> : null}
         </div>
+      )}
+
+      {/* por equipe */}
+      <div className="sec-h"><h3>🏷️ Por equipe</h3><span>{nivelLabel}</span></div>
+      <div className="eq">
+        <table>
+          <thead><tr><th>Equipe</th><th>Paradas</th><th>Aprov. s/ contrato</th><th>Mais velha</th><th>Pendências</th></tr></thead>
+          <tbody>
+            {porEquipe.length ? porEquipe.map((e) => (
+              <tr key={e.chave} className={temFilho ? "has" : ""} onClick={() => { if (!temFilho) return; nivel === "diretor" ? setDir(e.chave) : setGer(e.chave); }}>
+                <td><span className="nm2"><span className="av">{ini(e.nome || e.chave)}</span>{e.nome || e.chave}{(e.pend > 8 || e.velha > 120) ? <span className="gtag">gargalo</span> : null}{temFilho ? <span className="drill">entrar ›</span> : null}</span></td>
+                <td>{e.paradas}</td><td className="money">{e.aprov}</td><td className="velha">{e.velha} d</td><td>{e.pend}</td>
+              </tr>
+            )) : <tr><td colSpan={5} className="vazio">{carregando ? "Carregando…" : "Sem dado no recorte."}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {/* faxina */}
+      {((faxinaD.reprovadas ?? 0) + (faxinaD.paradas60 ?? 0)) > 0 && (
+        <details className="fax">
+          <summary>
+            <span className="ft">🧹 <b>Limpar o pipeline</b> — pasta que não fecha engana a meta</span>
+            <span className="pills"><span className="pill v">{faxinaD.reprovadas ?? 0} reprovadas</span><span className="pill m">{faxinaD.paradas60 ?? 0} paradas 60+ dias</span></span>
+          </summary>
+          <div className="body">
+            <p style={{ fontSize: 12.5, color: "var(--ink-3)", margin: "2px 0 8px" }}>Revisão em lote para quem decide — sem listar uma a uma.</p>
+            {(faxinaD.revisao ?? []).map((r: any) => (
+              <button className="rev" key={r.chave} onClick={() => toast.message(`Revisão em lote para ${r.nome} (${r.n}) — a Régua entra na próxima etapa.`)}>Pedir revisão a {r.nome} ({r.n})</button>
+            ))}
+          </div>
+        </details>
       )}
     </div>
   );

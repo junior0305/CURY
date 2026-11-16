@@ -14,6 +14,7 @@ import "@/styles/cockpit-gerente.css";
 import "@/styles/pastas-kanban.css";
 import AvisoJunix from "@/components/manager-v10/AvisoJunix";
 import { enviarPeloMeuChip } from "@/hooks/useCobrarPessoa";
+import FechamentoAcelerador from "@/components/fechamento/FechamentoAcelerador";
 
 const ini = (s: string) => s.trim().slice(0, 2).toUpperCase();
 
@@ -63,7 +64,7 @@ function classificarFase(etapa: string): string {
 }
 
 export default function Pastas() {
-  const { session } = useAuth();
+  const { session, role } = useAuth();
   const userId = useEffectiveManagerId() ?? session?.user?.id;
   const { mode, toggle } = useTheme();
   const { data, isLoading, error } = usePastas(userId);
@@ -207,6 +208,8 @@ export default function Pastas() {
             </button>
           </div>
         </header>
+
+        <FechamentoAcelerador podeSubir={role === "ADMIN" || role === "DIRECTOR"} />
 
         <AvisoJunix />
         <label style={{ display: "inline-flex", gap: 8, alignItems: "center", margin: "0 0 12px", fontSize: 13.5, cursor: "pointer" }}>
