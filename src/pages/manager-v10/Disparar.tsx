@@ -940,65 +940,82 @@ export default function Disparar() {
           )) : null}
         </div>
 
-        {/* ══ Agora: o que está saindo / parou / terminou — só desta conta ══ */}
+        {/* ══ Agora: Bilhetagem & Pacing — orçamento, bilhetagem, disparo ao vivo e extrato ══ */}
         <div className={`pane${etapa === "agora" ? " on" : ""}`}>
-          <DisparoAgora userId={userId} configId={cfgEnvio?.id ?? null} />
-
-          {/* Bilhetagem: orçamento do mês + extrato por campanha */}
-          {cfgEnvio ? (
-          <div className="sec" style={{ marginTop: 14 }}>
-            <div className="bl-orc">
-              <div className="bl-orc-top">
-                <div><b>💳 Orçamento do mês</b><i>o que a Meta cobrou no cartão vs. o teto que você definiu</i></div>
-                {editTeto ? (
-                  <span className="bl-orc-ed">
-                    <span className="bl-pre">R$</span>
-                    <input type="number" min={0} step={50} value={tetoInput} onChange={(e) => setTetoInput(e.target.value)} placeholder="teto" autoFocus />
-                    <button className="bl-save" onClick={salvarTeto}>Salvar</button>
-                    <button className="bl-x" onClick={() => setEditTeto(false)}>✕</button>
-                  </span>
+          {!cfgEnvio ? <DisparoAgora userId={userId} configId={null} /> : (() => {
+            const cm = painelMes?.custo; const em = painelMes?.envio;
+            const q = ((cfgEnvio as any)?.quality ?? "").toUpperCase();
+            const qLab = q === "GREEN" ? "Qualidade verde" : q === "YELLOW" ? "Qualidade amarela" : q === "RED" ? "Qualidade vermelha" : "Qualidade —";
+            const qCor = q === "GREEN" ? "var(--good)" : q === "YELLOW" ? "var(--warn)" : q === "RED" ? "var(--red)" : "var(--ink-3)";
+            const camps = (data?.campanhas ?? []).filter((c) => (c.enviadas ?? 0) > 0).sort((a, b2) => new Date(b2.criadaEm ?? 0).getTime() - new Date(a.criadaEm ?? 0).getTime());
+            return (
+            <>
+              {/* Orçamento do mês */}
+              <div className="bz-orc">
+                <div className="bz-orc-top">
+                  <b>💳 Orçamento do mês</b>
+                  {editTeto ? (
+                    <span className="bz-ed"><span className="bz-pre">R$</span>
+                      <input type="number" min={0} step={50} value={tetoInput} onChange={(e) => setTetoInput(e.target.value)} placeholder="teto" autoFocus />
+                      <button className="bz-save" onClick={salvarTeto}>Salvar</button>
+                      <button className="bz-x" onClick={() => setEditTeto(false)}>✕</button>
+                    </span>
+                  ) : (
+                    <button className="bz-def" onClick={() => { setTetoInput(teto ? String(teto) : ""); setEditTeto(true); }}>⚙️ {teto ? "Alterar teto" : "Definir teto"}</button>
+                  )}
+                </div>
+                {teto > 0 ? (
+                  <>
+                    <div className="bz-nums"><span className="g">{brl(gastoMes)}</span><span className="t">de {brl(teto)}</span></div>
+                    <div className="bz-bar"><span style={{ width: `${Math.min(100, (gastoMes / teto) * 100)}%`, background: gastoMes > teto ? "var(--red)" : gastoMes > teto * 0.8 ? "var(--warn)" : "linear-gradient(90deg,var(--good),#0EA5B7)" }} /></div>
+                    <div className="bz-foot"><span>{Math.round((gastoMes / teto) * 100)}% do teto consumido</span><span>{gastoMes >= teto ? <em className="bz-estourou">teto estourado</em> : <>restam <b>{brl(teto - gastoMes)}</b> para novos disparos</>}</span></div>
+                  </>
                 ) : (
-                  <button className="bl-def" onClick={() => { setTetoInput(teto ? String(teto) : ""); setEditTeto(true); }}>⚙️ {teto ? "Alterar teto" : "Definir teto"}</button>
+                  <div className="bz-nums"><span className="g">{brl(gastoMes)}</span><span className="t">gasto no mês · defina um teto para acompanhar o consumo</span></div>
                 )}
               </div>
-              {teto > 0 ? (
-                <>
-                  <div className="bl-bar"><span style={{ width: `${Math.min(100, (gastoMes / teto) * 100)}%`, background: gastoMes > teto ? "#F43F5E" : gastoMes > teto * 0.8 ? "#F59E0B" : "#10B981" }} /></div>
-                  <div className="bl-orc-n"><b>{brl(gastoMes)}</b> <span>de {brl(teto)}</span> · {Math.round((gastoMes / teto) * 100)}% do teto · {gastoMes >= teto ? <em className="bl-estourou">teto estourado</em> : <>restam <b>{brl(teto - gastoMes)}</b></>}</div>
-                </>
-              ) : (
-                <div className="bl-orc-n"><span>Gasto no mês: <b>{brl(gastoMes)}</b>. Defina um teto para acompanhar o consumo e não estourar o cartão.</span></div>
-              )}
-            </div>
 
-            <details className="dobra" style={{ marginTop: 12 }}>
-              <summary>Extrato por campanha — quanto cada disparo custou</summary>
-              {(() => { const camps = (data?.campanhas ?? []).filter((c) => (c.enviadas ?? 0) > 0).sort((a, b2) => new Date(b2.criadaEm ?? 0).getTime() - new Date(a.criadaEm ?? 0).getTime()); return !camps.length ? (
-                <p className="vars-n">Nenhuma campanha com envio ainda.</p>
-              ) : (
-                <div className="bl-ext">
-                  <div className="bl-ext-top"><span>{camps.length} campanha(s)</span><button className="bl-def" onClick={baixarExtrato}>📥 Baixar fatura (CSV)</button></div>
-                  <div className="bl-tb">
-                    <div className="bl-tr bl-th"><span>Data</span><span>Campanha</span><span className="n">Alvos</span><span className="n">Entregues</span><span className="n">Respostas</span><span className="n">Custo</span><span>Status</span></div>
+              {/* 4 cartões de bilhetagem (dado real do disparador_painel) */}
+              <div className="bz-cards">
+                <div className="bz-card b"><span className="k">Enviadas no mês</span><b style={{ color: "var(--accent)" }}>{(em?.enviadas ?? 0).toLocaleString("pt-BR")}</b><i>{em?.enviadas ? `${pct(em.entregues, em.enviadas)} entregues` : "nenhuma ainda"}</i></div>
+                <div className="bz-card a"><span className="k">Cobradas</span><b style={{ color: "var(--warn)" }}>{(cm?.cobradas ?? 0).toLocaleString("pt-BR")}</b><i>fora da janela de 24h</i></div>
+                <div className="bz-card g"><span className="k">Saíram de graça</span><b style={{ color: "var(--good)" }}>{(cm?.gratuitas ?? 0).toLocaleString("pt-BR")}</b><i>janela de 24h aberta</i></div>
+                <div className="bz-card p"><span className="k">Economia (Utilidade)</span><b style={{ color: "#C084FC" }}>{brl(cm?.economia ?? 0)}</b><i>evitou tarifa de Marketing</i></div>
+              </div>
+
+              {/* Disparo ao vivo (pacing) + Saúde do número */}
+              <div className="bz-duo">
+                <div className="bz-box"><h3>📡 Disparo ao vivo</h3><DisparoAgora userId={userId} configId={cfgEnvio?.id ?? null} /><p className="bz-link">Para um disparo novo, vá em <button className="btn sm" onClick={() => setEtapa("disp")}>Disparar</button>.</p></div>
+                <div className="bz-box"><h3>🛡️ Saúde do número</h3>
+                  <span className="bz-q" style={{ color: qCor }}><span className="bz-dot" style={{ background: qCor }} /> {qLab}</span>
+                  <div className="bz-ql">Capacidade: <b className="mono">{(cfgEnvio as any)?.tetoHoje ? `${(cfgEnvio as any).tetoHoje}/dia` : "—"}</b> · liberado para enviar.</div>
+                  <div className="bz-corte">⏱ Corte 19:30 — o que não sair até 19h30 continua amanhã às 8h, pra evitar denúncia.</div>
+                </div>
+              </div>
+
+              {/* Extrato por campanha */}
+              <div className="bz-box">
+                <h3 className="bz-exth"><span>📊 Extrato por campanha</span>{camps.length ? <button className="bz-def" onClick={baixarExtrato}>📥 Baixar fatura (CSV)</button> : null}</h3>
+                {!camps.length ? <p className="bz-vazio">Nenhuma campanha com envio ainda.</p> : (
+                  <div className="bz-tb">
+                    <div className="bz-tr bz-th"><span>Data</span><span>Campanha</span><span className="n">Alvos</span><span className="n">Entregues</span><span className="n">Respostas</span><span className="n">Custo</span><span>Status</span></div>
                     {camps.map((c) => (
-                      <div className="bl-tr" key={c.id}>
-                        <span className="bl-dt">{c.criadaEm ? new Date(c.criadaEm).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "—"}</span>
-                        <span className="bl-nm">{c.nome}</span>
+                      <div className="bz-tr" key={c.id}>
+                        <span className="bz-dt">{c.criadaEm ? new Date(c.criadaEm).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "—"}</span>
+                        <span className="bz-nm">{c.nome}</span>
                         <span className="n">{(c.alvos ?? 0).toLocaleString("pt-BR")}</span>
                         <span className="n">{(c.entregues ?? 0).toLocaleString("pt-BR")}{c.enviadas ? <i> ({pct(c.entregues, c.enviadas)})</i> : null}</span>
                         <span className="n">{(c.respostas ?? 0).toLocaleString("pt-BR")}{c.enviadas ? <i> ({pct(c.respostas, c.enviadas)})</i> : null}</span>
-                        <span className="n bl-cu">{brl(c.custo ?? 0)}</span>
-                        <span><em className={`bl-st bl-${(c.status ?? "").toLowerCase()}`}>{STATUS_PT[c.status ?? ""] ?? c.status ?? "—"}</em></span>
+                        <span className="n bz-cu">{brl(c.custo ?? 0)}</span>
+                        <span><em className={`bz-st bz-${(c.status ?? "").toLowerCase()}`}>{STATUS_PT[c.status ?? ""] ?? c.status ?? "—"}</em></span>
                       </div>
                     ))}
                   </div>
-                </div>
-              ); })()}
-            </details>
-          </div>
-          ) : null}
-
-          {!cfgEnvio ? null : <p className="vars-n">Para fazer um disparo novo, vá em <button className="btn sm" onClick={() => setEtapa("disp")}>Disparar</button>.</p>}
+                )}
+              </div>
+            </>
+            );
+          })()}
         </div>
 
         {/* ══ 1 · o número (⚙ Número) ══ */}

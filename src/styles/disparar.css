@@ -458,3 +458,54 @@
 .mgr10.disparar .passo-n{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:800;margin-right:9px;flex:none;vertical-align:middle;line-height:1}
 .mgr10.disparar .passo-n.sm{width:20px;height:20px;font-size:11px;margin-right:7px}
 .mgr10.disparar .sec-h .passo-n{margin-right:10px}
+
+/* ── Bilhetagem & Pacing (aba Agora, visual do mockup, tokens do tema) ── */
+.mgr10.disparar .bz-orc{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow);margin-bottom:14px}
+.mgr10.disparar .bz-orc-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.mgr10.disparar .bz-orc-top b{font-size:15px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:8px}
+.mgr10.disparar .bz-def{font:inherit;font-size:12px;font-weight:700;padding:8px 14px;border-radius:9px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);cursor:pointer}
+.mgr10.disparar .bz-def:hover{border-color:var(--accent);color:var(--accent)}
+.mgr10.disparar .bz-ed{display:flex;align-items:center;gap:6px}
+.mgr10.disparar .bz-pre{font-size:12px;color:var(--ink-3);font-weight:700}
+.mgr10.disparar .bz-ed input{width:110px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:7px 9px;font-size:13px}
+.mgr10.disparar .bz-save{background:var(--accent);border:none;color:#fff;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer}
+.mgr10.disparar .bz-x{background:var(--surface);border:1px solid var(--line);color:var(--ink-3);border-radius:8px;padding:7px 10px;cursor:pointer}
+.mgr10.disparar .bz-nums{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.mgr10.disparar .bz-nums .g{font-size:30px;font-weight:800;font-family:"JetBrains Mono",monospace;color:var(--ink)}
+.mgr10.disparar .bz-nums .t{font-size:14px;color:var(--ink-3)}
+.mgr10.disparar .bz-bar{height:14px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden}
+.mgr10.disparar .bz-bar span{display:block;height:100%;border-radius:999px}
+.mgr10.disparar .bz-foot{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--ink-3);margin-top:8px;flex-wrap:wrap}
+.mgr10.disparar .bz-foot b{color:var(--good)}
+.mgr10.disparar .bz-estourou{color:var(--red);font-style:normal;font-weight:800}
+.mgr10.disparar .bz-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.mgr10.disparar .bz-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 16px;box-shadow:var(--shadow)}
+.mgr10.disparar .bz-card .k{font-size:10.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+.mgr10.disparar .bz-card b{display:block;font-size:24px;font-weight:800;font-family:"JetBrains Mono",monospace;margin:7px 0 2px}
+.mgr10.disparar .bz-card i{font-style:normal;font-size:11.5px;color:var(--ink-3)}
+.mgr10.disparar .bz-card.g{border-top:3px solid var(--good)}.mgr10.disparar .bz-card.b{border-top:3px solid var(--accent)}
+.mgr10.disparar .bz-card.a{border-top:3px solid var(--warn)}.mgr10.disparar .bz-card.p{border-top:3px solid #C084FC}
+.mgr10.disparar .bz-duo{display:grid;grid-template-columns:1.5fr 1fr;gap:12px;margin-bottom:14px;align-items:start}
+.mgr10.disparar .bz-box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
+.mgr10.disparar .bz-box h3{font-size:13.5px;font-weight:800;margin:0 0 10px;color:var(--ink);display:flex;align-items:center;gap:8px}
+.mgr10.disparar .bz-link{font-size:12.5px;color:var(--ink-3);margin:10px 0 0}
+.mgr10.disparar .bz-q{display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:800}
+.mgr10.disparar .bz-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.mgr10.disparar .bz-ql{font-size:12px;color:var(--ink-2);margin-top:8px}
+.mgr10.disparar .bz-corte{margin-top:12px;background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--warn)}
+.mgr10.disparar .bz-exth{justify-content:space-between}
+.mgr10.disparar .bz-vazio{color:var(--ink-3);font-size:13px;margin:0}
+.mgr10.disparar .bz-tb{display:flex;flex-direction:column;gap:4px}
+.mgr10.disparar .bz-tr{display:grid;grid-template-columns:54px minmax(0,1.6fr) 72px 90px 92px 82px 96px;gap:10px;align-items:center;padding:9px 12px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;font-size:12.5px;color:var(--ink-2)}
+.mgr10.disparar .bz-tr.bz-th{background:none;border:0;color:var(--ink-3);font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:700;padding:2px 12px}
+.mgr10.disparar .bz-tr .n{text-align:right;font-variant-numeric:tabular-nums}
+.mgr10.disparar .bz-tr .n i{font-style:normal;color:var(--ink-3);font-size:10.5px}
+.mgr10.disparar .bz-nm{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mgr10.disparar .bz-dt{color:var(--ink-3);font-family:"JetBrains Mono",monospace;font-size:11px}
+.mgr10.disparar .bz-cu{font-family:"JetBrains Mono",monospace;font-weight:700;color:var(--warn)}
+.mgr10.disparar .bz-st{font-size:10px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--surface-3);color:var(--ink-3)}
+.mgr10.disparar .bz-st.bz-sending{color:var(--accent);background:var(--accent-soft)}
+.mgr10.disparar .bz-st.bz-sent,.mgr10.disparar .bz-st.bz-done,.mgr10.disparar .bz-st.bz-completed{color:var(--good);background:var(--good-soft)}
+.mgr10.disparar .bz-st.bz-paused{color:var(--warn);background:var(--warn-soft)}
+.mgr10.disparar .bz-st.bz-failed,.mgr10.disparar .bz-st.bz-canceled,.mgr10.disparar .bz-st.bz-cancelled{color:var(--red);background:var(--red-air)}
+@media(max-width:860px){.mgr10.disparar .bz-cards{grid-template-columns:repeat(2,1fr)}.mgr10.disparar .bz-duo{grid-template-columns:1fr}.mgr10.disparar .bz-tr{grid-template-columns:46px 1fr 78px 80px}.mgr10.disparar .bz-tr>span:nth-child(4),.mgr10.disparar .bz-tr>span:nth-child(5){display:none}}
