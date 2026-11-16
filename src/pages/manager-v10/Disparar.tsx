@@ -943,6 +943,61 @@ export default function Disparar() {
         {/* ══ Agora: o que está saindo / parou / terminou — só desta conta ══ */}
         <div className={`pane${etapa === "agora" ? " on" : ""}`}>
           <DisparoAgora userId={userId} configId={cfgEnvio?.id ?? null} />
+
+          {/* Bilhetagem: orçamento do mês + extrato por campanha */}
+          {cfgEnvio ? (
+          <div className="sec" style={{ marginTop: 14 }}>
+            <div className="bl-orc">
+              <div className="bl-orc-top">
+                <div><b>💳 Orçamento do mês</b><i>o que a Meta cobrou no cartão vs. o teto que você definiu</i></div>
+                {editTeto ? (
+                  <span className="bl-orc-ed">
+                    <span className="bl-pre">R$</span>
+                    <input type="number" min={0} step={50} value={tetoInput} onChange={(e) => setTetoInput(e.target.value)} placeholder="teto" autoFocus />
+                    <button className="bl-save" onClick={salvarTeto}>Salvar</button>
+                    <button className="bl-x" onClick={() => setEditTeto(false)}>✕</button>
+                  </span>
+                ) : (
+                  <button className="bl-def" onClick={() => { setTetoInput(teto ? String(teto) : ""); setEditTeto(true); }}>⚙️ {teto ? "Alterar teto" : "Definir teto"}</button>
+                )}
+              </div>
+              {teto > 0 ? (
+                <>
+                  <div className="bl-bar"><span style={{ width: `${Math.min(100, (gastoMes / teto) * 100)}%`, background: gastoMes > teto ? "#F43F5E" : gastoMes > teto * 0.8 ? "#F59E0B" : "#10B981" }} /></div>
+                  <div className="bl-orc-n"><b>{brl(gastoMes)}</b> <span>de {brl(teto)}</span> · {Math.round((gastoMes / teto) * 100)}% do teto · {gastoMes >= teto ? <em className="bl-estourou">teto estourado</em> : <>restam <b>{brl(teto - gastoMes)}</b></>}</div>
+                </>
+              ) : (
+                <div className="bl-orc-n"><span>Gasto no mês: <b>{brl(gastoMes)}</b>. Defina um teto para acompanhar o consumo e não estourar o cartão.</span></div>
+              )}
+            </div>
+
+            <details className="dobra" style={{ marginTop: 12 }}>
+              <summary>Extrato por campanha — quanto cada disparo custou</summary>
+              {(() => { const camps = (data?.campanhas ?? []).filter((c) => (c.enviadas ?? 0) > 0).sort((a, b2) => new Date(b2.criadaEm ?? 0).getTime() - new Date(a.criadaEm ?? 0).getTime()); return !camps.length ? (
+                <p className="vars-n">Nenhuma campanha com envio ainda.</p>
+              ) : (
+                <div className="bl-ext">
+                  <div className="bl-ext-top"><span>{camps.length} campanha(s)</span><button className="bl-def" onClick={baixarExtrato}>📥 Baixar fatura (CSV)</button></div>
+                  <div className="bl-tb">
+                    <div className="bl-tr bl-th"><span>Data</span><span>Campanha</span><span className="n">Alvos</span><span className="n">Entregues</span><span className="n">Respostas</span><span className="n">Custo</span><span>Status</span></div>
+                    {camps.map((c) => (
+                      <div className="bl-tr" key={c.id}>
+                        <span className="bl-dt">{c.criadaEm ? new Date(c.criadaEm).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "—"}</span>
+                        <span className="bl-nm">{c.nome}</span>
+                        <span className="n">{(c.alvos ?? 0).toLocaleString("pt-BR")}</span>
+                        <span className="n">{(c.entregues ?? 0).toLocaleString("pt-BR")}{c.enviadas ? <i> ({pct(c.entregues, c.enviadas)})</i> : null}</span>
+                        <span className="n">{(c.respostas ?? 0).toLocaleString("pt-BR")}{c.enviadas ? <i> ({pct(c.respostas, c.enviadas)})</i> : null}</span>
+                        <span className="n bl-cu">{brl(c.custo ?? 0)}</span>
+                        <span><em className={`bl-st bl-${(c.status ?? "").toLowerCase()}`}>{STATUS_PT[c.status ?? ""] ?? c.status ?? "—"}</em></span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ); })()}
+            </details>
+          </div>
+          ) : null}
+
           {!cfgEnvio ? null : <p className="vars-n">Para fazer um disparo novo, vá em <button className="btn sm" onClick={() => setEtapa("disp")}>Disparar</button>.</p>}
         </div>
 
@@ -1358,33 +1413,6 @@ export default function Disparar() {
               </div>
             </div>
 
-            {/* Orçamento do mês — teto configurável × gasto real da Meta (sempre do mês) */}
-            <div className="bl-orc">
-              <div className="bl-orc-top">
-                <div><b>💳 Orçamento do mês</b><i>o que a Meta cobrou no cartão vs. o teto que você definiu</i></div>
-                {editTeto ? (
-                  <span className="bl-orc-ed">
-                    <span className="bl-pre">R$</span>
-                    <input type="number" min={0} step={50} value={tetoInput} onChange={(e) => setTetoInput(e.target.value)} placeholder="teto" autoFocus />
-                    <button className="bl-save" onClick={salvarTeto}>Salvar</button>
-                    <button className="bl-x" onClick={() => setEditTeto(false)}>✕</button>
-                  </span>
-                ) : (
-                  <button className="bl-def" onClick={() => { setTetoInput(teto ? String(teto) : ""); setEditTeto(true); }}>⚙️ {teto ? "Alterar teto" : "Definir teto"}</button>
-                )}
-              </div>
-              {teto > 0 ? (
-                <>
-                  <div className="bl-bar"><span style={{ width: `${Math.min(100, (gastoMes / teto) * 100)}%`, background: gastoMes > teto ? "#F43F5E" : gastoMes > teto * 0.8 ? "#F59E0B" : "#10B981" }} /></div>
-                  <div className="bl-orc-n">
-                    <b>{brl(gastoMes)}</b> <span>de {brl(teto)}</span> · {Math.round((gastoMes / teto) * 100)}% do teto · {gastoMes >= teto ? <em className="bl-estourou">teto estourado</em> : <>restam <b>{brl(teto - gastoMes)}</b></>}
-                  </div>
-                </>
-              ) : (
-                <div className="bl-orc-n"><span>Gasto no mês: <b>{brl(gastoMes)}</b>. Defina um teto para acompanhar o consumo e não estourar o cartão.</span></div>
-              )}
-            </div>
-
             {!painel ? (
               <div className="box"><p className="vars-n" style={{ margin: 0 }}>
                 {carregandoPainel ? "Somando…" : "Sem dado neste período."}</p></div>
@@ -1527,32 +1555,6 @@ export default function Disparar() {
                       </div>
                     ))}
                   </div>
-                </details>
-
-                {/* Extrato financeiro por campanha + baixar fatura */}
-                <details className="dobra">
-                  <summary>Extrato por campanha — quanto cada disparo custou</summary>
-                  {(() => { const camps = (data?.campanhas ?? []).filter((c) => (c.enviadas ?? 0) > 0).sort((a, b2) => new Date(b2.criadaEm ?? 0).getTime() - new Date(a.criadaEm ?? 0).getTime()); return !camps.length ? (
-                    <p className="vars-n">Nenhuma campanha com envio ainda.</p>
-                  ) : (
-                    <div className="bl-ext">
-                      <div className="bl-ext-top"><span>{camps.length} campanha(s)</span><button className="bl-def" onClick={baixarExtrato}>📥 Baixar fatura (CSV)</button></div>
-                      <div className="bl-tb">
-                        <div className="bl-tr bl-th"><span>Data</span><span>Campanha</span><span className="n">Alvos</span><span className="n">Entregues</span><span className="n">Respostas</span><span className="n">Custo</span><span>Status</span></div>
-                        {camps.map((c) => (
-                          <div className="bl-tr" key={c.id}>
-                            <span className="bl-dt">{c.criadaEm ? new Date(c.criadaEm).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "—"}</span>
-                            <span className="bl-nm">{c.nome}</span>
-                            <span className="n">{(c.alvos ?? 0).toLocaleString("pt-BR")}</span>
-                            <span className="n">{(c.entregues ?? 0).toLocaleString("pt-BR")}{c.enviadas ? <i> ({pct(c.entregues, c.enviadas)})</i> : null}</span>
-                            <span className="n">{(c.respostas ?? 0).toLocaleString("pt-BR")}{c.enviadas ? <i> ({pct(c.respostas, c.enviadas)})</i> : null}</span>
-                            <span className="n bl-cu">{brl(c.custo ?? 0)}</span>
-                            <span><em className={`bl-st bl-${(c.status ?? "").toLowerCase()}`}>{STATUS_PT[c.status ?? ""] ?? c.status ?? "—"}</em></span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ); })()}
                 </details>
               </>
             )}
