@@ -20,6 +20,7 @@ import EquipeTopo from "@/components/equipe/EquipeTopo";
 import BiTab from "@/components/manager-v10/BiTab";
 import AnunciosSaude from "@/components/diretoria/AnunciosSaude";
 import PastasPainel from "@/components/diretoria/PastasPainel";
+import FechamentoAcelerador from "@/components/fechamento/FechamentoAcelerador";
 import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
 import { usePlanos, atrasada } from "@/hooks/usePlano";
 import "@/styles/diretoria.css";
@@ -187,6 +188,7 @@ export default function Diretoria() {
             {aba === "leads" && <AnunciosSaude diretorId={diretorId!} supers={supers} />}
             {aba === "leads" && <Leads dias={dias} deP={periodo.de} supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
             {aba === "pastas" && <>
+              <FechamentoAcelerador />
               <PastasPainel diretorId={diretorId!} supers={supers} pastas={dir.pastas} />
               <button className="dir-btn" style={{ alignSelf: "flex-start" }} onClick={() => tog("tabela-pastas")}>
                 {aberto["tabela-pastas"] ? "▾ Esconder a árvore completa" : "▸ Árvore completa: super → gerente → corretor → cliente"}</button>
