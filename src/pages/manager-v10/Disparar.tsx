@@ -208,6 +208,8 @@ export default function Disparar() {
   /* ── etapa 4 · respostas ── */
   const [thread, setThread] = useState<string | null>(null);
   const [rascunho, setRascunho] = useState("");
+  const [passarAberto, setPassarAberto] = useState(false); // War Room: passar lead sem corretor
+  const [alvoCorr, setAlvoCorr] = useState("");
   const { data: msgs } = useMensagens(thread);
 
   const vars = useMemo(() => achaVars(tCorpo), [tCorpo]);
@@ -810,6 +812,20 @@ export default function Disparar() {
       toast.success("Enviada. O corretor vê a mensagem marcada como sua.");
       qc.invalidateQueries({ queryKey: ["wa-msgs", c.id] });
     } catch (e: any) { toast.error(`Não consegui enviar: ${e?.message ?? e}`); }
+  }
+
+  // War Room: passar um lead que respondeu e está sem corretor para um corretor da equipe
+  async function passarParaCorretor() {
+    const c = data?.conversas.find((x) => x.id === thread);
+    if (!c?.leadId || !alvoCorr) return;
+    const destino = (painel?.equipe.lista ?? []).find((b) => b.id === alvoCorr);
+    try {
+      const { error } = await supabase.rpc("redistribuir_lote", { p_leads: [c.leadId], p_para: [alvoCorr], p_como: null, p_motivo: "War Room (resposta sem corretor)" });
+      if (error) throw error;
+      setPassarAberto(false); setAlvoCorr("");
+      toast.success(`Lead passado para ${destino?.nome?.split(" ")[0] ?? "o corretor"}.`);
+      qc.invalidateQueries({ queryKey: ["disparar"] });
+    } catch (e: any) { toast.error(e?.message || "Não consegui passar o lead."); }
   }
 
   /* ── o celular ── */
@@ -2420,7 +2436,23 @@ export default function Disparar() {
                         <div className="ch-top">
                           <span className="av">{ini(c.cliente ?? c.telefone.slice(-2))}</span>
                           <div><b>{c.cliente ?? c.telefone}</b>
-                            <span>{c.telefone} · {c.corretor ? `atendido por ${c.corretor}` : "sem corretor"}</span></div>
+                            <span>{c.telefone} · {c.corretor ? `atendido por ${c.corretor}` : <em className="wr-sem">🚨 sem corretor</em>}</span></div>
+                          {!c.corretor && c.leadId ? (
+                            <div className="wr-acts">
+                              {!passarAberto ? (
+                                <button className="wr-btn" onClick={() => { setPassarAberto(true); setAlvoCorr(""); }}>⚡ Passar pra um corretor</button>
+                              ) : (
+                                <span className="wr-pick">
+                                  <select value={alvoCorr} onChange={(e) => setAlvoCorr(e.target.value)}>
+                                    <option value="">Escolher corretor…</option>
+                                    {(painel?.equipe.lista ?? []).map((b) => <option key={b.id} value={b.id}>{b.nome}{b.online ? " · online" : ""}</option>)}
+                                  </select>
+                                  <button className="wr-ok" disabled={!alvoCorr} onClick={passarParaCorretor}>Passar</button>
+                                  <button className="wr-x" onClick={() => setPassarAberto(false)}>✕</button>
+                                </span>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="ch-msgs">
                           {(msgs ?? []).map((m, i, arr) => (

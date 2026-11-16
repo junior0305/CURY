@@ -442,3 +442,14 @@
 .bl-st.bl-paused{color:#fcd34d;background:rgba(245,158,11,.14)}
 .bl-st.bl-failed,.bl-st.bl-canceled,.bl-st.bl-cancelled{color:#fda4af;background:rgba(244,63,94,.14)}
 @media(max-width:720px){.bl-tr{grid-template-columns:44px 1fr 70px 80px;gap:6px}.bl-tr>span:nth-child(4),.bl-tr>span:nth-child(5){display:none}}
+
+/* ── War Room: passar lead sem corretor ── */
+.wr-sem{color:#fda4af;font-style:normal;font-weight:700}
+.wr-acts{margin-left:auto}
+.wr-btn{font:inherit;font-size:12px;font-weight:800;padding:7px 13px;border-radius:8px;border:none;cursor:pointer;color:#fff;background:linear-gradient(135deg,#0ea5b7,#2563eb);white-space:nowrap}
+.wr-btn:hover{filter:brightness(1.08)}
+.wr-pick{display:flex;align-items:center;gap:6px}
+.wr-pick select{background:var(--surface,#0a1220);border:1px solid #27354b;color:var(--text,#dce3ec);border-radius:7px;padding:7px 9px;font-size:12.5px;max-width:180px}
+.wr-ok{background:#10b981;border:none;color:#04121f;border-radius:7px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer}
+.wr-ok:disabled{opacity:.45;cursor:default}
+.wr-x{background:none;border:1px solid #27354b;color:#8a94a6;border-radius:7px;padding:7px 10px;cursor:pointer}
