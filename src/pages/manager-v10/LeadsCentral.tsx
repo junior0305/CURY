@@ -18,6 +18,7 @@ import TodosLeadsV4 from "@/components/leads/TodosLeadsV4";
 import TarefasV4 from "@/components/manager-v10/TarefasV4";
 import CampanhasV4 from "@/components/manager-v10/CampanhasV4";
 import FilasV4 from "@/components/manager-v10/FilasV4";
+import PaginasAtivar from "@/components/leads/PaginasAtivar";
 
 const sb = supabase as any;
 type Aba = "funil" | "campanhas" | "filas" | "leads" | "tarefas";
@@ -159,6 +160,8 @@ export default function LeadsCentral() {
             </div>
           </section>
         )}
+
+        <PaginasAtivar como={gerente} />
 
         {/* ── abas ── */}
         <nav className="lx-tabs" role="tablist">
