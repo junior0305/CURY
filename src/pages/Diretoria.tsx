@@ -21,6 +21,7 @@ import BiTab from "@/components/manager-v10/BiTab";
 import AnunciosSaude from "@/components/diretoria/AnunciosSaude";
 import PastasPainel from "@/components/diretoria/PastasPainel";
 import FechamentoAcelerador from "@/components/fechamento/FechamentoAcelerador";
+import PaginasAtivar from "@/components/leads/PaginasAtivar";
 import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
 import { usePlanos, atrasada } from "@/hooks/usePlano";
 import "@/styles/diretoria.css";
@@ -183,6 +184,7 @@ export default function Diretoria() {
                 {aberto["tabela-equipes"] ? "▾ Esconder a tabela completa" : "▸ Tabela completa, corretor por corretor (login, online, plantão)"}</button>
               {aberto["tabela-equipes"] ? <Equipes supers={supers} linhasDoSuper={linhasDoSuper} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} /> : null}
             </>}
+            {aba === "leads" && <PaginasAtivar />}
             {aba === "leads" && <LeadsOrigem />}
             {aba === "leads" && <FilasFormulario />}
             {aba === "leads" && <AnunciosSaude diretorId={diretorId!} supers={supers} />}

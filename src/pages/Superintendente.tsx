@@ -44,6 +44,7 @@ import LeadsSuper from "@/components/super2/LeadsSuper";
 import VerComo from "@/components/manager-v10/VerComo";
 import FilasFormulario from "@/components/leads/FilasFormulario";
 import FormulariosSemDono from "@/components/leads/FormulariosSemDono";
+import PaginasAtivar from "@/components/leads/PaginasAtivar";
 import TelaSuper from "@/components/super2/Tela";
 import Tropa from "@/components/super2/Tropa";
 import PainelGeral from "@/components/super2/PainelGeral";
@@ -152,6 +153,7 @@ export default function Superintendente() {
           <PastasDoSuper superId={superId} />
         ) : aba === "leads" && superId ? (
           <>
+            <PaginasAtivar como={verComo ?? superId} />
             <FormulariosSemDono como={verComo ?? undefined} />
             <FilasFormulario como={verComo ?? undefined} />
             <LeadsSuper key="leads" superId={superId} inicial="leads" />
