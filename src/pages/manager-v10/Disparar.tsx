@@ -1937,7 +1937,7 @@ export default function Disparar() {
         {/* ══ 3 · disparar ══ */}
         <div className={`pane${etapa === "disp" ? " on" : ""}`}>
           <div className="sec">
-            <div className="sec-h"><h2>Para quem</h2><span>escolha uma ou mais listas</span></div>
+            <div className="sec-h"><span className="passo-n">1</span><h2>Para quem</h2><span>escolha uma ou mais listas</span></div>
             <div className="box disp">
               <div>
                 <div className="pub">
@@ -2026,7 +2026,7 @@ export default function Disparar() {
                 ) : null}
 
                 <div className="f">
-                  <label htmlFor="d-tpl">Qual mensagem</label>
+                  <label htmlFor="d-tpl"><span className="passo-n sm">2</span>Qual mensagem</label>
                   <select id="d-tpl" value={tplSel} onChange={(e) => { setTplSel(e.target.value); setSemImagem(false); }} disabled={!cfgEnvio}>
                     <option value="">{cfgEnvio ? "— escolha —" : "escolha o número primeiro"}</option>
                     {/* só os templates aprovados NA CONTA do número que vai enviar: template de outra conta é recusado pela Meta */}
@@ -2148,7 +2148,7 @@ export default function Disparar() {
                 </div>
 
                 <div className="f" style={{ marginTop: 18 }}>
-                  <label>{tipoCampanha === "outro" ? "Quem fala com quem responder" : "Quem atende quem responder"}</label>
+                  <label><span className="passo-n sm">3</span>{tipoCampanha === "outro" ? "Quem fala com quem responder" : "Quem atende quem responder"}</label>
                   <div className="dest">
                     <button className={`dst${destino === "fila" ? " on" : ""}`} onClick={() => setDestino("fila")}>
                       <input type="radio" readOnly checked={destino === "fila"} />

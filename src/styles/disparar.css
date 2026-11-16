@@ -453,3 +453,8 @@
 .wr-ok{background:#10b981;border:none;color:#04121f;border-radius:7px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer}
 .wr-ok:disabled{opacity:.45;cursor:default}
 .wr-x{background:none;border:1px solid #27354b;color:#8a94a6;border-radius:7px;padding:7px 10px;cursor:pointer}
+
+/* ── selo numerado dos passos do disparo (passada leve) ── */
+.passo-n{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#0ea5b7,#2563eb);color:#fff;font-size:12px;font-weight:800;margin-right:9px;flex:none;vertical-align:middle;line-height:1}
+.passo-n.sm{width:20px;height:20px;font-size:11px;margin-right:7px}
+.sec-h .passo-n{margin-right:10px}
