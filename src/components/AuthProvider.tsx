@@ -306,7 +306,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // nos gerentes via /manager?manager=<id>). NÃO caem mais no /admin cru.
           // Mantêm acesso às telas de admin (cadastro, filas...) quando precisarem.
           const SUP_ALLOWED_PREFIXES = ['/super', '/manager', ...(ADMIN_SO_ADMIN ? [] : ['/admin']), ...(role === 'DIRECTOR' ? ['/diretor'] : [])];
-          const SUP_ALLOWED_EXACT = ADMIN_SO_ADMIN ? ['/integracoes'] : ['/command-center', '/user-management', '/atribuir-chips', '/cold-pool', '/integracoes'];
+          const SUP_ALLOWED_EXACT = ADMIN_SO_ADMIN ? ['/integracoes', '/discar'] : ['/command-center', '/user-management', '/atribuir-chips', '/cold-pool', '/integracoes', '/discar'];
           const isAllowed =
             SUP_ALLOWED_PREFIXES.some((p) => path === p || path.startsWith(p + '/')) ||
             SUP_ALLOWED_EXACT.includes(path);
@@ -324,6 +324,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             '/atribuir-chips',
             '/cold-pool',
             '/integracoes',
+            '/discar',
           ];
           const isAllowed =
             ADMIN_ALLOWED_PREFIXES.some((p) => path === p || path.startsWith(p + '/')) ||
@@ -334,13 +335,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         } else if (role === 'MANAGER') {
           // Whitelist: /manager (v1) + tudo dentro de /manager (v2 + subtelas)
           // /integracoes: o gerente conecta a Página do Facebook (a Meta testa o app por aqui)
-          if (path !== '/manager' && !path.startsWith('/manager') && path !== '/integracoes') {
+          if (path !== '/manager' && !path.startsWith('/manager') && path !== '/integracoes' && path !== '/discar') {
             navigate('/manager', { replace: true });
           }
         } else {
           // BROKER e outros -> dashboard. Whitelist das telas do corretor
           // (inclui /painel, o novo painel, senão a sessão joga de volta pro /dashboard).
-          const BROKER_ALLOWED = ['/dashboard', '/dashboard-wolf', '/dashboard-classico', '/atender', '/painel'];
+          const BROKER_ALLOWED = ['/dashboard', '/dashboard-wolf', '/dashboard-classico', '/atender', '/painel', '/discar'];
           if (!BROKER_ALLOWED.includes(path)) {
             navigate('/dashboard', { replace: true });
           }
