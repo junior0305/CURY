@@ -85,6 +85,7 @@ export function RailV10({ atual, sub, mode, toggle, onAba }: {
   const { pathname } = useLocation();
   const [recolhido, setRecolhido] = useState<boolean>(() => { try { return localStorage.getItem("cmd_menu_recolhido") === "1"; } catch { return false; } });
   const toggleRecolher = () => setRecolhido((v) => { const n = !v; try { localStorage.setItem("cmd_menu_recolhido", n ? "1" : "0"); } catch { /* */ } return n; });
+  const [maisAberto, setMaisAberto] = useState(false); // menu "Mais" do mobile (avatar)
 
   const ehSuper = role === "SUPERINTENDENT" || ((role === "DIRECTOR" || role === "ADMIN") && pathname.startsWith("/super"));
   const listaAbas = ehSuper ? ABAS_SUPER : ABAS;
@@ -126,7 +127,17 @@ export function RailV10({ atual, sub, mode, toggle, onAba }: {
       : <Link key={it.key} to={it.to!} className={`sb-item${it.on ? " on" : ""}`} aria-current={it.on ? "page" : undefined} title={it.label}>{conteudo}</Link>;
   };
 
+  // ── mobile: 5 principais na barra de baixo, o resto no menu do avatar ──
+  const CHAVES_MB = ["tempo", "leads", "pastas", "disparar", "time"];
+  const MB_LABEL: Record<string, string> = { tempo: ehSuper ? "Painel" : "Cockpit", leads: "Leads", pastas: "Pastas", disparar: "Disparos", time: "Equipes" };
+  const primarios = CHAVES_MB.map((k) => itens.find((i) => i.aba === k)).filter(Boolean) as It[];
+  const maisItens = itens.filter((i) => !CHAVES_MB.includes((i.aba as string) ?? ""));
+  const linhaMB = (it: It, cls: string, lb: string) => usaAba(it.aba, it.to)
+    ? <button key={it.key} type="button" className={`${cls}${it.on ? " on" : ""}`} onClick={() => { setMaisAberto(false); onAba!(it.aba!); }}>{it.icon}<span>{lb}</span></button>
+    : <Link key={it.key} to={it.to!} className={`${cls}${it.on ? " on" : ""}`} onClick={() => setMaisAberto(false)}>{it.icon}<span>{lb}</span></Link>;
+
   return (
+    <>
     <nav className={`sbnav${recolhido ? " recolhido" : ""}`} aria-label="Menu">
       <style>{CSS(recolhido)}</style>
 
@@ -170,6 +181,27 @@ export function RailV10({ atual, sub, mode, toggle, onAba }: {
         </div>
       </div>
     </nav>
+
+    {/* ── mobile: topo (logo + avatar) + barra de baixo (5) + menu "Mais" ── */}
+    <header className="sb-top">
+      <div className="sb-top-lg"><span className="sb-top-c">C</span><b>Comandra</b></div>
+      <button className="sb-top-av" onClick={() => setMaisAberto((v) => !v)} aria-label="Mais opções">{(eu?.nome ?? "?").slice(0, 2).toUpperCase()}</button>
+    </header>
+    <nav className="sb-bot" aria-label="Menu">
+      {primarios.map((it) => linhaMB(it, "sb-mb", MB_LABEL[it.aba as string] ?? it.label))}
+    </nav>
+    {maisAberto && (
+      <>
+        <div className="sb-ov" onClick={() => setMaisAberto(false)} />
+        <div className="sb-sheet" role="menu">
+          <div className="sb-sh-h">Mais</div>
+          {maisItens.map((it) => linhaMB(it, "sb-sh-i", it.label))}
+          <button type="button" className="sb-sh-i" onClick={() => { setMaisAberto(false); toggle(); }}>{svg("M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4")}<span>Alternar tema</span></button>
+          <button type="button" className="sb-sh-i sair" onClick={signOut}>{svg("M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6")}<span>Sair</span></button>
+        </div>
+      </>
+    )}
+    </>
   );
 }
 
@@ -206,7 +238,27 @@ const CSS = (recolhido: boolean) => `
 .sbnav.recolhido .sb-recolher{background:rgba(255,255,255,.07);color:#fff;width:34px;height:30px;display:flex;align-items:center;justify-content:center}
 .sbnav.recolhido .sb-user{justify-content:center;padding:8px 0;background:none}
 .sbnav.recolhido .sb-fbtns{flex-direction:column}
-@media(max-width:860px){.mgr10.app2{grid-template-columns:72px 1fr}
-  .sbnav .sb-bt,.sbnav .sb-gh,.sbnav .sb-lb,.sbnav .sb-badge,.sbnav .sb-ut{display:none}
-  .sbnav .sb-item{justify-content:center;padding:11px 0}.sbnav .sb-brand{justify-content:center}.sbnav .sb-user{justify-content:center;background:none}.sbnav .sb-fbtns{flex-direction:column}}
+/* ── mobile: barra de baixo (5) + topo com avatar/Mais; display:none no desktop ── */
+.sb-top,.sb-bot,.sb-sheet,.sb-ov{display:none}
+@media(max-width:860px){
+  .mgr10.app2{grid-template-columns:1fr !important}
+  .sbnav{display:none !important}
+  .sb-top{display:flex;position:fixed;top:0;left:0;right:0;height:50px;z-index:60;background:#0E1626;color:#fff;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .sb-top-lg{display:flex;align-items:center;gap:9px}.sb-top-lg b{font-size:16px;font-weight:800;color:#fff}
+  .sb-top-c{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#1CC6F2,#0E8FE0);color:#fff;font-weight:800;display:grid;place-items:center;font-size:16px}
+  .sb-top-av{width:34px;height:34px;border-radius:50%;background:#1E2C44;color:#8FB7FF;font-weight:800;font-size:12px;border:1px solid rgba(120,160,255,.3)}
+  .sb-bot{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:60;background:#0E1626;border-top:1px solid rgba(255,255,255,.07);padding:6px 4px calc(8px + env(safe-area-inset-bottom,0))}
+  .sb-bot .sb-mb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#8593a8;text-decoration:none;border:0;background:none;font:700 10.5px Archivo;cursor:pointer;padding:5px 0 2px;min-width:0}
+  .sb-bot .sb-mb span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+  .sb-bot .sb-mb svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
+  .sb-bot .sb-mb.on{color:#6FB0FF}
+  .sb-ov{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:65}
+  .sb-sheet{display:block;position:fixed;left:0;right:0;bottom:0;z-index:66;background:#141d2e;border-radius:18px 18px 0 0;padding:6px 10px calc(16px + env(safe-area-inset-bottom,0));max-height:72vh;overflow:auto}
+  .sb-sh-h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#5A6880;padding:12px 12px 6px}
+  .sb-sheet .sb-sh-i{display:flex;align-items:center;gap:13px;padding:14px 12px;border-radius:12px;color:#DBE4F0;text-decoration:none;border:0;background:none;width:100%;font:600 15px Archivo;cursor:pointer;text-align:left}
+  .sb-sheet .sb-sh-i svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8;flex:none}
+  .sb-sheet .sb-sh-i.on{background:rgba(31,110,230,.16);color:#6FB0FF}
+  .sb-sheet .sb-sh-i.sair{color:#FF9B9B}
+  .mgr10.app2 .shell2,.mgr10.app2 > main{padding-top:58px !important;padding-bottom:78px !important}
+}
 `;
