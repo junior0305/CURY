@@ -153,6 +153,15 @@ const ProtectedBrokerRoute = ({ children }: { children: React.ReactNode }) => {
   return <WhatsAppGatekeeper>{children}</WhatsAppGatekeeper>;
 };
 
+// Discador: qualquer usuário logado abre; quem pode LIGAR é gated pela edge (ramal/licença).
+const ProtectedDiscarRoute = ({ children }: { children: React.ReactNode }) => {
+  const { session, loading, mustChangePassword } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!session) return <Navigate to="/login" />;
+  if (mustChangePassword) return <Navigate to="/force-password-change" replace />;
+  return <>{children}</>;
+};
+
 const ProtectedSecretaryRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, role, loading, mustChangePassword } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -220,7 +229,7 @@ const App = () => (
             <Route path="/l/:codigo" element={<LinkLead />} />
             <Route path="/aviso" element={<AvisoPush />} />
             <Route path="/atender" element={<ProtectedBrokerRoute><Atender /></ProtectedBrokerRoute>} />
-            <Route path="/discar" element={<ProtectedBrokerRoute><Discar /></ProtectedBrokerRoute>} />
+            <Route path="/discar" element={<ProtectedDiscarRoute><Discar /></ProtectedDiscarRoute>} />
             <Route path="/dashboard-classico" element={<ProtectedBrokerRoute><DashboardFoco /></ProtectedBrokerRoute>} />
             <Route path="/dashboard-wolf" element={<ProtectedBrokerRoute><DashboardWolf /></ProtectedBrokerRoute>} />
             {/* /manager = v2 completo + console Jarvis no topo (escolha do gerente). /manager-v3 = experimento overview. /manager-v1 = antigo. */}

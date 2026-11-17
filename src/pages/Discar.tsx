@@ -56,6 +56,8 @@ export default function Discar() {
     enabled: !!user,
   });
 
+  const [testNum, setTestNum] = useState("");
+  const [testMsg, setTestMsg] = useState("");
   const [fila, setFila] = useState<Item[]>([]);
   const [idx, setIdx] = useState(0);
   const [running, setRunning] = useState(false);
@@ -110,6 +112,25 @@ export default function Discar() {
     if (e === "nao_autenticado") return "Sessão expirada, entre de novo.";
     if (e === "numero_invalido") return "Número inválido, pulando.";
     return "Não consegui ligar agora.";
+  }
+
+  async function testarLigar() {
+    const n = paraNvoip(testNum);
+    if (n.length < 12) { setTestMsg("Número inválido — use DDD (ex.: 11988887777)."); return; }
+    setTestMsg("Pedindo a ligação…");
+    const cid = await ligar(n);
+    if (!cid) { setTestMsg("Não saiu — confira o secret no Portainer (ou o console)."); return; }
+    setTestMsg(`Ligando! callId ${cid.slice(0, 8)}… seu ramal (144933001) deve tocar.`);
+    let t = 0;
+    const ver = async () => {
+      t++;
+      const raw = await status(cid);
+      console.log("[discar][teste] status", raw);
+      const c = classifica(raw);
+      setTestMsg(`Estado: ${c === "atendeu" ? "ATENDEU ✓" : c === "naoatendeu" ? "encerrou/não atendeu" : "em andamento…"} (callId ${cid.slice(0, 8)})`);
+      if (c === "andamento" && t < 12) window.setTimeout(ver, 2500);
+    };
+    window.setTimeout(ver, 2500);
   }
 
   function marca(i: number, s: QStatus) {
@@ -193,6 +214,13 @@ export default function Discar() {
         </div>
 
         <div className="autobar">🔄 Discagem automática — o sistema liga um atrás do outro sozinho e pula quem não atende. Só te conecta quando alguém atende.</div>
+
+        <div className="test">
+          <span className="tl">Ligar um número de teste</span>
+          <input className="ti" value={testNum} onChange={(e) => setTestNum(e.target.value)} placeholder="11988887777" inputMode="tel" />
+          <button className="tb" onClick={testarLigar}>Ligar</button>
+          {testMsg && <div className="tm">{testMsg}</div>}
+        </div>
 
         <div className="grid">
           {/* PAINEL */}
