@@ -36,12 +36,16 @@ const fmtFone = (tel?: string) => {
 };
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
-// classifica a resposta crua do getCall (shape ainda não 100% conhecido → por palavra)
+// classifica o getCall da Nvoip pelo campo `state` + tempo de conversa.
+// Estados vistos: "calling_origin" (tocando no ramal), "calling_destination" (tocando no lead),
+// conversa real = talkingDurationSeconds > 0. Terminais: hangup/failed/no_answer/completed...
 function classifica(raw: unknown): "andamento" | "atendeu" | "naoatendeu" {
-  const s = JSON.stringify(raw || "").toLowerCase();
-  if (/answer|bridge|atend|talk|falando|in[_-]?call|connected|active|conversa/.test(s)) return "atendeu";
-  if (/hangup|fail|busy|ocup|noanswer|no[_-]?answer|cancel|complete|finish|ended|encerr|rejeit|unavailable/.test(s)) return "naoatendeu";
-  return "andamento";
+  const r = (raw || {}) as any;
+  const st = String(r.state || "").toLowerCase();
+  const talking = Number(r.talkingDurationSeconds || 0);
+  if (talking > 0 || /talking|bridg|answer|in[_-]?call|connected|^active$|conversa/.test(st)) return "atendeu";
+  if (/hangup|fail|busy|ocup|no[_-]?answer|noanswer|cancel|complete|finish|ended|encerr|rejeit|unavailable|timeout|not_?answer/.test(st)) return "naoatendeu";
+  return "andamento"; // calling_origin, calling_destination, ringing…
 }
 
 const ATIVOS = new Set(["NEW", "IN_PROGRESS", "NEGOTIATING", "VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED"]);
