@@ -26,6 +26,7 @@ import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
 import MeuPlacar from "@/components/painel-corretor/MeuPlacar";
 import InicioCorretor from "@/components/painel-corretor/InicioCorretor";
 import CheckinAviso from "@/components/painel-corretor/CheckinAviso";
+import DiscadorSessao from "@/components/painel-corretor/DiscadorSessao";
 import { montarFila, contarGrupos, GRUPOS, ORDEM } from "@/components/painel-corretor/fila";
 import { LOST_REASON_LABEL } from "@/types/lead";
 import type { LostReason } from "@/types/lead";
@@ -36,7 +37,7 @@ import {
 } from "@/components/painel-corretor/util";
 import "@/styles/painel-corretor.css";
 
-type Aba = "hoje" | "cli" | "pes" | "disp" | "eu";
+type Aba = "hoje" | "cli" | "pes" | "disp" | "disc" | "eu";
 type Tipo = "new" | "ret" | "vis" | "resp" | "pes" | "par";
 const TAGC: Record<Tipo, string> = { new: "t-new", ret: "t-ret", vis: "t-vis", resp: "t-resp", pes: "t-ret", par: "t-ret" };
 const PREFIXO_TENTATIVA = "Tentativa de contato";
@@ -266,7 +267,7 @@ export default function PainelCorretor() {
   const hojeTxt = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Sao_Paulo" });
   const titulo: Record<Aba, [string, string]> = {
     hoje: filaOn ? ["Atender", "um cliente por vez, na ordem certa"] : [`${saud}${nomeEu ? ", " + nomeEu : ""}`, hojeTxt], cli: ["Clientes", `${ativos.length} com você`], pes: ["Pescar", "contatos da sua região"],
-    disp: ["Disparar", "pelo número oficial da sua equipe"], eu: ["Meu Placar", `seu mês de ${MES()}`],
+    disp: ["Disparar", "pelo número oficial da sua equipe"], disc: ["Discador", "ligue pela fila, fale pelo navegador"], eu: ["Meu Placar", `seu mês de ${MES()}`],
   };
 
   const novos = useMemo(() => ativos.filter(ehNovo), [ativos]);
@@ -371,6 +372,8 @@ export default function PainelCorretor() {
             </div>
           ))}
 
+          {aba === "disc" && <DiscadorSessao leads={leads} />}
+
           {aba === "eu" && <>
             <MeuPlacar uid={uid} titulo={false} onAbrir={(id) => { setAba("hoje"); setSelId(id); }}
               onFiltro={(f) => { setAba("cli"); setBusca(""); setCliFase(f === "quentes" ? "QUENTE" : "PARADO"); }}
@@ -398,7 +401,7 @@ export default function PainelCorretor() {
         )}
 
         <nav className="nav" aria-label="Seções">
-          {([["hoje", "☀️", "Hoje"], ["cli", "👥", "Clientes"], ["pes", "🎣", "Pescar"], ["disp", "📣", "Disparar"], ["eu", "🏆", "Placar"]] as [Aba, string, string][]).map(([k, i, r]) => (
+          {([["hoje", "☀️", "Hoje"], ["cli", "👥", "Clientes"], ["pes", "🎣", "Pescar"], ["disc", "📞", "Discador"], ["disp", "📣", "Disparar"], ["eu", "🏆", "Placar"]] as [Aba, string, string][]).map(([k, i, r]) => (
             <button key={k} type="button" className={aba === k ? "on" : ""} onClick={() => { setAba(k); setFiltro(""); }} aria-current={aba === k ? "page" : undefined}>
               {k === "hoje" && nNew > 0 && <span className="pip">{nNew}</span>}<i>{i}</i>{r}</button>))}
         </nav>

@@ -1,0 +1,26 @@
+/* Aba Discador do painel do corretor. Usa as variáveis de tema do .pc (claro/escuro). */
+.dsc-sessao{display:flex;flex-direction:column;gap:12px}
+
+.dsc-bar{display:flex;align-items:center;gap:14px;background:var(--app2);border:1px solid var(--line);border-radius:16px;padding:12px 14px}
+.dsc-bar>div{text-align:center;min-width:52px}
+.dsc-bar>div>b{display:block;font-size:20px;font-weight:800;color:var(--ink);line-height:1}
+.dsc-bar>div>span{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}
+.dsc-start{margin-left:auto;border:none;border-radius:12px;background:var(--teal);color:var(--tealink);font-weight:800;font-size:14px;padding:11px 18px;cursor:pointer}
+.dsc-start.off,.dsc-start:disabled{opacity:.5;cursor:not-allowed}
+
+.dsc-vazio{background:var(--app2);border:1px solid var(--line);border-radius:16px;padding:28px 18px;text-align:center;color:var(--mut);font-size:14px}
+
+.dsc-fila{display:flex;flex-direction:column;gap:7px}
+.dsc-item{display:flex;align-items:center;gap:11px;background:var(--app2);border:1px solid var(--line);border-radius:14px;padding:9px 11px}
+.dsc-item.ativo{border-color:var(--teal);box-shadow:0 0 0 2px color-mix(in srgb,var(--teal) 22%,transparent)}
+.dsc-item.feito{opacity:.55}
+.dsc-av{width:36px;height:36px;border-radius:10px;background:color-mix(in srgb,var(--teal) 14%,transparent);color:var(--teal);display:grid;place-items:center;font-weight:800;font-size:12px;flex-shrink:0}
+.dsc-info{flex:1;min-width:0}
+.dsc-info>b{display:block;font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsc-info>span{font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}
+.dsc-badge{font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;white-space:nowrap}
+.dsc-badge.live{background:color-mix(in srgb,#f59e0b 20%,transparent);color:#f59e0b;animation:dscpulse 1.2s infinite}
+.dsc-badge.ok{background:color-mix(in srgb,var(--teal) 16%,transparent);color:var(--teal)}
+@keyframes dscpulse{50%{opacity:.5}}
+
+.dsc-hint{font-size:12px;color:var(--mut);text-align:center;margin:6px 2px 0;line-height:1.5}
