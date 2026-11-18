@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Zap, ShieldCheck, Users, PhoneCall, TrendingUp, CalendarCheck, PhoneOutgoing, Play, Phone, SkipForward, Square, Mic, MicOff, PhoneOff, Activity, Clock, ThumbsUp, Voicemail, UserX, Pause, Trophy, Sparkles, Target, Pencil, Lock, Check } from "lucide-react";
+import { Zap, ShieldCheck, Users, PhoneCall, TrendingUp, CalendarCheck, PhoneOutgoing, Play, Phone, SkipForward, Square, Mic, MicOff, PhoneOff, Activity, Clock, ThumbsUp, Voicemail, UserX, Pause, Trophy, Sparkles, Target, Pencil, Lock, Check, Copy, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { registerContactAttempt, updateLeadStatus } from "@/integrations/supabase/leads";
@@ -79,7 +79,7 @@ export default function DiscadorSessao({ leads }: { leads: Lead[] }) {
       ) : !lic?.liberado ? (
         <GateLiberacao uid={lic?.uid} managerId={lic?.managerId} nome={lic?.nome} />
       ) : (
-        <Dialer fila={fila} uid={lic.uid} config={lic.config!} />
+        <Dialer fila={fila} uid={lic.uid} config={lic.config!} brokerNome={lic.nome} />
       )}
     </div>
   );
@@ -110,7 +110,7 @@ function GateLiberacao({ uid, managerId, nome }: { uid?: string; managerId?: str
 
 type Fase = "idle" | "discando" | "conectado" | "desfecho" | "vitoria";
 
-function Dialer({ fila, uid, config }: { fila: Lead[]; uid: string; config: SipConfig }) {
+function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; config: SipConfig; brokerNome?: string | null }) {
   const engine = useMemo(() => new WebRTCDialerEngine(async () => config), [config]);
   const [fase, setFase] = useState<Fase>("idle");
   const [atual, setAtual] = useState<Lead | null>(null);
@@ -422,10 +422,7 @@ function Dialer({ fila, uid, config }: { fila: Lead[]; uid: string; config: SipC
 
         {/* ===== LATERAL (copilot + notas) — nunca a fila de nomes ===== */}
         <div className="disc-side">
-          <div className="disc-glass disc-card disc-copilot">
-            <div className="ch"><span className="ct"><span className="ci"><Sparkles size={14} /></span> Copilot de abordagem</span><span className="disc-badge am" style={{ fontSize: 10 }}>MCMV</span></div>
-            <div className="disc-script"><div className="lbl"><Target size={12} /> O que falar agora</div><p>{roteiro(atual)}</p></div>
-          </div>
+          <Copilot lead={atual} brokerNome={brokerNome} uid={uid} />
 
           <div className="disc-glass disc-card">
             <div className="ch"><span className="ct" style={{ color: "var(--cy)" }}><span className="ci" style={{ background: "color-mix(in srgb,var(--cy) 14%,transparent)", color: "var(--cy)" }}><Pencil size={14} /></span> Anotações da ligação</span></div>
@@ -435,6 +432,82 @@ function Dialer({ fila, uid, config }: { fila: Lead[]; uid: string; config: SipC
         </div>
       </div>
     </>
+  );
+}
+
+const primeiroNome = (n?: string | null) => (n || "").trim().split(/\s+/)[0] || "";
+const MODELOS = [
+  { id: "noticia", nome: "Notícia boa", tpl: "{nome}? Aqui é o {corretor}. Vou ser rápido porque é boa notícia: pela sua renda você já tem subsídio do governo reservado pra sair do aluguel — e a faixa pode mudar mês que vem. Separei umas opções {regiao}. Me dá 2 minutos?" },
+  { id: "provoca", nome: "Provocação", tpl: "{nome}, pergunta rápida e meio estranha: se a parcela do seu apê ficasse quase igual ao aluguel que você paga hoje, você iria ver no sábado? Porque foi isso que eu achei pra você {empreendimento}." },
+  { id: "direto", nome: "Direto 30s", tpl: "Oi {nome}, não é telemarketing não — vi que você pediu uma simulação {empreendimento}. Tenho 30 segundos: você quer sair do aluguel ainda esse ano, ou tá só pesquisando?" },
+];
+const TIPS_SCRIPT: [string, string][] = [
+  ["Nome + motivo real", "cite \"você simulou X\" ou a região — mata o \"é telemarketing\""],
+  ["Quebre o padrão na 1ª frase", "\"boa notícia\", \"pergunta estranha\", \"não é telemarketing\""],
+  ["Novidade, não \"tem interesse?\"", "\"você tem subsídio esperando\" bate mais que \"quer um apê?\""],
+  ["Peça micro-compromisso", "\"me dá 30 segundos\" / \"responde só uma coisa\""],
+  ["O sim que você quer é a VISITA", "\"topa ver no sábado?\" — nunca \"quer comprar?\""],
+];
+function montar(tpl: string, lead?: Lead | null, brokerNome?: string | null) {
+  const regiao = lead?.regiao_interesse || (lead as any)?.regiao;
+  const emp = (lead as any)?.campanha_nome;
+  return tpl
+    .replace(/{nome}/g, primeiroNome(lead?.name) || "cliente")
+    .replace(/{corretor}/g, primeiroNome(brokerNome) || "seu corretor")
+    .replace(/{regiao}/g, regiao ? "em " + regiao : "na sua região")
+    .replace(/{empreendimento}/g, emp ? "no " + emp : "no nosso lançamento")
+    .replace(/{renda}/g, fmtRenda((lead as any)?.renda_declarada));
+}
+
+function Copilot({ lead, brokerNome, uid }: { lead?: Lead | null; brokerNome?: string | null; uid: string }) {
+  const [sel, setSel] = useState("noticia");
+  const [editando, setEditando] = useState(false);
+  const [meu, setMeu] = useState<string>(() => { try { return localStorage.getItem("disc_meu_script_" + uid) || ""; } catch { return ""; } });
+  const [rascunho, setRascunho] = useState("");
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  const modelos = [...MODELOS, ...(meu ? [{ id: "meu", nome: "Meu script", tpl: meu }] : [])];
+  const tpl = modelos.find((m) => m.id === sel)?.tpl || MODELOS[0].tpl;
+  const texto = montar(tpl, lead, brokerNome);
+
+  function copiar() { navigator.clipboard?.writeText(texto).then(() => toast.success("Script copiado ✅")).catch(() => {}); }
+  function abrirEditor() { setRascunho(meu || MODELOS[0].tpl); setEditando(true); }
+  function inserir(ph: string) {
+    const ta = taRef.current;
+    if (!ta) { setRascunho((r) => r + ph); return; }
+    const s = ta.selectionStart ?? rascunho.length, e = ta.selectionEnd ?? s;
+    setRascunho(rascunho.slice(0, s) + ph + rascunho.slice(e));
+    setTimeout(() => { ta.focus(); ta.selectionStart = ta.selectionEnd = s + ph.length; }, 0);
+  }
+  function salvar() { const v = rascunho.trim(); try { localStorage.setItem("disc_meu_script_" + uid, v); } catch {} setMeu(v); setSel(v ? "meu" : "noticia"); setEditando(false); toast.success("Seu script foi salvo 💪"); }
+
+  return (
+    <div className="disc-glass disc-card disc-copilot">
+      <div className="ch">
+        <span className="ct"><span className="ci"><Sparkles size={14} /></span> Copilot de abordagem</span>
+        <button className="disc-spill" onClick={editando ? () => setEditando(false) : abrirEditor}><Pencil size={11} /> {editando ? "voltar" : meu ? "meu script" : "criar o meu"}</button>
+      </div>
+
+      {editando ? (
+        <>
+          <div className="disc-block">
+            <div className="bl"><Target size={12} /> Receita do script matador</div>
+            <ul className="disc-tips">{TIPS_SCRIPT.map(([a, b]) => <li key={a}><Check size={13} style={{ color: "var(--em)", flexShrink: 0, marginTop: 1 }} /><span><b>{a}:</b> {b}</span></li>)}</ul>
+          </div>
+          <div className="disc-chips2">{["{nome}", "{regiao}", "{renda}", "{empreendimento}"].map((p) => <button key={p} className="disc-ph" onClick={() => inserir(p)}>{p}</button>)}</div>
+          <textarea ref={taRef} className="disc-ta" value={rascunho} onChange={(e) => setRascunho(e.target.value)} placeholder="Escreva sua abertura do seu jeito. Use os chips acima — o sistema troca nome / região / renda / empreendimento pelos dados do cliente." />
+          <div className="disc-mini"><button className="cancel" onClick={() => setEditando(false)}>Cancelar</button><button className="save" onClick={salvar} disabled={rascunho.trim().length < 10}>Salvar meu script</button></div>
+        </>
+      ) : (
+        <>
+          <div className="disc-pills">{modelos.map((m) => <button key={m.id} className={"disc-spill" + (sel === m.id ? " on" : "")} onClick={() => setSel(m.id)}>{m.nome}</button>)}</div>
+          <div className="disc-script"><div className="lbl"><Target size={12} /> Abertura — leia no tom de conversa</div><p className="disc-scripttxt">"{texto}"</p></div>
+          <div className="disc-copyrow"><button className="disc-copy" onClick={copiar}><Copy size={13} /> Copiar</button></div>
+          <div className="disc-block"><div className="bl"><CalendarCheck size={12} /> Gatilho de visita</div><p>"Tô no decorado sábado às 10h ou 15h — qual fica melhor pra você e sua família verem de perto?"</p></div>
+          <div className="disc-block"><div className="bl"><AlertCircle size={12} /> Se travar na entrada</div><p>"Entendo — por isso a maioria usa o FGTS como entrada. Você tem conta com FGTS?" (abre a conversa, não fecha)</p></div>
+        </>
+      )}
+    </div>
   );
 }
 
