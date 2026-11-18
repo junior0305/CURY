@@ -245,11 +245,12 @@
       gap: 6px;
       background: var(--surface);
       border: 1px solid var(--border);
-      padding: 3px 10px;
+      padding: 4px 11px;
       border-radius: var(--radius-full);
       font-weight: 700;
       color: #FFF;
       font-size: 11.5px;
+      text-decoration: none;
     }
     .dot-live {
       width: 7px;
@@ -259,6 +260,38 @@
     .dot-green { background: #10B981; box-shadow: 0 0 8px #10B981; }
     .dot-blue { background: #38BDF8; box-shadow: 0 0 8px #38BDF8; }
     .dot-amber { background: #F59E0B; box-shadow: 0 0 8px #F59E0B; }
+    .dot-purple { background: #C084FC; box-shadow: 0 0 8px #C084FC; }
+
+    /* PÍLULA ESPECIAL DE SOLICITAÇÃO DE ROLETA */
+    .badge-solicitacao {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(245, 158, 11, 0.2) 100%);
+      border: 1.5px solid #A855F7;
+      color: #FFFFFF;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 14px rgba(168, 85, 247, 0.35);
+      animation: pulseGlow 2.5s infinite;
+    }
+    .badge-solicitacao:hover {
+      background: rgba(168, 85, 247, 0.35);
+      border-color: #C084FC;
+      transform: translateY(-1px);
+    }
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 10px rgba(168, 85, 247, 0.3); }
+      50% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.6); }
+    }
+    .badge-mini-btn {
+      background: #A855F7;
+      color: #FFF;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      margin-left: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
 
     .periodo-pills {
       display: inline-flex;
@@ -831,6 +864,23 @@
       content: " (Clique p/ Ativar)";
     }
 
+    /* BOTÃO DE QUEM PEDIU LIBERAÇÃO */
+    .roleta-toggle-btn.pediu {
+      background: rgba(168, 85, 247, 0.2);
+      border-color: #A855F7;
+      color: #E9D5FF;
+      box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);
+      animation: pulseGlow 2s infinite;
+    }
+    .roleta-toggle-btn.pediu:hover {
+      background: #10B981;
+      border-color: #10B981;
+      color: #FFF;
+    }
+    .roleta-toggle-btn.pediu:hover .txt-status::after {
+      content: " (Clique p/ Liberar!)";
+    }
+
     /* BADGES DE STATUS DE AGORA */
     .badge-agora {
       display: inline-flex;
@@ -908,6 +958,61 @@
     .act-btn.ver:hover {
       background: var(--surface-subtle);
       color: var(--text-main);
+    }
+
+    /* MODAL FLUTUANTE DE LIBERAÇÃO DE ROLETA */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      z-index: 2500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-box-card {
+      background: #0D1527;
+      border: 1px solid #334155;
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 620px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8);
+      overflow: hidden;
+      animation: modalSlide 0.25s ease-out;
+    }
+    @keyframes modalSlide {
+      from { transform: translateY(20px) scale(0.97); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .modal-box-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #080D1A;
+    }
+    .modal-box-body {
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .solic-item-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      transition: all 0.2s;
+    }
+    .solic-item-card:hover {
+      border-color: #A855F7;
     }
 
     /* EXPANSÍVEL DE PASTAS QUENTES */
@@ -1018,18 +1123,28 @@
             Semana de 09/11 a 15/11 · <b>a semana fecha hoje à meia-noite</b>
           </p>
           
-          <!-- DADOS DE AGORA: CHECKIN, LOGADO, TRABALHANDO -->
+          <!-- DADOS DE AGORA: CHECKIN, LOGADO, TRABALHANDO & SOLICITAÇÕES DE ROLETA -->
           <div class="live-tropa-pulse">
             <span>🔴 <b>Dados de Agora:</b></span>
+            
             <span class="live-badge-item">
               <span class="dot-live dot-blue"></span> <b>8 no Plantão</b> (Check-in C2S)
             </span>
+            
             <span class="live-badge-item">
               <span class="dot-live dot-green"></span> <b>14 Logados</b> no CRM
             </span>
+            
             <span class="live-badge-item">
               <span class="dot-live dot-amber"></span> <b>6 em Atendimento</b> (WhatsApp)
             </span>
+
+            <!-- NOVIDADE SOLICITADA: CORRETORES NO PLANTÃO PEDINDO LIBERAÇÃO PARA A ROLETA -->
+            <button class="live-badge-item badge-solicitacao" id="btn-pulse-roleta" onclick="abrirModalLiberacao()">
+              <span class="dot-live dot-purple"></span> 
+              <b>✋ <span id="num-pedindo-roleta">3</span> no Plantão Pedindo Roleta</b>
+              <span class="badge-mini-btn">Liberar (1 Clique)</span>
+            </button>
           </div>
         </div>
 
@@ -1118,10 +1233,10 @@
         </div>
 
         <!-- CARD 4: PLANTÃO HOJE (C2S) -->
-        <div class="top-card">
+        <div class="top-card" style="cursor: pointer;" onclick="abrirModalLiberacao()">
           <div class="card-label-row">
             <span class="card-label">Plantão Hoje (C2S)</span>
-            <span style="font-size: 11px; color: var(--blue); font-weight: 800;">Físico Stand</span>
+            <span style="font-size: 11px; color: #C084FC; font-weight: 800;">3 Pedindo Roleta</span>
           </div>
           <div>
             <div class="card-value mono">
@@ -1131,8 +1246,8 @@
               <span>No time: <b>18 corretores</b></span>
             </div>
           </div>
-          <div style="font-size: 11px; color: var(--text-muted);">
-            Semana: <b>24 de 18</b> esperados · Roleta: 15
+          <div style="font-size: 11px; color: #C084FC; font-weight: 700;">
+            ✋ Clique p/ liberar quem está no stand ▾
           </div>
         </div>
 
@@ -1587,7 +1702,118 @@
               </td>
             </tr>
 
-            <!-- CORRETOR 3: PEDRO -->
+            <!-- CORRETOR 3: PATRÍCIA (NOVO: NO PLANTÃO PEDINDO LIBERAÇÃO) -->
+            <tr class="linha-corretor" id="row-patricia" style="background: rgba(168, 85, 247, 0.05); border-left: 3px solid #A855F7;">
+              <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div class="avatar-clean" style="width: 30px; height: 30px; font-size: 11px; border-color: #A855F7;">PA</div>
+                  <div>
+                    <b style="font-size: 13.5px;">Patrícia</b>
+                    <span style="display: block; font-size: 11px; color: #C084FC; font-weight: 700;">✋ Pediu Roleta às 08:52</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="badge-agora checkin-ok">🏢 Stand Mooca (08:42)</span>
+              </td>
+              <td>
+                <span class="badge-agora online">● Online Agora</span>
+              </td>
+              <td>
+                <span class="badge-agora online">🟢 Disponível p/ Atender</span>
+              </td>
+              <td class="mono">
+                <b>1 venda</b> · 2 pastas · 6 visitas
+              </td>
+              <td>
+                <!-- TOGGLE ESPECIAL: PEDIU LIBERAÇÃO -->
+                <button class="roleta-toggle-btn pediu" id="btn-roleta-patricia" onclick="liberarCorretorIndividual('Patrícia', this)">
+                  <span>✋</span> <span class="txt-status">Liberar Roleta</span>
+                </button>
+              </td>
+              <td style="text-align: right;">
+                <div class="action-btn-group">
+                  <button class="act-btn cobrar">💬 WhatsApp</button>
+                  <button class="act-btn ver">👁️ Ver</button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- CORRETOR 4: CARLOS (NOVO: NO PLANTÃO PEDINDO LIBERAÇÃO) -->
+            <tr class="linha-corretor" id="row-carlos" style="background: rgba(168, 85, 247, 0.05); border-left: 3px solid #A855F7;">
+              <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div class="avatar-clean" style="width: 30px; height: 30px; font-size: 11px; border-color: #A855F7;">CA</div>
+                  <div>
+                    <b style="font-size: 13.5px;">Carlos</b>
+                    <span style="display: block; font-size: 11px; color: #C084FC; font-weight: 700;">✋ Pediu Roleta às 08:40</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="badge-agora checkin-ok">🏢 Stand Mooca (08:35)</span>
+              </td>
+              <td>
+                <span class="badge-agora online">● Online Agora</span>
+              </td>
+              <td>
+                <span class="badge-agora online">🟢 Disponível p/ Atender</span>
+              </td>
+              <td class="mono">
+                <b>2 vendas</b> · 4 pastas · 9 visitas
+              </td>
+              <td>
+                <!-- TOGGLE ESPECIAL: PEDIU LIBERAÇÃO -->
+                <button class="roleta-toggle-btn pediu" id="btn-roleta-carlos" onclick="liberarCorretorIndividual('Carlos', this)">
+                  <span>✋</span> <span class="txt-status">Liberar Roleta</span>
+                </button>
+              </td>
+              <td style="text-align: right;">
+                <div class="action-btn-group">
+                  <button class="act-btn cobrar">💬 WhatsApp</button>
+                  <button class="act-btn ver">👁️ Ver</button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- CORRETOR 5: LUCAS (NOVO: NO PLANTÃO ITAQUERA PEDINDO LIBERAÇÃO) -->
+            <tr class="linha-corretor" id="row-lucas" style="background: rgba(168, 85, 247, 0.05); border-left: 3px solid #A855F7;">
+              <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div class="avatar-clean" style="width: 30px; height: 30px; font-size: 11px; border-color: #A855F7;">LU</div>
+                  <div>
+                    <b style="font-size: 13.5px;">Lucas</b>
+                    <span style="display: block; font-size: 11px; color: #C084FC; font-weight: 700;">✋ Pediu Roleta às 08:55</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="badge-agora checkin-ok">🏢 Stand Itaquera (08:50)</span>
+              </td>
+              <td>
+                <span class="badge-agora online">● Online Agora</span>
+              </td>
+              <td>
+                <span class="badge-agora online">🟢 Disponível p/ Atender</span>
+              </td>
+              <td class="mono">
+                <b>1 venda</b> · 1 pasta · 5 visitas
+              </td>
+              <td>
+                <!-- TOGGLE ESPECIAL: PEDIU LIBERAÇÃO -->
+                <button class="roleta-toggle-btn pediu" id="btn-roleta-lucas" onclick="liberarCorretorIndividual('Lucas', this)">
+                  <span>✋</span> <span class="txt-status">Liberar Roleta</span>
+                </button>
+              </td>
+              <td style="text-align: right;">
+                <div class="action-btn-group">
+                  <button class="act-btn cobrar">💬 WhatsApp</button>
+                  <button class="act-btn ver">👁️ Ver</button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- CORRETOR 6: PEDRO -->
             <tr class="linha-corretor" data-status="checkin-ok">
               <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
@@ -1624,7 +1850,7 @@
               </td>
             </tr>
 
-            <!-- CORRETOR 4: XANDE (ALERTA SALVAR A SEMANA) -->
+            <!-- CORRETOR 7: XANDE (ALERTA SALVAR A SEMANA) -->
             <tr class="linha-corretor" data-status="sem-entrar" style="background: rgba(245, 158, 11, 0.04);">
               <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
@@ -1662,7 +1888,7 @@
               </td>
             </tr>
 
-            <!-- CORRETOR 5: LISANDRA (ALERTA) -->
+            <!-- CORRETOR 8: LISANDRA (ALERTA) -->
             <tr class="linha-corretor" data-status="sem-entrar">
               <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
@@ -1700,7 +1926,7 @@
               </td>
             </tr>
 
-            <!-- CORRETOR 6: RIOS (CRÍTICO) -->
+            <!-- CORRETOR 9: RIOS (CRÍTICO) -->
             <tr class="linha-corretor" data-status="checkin-no" style="background: rgba(244, 63, 94, 0.04);">
               <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
@@ -1747,6 +1973,88 @@
     </main>
   </div>
 
+  <!-- MODAL DE SOLICITAÇÃO DE ROLETA (LIBERAÇÃO EM 1 CLIQUE) -->
+  <div class="modal-backdrop" id="modal-liberacao-roleta" style="display: none;">
+    <div class="modal-box-card">
+      <div class="modal-box-header">
+        <div>
+          <h3 style="font-size: 15px; color: #FFF; display: flex; align-items: center; gap: 8px;">
+            <span>✋</span> Liberação de Roleta para Corretores no Stand
+          </h3>
+          <span style="font-size: 12px; color: var(--text-muted);">
+            Bateram ponto no plantão físico C2S e aguardam autorização para receber leads
+          </span>
+        </div>
+        <button class="act-btn ver" onclick="fecharModalLiberacao()">✕ Fechar</button>
+      </div>
+
+      <div class="modal-box-body">
+        
+        <!-- CARD CORRETOR 1 -->
+        <div class="solic-item-card" id="modal-solic-patricia">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="avatar-clean" style="border-color: #A855F7;">PA</div>
+            <div>
+              <b style="font-size: 13.5px; color: #FFF;">Patrícia</b>
+              <span style="display: block; font-size: 11.5px; color: #38BDF8;">🏢 Stand Mooca · Check-in às 08:42</span>
+              <span style="display: block; font-size: 11px; color: #10B981;">● 0 leads atrasados · SLA 1m45s</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="act-btn cobrar" style="background: #10B981; color: #FFF;" onclick="liberarPeloModal('Patrícia', 'modal-solic-patricia', 'btn-roleta-patricia')">
+              ✓ Liberar Roleta
+            </button>
+            <button class="act-btn ver" onclick="recusarPeloModal('Patrícia', 'modal-solic-patricia')">Recusar</button>
+          </div>
+        </div>
+
+        <!-- CARD CORRETOR 2 -->
+        <div class="solic-item-card" id="modal-solic-carlos">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="avatar-clean" style="border-color: #A855F7;">CA</div>
+            <div>
+              <b style="font-size: 13.5px; color: #FFF;">Carlos</b>
+              <span style="display: block; font-size: 11.5px; color: #38BDF8;">🏢 Stand Mooca · Check-in às 08:35</span>
+              <span style="display: block; font-size: 11px; color: #10B981;">● 0 leads atrasados · SLA 1m20s</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="act-btn cobrar" style="background: #10B981; color: #FFF;" onclick="liberarPeloModal('Carlos', 'modal-solic-carlos', 'btn-roleta-carlos')">
+              ✓ Liberar Roleta
+            </button>
+            <button class="act-btn ver" onclick="recusarPeloModal('Carlos', 'modal-solic-carlos')">Recusar</button>
+          </div>
+        </div>
+
+        <!-- CARD CORRETOR 3 -->
+        <div class="solic-item-card" id="modal-solic-lucas">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="avatar-clean" style="border-color: #A855F7;">LU</div>
+            <div>
+              <b style="font-size: 13.5px; color: #FFF;">Lucas</b>
+              <span style="display: block; font-size: 11.5px; color: #38BDF8;">🏢 Stand Itaquera · Check-in às 08:50</span>
+              <span style="display: block; font-size: 11px; color: var(--amber);">⚠️ 1 lead atrasado · SLA 2m50s</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="act-btn cobrar" style="background: #10B981; color: #FFF;" onclick="liberarPeloModal('Lucas', 'modal-solic-lucas', 'btn-roleta-lucas')">
+              ✓ Liberar Roleta
+            </button>
+            <button class="act-btn ver" onclick="recusarPeloModal('Lucas', 'modal-solic-lucas')">Recusar</button>
+          </div>
+        </div>
+
+        <!-- BOTÃO APROVAR TODOS -->
+        <div style="display: flex; justify-content: flex-end; margin-top: 10px; border-top: 1px solid var(--border-subtle); padding-top: 14px;">
+          <button class="act-btn repassar" style="padding: 10px 18px; font-weight: 800; background: #0EA5E9; color: #FFF;" onclick="liberarTodosRoleta()">
+            ⚡ Liberar Todos os 3 de Uma Vez
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <!-- TOAST -->
   <div class="toast-box" id="app-toast">
     <span id="toast-icon">✓</span>
@@ -1754,6 +2062,90 @@
   </div>
 
   <script>
+    let pendentesRoleta = 3;
+
+    function abrirModalLiberacao() {
+      document.getElementById('modal-liberacao-roleta').style.display = 'flex';
+    }
+
+    function fecharModalLiberacao() {
+      document.getElementById('modal-liberacao-roleta').style.display = 'none';
+    }
+
+    function atualizarBadgeRoleta() {
+      const elNum = document.getElementById('num-pedindo-roleta');
+      const elBtn = document.getElementById('btn-pulse-roleta');
+      if (pendentesRoleta > 0) {
+        elNum.innerText = pendentesRoleta;
+      } else {
+        elBtn.style.display = 'none';
+      }
+    }
+
+    function liberarPeloModal(nome, cardId, btnTabelaId) {
+      const card = document.getElementById(cardId);
+      if (card) card.remove();
+
+      const btnTab = document.getElementById(btnTabelaId);
+      if (btnTab) {
+        btnTab.className = 'roleta-toggle-btn ativo';
+        btnTab.innerHTML = '<span>●</span> <span class="txt-status">Na Roleta</span>';
+        btnTab.onclick = function() { toggleRoleta(this, nome); };
+      }
+
+      pendentesRoleta = Math.max(0, pendentesRoleta - 1);
+      atualizarBadgeRoleta();
+      showToast('🟢 ' + nome + ' foi liberado(a) na roleta de novos leads!');
+
+      if (pendentesRoleta === 0) {
+        fecharModalLiberacao();
+      }
+    }
+
+    function recusarPeloModal(nome, cardId) {
+      const card = document.getElementById(cardId);
+      if (card) card.remove();
+      pendentesRoleta = Math.max(0, pendentesRoleta - 1);
+      atualizarBadgeRoleta();
+      showToast('❌ Solicitação de ' + nome + ' foi recusada.');
+
+      if (pendentesRoleta === 0) {
+        fecharModalLiberacao();
+      }
+    }
+
+    function liberarTodosRoleta() {
+      ['Patrícia', 'Carlos', 'Lucas'].forEach(nome => {
+        const idLower = nome.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const btnTab = document.getElementById('btn-roleta-' + idLower);
+        if (btnTab) {
+          btnTab.className = 'roleta-toggle-btn ativo';
+          btnTab.innerHTML = '<span>●</span> <span class="txt-status">Na Roleta</span>';
+          btnTab.onclick = function() { toggleRoleta(this, nome); };
+        }
+      });
+
+      pendentesRoleta = 0;
+      atualizarBadgeRoleta();
+      fecharModalLiberacao();
+      showToast('⚡ Todos os 3 corretores foram liberados na roleta!');
+    }
+
+    function liberarCorretorIndividual(nome, btn) {
+      btn.className = 'roleta-toggle-btn ativo';
+      btn.innerHTML = '<span>●</span> <span class="txt-status">Na Roleta</span>';
+      btn.onclick = function() { toggleRoleta(this, nome); };
+
+      pendentesRoleta = Math.max(0, pendentesRoleta - 1);
+      atualizarBadgeRoleta();
+
+      const idLower = nome.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const modalItem = document.getElementById('modal-solic-' + idLower);
+      if (modalItem) modalItem.remove();
+
+      showToast('🟢 ' + nome + ' foi liberado(a) na roleta de novos leads!');
+    }
+
     // DADOS DAS MÉTRICAS DO GRÁFICO SEMANA A SEMANA
     const DADOS_GRAFICO = {
       leads: {
