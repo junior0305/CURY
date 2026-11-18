@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Zap, ShieldCheck, Users, PhoneCall, TrendingUp, CalendarCheck, PhoneOutgoing, Play, Phone, SkipForward, Square, Mic, MicOff, PhoneOff, Activity, Clock, ThumbsUp, Voicemail, UserX, Pause, Trophy, Sparkles, Target, Pencil, Lock, Check, Copy, AlertCircle } from "lucide-react";
+import { Zap, ShieldCheck, Users, PhoneCall, TrendingUp, CalendarCheck, PhoneOutgoing, Play, Phone, SkipForward, Square, Mic, MicOff, PhoneOff, Activity, Clock, ThumbsUp, Voicemail, UserX, Pause, Trophy, Sparkles, Target, Pencil, Lock, Check, Copy, AlertCircle, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { registerContactAttempt, updateLeadStatus } from "@/integrations/supabase/leads";
@@ -126,6 +126,9 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
   const [manual, setManual] = useState("");
   const [mostraManual, setMostraManual] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
+  const [subindo, setSubindo] = useState(false);
+  const [csvBusy, setCsvBusy] = useState(false);
+  const [csvResult, setCsvResult] = useState<{ inseridos: number; rejeitados: any[] } | null>(null);
 
   const sessaoRef = useRef(false);
   const feitos = useRef<Set<string>>(new Set()).current;
@@ -248,6 +251,42 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
     ringTimer.current = window.setTimeout(() => { engine.hangup().catch(() => {}); if (!conectouRef.current) { encerrar(); toast("Ninguém atendeu."); } }, 25000);
   }
 
+  async function lerArquivo(file: File): Promise<string> {
+    const buf = await file.arrayBuffer();
+    let txt = new TextDecoder("utf-8").decode(buf);
+    if (txt.includes("�")) txt = new TextDecoder("windows-1252").decode(buf);
+    return txt;
+  }
+  function parseCsv(txt: string): { nome: string; telefone: string }[] {
+    const out: { nome: string; telefone: string }[] = [];
+    txt.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).forEach((ln, i) => {
+      if (i === 0 && /(telefone|celular|fone|nome|phone|name)/i.test(ln) && !/\d{8}/.test(ln)) return;
+      const cols = ln.split(/[;,\t]/).map((c) => c.trim());
+      let nome = "", tel = "";
+      for (const c of cols) { const d = c.replace(/\D/g, ""); if (d.length >= 8 && d.length >= tel.replace(/\D/g, "").length) tel = c; else if (!nome && /[a-zA-ZÀ-ú]/.test(c)) nome = c; }
+      if (!tel && cols.length) tel = cols[cols.length - 1];
+      if (tel) out.push({ nome, telefone: tel });
+    });
+    return out;
+  }
+  function baixaCsv(nome: string, conteudo: string) {
+    const blob = new Blob(["﻿" + conteudo], { type: "text/csv;charset=utf-8" });
+    const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = nome; a.click(); URL.revokeObjectURL(u);
+  }
+  async function processarCsv(file: File) {
+    setCsvBusy(true); setCsvResult(null);
+    try {
+      const rows = parseCsv(await lerArquivo(file));
+      if (!rows.length) { toast.error("Não achei telefones no arquivo."); setCsvBusy(false); return; }
+      const { data, error } = await supabase.rpc("discador_subir_csv", { p: rows });
+      if (error || (data as any)?.erro) { toast.error("Não consegui subir a lista."); setCsvBusy(false); return; }
+      const res = data as any; setCsvResult({ inseridos: res.inseridos || 0, rejeitados: res.rejeitados || [] });
+      if (res.inseridos) { setPoolQtde((q) => (q || 0) + res.inseridos); setFonte("pool"); }
+      toast.success(`${res.inseridos || 0} contato(s) na sua lista ✅`);
+    } catch { toast.error("Erro ao ler o arquivo."); }
+    setCsvBusy(false);
+  }
+
   // cleanup
   useEffect(() => () => { limparTimers(); (engine as any).destruir?.(); }, [engine]);
 
@@ -305,7 +344,35 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
           {/* IDLE */}
           {fase === "idle" && (
             <div className="disc-stage">
-              {confirmando ? (
+              {subindo ? (
+                <>
+                  <div className="disc-orb"><div className="halo" style={{ opacity: .15 }} /><div className="core" style={{ color: "var(--cy)" }}><Upload size={42} /></div></div>
+                  <div style={{ maxWidth: 420 }}>
+                    <span className="disc-badge" style={{ background: "color-mix(in srgb,var(--cy) 12%,transparent)", color: "var(--cy)", borderColor: "color-mix(in srgb,var(--cy) 22%,transparent)" }}>Minha lista</span>
+                    <h2 className="disc-h2" style={{ marginTop: 10 }}>Subir minha lista pra ligar</h2>
+                    <p className="disc-lead" style={{ marginTop: 8 }}>Planilha CSV com <b style={{ color: "var(--ink)" }}>nome;telefone</b>. O Comandra confere e <b style={{ color: "var(--ink)" }}>só entra o que é válido</b> — tira número errado, sem DDD, repetido e bloqueado, pra você não gastar ligação à toa.</p>
+                  </div>
+                  {csvResult ? (
+                    <>
+                      <div className="disc-block" style={{ width: "100%", maxWidth: 420 }}>
+                        <div className="bl"><Check size={12} /> Resultado</div>
+                        <p><b style={{ color: "var(--em)" }}>{csvResult.inseridos}</b> entraram na sua lista.{csvResult.rejeitados.length > 0 ? <> <b style={{ color: "var(--rose)" }}>{csvResult.rejeitados.length}</b> ficaram de fora (errado / repetido / bloqueado).</> : ""}</p>
+                        {csvResult.rejeitados.length > 0 && <button className="disc-link" style={{ marginTop: 8 }} onClick={() => baixaCsv("linhas_com_problema.csv", ["nome;telefone;problema", ...csvResult.rejeitados.map((r: any) => `${r.nome || ""};${r.telefone || ""};${r.motivo}`)].join("\n"))}>baixar as linhas com problema</button>}
+                      </div>
+                      <button className="disc-ghost" onClick={() => { setSubindo(false); setCsvResult(null); }}>Pronto</button>
+                    </>
+                  ) : (
+                    <>
+                      <label className="disc-cta" style={{ cursor: "pointer" }}>
+                        {csvBusy ? <><div className="disc-spin" style={{ width: 18, height: 18, margin: 0 }} /> Conferindo…</> : <><Upload size={18} /> Escolher planilha CSV</>}
+                        <input type="file" accept=".csv,text/csv" style={{ display: "none" }} disabled={csvBusy} onChange={(e) => { const f = e.target.files?.[0]; if (f) processarCsv(f); (e.target as HTMLInputElement).value = ""; }} />
+                      </label>
+                      <button className="disc-link" onClick={() => baixaCsv("modelo_lista.csv", "nome;telefone\nMaria Silva;11988887777\nJoão Souza;11977776666\n")}>baixar o modelo CSV</button>
+                      <button className="disc-link" style={{ opacity: .7 }} onClick={() => setSubindo(false)}>voltar</button>
+                    </>
+                  )}
+                </>
+              ) : confirmando ? (
                 <>
                   <div className="disc-orb" onClick={iniciar}><div className="halo" /><div className="core"><PhoneOutgoing size={46} /></div></div>
                   <div style={{ maxWidth: 380 }}>
@@ -339,6 +406,7 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
                   ) : (
                     <button className="disc-link" onClick={() => setMostraManual(true)}>ou ligar um número específico</button>
                   )}
+                  <button className="disc-link" style={{ opacity: .85 }} onClick={() => { setSubindo(true); setCsvResult(null); }}><Upload size={12} style={{ verticalAlign: "-2px", marginRight: 4 }} />subir minha lista (CSV)</button>
                 </>
               )}
             </div>
