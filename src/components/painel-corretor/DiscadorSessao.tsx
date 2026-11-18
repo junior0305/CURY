@@ -34,6 +34,7 @@ export default function DiscadorSessao({ leads }: { leads: Lead[] }) {
     [leads],
   );
   async function salvarResultado(r: { target: CallTarget; desfecho: string; observacao: string; duracao: number }) {
+    if (r.target.id === "avulso") return; // ligação avulsa não é lead
     try {
       await registerContactAttempt(r.target.id, "Ligação");
       const nota = `📞 Ligação (${r.duracao}s) · ${LABEL_DESFECHO[r.desfecho] || r.desfecho}${r.observacao ? " · " + r.observacao : ""}`;
@@ -55,8 +56,7 @@ const LABEL_DESFECHO: Record<string, string> = {
 
 function Conteudo({ fila }: { fila: Lead[] }) {
   const { status, discar, target } = useDiscador();
-  const [idx, setIdx] = useState(0);
-  const [auto, setAuto] = useState(false);
+  const [num, setNum] = useState("");
   const feitos = useRef<Set<string>>(new Set()).current;
   const emChamada = status !== "idle" && status !== "ended";
 
@@ -78,6 +78,13 @@ function Conteudo({ fila }: { fila: Lead[] }) {
           onClick={() => { const prox = restam[0]; if (prox) discarLead(prox); }}>
           {emChamada ? "Em ligação…" : "▶ Discar o próximo"}
         </button>
+      </div>
+
+      {/* ligar um número avulso (teste / ligação direta) */}
+      <div className="dsc-avulso">
+        <input value={num} onChange={(e) => setNum(e.target.value)} placeholder="Ligar um número (com DDD)" inputMode="tel" />
+        <button disabled={emChamada || soDig(num).length < 10}
+          onClick={() => discar({ id: "avulso", nome: "Ligação avulsa", telefone: num })}>Ligar</button>
       </div>
 
       {!fila.length ? (
