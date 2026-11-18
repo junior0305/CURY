@@ -101,7 +101,7 @@ function Conteudo({ fila }: { fila: Lead[] }) {
   const noPalco = target && (emChamada || resumoAberto); // tem alguém na tela do palco
 
   return (
-    <div className="text-slate-100">
+    <div className="rounded-3xl bg-[#070b14] p-4 md:p-6 text-slate-100">
       {/* ritmo da sessão */}
       <div className="hidden md:flex items-center gap-5 rounded-2xl border border-white/10 bg-white/[.03] px-5 py-2.5 mb-4 w-fit">
         <Metrica n={feitos.size} label="discadas" />

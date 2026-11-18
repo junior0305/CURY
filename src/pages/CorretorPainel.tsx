@@ -945,7 +945,7 @@ const CorretorPainel = () => {
         {/* ── MODO DISPARAR ── */}
         {mode === "discador" && (
           <div className="stage">
-            <div className="stage-inner">
+            <div className="stage-inner" style={{ maxWidth: 1180 }}>
               <h1 className="lead-title">Discador</h1>
               <p className="lead-sub" style={{ marginBottom: 14 }}>Ligue pela fila e fale pelo navegador — permita o microfone na primeira ligação.</p>
               <DiscadorSessao leads={leads} />
