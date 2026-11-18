@@ -46,9 +46,21 @@ export class WebRTCDialerEngine implements DialerEngine {
     } else {
       this.remoteAudio = document.createElement("audio");
       this.remoteAudio.autoplay = true;
+      (this.remoteAudio as any).playsInline = true;
+      this.remoteAudio.setAttribute("playsinline", "");
       this.remoteAudio.style.display = "none";
       document.body.appendChild(this.remoteAudio);
     }
+  }
+
+  /** força o som remoto a tocar (contorna o bloqueio de autoplay do navegador) */
+  private forcarAudio() {
+    try {
+      this.remoteAudio.muted = false;
+      this.remoteAudio.volume = 1;
+      const p = this.remoteAudio.play();
+      if (p && typeof (p as any).catch === "function") (p as Promise<void>).catch(() => {});
+    } catch { /* ignore */ }
   }
 
   /** Conecta e registra o ramal. Pode ser chamado 1x ao abrir a sessão de ligação. */
@@ -70,7 +82,7 @@ export class WebRTCDialerEngine implements DialerEngine {
 
     this.simple.delegate = {
       onCallHangup: () => onStatus?.("ended"),
-      onCallAnswered: () => onStatus?.("connected"),
+      onCallAnswered: () => { this.forcarAudio(); onStatus?.("connected"); },
       onServerDisconnect: () => { this.registrado = false; },
     };
 
@@ -89,7 +101,7 @@ export class WebRTCDialerEngine implements DialerEngine {
 
       // liga os callbacks de status desta chamada
       this.simple.delegate = {
-        onCallAnswered: () => cb.onStatus("connected"),
+        onCallAnswered: () => { this.forcarAudio(); cb.onStatus("connected"); },
         onCallHangup: () => cb.onStatus("ended"),
         onServerDisconnect: () => cb.onStatus("failed"),
       };
@@ -99,6 +111,9 @@ export class WebRTCDialerEngine implements DialerEngine {
         // peça áudio apenas (sem vídeo)
         constraints: { audio: true, video: false },
       });
+      // garante o play logo após estabelecer a mídia (autoplay costuma bloquear)
+      this.forcarAudio();
+      setTimeout(() => this.forcarAudio(), 800);
       // gravação: a Nvoip grava do lado dela; a URL é buscada depois pelo callId/relatório.
     } catch (e) {
       console.error("[WebRTCDialerEngine] erro na chamada:", e);
