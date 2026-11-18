@@ -61,12 +61,14 @@ export const useDiscador = () => {
 };
 
 export function DiscadorProvider({
-  engine, onResultado, children,
+  engine, onResultado, children, semWidget,
 }: {
   engine?: DialerEngine;
   /** chamado quando o corretor marca o desfecho no modal pós-chamada */
   onResultado?: (r: { target: CallTarget; desfecho: string; observacao: string; duracao: number }) => void;
   children: React.ReactNode;
+  /** true = não renderiza o widget flutuante nem o modal (a tela desenha o próprio palco) */
+  semWidget?: boolean;
 }) {
   const eng = useMemo(() => engine ?? new MockEngine(), [engine]);
   const [st, setSt] = useState<DialerState>({ status: "idle", target: null, seconds: 0, muted: false, recordingUrl: null });
@@ -112,8 +114,8 @@ export function DiscadorProvider({
   return (
     <Ctx.Provider value={value}>
       {children}
-      <WidgetChamada />
-      <ModalPosChamada />
+      {!semWidget && <WidgetChamada />}
+      {!semWidget && <ModalPosChamada />}
     </Ctx.Provider>
   );
 }
