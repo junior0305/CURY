@@ -10,11 +10,11 @@
   color:var(--ink);font-family:"Plus Jakarta Sans","Public Sans",system-ui,sans-serif;
 }
 .disc.claro{
-  --bg:#EEF2F7; --s1:#FFFFFF; --s2:#FFFFFF; --s3:#EEF2F7; --line:rgba(15,23,42,.10);
-  --ink:#0F1B2D; --mut:#56657C; --mut2:#8595AC;
-  --em:#0E7C7B; --em2:#0E7C7B; --cy:#0891B2; --am:#B5791A; --rose:#E11D48; --yl:#CA8A04;
-  --glass:rgba(255,255,255,.80); --card:rgba(15,23,42,.035); --cardb:rgba(15,23,42,.09);
-  --glow:rgba(14,124,123,.12);
+  --bg:#F3F6FB; --s1:#FFFFFF; --s2:#FFFFFF; --s3:#ECF1F8; --line:#E3E8F0;
+  --ink:#0E1726; --mut:#586579; --mut2:#94A2B8;
+  --em:#0E9E8D; --em2:#0D7C72; --cy:#0E88A8; --am:#A9700F; --rose:#DD2149; --yl:#C98A04;
+  --glass:#FFFFFF; --card:#F1F5FA; --cardb:#E3E8F0;
+  --glow:rgba(14,158,141,.14);
 }
 .disc *{box-sizing:border-box}
 .disc{background:var(--bg);border-radius:20px;padding:14px}
@@ -214,3 +214,19 @@
 .disc-block{padding:11px 12px;border-radius:13px;background:var(--card);border:1px solid var(--line);margin-top:10px}
 .disc-block .bl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);display:flex;align-items:center;gap:6px;margin-bottom:5px}
 .disc-block p{font-size:12.5px;color:var(--ink);line-height:1.5}
+
+/* ===== TEMA CLARO: superfícies sólidas + profundidade suave (Linear/Stripe light) ===== */
+.disc.claro{background:radial-gradient(820px 320px at 50% -70px, rgba(14,158,141,.12), transparent 70%), var(--bg)}
+.disc.claro .disc-glass{backdrop-filter:none;-webkit-backdrop-filter:none;border-color:var(--cardb);box-shadow:0 1px 2px rgba(16,24,40,.05), 0 10px 26px -12px rgba(16,24,40,.16)}
+.disc.claro .disc-metric{box-shadow:0 1px 2px rgba(16,24,40,.05), 0 4px 12px -7px rgba(16,24,40,.12)}
+.disc.claro .disc-fcard,.disc.claro .disc-wavebox,.disc.claro .disc-timer,.disc.claro .disc-ipt input,.disc.claro .disc-ta,.disc.claro .disc-cbtn{box-shadow:0 1px 2px rgba(16,24,40,.03);border-color:var(--cardb)}
+.disc.claro .disc-block{box-shadow:0 1px 2px rgba(16,24,40,.03)}
+.disc.claro .disc-palco{overflow:visible}
+.disc.claro .disc-ambient{opacity:.5;filter:blur(66px)}
+.disc.claro .disc-orb .halo{opacity:.2}
+.disc.claro .disc-orb .core{background:linear-gradient(180deg,#fff,#EEF3F9);box-shadow:0 14px 30px -12px rgba(16,24,40,.22)}
+.disc.claro .disc-av .in{background:#fff}
+.disc.claro .disc-cta{box-shadow:0 10px 24px -10px rgba(14,124,123,.45)}
+.disc.claro .disc-hang{box-shadow:0 10px 24px -10px rgba(221,33,73,.4)}
+.disc.claro .disc-script{background:#FFFBF2;border-color:#F0E2C6}
+.disc.claro .disc-copilot{border-color:#F0E2C6}
