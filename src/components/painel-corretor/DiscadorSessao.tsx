@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Zap, ShieldCheck, Network, Users, PhoneCall, TrendingUp, CalendarCheck, PhoneOutgoing, Play, Phone, SkipForward, Square, Mic, MicOff, PhoneOff, Activity, Clock, ThumbsUp, Voicemail, UserX, Pause, Trophy, Sparkles, Target, Pencil, Lock, Check } from "lucide-react";
+import { Zap, ShieldCheck, Users, PhoneCall, TrendingUp, CalendarCheck, PhoneOutgoing, Play, Phone, SkipForward, Square, Mic, MicOff, PhoneOff, Activity, Clock, ThumbsUp, Voicemail, UserX, Pause, Trophy, Sparkles, Target, Pencil, Lock, Check } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { registerContactAttempt, updateLeadStatus } from "@/integrations/supabase/leads";
@@ -91,7 +91,7 @@ function GateLiberacao({ uid, managerId, nome }: { uid?: string; managerId?: str
     if (!managerId) { toast.error("Você não tem gerente definido — fale com o admin."); return; }
     const { error } = await supabase.from("internal_notifications").insert({
       to_id: managerId, from_id: uid, type: "DISCADOR_LIBERACAO_PEDIDO",
-      message: `📞 ${nome || "Um corretor"} pediu pra liberar o Discador. Configure o ramal de ligação dele em Configurar.`,
+      message: `📞 ${nome || "Um corretor"} pediu pra liberar o Discador. Configure o linha de ligação dele em Configurar.`,
     });
     if (error) { toast.error("Não consegui enviar o pedido."); return; }
     setPedido(true); toast.success("Pedido enviado ao seu gerente ✅");
@@ -100,7 +100,7 @@ function GateLiberacao({ uid, managerId, nome }: { uid?: string; managerId?: str
     <div className="disc-glass disc-gate">
       <div className="ic"><Lock size={30} /></div>
       <h2>Discador ainda não liberado pra você</h2>
-      <p>O Discador liga pelos seus clientes direto do navegador — sem precisar do celular. Seu gerente precisa liberar e configurar seu ramal de ligação. Peça a liberação aqui que ele recebe o aviso.</p>
+      <p>O Discador liga pelos seus clientes direto do navegador — sem precisar do celular. Seu gerente precisa liberar e configurar seu linha de ligação. Peça a liberação aqui que ele recebe o aviso.</p>
       {pedido
         ? <span className="ok"><Check size={17} /> Pedido enviado — assim que ele liberar, o discador abre aqui.</span>
         : <button className="disc-cta" style={{ marginTop: 20 }} onClick={pedir}><Phone size={18} /> Pedir liberação ao gerente</button>}
@@ -262,8 +262,8 @@ function Dialer({ fila, uid, config }: { fila: Lead[]; uid: string; config: SipC
     <>
       {/* barra de métricas */}
       <div className="disc-metrics">
-        <Metric ic={<ShieldCheck size={18} />} lbl="Ramal SIP" val={<><span className="disc-dot" /> {config.user}</>} />
-        <Metric cls="cy" ic={<Network size={18} />} lbl="Canais" val="1 / 5" />
+        <Metric ic={<ShieldCheck size={18} />} lbl="Linha" val={<><span className="disc-dot" /> Pronta</>} />
+        <Metric cls="cy" ic={<Clock size={18} />} lbl="Falado" val={mmss(stats.falado + (fase === "conectado" ? seconds : 0))} />
         <Metric cls="sl" ic={<Users size={18} />} lbl="Fila de hoje" val={`${restamN} leads`} />
         <Metric cls="sl" ic={<PhoneCall size={18} />} lbl="Discadas" val={`${stats.discadas}`} />
         <Metric ic={<TrendingUp size={18} />} lbl="Atenderam" val={`${stats.atenderam}${stats.discadas ? ` · ${taxa}%` : ""}`} />
@@ -316,7 +316,7 @@ function Dialer({ fila, uid, config }: { fila: Lead[]; uid: string; config: SipC
             <div className="disc-stage">
               <div className="disc-radar"><span className="w" /><span className="w" /><span className="w" /><div className="core"><PhoneOutgoing size={30} /></div></div>
               <div>
-                <div className="disc-eyebrow">{avulso ? "Ligando via NVoip" : "Procurando quem atende"}</div>
+                <div className="disc-eyebrow">{avulso ? "Ligando" : "Procurando quem atende"}</div>
                 <h2 className="disc-h2" style={{ marginTop: 6 }}>Chamando…</h2>
                 <p className="disc-lead" style={{ marginTop: 8 }}>{avulso ? "Assim que atender, o áudio abre aqui." : "Assim que alguém atender, o cliente aparece com a ficha e o roteiro. Pode deixar — o Comandra pula quem não atende em 25 segundos."}</p>
               </div>
@@ -349,7 +349,7 @@ function Dialer({ fila, uid, config }: { fila: Lead[]; uid: string; config: SipC
               </div>
 
               <div className="disc-wavebox">
-                <div className="disc-waverow"><span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Activity size={13} style={{ color: "var(--em)" }} /> Áudio bidirecional NVoip WebRTC</span><span className="live"><span className="disc-dot" /> {muted ? "Microfone mudo" : "Microfone transmitindo"}</span></div>
+                <div className="disc-waverow"><span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Activity size={13} style={{ color: "var(--em)" }} /> Áudio ao vivo</span><span className="live"><span className="disc-dot" /> {muted ? "Microfone mudo" : "Microfone transmitindo"}</span></div>
                 <div className="disc-wave" ref={waveRef}>{Array.from({ length: 32 }).map((_, i) => <i key={i} style={{ height: 6 }} />)}</div>
               </div>
 
