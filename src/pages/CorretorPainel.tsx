@@ -10,7 +10,8 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { MessageCircle, Send, Fish, Moon, ArrowLeft, LogOut } from "lucide-react";
+import { MessageCircle, Send, Fish, Moon, ArrowLeft, LogOut, Phone } from "lucide-react";
+import DiscadorSessao from "@/components/painel-corretor/DiscadorSessao";
 import { toast } from "sonner";
 import { useAuth } from "@/components/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
@@ -118,7 +119,7 @@ const CorretorPainel = () => {
   const qc = useQueryClient();
   const reduce = useReducedMotion();
 
-  const [mode, setMode] = useState<"atender" | "disparar" | "pescar">("atender");
+  const [mode, setMode] = useState<"atender" | "disparar" | "pescar" | "discador">("atender");
   const [filter, setFilter] = useState<"fila" | "prio" | "novos" | "pescados" | "visita" | "todos">("prio");
   // tela principal (visão rápida + Atender) até escolher um cliente; ?lead= abre direto a ficha
   const [inicio, setInicio] = useState(() => !new URLSearchParams(window.location.search).get("lead"));
@@ -633,6 +634,9 @@ const CorretorPainel = () => {
             <button className={`rail-item${mode === "pescar" ? " active" : ""}`} onClick={() => setMode("pescar")} title="Pescar leads">
               <Fish size={22} /><span>Pescar</span>
             </button>
+            <button className={`rail-item${mode === "discador" ? " active" : ""}`} onClick={() => setMode("discador")} title="Discador — ligue pela fila">
+              <Phone size={22} /><span>Discador</span>
+            </button>
           </div>
           <div className="rail-footer">
             <div className="ficha-pill"><span>Fichas</span><b>{counts.todos}</b></div>
@@ -939,6 +943,16 @@ const CorretorPainel = () => {
         )}
 
         {/* ── MODO DISPARAR ── */}
+        {mode === "discador" && (
+          <div className="stage">
+            <div className="stage-inner">
+              <h1 className="lead-title">Discador</h1>
+              <p className="lead-sub" style={{ marginBottom: 14 }}>Ligue pela fila e fale pelo navegador — permita o microfone na primeira ligação.</p>
+              <DiscadorSessao leads={leads} />
+            </div>
+          </div>
+        )}
+
         {mode === "disparar" && (
           <div className="stage">
             <div className="disp-wrap">
