@@ -66,7 +66,7 @@ export default function DiscadorSessao({ leads }: { leads: Lead[] }) {
         supabase.functions.invoke("discador-sip-config", { body: {} }),
       ]);
       const liberado = !cfg.error && !!(cfg.data as any)?.server;
-      return { uid, liberado, config: (cfg.data as SipConfig) || null, managerId: (prof as any)?.manager_id ?? null, nome: (prof as any)?.first_name ?? null };
+      return { uid, liberado, config: (cfg.data as SipConfig) || null, managerId: (prof as any)?.manager_id ?? null, nome: (prof as any)?.first_name ?? null, licencaPropria: !!(cfg.data as any)?.licenca_propria };
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -79,7 +79,7 @@ export default function DiscadorSessao({ leads }: { leads: Lead[] }) {
       ) : !lic?.liberado ? (
         <GateLiberacao uid={lic?.uid} managerId={lic?.managerId} nome={lic?.nome} />
       ) : (
-        <Dialer fila={fila} uid={lic.uid} config={lic.config!} brokerNome={lic.nome} />
+        <Dialer fila={fila} uid={lic.uid} config={lic.config!} brokerNome={lic.nome} licencaPropria={lic.licencaPropria} />
       )}
     </div>
   );
@@ -110,7 +110,7 @@ function GateLiberacao({ uid, managerId, nome }: { uid?: string; managerId?: str
 
 type Fase = "idle" | "discando" | "conectado" | "desfecho" | "vitoria" | "carregar";
 
-function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; config: SipConfig; brokerNome?: string | null }) {
+function Dialer({ fila, uid, config, brokerNome, licencaPropria }: { fila: Lead[]; uid: string; config: SipConfig; brokerNome?: string | null; licencaPropria?: boolean }) {
   const engine = useMemo(() => new WebRTCDialerEngine(async () => config), [config]);
   const [fase, setFase] = useState<Fase>("idle");
   const [atual, setAtual] = useState<Lead | null>(null);
@@ -198,7 +198,7 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
     avancandoRef.current = true;
     limparTimers();
     const pa = poolAtualRef.current;
-    if (fonteRef.current === "pool" && pa) supabase.rpc("discador_ligou", { p_id: pa.id, p_resultado: "nao_atendeu" }).catch(() => {});
+    if (fonteRef.current === "pool" && pa) supabase.rpc("discador_ligou", { p_id: pa.id, p_resultado: "nao_atendeu", p_duracao: 0 }).catch(() => {});
     await engine.hangup().catch(() => {});
     setFase("discando");
     window.setTimeout(() => proximo(), 450);
@@ -231,7 +231,7 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
       } catch { /* não trava */ }
     } else if (pa) {
       try {
-        const { data } = await supabase.rpc("discador_ligou", { p_id: pa.id, p_resultado: sucesso ? "sucesso" : "nao_atendeu", p_desfecho: desfecho });
+        const { data } = await supabase.rpc("discador_ligou", { p_id: pa.id, p_resultado: sucesso ? "sucesso" : "nao_atendeu", p_desfecho: desfecho, p_duracao: dur });
         if (sucesso && (data as any)?.virou_lead) { toast.success("Virou cliente — foi pra sua Central de Leads ✅"); setPoolQtde((q) => (q != null ? Math.max(0, q - 1) : q)); }
       } catch { /* não trava */ }
     }
@@ -398,15 +398,7 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
                     <p className="disc-lead" style={{ marginTop: 8 }}>{continuando ? "Você parou no meio — dá pra seguir de onde parou. Você não escolhe pra quem: só fala quando alguém atende." : fonte === "pool" ? "O Comandra disca a lista da sua equipe sozinho, pula quem não atende, e quando alguém atende e dá certo o contato vira seu cliente na Central. Você não sabe pra quem liga até atender." : "O Comandra disca sozinho pelo navegador, pula quem não atende, e abre o áudio e a ficha do cliente quando alguém atender. Você não sabe pra quem vai ligar até a pessoa atender."}</p>
                   </div>
                   <button className="disc-cta" disabled={!naFonte} onClick={() => setConfirmando(true)}><Play size={18} /> {continuando ? `Continuar · ${naFonte} restantes` : fonte === "pool" ? "Ligar a lista" : "Iniciar sessão automática"}</button>
-                  {mostraManual ? (
-                    <div className="disc-ipt">
-                      <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="Número com DDD" inputMode="tel" autoFocus />
-                      <button disabled={soDig(manual).length < 10} onClick={ligarManual}>Ligar</button>
-                    </div>
-                  ) : (
-                    <button className="disc-link" onClick={() => setMostraManual(true)}>ou ligar um número específico</button>
-                  )}
-                  <button className="disc-link" style={{ opacity: .85 }} onClick={() => { setSubindo(true); setCsvResult(null); }}><Upload size={12} style={{ verticalAlign: "-2px", marginRight: 4 }} />subir minha lista (CSV)</button>
+                  {licencaPropria && <button className="disc-link" style={{ opacity: .85 }} onClick={() => { setSubindo(true); setCsvResult(null); }}><Upload size={12} style={{ verticalAlign: "-2px", marginRight: 4 }} />subir minha lista (CSV)</button>}
                 </>
               )}
             </div>
