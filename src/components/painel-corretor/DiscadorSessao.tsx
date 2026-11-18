@@ -108,13 +108,16 @@ function GateLiberacao({ uid, managerId, nome }: { uid?: string; managerId?: str
   );
 }
 
-type Fase = "idle" | "discando" | "conectado" | "desfecho" | "vitoria";
+type Fase = "idle" | "discando" | "conectado" | "desfecho" | "vitoria" | "carregar";
 
 function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; config: SipConfig; brokerNome?: string | null }) {
   const engine = useMemo(() => new WebRTCDialerEngine(async () => config), [config]);
   const [fase, setFase] = useState<Fase>("idle");
   const [atual, setAtual] = useState<Lead | null>(null);
   const [avulso, setAvulso] = useState<CallTarget | null>(null);
+  const [poolAtual, setPoolAtual] = useState<{ id: string; nome: string; telefone: string; regiao?: string } | null>(null);
+  const [fonte, setFonte] = useState<"meus" | "pool">(fila.length ? "meus" : "pool");
+  const [poolQtde, setPoolQtde] = useState<number | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [muted, setMuted] = useState(false);
   const [stats, setStats] = useState({ discadas: 0, atenderam: 0, agendadas: 0, falado: 0 });
@@ -132,12 +135,18 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
   const secTimer = useRef<number | null>(null);
   const faseRef = useRef<Fase>(fase); faseRef.current = fase;
   const mutedRef = useRef(muted); mutedRef.current = muted;
+  const fonteRef = useRef(fonte); fonteRef.current = fonte;
+  const poolAtualRef = useRef(poolAtual); poolAtualRef.current = poolAtual;
+  const poolBatch = useRef<any[]>([]);
   const waveRef = useRef<HTMLDivElement>(null);
 
-  const restamN = fila.filter((l) => !feitos.has(l.id)).length;
-  const continuando = feitos.size > 0 && restamN > 0;
-  const total = fila.length || 1;
-  const naTela = atual || avulso;
+  useEffect(() => { supabase.rpc("discador_pool_qtde").then(({ data }) => setPoolQtde(typeof data === "number" ? data : null)).catch(() => {}); }, []);
+
+  const restamLeads = fila.filter((l) => !feitos.has(l.id)).length;
+  const continuando = fonte === "meus" && feitos.size > 0 && restamLeads > 0;
+  const naFonte = fonte === "pool" ? (poolQtde ?? 0) : restamLeads;
+  const total = (fonte === "pool" ? (poolQtde || 1) : fila.length) || 1;
+  const naTela = atual ? { nome: atual.name, telefone: atual.phone } : (avulso || poolAtual);
   const taxa = stats.discadas ? Math.round((stats.atenderam / stats.discadas) * 100) : 0;
 
   function limparTimers() { if (ringTimer.current) { clearTimeout(ringTimer.current); ringTimer.current = null; } if (secTimer.current) { clearInterval(secTimer.current); secTimer.current = null; } }
@@ -155,26 +164,38 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
     }
   }
 
-  function discar(lead: Lead) {
-    feitos.add(lead.id);
+  function discarAlvo(a: { id: string; nome: string; telefone: string; regiao?: string }, lead?: Lead) {
+    if (lead) feitos.add(lead.id);
     conectouRef.current = false; avancandoRef.current = false;
-    setAtual(lead); setAvulso(null); setMuted(false); setNota(""); setTags([]);
+    setAtual(lead || null); setPoolAtual(lead ? null : { id: a.id, nome: a.nome, telefone: a.telefone, regiao: a.regiao }); setAvulso(null);
+    setMuted(false); setNota(""); setTags([]);
     setFase("discando");
     setStats((p) => ({ ...p, discadas: p.discadas + 1 }));
-    engine.call({ id: lead.id, nome: lead.name, telefone: lead.phone }, { onStatus });
+    engine.call({ id: a.id, nome: a.nome, telefone: a.telefone }, { onStatus });
     ringTimer.current = window.setTimeout(() => pularSemResposta(), 25000);
   }
 
-  function proximo() {
+  async function proximo() {
     if (!sessaoRef.current) return;
-    const prox = fila.find((l) => !feitos.has(l.id));
-    if (!prox) { sessaoRef.current = false; limparTimers(); setAtual(null); setAvulso(null); setFase("vitoria"); return; }
-    discar(prox);
+    if (fonteRef.current === "meus") {
+      const prox = fila.find((l) => !feitos.has(l.id));
+      if (!prox) { sessaoRef.current = false; limparTimers(); setAtual(null); setPoolAtual(null); setAvulso(null); setFase("vitoria"); return; }
+      discarAlvo({ id: prox.id, nome: prox.name, telefone: prox.phone }, prox);
+    } else {
+      if (!poolBatch.current.length) {
+        try { const { data } = await supabase.rpc("discador_pool_proximos", { p_limit: 40 }); poolBatch.current = (data as any[]) || []; } catch { poolBatch.current = []; }
+      }
+      const c = poolBatch.current.shift();
+      if (!c) { sessaoRef.current = false; limparTimers(); setPoolAtual(null); setAtual(null); setFase("carregar"); return; }
+      discarAlvo({ id: c.id, nome: c.nome, telefone: c.telefone, regiao: c.regiao });
+    }
   }
 
   async function pularSemResposta() {
     avancandoRef.current = true;
     limparTimers();
+    const pa = poolAtualRef.current;
+    if (fonteRef.current === "pool" && pa) supabase.rpc("discador_ligou", { p_id: pa.id, p_resultado: "nao_atendeu" }).catch(() => {});
     await engine.hangup().catch(() => {});
     setFase("discando");
     window.setTimeout(() => proximo(), 450);
@@ -184,25 +205,31 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
     limparTimers();
     setStats((p) => ({ ...p, falado: p.falado + seconds }));
     await engine.hangup().catch(() => {});
-    if (atual) setFase("desfecho");
+    if (atual || poolAtual) setFase("desfecho");
     else encerrar();
   }
 
   function iniciar() { setConfirmando(false); sessaoRef.current = true; proximo(); }
-  function encerrar() { sessaoRef.current = false; limparTimers(); engine.hangup().catch(() => {}); setFase("idle"); setAtual(null); setAvulso(null); }
+  function encerrar() { sessaoRef.current = false; limparTimers(); engine.hangup().catch(() => {}); poolBatch.current = []; setFase("idle"); setAtual(null); setAvulso(null); setPoolAtual(null); }
   function toggleMute() { const m = !muted; setMuted(m); engine.setMuted(m); }
   function toggleTag(t: string) { setTags((p) => p.includes(t) ? p.filter((x) => x !== t) : [...p, t]); }
 
   async function marcar(desfecho: string) {
-    const lead = atual; const dur = seconds;
+    const lead = atual; const pa = poolAtual; const dur = seconds;
     const obs = [nota.trim(), tags.join(", ")].filter(Boolean).join(" · ");
     setFase("discando");
     if (desfecho === "agendou") setStats((p) => ({ ...p, agendadas: p.agendadas + 1 }));
+    const sucesso = desfecho === "agendou" || desfecho === "interesse" || desfecho === "ligar_depois";
     if (lead) {
       try {
         await registerContactAttempt(lead.id, "Ligação");
         await supabase.from("lead_notes").insert({ lead_id: lead.id, content: `📞 Ligação (${dur}s) · ${LABEL[desfecho] || desfecho}${obs ? " · " + obs : ""}` });
         if (desfecho === "agendou") await updateLeadStatus(lead.id, "VISIT_SCHEDULED");
+      } catch { /* não trava */ }
+    } else if (pa) {
+      try {
+        const { data } = await supabase.rpc("discador_ligou", { p_id: pa.id, p_resultado: sucesso ? "sucesso" : "nao_atendeu", p_desfecho: desfecho });
+        if (sucesso && (data as any)?.virou_lead) { toast.success("Virou cliente — foi pra sua Central de Leads ✅"); setPoolQtde((q) => (q != null ? Math.max(0, q - 1) : q)); }
       } catch { /* não trava */ }
     }
     setNota(""); setTags([]);
@@ -212,7 +239,7 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
   function ligarManual() {
     const alvo: CallTarget = { id: "avulso", nome: "Ligação", telefone: manual };
     sessaoRef.current = false; conectouRef.current = false; avancandoRef.current = false;
-    setAtual(null); setAvulso(alvo); setMuted(false); setMostraManual(false);
+    setAtual(null); setPoolAtual(null); setAvulso(alvo); setMuted(false); setMostraManual(false);
     setFase("discando");
     engine.call(alvo, { onStatus: (s) => {
       if (s === "connected") { conectouRef.current = true; setFase("conectado"); cronometro(); }
@@ -264,7 +291,7 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
       <div className="disc-metrics">
         <Metric ic={<ShieldCheck size={18} />} lbl="Linha" val={<><span className="disc-dot" /> Pronta</>} />
         <Metric cls="cy" ic={<Clock size={18} />} lbl="Falado" val={mmss(stats.falado + (fase === "conectado" ? seconds : 0))} />
-        <Metric cls="sl" ic={<Users size={18} />} lbl="Fila de hoje" val={`${restamN} leads`} />
+        <Metric cls="sl" ic={<Users size={18} />} lbl={fonte === "pool" ? "Na lista" : "Fila de hoje"} val={`${naFonte}${fonte === "pool" ? "" : " leads"}`} />
         <Metric cls="sl" ic={<PhoneCall size={18} />} lbl="Discadas" val={`${stats.discadas}`} />
         <Metric ic={<TrendingUp size={18} />} lbl="Atenderam" val={`${stats.atenderam}${stats.discadas ? ` · ${taxa}%` : ""}`} />
         <Metric cls="am" ic={<CalendarCheck size={18} />} lbl="Visitas" val={`${stats.agendadas}`} />
@@ -284,20 +311,26 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
                   <div style={{ maxWidth: 380 }}>
                     <span className="disc-badge">Confirmar</span>
                     <h2 className="disc-h2" style={{ marginTop: 10 }}>Ligar pros seus clientes?</h2>
-                    <p className="disc-lead" style={{ marginTop: 8 }}>O Comandra vai ligar de verdade, um atrás do outro, começando por <b style={{ color: "var(--ink)" }}>{restamN} cliente{restamN === 1 ? "" : "s"}</b>. É só falar quando alguém atender.</p>
+                    <p className="disc-lead" style={{ marginTop: 8 }}>O Comandra vai ligar de verdade, um atrás do outro, começando por <b style={{ color: "var(--ink)" }}>{naFonte} {fonte === "pool" ? "contato" : "cliente"}{naFonte === 1 ? "" : "s"}</b>. É só falar quando alguém atender.</p>
                   </div>
                   <button className="disc-cta" onClick={iniciar}><Play size={18} /> Sim, pode ligar</button>
                   <button className="disc-link" onClick={() => setConfirmando(false)}>agora não</button>
                 </>
               ) : (
                 <>
-                  <div className="disc-orb" onClick={() => restamN && setConfirmando(true)}><div className="halo" /><div className="core"><PhoneOutgoing size={46} /></div></div>
+                  {fila.length > 0 && (poolQtde ?? 0) > 0 && (
+                    <div className="disc-pills" style={{ justifyContent: "center" }}>
+                      <button className={"disc-spill" + (fonte === "meus" ? " on" : "")} onClick={() => setFonte("meus")}>Meus clientes · {restamLeads}</button>
+                      <button className={"disc-spill" + (fonte === "pool" ? " on" : "")} onClick={() => setFonte("pool")}>Lista da equipe · {poolQtde}</button>
+                    </div>
+                  )}
+                  <div className="disc-orb" onClick={() => naFonte && setConfirmando(true)}><div className="halo" /><div className="core"><PhoneOutgoing size={46} /></div></div>
                   <div style={{ maxWidth: 400 }}>
-                    <span className="disc-badge">Power Dialer Contínuo</span>
+                    <span className="disc-badge">{fonte === "pool" ? "Lista da equipe" : "Power Dialer Contínuo"}</span>
                     <h2 className="disc-h2" style={{ marginTop: 10 }}>{continuando ? "Continuar a sessão" : "Iniciar sessão de ligações"}</h2>
-                    <p className="disc-lead" style={{ marginTop: 8 }}>{continuando ? "Você parou no meio — dá pra seguir de onde parou, sem repetir quem já ligou. Você não escolhe pra quem: só fala quando alguém atende." : "O Comandra disca sozinho pelo navegador, pula quem não atende, e abre o áudio e a ficha do cliente na hora em que alguém atender. Você não sabe pra quem vai ligar até a pessoa atender."}</p>
+                    <p className="disc-lead" style={{ marginTop: 8 }}>{continuando ? "Você parou no meio — dá pra seguir de onde parou. Você não escolhe pra quem: só fala quando alguém atende." : fonte === "pool" ? "O Comandra disca a lista da sua equipe sozinho, pula quem não atende, e quando alguém atende e dá certo o contato vira seu cliente na Central. Você não sabe pra quem liga até atender." : "O Comandra disca sozinho pelo navegador, pula quem não atende, e abre o áudio e a ficha do cliente quando alguém atender. Você não sabe pra quem vai ligar até a pessoa atender."}</p>
                   </div>
-                  <button className="disc-cta" disabled={!restamN} onClick={() => setConfirmando(true)}><Play size={18} /> {continuando ? `Continuar · ${restamN} restantes` : "Iniciar sessão automática"}</button>
+                  <button className="disc-cta" disabled={!naFonte} onClick={() => setConfirmando(true)}><Play size={18} /> {continuando ? `Continuar · ${naFonte} restantes` : fonte === "pool" ? "Ligar a lista" : "Iniciar sessão automática"}</button>
                   {mostraManual ? (
                     <div className="disc-ipt">
                       <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="Número com DDD" inputMode="tel" autoFocus />
@@ -342,6 +375,7 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
                       <span className="mono">{fmtFone(naTela.telefone)}</span>
                       {atual?.regiao_interesse && <><span>•</span><span>{atual.regiao_interesse}</span></>}
                       {(atual as any)?.campanha_nome && <><span>•</span><span style={{ color: "var(--em)" }}>{(atual as any).campanha_nome}</span></>}
+                      {!atual && poolAtual && <><span>•</span><span style={{ color: "var(--cy)" }}>Da lista{poolAtual.regiao ? " · " + poolAtual.regiao : ""}</span></>}
                     </div>
                   </div>
                 </div>
@@ -361,6 +395,12 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
                   <div className="disc-fcard"><span>Veio de</span><b className="cy">{(atual as any).campanha_nome || "MCMV"}</b></div>
                 </div>
               )}
+              {!atual && poolAtual && (
+                <div className="disc-ficha" style={{ gridTemplateColumns: "repeat(2,1fr)" }}>
+                  <div className="disc-fcard"><span>Região</span><b>{poolAtual.regiao || "—"}</b></div>
+                  <div className="disc-fcard"><span>Origem</span><b className="cy">Lista da equipe</b></div>
+                </div>
+              )}
 
               <div className="disc-ctrls" style={{ marginTop: "auto", paddingTop: 8 }}>
                 <button className={"disc-cbtn" + (muted ? " on" : "")} onClick={toggleMute} title="Atalho: M">{muted ? <MicOff size={20} /> : <Mic size={20} />}<span>[M] Mudo</span></button>
@@ -375,7 +415,7 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
             <div className="disc-stage" style={{ justifyContent: "center", gap: 20 }}>
               <div>
                 <span className="disc-badge am">Resultado da ligação</span>
-                <h2 className="disc-h2" style={{ marginTop: 10 }}>Como foi com <span style={{ color: "var(--em)" }}>{atual?.name}</span>?</h2>
+                <h2 className="disc-h2" style={{ marginTop: 10 }}>Como foi com <span style={{ color: "var(--em)" }}>{atual?.name || poolAtual?.nome}</span>?</h2>
                 <p className="disc-lead" style={{ marginTop: 6 }}>Falou <b className="mono" style={{ color: "var(--ink)" }}>{mmss(seconds)}</b> · escolha o desfecho ou tecle <b>[1–5]</b>. Depois o Comandra liga o próximo sozinho.</p>
               </div>
               <div className="disc-desf" style={{ width: "100%" }}>
@@ -410,11 +450,27 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
             </div>
           )}
 
+          {/* CARREGAR MAIS (pool esgotado) */}
+          {fase === "carregar" && (
+            <div className="disc-stage">
+              <div className="disc-orb"><div className="halo" style={{ opacity: .15 }} /><div className="core" style={{ color: "var(--am)" }}><AlertCircle size={44} /></div></div>
+              <div style={{ maxWidth: 400 }}>
+                <span className="disc-badge am">Lista no fim</span>
+                <h2 className="disc-h2" style={{ marginTop: 10 }}>Já testou todo mundo da lista</h2>
+                <p className="disc-lead" style={{ marginTop: 8 }}>Todos os contatos da lista já foram bem tentados. Peça pro seu gerente carregar mais contatos{fila.length ? ", ou ligue pros seus clientes" : ""}.</p>
+              </div>
+              <div className="disc-ctrls" style={{ gap: 10 }}>
+                {fila.length > 0 && <button className="disc-cta" onClick={() => { setFonte("meus"); setFase("idle"); }}><Play size={18} /> Ligar meus clientes</button>}
+                <button className="disc-ghost" onClick={() => setFase("idle")}>Voltar</button>
+              </div>
+            </div>
+          )}
+
           {/* footer progresso */}
-          {fase !== "idle" && (
+          {fase !== "idle" && fase !== "carregar" && (
             <div className="disc-foot">
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><span className="disc-dot" /> Progresso: <b className="mono" style={{ color: "var(--ink)" }}>{stats.discadas} / {fila.length}</b></span>
-              <div className="disc-prog"><i style={{ width: `${Math.round((stats.discadas / total) * 100)}%` }} /></div>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><span className="disc-dot" /> {fonte === "pool" ? "Ligadas" : "Progresso"}: <b className="mono" style={{ color: "var(--ink)" }}>{fonte === "meus" ? `${stats.discadas} / ${fila.length}` : stats.discadas}</b></span>
+              <div className="disc-prog"><i style={{ width: `${Math.min(100, Math.round((stats.discadas / total) * 100))}%` }} /></div>
               <span className="mono">Falado: <b style={{ color: "var(--ink)" }}>{mmss(stats.falado + (fase === "conectado" ? seconds : 0))}</b></span>
             </div>
           )}
@@ -422,7 +478,7 @@ function Dialer({ fila, uid, config, brokerNome }: { fila: Lead[]; uid: string; 
 
         {/* ===== LATERAL (copilot + notas) — nunca a fila de nomes ===== */}
         <div className="disc-side">
-          <Copilot lead={atual} brokerNome={brokerNome} uid={uid} />
+          <Copilot lead={atual || (poolAtual ? ({ name: poolAtual.nome, regiao_interesse: poolAtual.regiao } as any) : null)} brokerNome={brokerNome} uid={uid} />
 
           <div className="disc-glass disc-card">
             <div className="ch"><span className="ct" style={{ color: "var(--cy)" }}><span className="ci" style={{ background: "color-mix(in srgb,var(--cy) 14%,transparent)", color: "var(--cy)" }}><Pencil size={14} /></span> Anotações da ligação</span></div>
