@@ -6,6 +6,7 @@
 
 import BaseContatos from "@/components/config/BaseContatos";
 import PlantoesCadastro from "@/components/plantao/PlantoesCadastro";
+import RegraPlantao from "@/components/config/RegraPlantao";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
@@ -73,7 +74,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
       <section className="cfg-corpo">
         {secaoOk === "avisos" ? <ReguaEquipe nivel={nivel} donoId={donoId} />
           : secaoOk === "equipe" ? <Equipe nivel={nivel} donoId={donoId} />
-          : secaoOk === "plantoes" ? <PlantoesCadastro como={donoId} />
+          : secaoOk === "plantoes" ? <><RegraPlantao como={donoId} /><div style={{ height: 22 }} /><PlantoesCadastro como={donoId} /></>
           : secaoOk === "base" ? <BaseContatos donoId={donoId} />
           : secaoOk === "whatsapp" ? <MeuWhatsApp />
           : secaoOk === "fontes" ? <FontesDados />
