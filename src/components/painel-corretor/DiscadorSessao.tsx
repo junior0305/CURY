@@ -1,48 +1,15 @@
 /**
- * DiscadorSessao — Cockpit Ultra-Moderno do Discador do Corretor (Comandra Dialer v2).
+ * DiscadorSessao — aba "Discador" do corretor. Cockpit v2 (design do Junior) portado nativo.
  *
- * Design System inspirado no padrão Linear, Raycast e Superhuman:
- * - Estética Obsidian Glass (Dark Mode) & Clean Executive (Light Mode).
- * - Fila Inteligente Visível (Next-in-line): o corretor visualiza os próximos 3 clientes.
- * - Waveform de Áudio Dinâmico: barras de frequência oscilando com a voz em tempo real.
- * - Copilot Tático de Abordagem: argumentos imediatos de MCMV, renda, FGTS e gatilhos de visita.
- * - Teclado Power-User: [Espaço] Ligar/Desligar, [M] Mute, [1-5] Desfechos instantâneos.
- * - Motor Real: WebRTCDialerEngine (SIP.js nativo via wss://app.nvoip.com.br:7443).
+ * Power dialer ÀS CEGAS: o corretor aperta Iniciar uma vez; o Comandra liga um atrás do outro,
+ * pula quem não atende e SÓ revela o cliente quando a pessoa ATENDE (nenhum nome da fila à vista,
+ * nenhum nome durante a discagem). Ao desligar, marca o desfecho em 1 toque → liga o próximo.
+ * Tema claro/escuro segue o painel. Motor real: WebRTCDialerEngine (SIP.js → :7443).
+ * Atalhos: Espaço (iniciar/desligar) · M (mudo) · 1–5 (desfecho).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Phone,
-  PhoneOutgoing,
-  PhoneOff,
-  Mic,
-  MicOff,
-  Grid3x3,
-  Square,
-  Pause,
-  Play,
-  Users,
-  Sparkles,
-  Pencil,
-  BarChart3,
-  Check,
-  CalendarCheck,
-  ThumbsUp,
-  Clock,
-  Voicemail,
-  UserX,
-  Lock,
-  SkipForward,
-  TrendingUp,
-  ShieldCheck,
-  Network,
-  Activity,
-  History,
-  Cloud,
-  X,
-  Target,
-  AlertCircle
-} from "lucide-react";
+import { Zap, ShieldCheck, Network, Users, PhoneCall, TrendingUp, CalendarCheck, PhoneOutgoing, Play, Phone, SkipForward, Square, Mic, MicOff, PhoneOff, Activity, Clock, ThumbsUp, Voicemail, UserX, Pause, Trophy, Sparkles, Target, Pencil, Lock, Check } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { registerContactAttempt, updateLeadStatus } from "@/integrations/supabase/leads";
@@ -52,46 +19,23 @@ import { WebRTCDialerEngine, type SipConfig } from "@/components/discador/WebRTC
 import "@/styles/discador-sessao.css";
 
 const soDig = (s?: string) => (s || "").replace(/\D/g, "");
-const fmtFone = (t?: string) => {
-  const d = soDig(t).replace(/^55/, "");
-  return d.length === 11
-    ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
-    : d.length === 10
-    ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
-    : t || "";
-};
-const ini = (n?: string) =>
-  (n || "?")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() || "")
-    .join("") || "?";
-const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-const fmtRenda = (v: any) => {
-  const n = Number(soDig(String(v ?? "")));
-  return n > 0 ? "R$ " + n.toLocaleString("pt-BR") : v ? String(v) : "—";
-};
+const fmtFone = (t?: string) => { const d = soDig(t).replace(/^55/, ""); return d.length === 11 ? `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}` : d.length === 10 ? `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}` : (t || ""); };
+const ini = (n?: string) => (n || "?").trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() || "").join("") || "?";
+const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+const fmtRenda = (v: any) => { const n = Number(soDig(String(v ?? ""))); return n > 0 ? "R$ " + n.toLocaleString("pt-BR") : (v ? String(v) : "—"); };
+const ATIVOS = new Set(["NEW", "IN_PROGRESS", "NEGOTIATING", "VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED", "REACTIVATED"]);
+const LABEL: Record<string, string> = { interesse: "Atendeu com interesse", agendou: "Agendou visita", ligar_depois: "Ligar depois", caixa: "Caixa postal", sem_interesse: "Sem interesse" };
+const TAGS = ["Tem FGTS", "Compõe renda", "Quer 2 dorms", "Nome limpo"];
 
-const ATIVOS = new Set([
-  "NEW",
-  "IN_PROGRESS",
-  "NEGOTIATING",
-  "VISIT_SCHEDULED",
-  "VISITA_REALIZADA",
-  "DOCS_REQUESTED",
-  "REACTIVATED"
-]);
+function roteiro(l?: Lead | null): string {
+  if (!l) return "Confirme com quem fala, descubra renda e tipo de trabalho pra achar a faixa do MCMV e já convide pra uma visita.";
+  const regiao = l.regiao_interesse || (l as any).regiao;
+  const renda = (l as any).renda_declarada, trab = (l as any).tipo_trabalho;
+  if (renda && trab) return `Renda ${fmtRenda(renda)} + ${trab}: confira a faixa do MCMV, ofereça um empreendimento${regiao ? " em " + regiao : " na região dela"} e convide pra visita neste fim de semana.`;
+  if (regiao) return `Cliente de ${regiao}. Confirme renda e tipo de trabalho pra achar a faixa do MCMV e já marque uma visita.`;
+  return "Confirme renda e tipo de trabalho pra achar a faixa do MCMV e convide pra uma visita neste fim de semana.";
+}
 
-const LABEL: Record<string, string> = {
-  agendou: "Agendou visita",
-  interesse: "Atendeu com interesse",
-  ligar_depois: "Ligar depois",
-  caixa: "Caixa postal",
-  sem_interesse: "Sem interesse"
-};
-
-// Hook dinâmico para seguir o tema do painel (mobile .pc.claro ou desktop html.dark)
 function useTemaClaro() {
   const ler = () => {
     if (typeof document === "undefined") return false;
@@ -100,22 +44,18 @@ function useTemaClaro() {
     return !document.documentElement.classList.contains("dark");
   };
   const [claro, setClaro] = useState(ler);
-
   useEffect(() => {
     const upd = () => setClaro(ler());
     const mo = new MutationObserver(upd);
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    const pc = document.querySelector(".pc");
-    if (pc) mo.observe(pc, { attributes: true, attributeFilter: ["class"] });
+    const pc = document.querySelector(".pc"); if (pc) mo.observe(pc, { attributes: true, attributeFilter: ["class"] });
     return () => mo.disconnect();
   }, []);
-
   return claro;
 }
 
 export default function DiscadorSessao({ leads }: { leads: Lead[] }) {
   const claro = useTemaClaro();
-
   const { data: lic, isLoading } = useQuery({
     queryKey: ["disc-lic"],
     queryFn: async () => {
@@ -123,118 +63,66 @@ export default function DiscadorSessao({ leads }: { leads: Lead[] }) {
       const uid = auth.user?.id || "";
       const [{ data: prof }, cfg] = await Promise.all([
         supabase.from("profiles").select("manager_id, first_name").eq("id", uid).maybeSingle(),
-        supabase.functions.invoke("discador-sip-config", { body: {} })
+        supabase.functions.invoke("discador-sip-config", { body: {} }),
       ]);
       const liberado = !cfg.error && !!(cfg.data as any)?.server;
-      return {
-        uid,
-        liberado,
-        config: (cfg.data as SipConfig) || null,
-        managerId: (prof as any)?.manager_id ?? null,
-        nome: (prof as any)?.first_name ?? null
-      };
+      return { uid, liberado, config: (cfg.data as SipConfig) || null, managerId: (prof as any)?.manager_id ?? null, nome: (prof as any)?.first_name ?? null };
     },
-    staleTime: 5 * 60 * 1000
+    staleTime: 5 * 60 * 1000,
   });
-
-  const fila = useMemo(
-    () => leads.filter((l) => soDig(l.phone).length >= 10 && ATIVOS.has(String(l.status))),
-    [leads]
-  );
+  const fila = useMemo(() => leads.filter((l) => soDig(l.phone).length >= 10 && ATIVOS.has(String(l.status))), [leads]);
 
   return (
     <div className={"disc" + (claro ? " claro" : "")}>
       {isLoading ? (
-        <div className="disc-gate-box">
-          <div className="disc-gate-ic">
-            <div className="disc-spin" style={{ width: 32, height: 32, borderRadius: "50%", border: "3px solid var(--line)", borderTopColor: "var(--emerald)", animation: "disc-spin .7s linear infinite" }} />
-          </div>
-          <h2 style={{ fontSize: 18, fontWeight: 800 }}>Carregando Cockpit do Discador…</h2>
-          <p style={{ color: "var(--text-sub)", fontSize: 13, marginTop: 4 }}>Conectando credenciais seguras de telefonia SIP.</p>
-        </div>
+        <div className="disc-glass disc-gate"><div className="disc-spin" /><p>Carregando o discador…</p></div>
       ) : !lic?.liberado ? (
         <GateLiberacao uid={lic?.uid} managerId={lic?.managerId} nome={lic?.nome} />
       ) : (
-        <CockpitDialer fila={fila} uid={lic.uid} config={lic.config!} />
+        <Dialer fila={fila} uid={lic.uid} config={lic.config!} />
       )}
     </div>
   );
 }
 
-function GateLiberacao({
-  uid,
-  managerId,
-  nome
-}: {
-  uid?: string;
-  managerId?: string | null;
-  nome?: string | null;
-}) {
+function GateLiberacao({ uid, managerId, nome }: { uid?: string; managerId?: string | null; nome?: string | null }) {
   const [pedido, setPedido] = useState(false);
-
   async function pedir() {
-    if (!managerId) {
-      toast.error("Você não tem gerente definido — fale com o admin.");
-      return;
-    }
+    if (!managerId) { toast.error("Você não tem gerente definido — fale com o admin."); return; }
     const { error } = await supabase.from("internal_notifications").insert({
-      to_id: managerId,
-      from_id: uid,
-      type: "DISCADOR_LIBERACAO_PEDIDO",
-      message: `📞 ${nome || "Um corretor"} pediu pra liberar o Discador. Configure o ramal de ligação dele em Configurar.`
+      to_id: managerId, from_id: uid, type: "DISCADOR_LIBERACAO_PEDIDO",
+      message: `📞 ${nome || "Um corretor"} pediu pra liberar o Discador. Configure o ramal de ligação dele em Configurar.`,
     });
-    if (error) {
-      toast.error("Não foi possível enviar o pedido.");
-      return;
-    }
-    setPedido(true);
-    toast.success("Pedido enviado ao seu gerente ✅");
+    if (error) { toast.error("Não consegui enviar o pedido."); return; }
+    setPedido(true); toast.success("Pedido enviado ao seu gerente ✅");
   }
-
   return (
-    <div className="disc-gate-box">
-      <div className="disc-gate-ic">
-        <Lock size={32} />
-      </div>
-      <h2 style={{ fontSize: 20, fontWeight: 800 }}>Discador ainda não liberado</h2>
-      <p style={{ color: "var(--text-sub)", fontSize: 14, lineHeight: 1.55, margin: "10px 0 20px" }}>
-        O Comandra liga para os seus clientes direto pelo navegador com gravação e detecção de caixa postal. Peça a liberação do ramal ao seu gerente.
-      </p>
-      {pedido ? (
-        <span style={{ color: "var(--emerald)", fontWeight: 700, fontSize: 13.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <Check size={16} /> Pedido enviado — assim que ele liberar, o discador abrirá aqui.
-        </span>
-      ) : (
-        <button className="disc-btn-start" onClick={pedir}>
-          <Phone size={18} /> Pedir liberação ao gerente
-        </button>
-      )}
+    <div className="disc-glass disc-gate">
+      <div className="ic"><Lock size={30} /></div>
+      <h2>Discador ainda não liberado pra você</h2>
+      <p>O Discador liga pelos seus clientes direto do navegador — sem precisar do celular. Seu gerente precisa liberar e configurar seu ramal de ligação. Peça a liberação aqui que ele recebe o aviso.</p>
+      {pedido
+        ? <span className="ok"><Check size={17} /> Pedido enviado — assim que ele liberar, o discador abre aqui.</span>
+        : <button className="disc-cta" style={{ marginTop: 20 }} onClick={pedir}><Phone size={18} /> Pedir liberação ao gerente</button>}
     </div>
   );
 }
 
-function CockpitDialer({
-  fila,
-  uid,
-  config
-}: {
-  fila: Lead[];
-  uid: string;
-  config: SipConfig;
-}) {
+type Fase = "idle" | "discando" | "conectado" | "desfecho" | "vitoria";
+
+function Dialer({ fila, uid, config }: { fila: Lead[]; uid: string; config: SipConfig }) {
   const engine = useMemo(() => new WebRTCDialerEngine(async () => config), [config]);
-  const [fase, setFase] = useState<"idle" | "discando" | "conectado" | "desfecho">("idle");
+  const [fase, setFase] = useState<Fase>("idle");
   const [atual, setAtual] = useState<Lead | null>(null);
   const [avulso, setAvulso] = useState<CallTarget | null>(null);
   const [seconds, setSeconds] = useState(0);
-  const [toques, setToques] = useState(0);
   const [muted, setMuted] = useState(false);
   const [stats, setStats] = useState({ discadas: 0, atenderam: 0, agendadas: 0, falado: 0 });
   const [nota, setNota] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [manual, setManual] = useState("");
-  const [mostraDtmf, setMostraDtmf] = useState(false);
   const [mostraManual, setMostraManual] = useState(false);
-  const [dtmfDigits, setDtmfDigits] = useState("—");
+  const [confirmando, setConfirmando] = useState(false);
 
   const sessaoRef = useRef(false);
   const feitos = useRef<Set<string>>(new Set()).current;
@@ -242,76 +130,45 @@ function CockpitDialer({
   const avancandoRef = useRef(false);
   const ringTimer = useRef<number | null>(null);
   const secTimer = useRef<number | null>(null);
-  const toqueTimer = useRef<number | null>(null);
+  const faseRef = useRef<Fase>(fase); faseRef.current = fase;
+  const mutedRef = useRef(muted); mutedRef.current = muted;
+  const waveRef = useRef<HTMLDivElement>(null);
 
+  const restamN = fila.filter((l) => !feitos.has(l.id)).length;
+  const continuando = feitos.size > 0 && restamN > 0;
+  const total = fila.length || 1;
   const naTela = atual || avulso;
-  const restamFila = useMemo(() => fila.filter((l) => !feitos.has(l.id)), [fila, feitos]);
-  const proximos = restamFila.slice(0, 3);
-  const totalFila = fila.length || 1;
+  const taxa = stats.discadas ? Math.round((stats.atenderam / stats.discadas) * 100) : 0;
 
-  function limparTimers() {
-    if (ringTimer.current) {
-      clearTimeout(ringTimer.current);
-      ringTimer.current = null;
-    }
-    if (secTimer.current) {
-      clearInterval(secTimer.current);
-      secTimer.current = null;
-    }
-    if (toqueTimer.current) {
-      clearInterval(toqueTimer.current);
-      toqueTimer.current = null;
-    }
-  }
-
-  function cronometro() {
-    setSeconds(0);
-    secTimer.current = window.setInterval(() => setSeconds((s) => s + 1), 1000);
-  }
-
-  function contarToques() {
-    setToques(0);
-    toqueTimer.current = window.setInterval(() => setToques((t) => t + 1), 1000);
-  }
+  function limparTimers() { if (ringTimer.current) { clearTimeout(ringTimer.current); ringTimer.current = null; } if (secTimer.current) { clearInterval(secTimer.current); secTimer.current = null; } }
+  function cronometro() { setSeconds(0); secTimer.current = window.setInterval(() => setSeconds((s) => s + 1), 1000); }
 
   function onStatus(s: CallStatus) {
     if (s === "connected") {
       conectouRef.current = true;
-      limparTimers();
+      if (ringTimer.current) { clearTimeout(ringTimer.current); ringTimer.current = null; }
       setFase("conectado");
       setStats((p) => ({ ...p, atenderam: p.atenderam + 1 }));
       cronometro();
-    } else if (
-      (s === "ended" || s === "failed") &&
-      !conectouRef.current &&
-      !avancandoRef.current
-    ) {
+    } else if ((s === "ended" || s === "failed") && !conectouRef.current && !avancandoRef.current) {
       pularSemResposta();
     }
   }
 
   function discar(lead: Lead) {
     feitos.add(lead.id);
-    conectouRef.current = false;
-    avancandoRef.current = false;
-    setAtual(lead);
-    setAvulso(null);
-    setMuted(false);
-    setNota("");
+    conectouRef.current = false; avancandoRef.current = false;
+    setAtual(lead); setAvulso(null); setMuted(false); setNota(""); setTags([]);
     setFase("discando");
     setStats((p) => ({ ...p, discadas: p.discadas + 1 }));
-    contarToques();
     engine.call({ id: lead.id, nome: lead.name, telefone: lead.phone }, { onStatus });
-    ringTimer.current = window.setTimeout(() => pularSemResposta(), 26000);
+    ringTimer.current = window.setTimeout(() => pularSemResposta(), 25000);
   }
 
   function proximo() {
     if (!sessaoRef.current) return;
     const prox = fila.find((l) => !feitos.has(l.id));
-    if (!prox) {
-      encerrar("Fila de hoje concluída! 🎉 Você ligou para todos os clientes.");
-      return;
-    }
+    if (!prox) { sessaoRef.current = false; limparTimers(); setAtual(null); setAvulso(null); setFase("vitoria"); return; }
     discar(prox);
   }
 
@@ -320,7 +177,7 @@ function CockpitDialer({
     limparTimers();
     await engine.hangup().catch(() => {});
     setFase("discando");
-    window.setTimeout(() => proximo(), 400);
+    window.setTimeout(() => proximo(), 450);
   }
 
   async function desligar() {
@@ -331,815 +188,259 @@ function CockpitDialer({
     else encerrar();
   }
 
-  function iniciar() {
-    sessaoRef.current = true;
-    proximo();
-  }
-
-  function encerrar(msg?: string) {
-    sessaoRef.current = false;
-    limparTimers();
-    engine.hangup().catch(() => {});
-    setFase("idle");
-    setAtual(null);
-    setAvulso(null);
-    if (msg) toast.success(msg);
-  }
-
-  function toggleMute() {
-    const m = !muted;
-    setMuted(m);
-    engine.setMuted(m);
-  }
+  function iniciar() { setConfirmando(false); sessaoRef.current = true; proximo(); }
+  function encerrar() { sessaoRef.current = false; limparTimers(); engine.hangup().catch(() => {}); setFase("idle"); setAtual(null); setAvulso(null); }
+  function toggleMute() { const m = !muted; setMuted(m); engine.setMuted(m); }
+  function toggleTag(t: string) { setTags((p) => p.includes(t) ? p.filter((x) => x !== t) : [...p, t]); }
 
   async function marcar(desfecho: string) {
-    const lead = atual;
-    const obs = nota.trim();
-    const dur = seconds;
+    const lead = atual; const dur = seconds;
+    const obs = [nota.trim(), tags.join(", ")].filter(Boolean).join(" · ");
     setFase("discando");
-
-    if (desfecho === "agendou") {
-      setStats((p) => ({ ...p, agendadas: p.agendadas + 1 }));
-    }
-
+    if (desfecho === "agendou") setStats((p) => ({ ...p, agendadas: p.agendadas + 1 }));
     if (lead) {
       try {
         await registerContactAttempt(lead.id, "Ligação");
-        await supabase.from("lead_notes").insert({
-          lead_id: lead.id,
-          content: `📞 Ligação (${dur}s) · ${LABEL[desfecho] || desfecho}${obs ? " · " + obs : ""}`
-        });
-        if (desfecho === "agendou") {
-          await updateLeadStatus(lead.id, "VISIT_SCHEDULED");
-        }
-      } catch {
-        /* não trava o fluxo */
-      }
+        await supabase.from("lead_notes").insert({ lead_id: lead.id, content: `📞 Ligação (${dur}s) · ${LABEL[desfecho] || desfecho}${obs ? " · " + obs : ""}` });
+        if (desfecho === "agendou") await updateLeadStatus(lead.id, "VISIT_SCHEDULED");
+      } catch { /* não trava */ }
     }
-
-    setNota("");
-    window.setTimeout(() => proximo(), 350);
+    setNota(""); setTags([]);
+    window.setTimeout(() => proximo(), 300);
   }
 
   function ligarManual() {
-    const alvo: CallTarget = { id: "avulso", nome: "Número Avulso", telefone: manual };
-    sessaoRef.current = false;
-    conectouRef.current = false;
-    avancandoRef.current = false;
-    setAtual(null);
-    setAvulso(alvo);
-    setMuted(false);
-    setMostraManual(false);
+    const alvo: CallTarget = { id: "avulso", nome: "Ligação", telefone: manual };
+    sessaoRef.current = false; conectouRef.current = false; avancandoRef.current = false;
+    setAtual(null); setAvulso(alvo); setMuted(false); setMostraManual(false);
     setFase("discando");
-    contarToques();
-    engine.call(alvo, {
-      onStatus: (s) => {
-        if (s === "connected") {
-          conectouRef.current = true;
-          limparTimers();
-          setFase("conectado");
-          cronometro();
-        } else if ((s === "ended" || s === "failed") && !conectouRef.current) {
-          encerrar();
-        }
-      }
-    });
-    ringTimer.current = window.setTimeout(() => {
-      engine.hangup().catch(() => {});
-      if (!conectouRef.current) encerrar("Ninguém atendeu.");
-    }, 28000);
+    engine.call(alvo, { onStatus: (s) => {
+      if (s === "connected") { conectouRef.current = true; setFase("conectado"); cronometro(); }
+      else if ((s === "ended" || s === "failed") && !conectouRef.current) encerrar();
+    } });
+    ringTimer.current = window.setTimeout(() => { engine.hangup().catch(() => {}); if (!conectouRef.current) { encerrar(); toast("Ninguém atendeu."); } }, 25000);
   }
 
-  function enviarDtmf(digit: string) {
-    setDtmfDigits((prev) => (prev === "—" ? digit : (prev + digit).slice(-8)));
-    // Simula ou envia via SIP se suportado
-    toast.info(`Dígito DTMF [${digit}] enviado`);
-  }
+  // cleanup
+  useEffect(() => () => { limparTimers(); (engine as any).destruir?.(); }, [engine]);
 
-  function toggleTag(texto: string) {
-    setNota((prev) => {
-      const tag = `[${texto}]`;
-      if (prev.includes(tag)) {
-        return prev.replace(tag, "").replace(/\s+/g, " ").trim();
-      }
-      return (prev ? prev + " " : "") + tag;
-    });
-  }
-
-  // Atalhos de Teclado Globais (Power-User)
+  // atalhos de teclado (lê pelos refs pra não ficar stale)
+  const apiRef = useRef<any>({});
+  apiRef.current = { desligar, toggleMute, marcar, iniciar: () => setConfirmando(true) };
   useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
+    const h = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "TEXTAREA" || tag === "INPUT") return;
-
-      if (e.code === "Space") {
-        e.preventDefault();
-        if (fase === "conectado") desligar();
-        else if (fase === "idle" && restamFila.length > 0) iniciar();
-      } else if (e.key === "m" || e.key === "M") {
-        if (fase === "conectado") toggleMute();
-      } else if (fase === "desfecho") {
-        if (e.key === "1") marcar("agendou");
-        else if (e.key === "2") marcar("interesse");
-        else if (e.key === "3") marcar("ligar_depois");
-        else if (e.key === "4") marcar("caixa");
-        else if (e.key === "5") marcar("sem_interesse");
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [fase, restamFila.length, muted, seconds]);
-
-  useEffect(() => {
-    return () => {
-      limparTimers();
-      (engine as any).destruir?.();
+      const f = faseRef.current; const a = apiRef.current;
+      if (e.code === "Space") { e.preventDefault(); if (f === "conectado") a.desligar(); else if (f === "idle") a.iniciar(); }
+      else if ((e.key === "m" || e.key === "M") && f === "conectado") a.toggleMute();
+      else if (f === "desfecho") { const m: Record<string, string> = { "1": "agendou", "2": "interesse", "3": "ligar_depois", "4": "caixa", "5": "sem_interesse" }; if (m[e.key]) a.marcar(m[e.key]); }
     };
-  }, [engine]);
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
 
-  // Taxa de atendimento calculada
-  const taxaAtendimento =
-    stats.discadas > 0 ? Math.round((stats.atenderam / stats.discadas) * 100) : 0;
+  // waveform
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => {
+      const bars = waveRef.current ? (Array.from(waveRef.current.children) as HTMLElement[]) : [];
+      const on = faseRef.current === "conectado" && !mutedRef.current;
+      bars.forEach((b, i) => {
+        if (on) { const t = Date.now() / 200; const w = Math.sin(t + i * 0.35) * 16 + 22; b.style.height = Math.min(46, Math.max(6, w + Math.random() * 12)) + "px"; b.style.opacity = "1"; }
+        else { b.style.height = "6px"; b.style.opacity = "0.3"; }
+      });
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
-  // MCMV e Renda para o Copilot Tático
-  const rendaNum = Number(soDig(String((atual as any)?.renda_declarada ?? "")));
-  const faixaMcmv =
-    rendaNum > 0 && rendaNum <= 2640
-      ? "Faixa 1 (Subsídio máx)"
-      : rendaNum <= 4400
-      ? "Faixa 2 (Até R$ 55k subsídio)"
-      : rendaNum <= 8000
-      ? "Faixa 3"
-      : "MCMV / Médio Padrão";
-
-  const empreendimento =
-    atual?.regiao_interesse || (atual as any)?.regiao || (atual as any)?.campanha_nome || "Plantão Local";
+  const ambientCor = fase === "discando" ? "color-mix(in srgb,var(--cy) 18%,transparent)" : fase === "desfecho" ? "color-mix(in srgb,var(--am) 16%,transparent)" : fase === "vitoria" ? "color-mix(in srgb,var(--yl) 16%,transparent)" : "var(--glow)";
 
   return (
     <>
-      {/* ================= BARRA DE MÉTRICAS EXECUTIVAS ================= */}
-      <div className="disc-kpis">
-        <div className="disc-card disc-kpi">
-          <div className="disc-kpi-icon em">
-            <ShieldCheck size={20} />
-          </div>
-          <div>
-            <div className="disc-kpi-lbl">Ramal SIP NVoip</div>
-            <div className="disc-kpi-val font-mono">{config.user || "144933001"}</div>
-          </div>
-        </div>
-
-        <div className="disc-card disc-kpi">
-          <div className="disc-kpi-icon cy">
-            <Network size={20} />
-          </div>
-          <div>
-            <div className="disc-kpi-lbl">Canais Ativos</div>
-            <div className="disc-kpi-val font-mono">1 / 5 Canais</div>
-          </div>
-        </div>
-
-        <div className="disc-card disc-kpi">
-          <div className="disc-kpi-icon in">
-            <Users size={20} />
-          </div>
-          <div>
-            <div className="disc-kpi-lbl">Fila de Hoje</div>
-            <div className="disc-kpi-val font-mono">{restamFila.length} Leads</div>
-          </div>
-        </div>
-
-        <div className="disc-card disc-kpi">
-          <div className="disc-kpi-icon sl">
-            <BarChart3 size={20} />
-          </div>
-          <div>
-            <div className="disc-kpi-lbl">Discadas Hoje</div>
-            <div className="disc-kpi-val font-mono">{stats.discadas} ligadas</div>
-          </div>
-        </div>
-
-        <div className="disc-card disc-kpi">
-          <div className="disc-kpi-icon em">
-            <TrendingUp size={20} />
-          </div>
-          <div>
-            <div className="disc-kpi-lbl">Taxa de Atendimento</div>
-            <div className="disc-kpi-val font-mono" style={{ color: "var(--emerald)" }}>
-              {taxaAtendimento}% <span style={{ fontSize: 10, color: "var(--text-sub)", fontWeight: 400 }}>({stats.atenderam}/{stats.discadas})</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="disc-card disc-kpi">
-          <div className="disc-kpi-icon am">
-            <CalendarCheck size={20} />
-          </div>
-          <div>
-            <div className="disc-kpi-lbl">Visitas Marcadas</div>
-            <div className="disc-kpi-val font-mono" style={{ color: "var(--amber)" }}>
-              {stats.agendadas} Marcadas
-            </div>
-          </div>
-        </div>
+      {/* barra de métricas */}
+      <div className="disc-metrics">
+        <Metric ic={<ShieldCheck size={18} />} lbl="Ramal SIP" val={<><span className="disc-dot" /> {config.user}</>} />
+        <Metric cls="cy" ic={<Network size={18} />} lbl="Canais" val="1 / 5" />
+        <Metric cls="sl" ic={<Users size={18} />} lbl="Fila de hoje" val={`${restamN} leads`} />
+        <Metric cls="sl" ic={<PhoneCall size={18} />} lbl="Discadas" val={`${stats.discadas}`} />
+        <Metric ic={<TrendingUp size={18} />} lbl="Atenderam" val={`${stats.atenderam}${stats.discadas ? ` · ${taxa}%` : ""}`} />
+        <Metric cls="am" ic={<CalendarCheck size={18} />} lbl="Visitas" val={`${stats.agendadas}`} />
       </div>
 
-      {/* ================= LAYOUT PRINCIPAL (PALCO + LATERAL) ================= */}
-      <div className="disc-layout">
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {/* ================= FILA INTELIGENTE VISÍVEL (NEXT-IN-LINE) ================= */}
-          <div className="disc-card disc-queue-bar">
-            <div className="disc-queue-lbl">
-              <span className="dot" />
-              <span>A seguir na fila:</span>
-            </div>
+      <div className="disc-grid">
+        {/* ===== PALCO ===== */}
+        <div className="disc-glass disc-palco">
+          <div className="disc-ambient" style={{ background: ambientCor }} />
 
-            <div className="disc-queue-items">
-              {proximos.length > 0 ? (
-                proximos.map((lead, idx) => (
-                  <div key={lead.id} className={"disc-queue-item" + (idx === 0 && fase !== "idle" ? " active" : "")}>
-                    {idx === 0 && fase !== "idle" && <span className="dot-live" />}
-                    <strong>{idx + 1}. {lead.name}</strong>
-                    <span style={{ opacity: 0.75 }}>
-                      {(lead as any).regiao || lead.regiao_interesse || "Interesse MCMV"}
-                    </span>
+          {/* IDLE */}
+          {fase === "idle" && (
+            <div className="disc-stage">
+              {confirmando ? (
+                <>
+                  <div className="disc-orb" onClick={iniciar}><div className="halo" /><div className="core"><PhoneOutgoing size={46} /></div></div>
+                  <div style={{ maxWidth: 380 }}>
+                    <span className="disc-badge">Confirmar</span>
+                    <h2 className="disc-h2" style={{ marginTop: 10 }}>Ligar pros seus clientes?</h2>
+                    <p className="disc-lead" style={{ marginTop: 8 }}>O Comandra vai ligar de verdade, um atrás do outro, começando por <b style={{ color: "var(--ink)" }}>{restamN} cliente{restamN === 1 ? "" : "s"}</b>. É só falar quando alguém atender.</p>
                   </div>
-                ))
+                  <button className="disc-cta" onClick={iniciar}><Play size={18} /> Sim, pode ligar</button>
+                  <button className="disc-link" onClick={() => setConfirmando(false)}>agora não</button>
+                </>
               ) : (
-                <span style={{ fontSize: 12, color: "var(--text-sub)" }}>Fila limpa por hoje</span>
+                <>
+                  <div className="disc-orb" onClick={() => restamN && setConfirmando(true)}><div className="halo" /><div className="core"><PhoneOutgoing size={46} /></div></div>
+                  <div style={{ maxWidth: 400 }}>
+                    <span className="disc-badge">Power Dialer Contínuo</span>
+                    <h2 className="disc-h2" style={{ marginTop: 10 }}>{continuando ? "Continuar a sessão" : "Iniciar sessão de ligações"}</h2>
+                    <p className="disc-lead" style={{ marginTop: 8 }}>{continuando ? "Você parou no meio — dá pra seguir de onde parou, sem repetir quem já ligou. Você não escolhe pra quem: só fala quando alguém atende." : "O Comandra disca sozinho pelo navegador, pula quem não atende, e abre o áudio e a ficha do cliente na hora em que alguém atender. Você não sabe pra quem vai ligar até a pessoa atender."}</p>
+                  </div>
+                  <button className="disc-cta" disabled={!restamN} onClick={() => setConfirmando(true)}><Play size={18} /> {continuando ? `Continuar · ${restamN} restantes` : "Iniciar sessão automática"}</button>
+                  {mostraManual ? (
+                    <div className="disc-ipt">
+                      <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="Número com DDD" inputMode="tel" autoFocus />
+                      <button disabled={soDig(manual).length < 10} onClick={ligarManual}>Ligar</button>
+                    </div>
+                  ) : (
+                    <button className="disc-link" onClick={() => setMostraManual(true)}>ou ligar um número específico</button>
+                  )}
+                </>
               )}
-            </div>
-
-            <button
-              onClick={() => setMostraManual(!mostraManual)}
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "var(--text-sub)",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                paddingLeft: 8,
-                borderLeft: "1px solid var(--line)"
-              }}
-            >
-              + Avulso
-            </button>
-          </div>
-
-          {/* Discagem manual caso clicada */}
-          {mostraManual && (
-            <div className="disc-card" style={{ padding: 12, display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                value={manual}
-                onChange={(e) => setManual(e.target.value)}
-                placeholder="DDD + Telefone (ex: 11988887777)"
-                style={{
-                  flex: 1,
-                  background: "var(--bg-input)",
-                  border: "1px solid var(--line)",
-                  borderRadius: 10,
-                  padding: "8px 12px",
-                  color: "var(--text-main)",
-                  fontSize: 13,
-                  outline: "none"
-                }}
-              />
-              <button
-                disabled={soDig(manual).length < 10}
-                onClick={ligarManual}
-                className="disc-btn-start"
-                style={{ width: "auto", padding: "8px 16px", fontSize: 13 }}
-              >
-                Ligar Agora
-              </button>
             </div>
           )}
 
-          {/* ================= PALCO CENTRAL ================= */}
-          <div className="disc-card disc-palco">
-            <div className="disc-ambient-glow" />
-
-            {/* FASE 1: IDLE / PRONTO */}
-            {fase === "idle" && (
-              <div className="disc-idle-body">
-                <div className="disc-hero-orb" onClick={iniciar}>
-                  <PhoneOutgoing size={36} />
-                </div>
-
-                <div className="disc-hero-badge">Power Dialer Contínuo NVoip</div>
-                <h1 className="disc-hero-title">Começar Sessão de Ligações</h1>
-                <p className="disc-hero-sub">
-                  O Comandra disca automaticamente pelo seu navegador. Pula telefones desligados e caixas postais, abrindo o áudio e a ficha do cliente instantaneamente quando atenderem.
-                </p>
-
-                <button
-                  className="disc-btn-start"
-                  disabled={restamFila.length === 0}
-                  onClick={iniciar}
-                >
-                  <Play size={18} fill="currentColor" /> Iniciar Sessão Automática
-                </button>
-
-                <div style={{ display: "flex", gap: 16, fontSize: 11.5, color: "var(--text-sub)", marginTop: 4 }}>
-                  <span>⚡ Pula sem resposta em 25s</span>
-                  <span>🎧 Áudio WebRTC direto</span>
-                  <span>⌨️ Atalho [Espaço]</span>
-                </div>
-              </div>
-            )}
-
-            {/* FASE 2: DISCANDO */}
-            {fase === "discando" && (
-              <div className="disc-idle-body">
-                <div className="disc-radar">
-                  <div className="disc-radar-ring" />
-                  <div className="disc-radar-ring b" />
-                  <div className="disc-radar-ring c" />
-                  <div className="disc-radar-core">
-                    <PhoneOutgoing size={30} />
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--cyan)" }}>
-                    Discando via NVoip WebRTC…
-                  </div>
-                  <h2 style={{ fontSize: 24, fontWeight: 800, color: "var(--text-main)", margin: "4px 0" }}>
-                    {naTela?.nome || "Lead Prioritário"}
-                  </h2>
-                  <div className="font-mono" style={{ fontSize: 14, color: "var(--text-sub)" }}>
-                    {fmtFone(naTela?.telefone)}
-                  </div>
-                  <div style={{ display: "inline-flex", gap: 8, padding: "4px 12px", background: "var(--bg-subtle)", borderRadius: 99, border: "1px solid var(--line)", fontSize: 11, marginTop: 8, color: "var(--text-sub)" }}>
-                    <span>Interesse: <strong>{empreendimento}</strong></span>
-                    <span>•</span>
-                    <span>Chamando: <strong className="font-mono" style={{ color: "var(--cyan)" }}>{toques}s</strong></span>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-                  <button
-                    onClick={pularSemResposta}
-                    style={{
-                      padding: "10px 18px",
-                      borderRadius: 12,
-                      background: "var(--bg-subtle)",
-                      border: "1px solid var(--line)",
-                      color: "var(--text-main)",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6
-                    }}
-                  >
-                    <SkipForward size={14} color="var(--amber)" /> Pular sem resposta
-                  </button>
-                  <button
-                    onClick={() => encerrar()}
-                    style={{
-                      padding: "10px 18px",
-                      borderRadius: 12,
-                      background: "var(--rose-bg)",
-                      border: "1px solid var(--rose-border)",
-                      color: "var(--rose)",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6
-                    }}
-                  >
-                    <Square size={14} /> Parar Sessão
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* FASE 3: CONECTADO */}
-            {fase === "conectado" && naTela && (
+          {/* DISCANDO — às cegas, sem nome */}
+          {fase === "discando" && (
+            <div className="disc-stage">
+              <div className="disc-radar"><span className="w" /><span className="w" /><span className="w" /><div className="core"><PhoneOutgoing size={30} /></div></div>
               <div>
-                <div className="disc-call-hdr">
-                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    <div className="disc-lead-av">
-                      {ini(naTela.nome)}
-                      <span className="pulse-dot" />
-                    </div>
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <h2 style={{ fontSize: 22, fontWeight: 900, color: "var(--text-main)", margin: 0 }}>
-                          {naTela.nome}
-                        </h2>
-                        <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", padding: "2px 8px", borderRadius: 99, background: "var(--emerald-bg)", color: "var(--emerald)", border: "1px solid var(--emerald-border)" }}>
-                          Em Ligação
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", gap: 8, fontSize: 12, color: "var(--text-sub)", marginTop: 2 }}>
-                        <span className="font-mono">{fmtFone(naTela.telefone)}</span>
-                        <span>•</span>
-                        <span>{empreendimento}</span>
-                      </div>
-                    </div>
-                  </div>
+                <div className="disc-eyebrow">{avulso ? "Ligando via NVoip" : "Procurando quem atende"}</div>
+                <h2 className="disc-h2" style={{ marginTop: 6 }}>Chamando…</h2>
+                <p className="disc-lead" style={{ marginTop: 8 }}>{avulso ? "Assim que atender, o áudio abre aqui." : "Assim que alguém atender, o cliente aparece com a ficha e o roteiro. Pode deixar — o Comandra pula quem não atende em 25 segundos."}</p>
+              </div>
+              <div className="disc-ctrls" style={{ gap: 12 }}>
+                {!avulso && <button className="disc-ghost" onClick={() => { avancandoRef.current = true; limparTimers(); engine.hangup().catch(() => {}); window.setTimeout(proximo, 200); }}><SkipForward size={16} /> Pular</button>}
+                <button className="disc-ghost danger" onClick={encerrar}><Square size={16} /> Parar sessão</button>
+              </div>
+            </div>
+          )}
 
-                  <div className="disc-timer-box">
-                    <div className="disc-timer-lbl">Duração</div>
-                    <div className="disc-timer-val font-mono">{mmss(seconds)}</div>
-                  </div>
-                </div>
-
-                {/* Waveform de Áudio Dinâmico */}
-                <div className="disc-waveform-wrap">
-                  <div className="disc-waveform-top">
-                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <Activity size={14} color="var(--emerald)" /> Áudio WebRTC NVoip Conectado
-                    </span>
-                    <span className="font-mono" style={{ color: "var(--emerald)" }}>
-                      {muted ? "Microfone Silenciado" : "Transmitindo Microfone"}
-                    </span>
-                  </div>
-                  <WaveformVisualizer active={!muted} />
-                </div>
-
-                {/* Cartões Táticos de Dados */}
-                <div className="disc-lead-cards">
-                  <div className="disc-lcard">
-                    <div className="disc-lcard-lbl">Perfil MCMV</div>
-                    <div className="disc-lcard-val">{faixaMcmv}</div>
-                  </div>
-                  <div className="disc-lcard">
-                    <div className="disc-lcard-lbl">Renda Declarada</div>
-                    <div className="disc-lcard-val font-mono" style={{ color: "var(--emerald)" }}>
-                      {fmtRenda((atual as any)?.renda_declarada)}
+          {/* CONECTADO */}
+          {fase === "conectado" && naTela && (
+            <div className="disc-conn">
+              <div className="disc-chead">
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div className="disc-av"><div className="in">{ini(naTela.nome)}</div><div className="pip"><i /></div></div>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span className="disc-nome">{naTela.nome}</span>
+                      <span className="disc-badge"><span className="disc-dot" /> Conectado</span>
                     </div>
-                  </div>
-                  <div className="disc-lcard">
-                    <div className="disc-lcard-lbl">Vínculo / Emprego</div>
-                    <div className="disc-lcard-val">
-                      {(atual as any)?.tipo_trabalho || "CLT / Formal"}
-                    </div>
-                  </div>
-                  <div className="disc-lcard">
-                    <div className="disc-lcard-lbl">Origem do Lead</div>
-                    <div className="disc-lcard-val">
-                      {(atual as any)?.campanha_nome || "Portal Imobiliário"}
+                    <div className="disc-sub">
+                      <span className="mono">{fmtFone(naTela.telefone)}</span>
+                      {atual?.regiao_interesse && <><span>•</span><span>{atual.regiao_interesse}</span></>}
+                      {(atual as any)?.campanha_nome && <><span>•</span><span style={{ color: "var(--em)" }}>{(atual as any).campanha_nome}</span></>}
                     </div>
                   </div>
                 </div>
+                <div className="disc-timer"><span><Clock size={11} /> Duração</span><b className="mono">{mmss(seconds)}</b></div>
+              </div>
 
-                {/* Controles Flutuantes da Chamada */}
-                <div className="disc-call-actions">
-                  <button
-                    className={"disc-act-btn" + (muted ? " muted" : "")}
-                    onClick={toggleMute}
-                    title="Silenciar microfone (Atalho: M)"
-                  >
-                    {muted ? <MicOff size={20} /> : <Mic size={20} />}
-                    <span style={{ fontSize: 9, opacity: 0.7 }}>Mute [M]</span>
-                  </button>
+              <div className="disc-wavebox">
+                <div className="disc-waverow"><span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Activity size={13} style={{ color: "var(--em)" }} /> Áudio bidirecional NVoip WebRTC</span><span className="live"><span className="disc-dot" /> {muted ? "Microfone mudo" : "Microfone transmitindo"}</span></div>
+                <div className="disc-wave" ref={waveRef}>{Array.from({ length: 32 }).map((_, i) => <i key={i} style={{ height: 6 }} />)}</div>
+              </div>
 
-                  <button className="disc-act-btn hang" onClick={desligar} title="Desligar (Atalho: Espaço)">
-                    <PhoneOff size={20} />
-                    <span>Desligar Chamada [Espaço]</span>
-                  </button>
-
-                  <button
-                    className="disc-act-btn"
-                    onClick={() => setMostraDtmf(true)}
-                    title="Teclado DTMF (URA)"
-                  >
-                    <Grid3x3 size={20} />
-                    <span style={{ fontSize: 9, opacity: 0.7 }}>DTMF</span>
-                  </button>
+              {atual && (
+                <div className="disc-ficha">
+                  <div className="disc-fcard"><span>Região</span><b>{atual.regiao_interesse || (atual as any).regiao || "—"}</b></div>
+                  <div className="disc-fcard"><span>Renda familiar</span><b className="em">{fmtRenda((atual as any).renda_declarada)}</b></div>
+                  <div className="disc-fcard"><span>Vínculo</span><b>{(atual as any).tipo_trabalho || "—"}</b></div>
+                  <div className="disc-fcard"><span>Veio de</span><b className="cy">{(atual as any).campanha_nome || "MCMV"}</b></div>
                 </div>
-              </div>
-            )}
-
-            {/* FASE 4: DESFECHO RELÂMPAGO */}
-            {fase === "desfecho" && atual && (
-              <div className="disc-desfecho-wrap">
-                <div>
-                  <span style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", padding: "3px 10px", borderRadius: 99, background: "var(--amber-bg)", color: "var(--amber)", border: "1px solid var(--amber-border)" }}>
-                    Resultado da Chamada
-                  </span>
-                  <h2 style={{ fontSize: 22, fontWeight: 900, color: "var(--text-main)", margin: "8px 0 2px" }}>
-                    Como foi o contato com {atual.name}?
-                  </h2>
-                  <p style={{ fontSize: 12, color: "var(--text-sub)", margin: 0 }}>
-                    Tempo falado: <strong className="font-mono">{mmss(seconds)}</strong> • Marque o resultado ou use os atalhos <kbd>[1 a 5]</kbd>:
-                  </p>
-                </div>
-
-                <div className="disc-outcomes-grid">
-                  <div className="disc-out-card win" onClick={() => marcar("agendou")}>
-                    <div className="disc-out-top">
-                      <div className="disc-out-ic" style={{ color: "var(--emerald)" }}>
-                        <CalendarCheck size={18} />
-                      </div>
-                      <span className="disc-out-kbd">[1]</span>
-                    </div>
-                    <div>
-                      <div className="disc-out-title">Agendou Visita 🎉</div>
-                      <div className="disc-out-sub">Visita marcada no plantão</div>
-                    </div>
-                  </div>
-
-                  <div className="disc-out-card" onClick={() => marcar("interesse")}>
-                    <div className="disc-out-top">
-                      <div className="disc-out-ic" style={{ color: "var(--cyan)" }}>
-                        <ThumbsUp size={18} />
-                      </div>
-                      <span className="disc-out-kbd">[2]</span>
-                    </div>
-                    <div>
-                      <div className="disc-out-title">Atendeu com Interesse</div>
-                      <div className="disc-out-sub">Pediu simulação ou retorno</div>
-                    </div>
-                  </div>
-
-                  <div className="disc-out-card" onClick={() => marcar("ligar_depois")}>
-                    <div className="disc-out-top">
-                      <div className="disc-out-ic" style={{ color: "var(--amber)" }}>
-                        <Clock size={18} />
-                      </div>
-                      <span className="disc-out-kbd">[3]</span>
-                    </div>
-                    <div>
-                      <div className="disc-out-title">Ocupado / Ligar Depois</div>
-                      <div className="disc-out-sub">Pediu pra ligar mais tarde</div>
-                    </div>
-                  </div>
-
-                  <div className="disc-out-card" onClick={() => marcar("caixa")}>
-                    <div className="disc-out-top">
-                      <div className="disc-out-ic">
-                        <Voicemail size={18} />
-                      </div>
-                      <span className="disc-out-kbd">[4]</span>
-                    </div>
-                    <div>
-                      <div className="disc-out-title">Caixa Postal / Sem Resposta</div>
-                      <div className="disc-out-sub">Não falou com o cliente</div>
-                    </div>
-                  </div>
-
-                  <div className="disc-out-card" onClick={() => marcar("sem_interesse")}>
-                    <div className="disc-out-top">
-                      <div className="disc-out-ic" style={{ color: "var(--rose)" }}>
-                        <UserX size={18} />
-                      </div>
-                      <span className="disc-out-kbd">[5]</span>
-                    </div>
-                    <div>
-                      <div className="disc-out-title">Sem Interesse</div>
-                      <div className="disc-out-sub">Descartar da esteira</div>
-                    </div>
-                  </div>
-
-                  <div
-                    className="disc-out-card"
-                    style={{ borderStyle: "dashed", justifyContent: "center", cursor: "default" }}
-                  >
-                    <div style={{ fontSize: 11.5, color: "var(--text-sub)" }}>
-                      <strong style={{ color: "var(--text-main)", display: "block", marginBottom: 2 }}>
-                        Fluxo Automático
-                      </strong>
-                      Ao clicar ou pressionar 1 a 5, salva a nota e disca o próximo.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* FOOTER DE PROGRESSO */}
-            <div className="disc-footer-bar">
-              <div>
-                Progresso: <strong className="font-mono" style={{ color: "var(--text-main)" }}>{stats.discadas} de {fila.length}</strong>
-              </div>
-              <div className="disc-progress-track">
-                <div
-                  className="disc-progress-fill"
-                  style={{ width: `${Math.min(100, Math.round((stats.discadas / totalFila) * 100))}%` }}
-                />
-              </div>
-              <div>
-                {fase !== "idle" && (
-                  <button
-                    onClick={() => encerrar()}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "var(--text-sub)",
-                      cursor: "pointer",
-                      fontSize: 11.5,
-                      textDecoration: "underline"
-                    }}
-                  >
-                    Pausar Sessão
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ================= COLUNA LATERAL: COPILOT & NOTAS ================= */}
-        <aside className="disc-sidebar">
-          {/* Card 1: Copilot Tático de Abordagem */}
-          <div className="disc-side-box" style={{ borderColor: "var(--amber-border)" }}>
-            <div className="disc-side-hdr" style={{ color: "var(--amber)" }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <Sparkles size={14} /> Copilot Tático MCMV
-              </span>
-              <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "var(--amber-bg)" }}>
-                Argumentação
-              </span>
-            </div>
-
-            <div className="disc-copilot-banner">
-              <div className="disc-copilot-title">
-                <Target size={13} /> Argumento de Abertura:
-              </div>
-              <div className="disc-copilot-text">
-                {atual
-                  ? `“Oi ${atual.name}! Vi que você calculou o financiamento para ${empreendimento}. Com a sua renda declarada de ${fmtRenda((atual as any)?.renda_declarada)}, conseguimos isenção de documentação e entrada parcelada.”`
-                  : "Selecione ou conecte a chamada para receber o argumento tático personalizado do cliente."}
-              </div>
-            </div>
-
-            <div style={{ background: "var(--bg-subtle)", padding: 10, borderRadius: 12, fontSize: 11.5, color: "var(--text-sub)", marginBottom: 8 }}>
-              <strong style={{ color: "var(--text-main)", display: "block", marginBottom: 2 }}>
-                🎯 Gatilho para Fechar a Visita:
-              </strong>
-              “Estou no plantão Mooca neste sábado às 10h ou às 15h. Qual horário fica mais fácil pra você ver a maquete?”
-            </div>
-
-            <div style={{ background: "var(--rose-bg)", border: "1px solid var(--rose-border)", padding: 10, borderRadius: 12, fontSize: 11, color: "var(--rose)", display: "flex", gap: 6 }}>
-              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-              <div>
-                <strong>Se disser que a entrada é alta:</strong>
-                <p style={{ margin: "2px 0 0", opacity: 0.9 }}>
-                  Abata o saldo de FGTS e sugira compor a renda com cônjuge ou familiar para aumentar o subsídio Caixa.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: Bloco de Anotações & Tags Rápidas */}
-          <div className="disc-side-box">
-            <div className="disc-side-hdr">
-              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <Pencil size={14} /> Anotações da Ligação
-              </span>
-              <span style={{ fontSize: 10, color: "var(--text-sub)", display: "flex", alignItems: "center", gap: 4 }}>
-                <Cloud size={12} color="var(--emerald)" /> Auto-save
-              </span>
-            </div>
-
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "var(--text-sub)", marginBottom: 6 }}>
-              Tags Rápidas (1 Toque)
-            </div>
-            <div className="disc-tags-list">
-              {["Tem FGTS", "Compor com cônjuge", "Quer 2 dorms", "Nome limpo"].map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  className={"disc-tag-btn" + (nota.includes(`[${t}]`) ? " active" : "")}
-                  onClick={() => toggleTag(t)}
-                >
-                  + {t}
-                </button>
-              ))}
-            </div>
-
-            <textarea
-              className="disc-textarea"
-              value={nota}
-              onChange={(e) => setNota(e.target.value)}
-              placeholder="Escreva aqui detalhes do que combinou com o cliente — será salvo no histórico do CRM."
-            />
-          </div>
-
-          {/* Card 3: Histórico Rápido */}
-          <div className="disc-side-box">
-            <div className="disc-side-hdr">
-              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <History size={14} /> Histórico do Lead
-              </span>
-              <span style={{ fontSize: 10, color: "var(--text-sub)" }}>
-                {atual ? "Lead Cadastrado" : "Aguardando"}
-              </span>
-            </div>
-            <div style={{ fontSize: 12, color: "var(--text-sub)", lineHeight: 1.5 }}>
-              {atual ? (
-                <div>
-                  <div style={{ fontWeight: 700, color: "var(--text-main)" }}>{atual.name}</div>
-                  <div>Status atual: <strong>{String(atual.status)}</strong></div>
-                  <div>Cadastrado em: {new Date(atual.created_at).toLocaleDateString("pt-BR")}</div>
-                </div>
-              ) : (
-                "Nenhum cliente ativo no momento."
               )}
-            </div>
-          </div>
-        </aside>
-      </div>
 
-      {/* ================= MODAL TECLADO DTMF (URA) ================= */}
-      {mostraDtmf && (
-        <div className="disc-modal-overlay" onClick={() => setMostraDtmf(false)}>
-          <div className="disc-dtmf-modal" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text-main)", display: "flex", alignItems: "center", gap: 6 }}>
-                <Grid3x3 size={16} color="var(--cyan)" /> Teclado DTMF (URA)
+              <div className="disc-ctrls" style={{ marginTop: "auto", paddingTop: 8 }}>
+                <button className={"disc-cbtn" + (muted ? " on" : "")} onClick={toggleMute} title="Atalho: M">{muted ? <MicOff size={20} /> : <Mic size={20} />}<span>[M] Mudo</span></button>
+                <button className="disc-hang" onClick={desligar}><PhoneOff size={20} /> Desligar <kbd style={{ fontSize: 10, opacity: .7 }}>[Espaço]</kbd></button>
+                <button className="disc-cbtn" onClick={() => { avancandoRef.current = true; desligar(); }} title="Próximo"><SkipForward size={20} /><span>Próximo</span></button>
               </div>
-              <button
-                onClick={() => setMostraDtmf(false)}
-                style={{ background: "none", border: "none", color: "var(--text-sub)", cursor: "pointer" }}
-              >
-                <X size={16} />
-              </button>
             </div>
+          )}
 
-            <div
-              className="font-mono"
-              style={{
-                height: 38,
-                background: "var(--bg-input)",
-                border: "1px solid var(--line)",
-                borderRadius: 10,
-                marginTop: 12,
-                display: "grid",
-                placeItems: "center",
-                fontSize: 16,
-                fontWeight: 800,
-                color: "var(--cyan)",
-                letterSpacing: "0.2em"
-              }}
-            >
-              {dtmfDigits}
+          {/* DESFECHO */}
+          {fase === "desfecho" && (
+            <div className="disc-stage" style={{ justifyContent: "center", gap: 20 }}>
+              <div>
+                <span className="disc-badge am">Resultado da ligação</span>
+                <h2 className="disc-h2" style={{ marginTop: 10 }}>Como foi com <span style={{ color: "var(--em)" }}>{atual?.name}</span>?</h2>
+                <p className="disc-lead" style={{ marginTop: 6 }}>Falou <b className="mono" style={{ color: "var(--ink)" }}>{mmss(seconds)}</b> · escolha o desfecho ou tecle <b>[1–5]</b>. Depois o Comandra liga o próximo sozinho.</p>
+              </div>
+              <div className="disc-desf" style={{ width: "100%" }}>
+                <Chip cls="ok" k="1" ic={<CalendarCheck size={18} />} t="Agendou visita 🎉" d="Visita confirmada no plantão" onClick={() => marcar("agendou")} />
+                <Chip cls="cy" k="2" ic={<ThumbsUp size={18} />} t="Atendeu com interesse" d="Pediu simulação ou retorno" onClick={() => marcar("interesse")} />
+                <Chip cls="am" k="3" ic={<Clock size={18} />} t="Ligar depois" d="Pediu pra retornar mais tarde" onClick={() => marcar("ligar_depois")} />
+                <Chip cls="sl" k="4" ic={<Voicemail size={18} />} t="Caixa postal / sem resposta" d="Tocou até cair ou deu ocupado" onClick={() => marcar("caixa")} />
+                <Chip cls="rose" k="5" ic={<UserX size={18} />} t="Sem interesse" d="Descartar da esteira" onClick={() => marcar("sem_interesse")} />
+                <div className="disc-chip info">
+                  <div><div className="tt">Fluxo automático</div><p>Ao marcar, o resultado é salvo e o Comandra liga o próximo sozinho.</p></div>
+                  <button className="disc-link" style={{ color: "var(--rose)", textAlign: "left", display: "inline-flex", alignItems: "center", gap: 5 }} onClick={encerrar}><Pause size={14} /> Fazer uma pausa</button>
+                </div>
+              </div>
             </div>
+          )}
 
-            <div className="disc-dtmf-grid">
-              {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((d) => (
-                <button key={d} className="disc-dtmf-key" onClick={() => enviarDtmf(d)}>
-                  {d}
-                </button>
-              ))}
+          {/* VITÓRIA */}
+          {fase === "vitoria" && (
+            <div className="disc-stage">
+              <div className="disc-trophy"><Trophy size={46} /></div>
+              <div style={{ maxWidth: 400 }}>
+                <span className="disc-badge" style={{ background: "color-mix(in srgb,var(--yl) 12%,transparent)", color: "var(--yl)", borderColor: "color-mix(in srgb,var(--yl) 22%,transparent)" }}>Sessão concluída</span>
+                <h2 className="disc-h2" style={{ marginTop: 10 }}>Boa, corretor! 🎯</h2>
+                <p className="disc-lead" style={{ marginTop: 8 }}>Você falou com todo mundo da fila de hoje. Tudo foi registrado no cliente e no seu placar.</p>
+              </div>
+              <div className="disc-score">
+                <div className="disc-scard"><b>{stats.discadas}</b><span>Discadas</span></div>
+                <div className="disc-scard em"><b>{stats.atenderam}</b><span>Atenderam</span></div>
+                <div className="disc-scard am"><b>{stats.agendadas}</b><span>Visitas</span></div>
+              </div>
+              <button className="disc-ghost" onClick={() => { feitos.clear(); setStats({ discadas: 0, atenderam: 0, agendadas: 0, falado: 0 }); setFase("idle"); }}>Voltar ao início</button>
             </div>
+          )}
+
+          {/* footer progresso */}
+          {fase !== "idle" && (
+            <div className="disc-foot">
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}><span className="disc-dot" /> Progresso: <b className="mono" style={{ color: "var(--ink)" }}>{stats.discadas} / {fila.length}</b></span>
+              <div className="disc-prog"><i style={{ width: `${Math.round((stats.discadas / total) * 100)}%` }} /></div>
+              <span className="mono">Falado: <b style={{ color: "var(--ink)" }}>{mmss(stats.falado + (fase === "conectado" ? seconds : 0))}</b></span>
+            </div>
+          )}
+        </div>
+
+        {/* ===== LATERAL (copilot + notas) — nunca a fila de nomes ===== */}
+        <div className="disc-side">
+          <div className="disc-glass disc-card disc-copilot">
+            <div className="ch"><span className="ct"><span className="ci"><Sparkles size={14} /></span> Copilot de abordagem</span><span className="disc-badge am" style={{ fontSize: 10 }}>MCMV</span></div>
+            <div className="disc-script"><div className="lbl"><Target size={12} /> O que falar agora</div><p>{roteiro(atual)}</p></div>
+          </div>
+
+          <div className="disc-glass disc-card">
+            <div className="ch"><span className="ct" style={{ color: "var(--cy)" }}><span className="ci" style={{ background: "color-mix(in srgb,var(--cy) 14%,transparent)", color: "var(--cy)" }}><Pencil size={14} /></span> Anotações da ligação</span></div>
+            <div className="disc-tags">{TAGS.map((t) => <button key={t} className={"disc-tag" + (tags.includes(t) ? " on" : "")} onClick={() => toggleTag(t)} disabled={fase !== "conectado"}>+ {t}</button>)}</div>
+            <textarea className="disc-ta" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Escreva o que combinou — vira nota no cliente ao marcar o desfecho." disabled={fase !== "conectado"} />
           </div>
         </div>
-      )}
+      </div>
     </>
   );
 }
 
-// Visualizador de Waveform Dinâmico Reativo
-function WaveformVisualizer({ active }: { active: boolean }) {
-  const bars = useMemo(() => Array.from({ length: 32 }, (_, i) => i), []);
-  const [heights, setHeights] = useState<number[]>(() =>
-    Array.from({ length: 32 }, () => 8)
-  );
-
-  useEffect(() => {
-    if (!active) {
-      setHeights(Array.from({ length: 32 }, () => 6));
-      return;
-    }
-
-    let frameId: number;
-    const animate = () => {
-      const t = Date.now() / 180;
-      setHeights((prev) =>
-        prev.map((_, i) => {
-          const wave = Math.sin(t + i * 0.35) * 15 + 20;
-          const jitter = Math.random() * 10;
-          return Math.min(42, Math.max(6, wave + jitter));
-        })
-      );
-      frameId = requestAnimationFrame(animate);
-    };
-
-    frameId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frameId);
-  }, [active]);
-
-  return (
-    <div className="disc-waveform-bars">
-      {bars.map((i) => (
-        <div
-          key={i}
-          className="disc-waveform-bar"
-          style={{
-            height: `${heights[i]}px`,
-            opacity: active ? 1 : 0.35
-          }}
-        />
-      ))}
-    </div>
-  );
+function Metric({ ic, lbl, val, cls = "" }: { ic: ReactNode; lbl: string; val: ReactNode; cls?: string }) {
+  return <div className="disc-glass disc-metric"><div className={"mi " + cls}>{ic}</div><div className="ml"><span>{lbl}</span><b>{val}</b></div></div>;
+}
+function Chip({ cls, k, ic, t, d, onClick }: { cls: string; k: string; ic: ReactNode; t: string; d: string; onClick: () => void }) {
+  return <button className={"disc-chip " + cls} onClick={onClick}><div className="ch"><span className="ic">{ic}</span><kbd>[{k}]</kbd></div><div className="tt">{t}</div><div className="ds">{d}</div></button>;
 }
