@@ -121,6 +121,7 @@ function Dialer({ fila, uid, config }: { fila: Lead[]; uid: string; config: SipC
   const [nota, setNota] = useState("");
   const [manual, setManual] = useState("");
   const [mostraManual, setMostraManual] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
 
   const sessaoRef = useRef(false);
   const feitos = useRef<Set<string>>(new Set()).current;
@@ -214,6 +215,7 @@ function Dialer({ fila, uid, config }: { fila: Lead[]; uid: string; config: SipC
 
   const emSessao = fase !== "idle";
   const restamN = fila.filter((l) => !feitos.has(l.id)).length;
+  const continuando = feitos.size > 0 && restamN > 0;
 
   return (
     <>
@@ -238,17 +240,28 @@ function Dialer({ fila, uid, config }: { fila: Lead[]; uid: string; config: SipC
           {fase === "idle" && (
             <>
               <div className="disc-orb"><div className="core"><Phone size={34} /></div></div>
-              <div className="disc-big">Começar a ligar</div>
-              <p className="disc-sub2">O Comandra liga sozinho, um cliente atrás do outro. Você não escolhe pra quem — só fala quando alguém atende.</p>
-              <span className="disc-pill"><Users size={14} /> {fila.length} clientes na fila de hoje</span>
-              <button className="disc-start" disabled={!fila.length} onClick={iniciar}><PhoneOutgoing size={18} /> Iniciar sessão</button>
-              {mostraManual ? (
-                <div className="disc-ipt">
-                  <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="Número com DDD" inputMode="tel" autoFocus />
-                  <button disabled={soDig(manual).length < 10} onClick={ligarManual}>Ligar</button>
-                </div>
+              {confirmando ? (
+                <>
+                  <div className="disc-big">Ligar pros seus clientes?</div>
+                  <p className="disc-sub2">O Comandra vai ligar de verdade, um atrás do outro, começando por <b style={{ color: "var(--ink)" }}>{restamN} cliente{restamN === 1 ? "" : "s"}</b>. É só falar quando alguém atender.</p>
+                  <button className="disc-start" onClick={() => { setConfirmando(false); iniciar(); }}><PhoneOutgoing size={20} /> Sim, pode ligar</button>
+                  <button className="disc-link" onClick={() => setConfirmando(false)}>agora não</button>
+                </>
               ) : (
-                <button className="disc-link" onClick={() => setMostraManual(true)}>ou ligar um número específico</button>
+                <>
+                  <div className="disc-big">{continuando ? "Continuar a sessão" : "Começar a ligar"}</div>
+                  <p className="disc-sub2">{continuando ? "Você parou no meio — dá pra seguir de onde parou, sem repetir quem já ligou." : "O Comandra liga sozinho, um cliente atrás do outro. Você não escolhe pra quem — só fala quando alguém atende."}</p>
+                  <span className="disc-pill"><Users size={14} /> {restamN} cliente{restamN === 1 ? "" : "s"} {continuando ? "restantes" : "na fila de hoje"}</span>
+                  <button className="disc-start" disabled={!restamN} onClick={() => setConfirmando(true)}><PhoneOutgoing size={20} /> {continuando ? "Continuar" : "Iniciar sessão"}</button>
+                  {mostraManual ? (
+                    <div className="disc-ipt">
+                      <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="Número com DDD" inputMode="tel" autoFocus />
+                      <button disabled={soDig(manual).length < 10} onClick={ligarManual}>Ligar</button>
+                    </div>
+                  ) : (
+                    <button className="disc-link" onClick={() => setMostraManual(true)}>ou ligar um número específico</button>
+                  )}
+                </>
               )}
             </>
           )}
