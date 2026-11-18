@@ -1128,6 +1128,11 @@ html[data-theme="dark"] .cockpit-v3 {
   padding-top: 14px;
   margin-top: -14px;
 }
+/* MOBILE (18/11): o cabeçalho (título + "entrar como" + período) NÃO fica mais congelado —
+   rola junto com a tela, devolvendo o espaço que as barras fixas de cima/baixo tiravam. */
+@media (max-width: 860px) {
+  .mgr10 .cockpit-v3-header, .mgr10 .time-v3-header { position: static; margin-top: 0; padding-top: 2px; }
+}
 
 /* Chave da roleta na Tabela da Tropa (19/10): existia sem estilo e ficava invisível */
 .mgr10 button.time-roleta-toggle{position:relative;display:inline-flex;align-items:center;width:46px;height:26px;padding:0;border-radius:99px;border:0;cursor:pointer;transition:background .15s;vertical-align:middle}
