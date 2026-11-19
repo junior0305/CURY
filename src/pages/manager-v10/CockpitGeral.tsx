@@ -7,6 +7,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import SoltarRepresados from "@/components/plantao/SoltarRepresados";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
@@ -341,6 +342,8 @@ export default function CockpitGeral() {
           </div>
           <SeletorPeriodo />
         </header>
+
+        <SoltarRepresados />
 
         {/* ── cartões ── */}
         <section className="cg-cards">

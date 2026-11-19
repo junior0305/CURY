@@ -1,0 +1,22 @@
+/* Botão "Soltar leads" + prévia (Fase 2). Teal que lê bem no cockpit escuro e no Leads claro. */
+.srep{--sr-teal:#0E7C7B;border:1px solid color-mix(in srgb,var(--sr-teal) 36%,transparent);
+  background:color-mix(in srgb,var(--sr-teal) 9%,transparent);border-radius:14px;padding:12px 14px;margin-bottom:14px;
+  font-family:"Public Sans",system-ui,sans-serif}
+.srep-top{display:flex;align-items:center;gap:12px}
+.srep-ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--sr-teal);color:#fff;flex-shrink:0}
+.srep-tx{flex:1;min-width:0}
+.srep-tx b{display:block;font-size:14.5px;font-family:"Archivo",system-ui,sans-serif;line-height:1.2}
+.srep-tx span{display:block;font-size:12px;opacity:.72;margin-top:2px}
+.srep-b{background:var(--sr-teal);color:#fff;font-weight:800;border:none;border-radius:10px;padding:9px 16px;font-size:13.5px;cursor:pointer;flex-shrink:0;font-family:inherit}
+.srep-b:hover{filter:brightness(1.08)}
+.srep-prev{margin-top:12px;padding-top:12px;border-top:1px dashed color-mix(in srgb,var(--sr-teal) 30%,transparent)}
+.srep-ph{font-size:12px;opacity:.72;margin-bottom:9px}
+.srep-grid{display:flex;flex-direction:column;gap:6px;margin-bottom:13px}
+.srep-row{display:flex;align-items:center;gap:10px;font-size:13.5px}
+.srep-n{font-family:"JetBrains Mono",monospace;font-size:12px;opacity:.6;width:26px;flex-shrink:0}
+.srep-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srep-q{font-family:"JetBrains Mono",monospace;font-weight:800;color:var(--sr-teal);background:color-mix(in srgb,var(--sr-teal) 15%,transparent);border-radius:8px;padding:2px 11px;flex-shrink:0}
+.srep-conf{width:100%;background:var(--sr-teal);color:#fff;font-weight:800;border:none;border-radius:11px;padding:11px;font-size:14px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.srep-conf:disabled{opacity:.6;cursor:wait}
+.srep .spin{animation:srep-spin 1s linear infinite}
+@keyframes srep-spin{to{transform:rotate(360deg)}}
