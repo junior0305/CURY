@@ -31,8 +31,9 @@ export default function SoltarRepresados({ como: comoProp }: { como?: string | n
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  if (!d || !d.represa_on || !d.total) return null;
+  if (!d || !d.represa_on) return null;
   const manual = d.liberacao === "manual";
+  const vazio = !d.total;
 
   async function soltar() {
     setSoltando(true);
@@ -52,12 +53,21 @@ export default function SoltarRepresados({ como: comoProp }: { como?: string | n
       <div className="srep-top">
         <div className="srep-ic"><Inbox size={18} /></div>
         <div className="srep-tx">
-          <b>{d.total} lead{d.total > 1 ? "s" : ""} represado{d.total > 1 ? "s" : ""}</b>
-          <span>{manual ? "você solta quando quiser" : `solta sozinho às ${d.abre}`} · divisão por {d.modo === "sorteio" ? "sorteio" : "ordem de chegada"}</span>
+          {vazio ? (
+            <>
+              <b>Represa ligada · nada segurando agora</b>
+              <span>os leads do rodízio seguram das 21h até às {d.abre} — o botão de soltar aparece aqui</span>
+            </>
+          ) : (
+            <>
+              <b>{d.total} lead{d.total > 1 ? "s" : ""} represado{d.total > 1 ? "s" : ""}</b>
+              <span>{manual ? "você solta quando quiser" : `solta sozinho às ${d.abre}`} · divisão por {d.modo === "sorteio" ? "sorteio" : "ordem de chegada"}</span>
+            </>
+          )}
         </div>
-        <button className="srep-b" onClick={() => setAberto((a) => !a)}>{aberto ? "Fechar" : manual ? "Soltar leads" : "Soltar agora"}</button>
+        {!vazio && <button className="srep-b" onClick={() => setAberto((a) => !a)}>{aberto ? "Fechar" : manual ? "Soltar leads" : "Soltar agora"}</button>}
       </div>
-      {aberto && (
+      {!vazio && aberto && (
         <div className="srep-prev">
           <div className="srep-ph">Se soltar agora, fica assim:</div>
           <div className="srep-grid">
