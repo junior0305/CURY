@@ -25,6 +25,9 @@ export default function RegraPlantao({ como }: { como: string | null }) {
   const [represa, setRepresa] = useState(false);
   const [exige, setExige] = useState(false);
   const [liberacao, setLiberacao] = useState<"auto" | "manual">("auto");
+  const [temR2, setTemR2] = useState(false);
+  const [r2abre, setR2abre] = useState("14:00");
+  const [r2modo, setR2modo] = useState<"login" | "sorteio">("login");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -34,6 +37,9 @@ export default function RegraPlantao({ como }: { como: string | null }) {
     setRepresa(!!data.represa_on);
     setExige(!!data.exige_liberacao);
     setLiberacao(data.liberacao === "manual" ? "manual" : "auto");
+    setTemR2(!!data.tem_roleta2);
+    setR2abre(data.roleta2_abre || "14:00");
+    setR2modo(data.roleta2_modo === "sorteio" ? "sorteio" : "login");
   }, [data]);
 
   const custom = !PRESETS.includes(abre);
@@ -41,7 +47,7 @@ export default function RegraPlantao({ como }: { como: string | null }) {
 
   async function salvar() {
     setSaving(true);
-    const { error } = await sb.rpc("plantao_config_salvar", { p_exige: exige, p_como: como, p_abre: abre || "09:00", p_modo: modo, p_represa: represa, p_liberacao: liberacao });
+    const { error } = await sb.rpc("plantao_config_salvar", { p_exige: exige, p_como: como, p_abre: abre || "09:00", p_modo: modo, p_represa: represa, p_liberacao: liberacao, p_r2: temR2, p_r2abre: r2abre || "14:00", p_r2modo: r2modo });
     setSaving(false);
     if (error) {
       const m = String(error.message || "");
@@ -112,8 +118,35 @@ export default function RegraPlantao({ como }: { como: string | null }) {
         {exige && <div className="rp-sub">Entra como <b>“aguardando”</b> (não recebe). Você admite e ele vai <b>pro fim da fila</b> — sem furar quem já estava.</div>}
       </div>
 
+      {/* roleta 2 (tarde) */}
+      <div className="rp-card">
+        <div className="rp-row">
+          <div className="rp-ct" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}><div className="rp-ci"><Clock size={18} /></div><div><b>Tem 2ª roleta (tarde)?</b><span style={{ display: "block", fontSize: "12.5px", color: "var(--mut)", marginTop: 2, lineHeight: 1.5 }}>Um 2º turno, <b>sem represa</b> — novo sorteio ou ordem de chegada. Também separa os relatórios (1ª × 2ª roleta).</span></div></div>
+          <div className={"rp-tg" + (temR2 ? " on" : "")} onClick={() => setTemR2(!temR2)} />
+        </div>
+        {temR2 && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px dashed var(--line)" }}>
+            <b style={{ fontSize: "13px" }}>Começa às</b>
+            <div className="rp-chips" style={{ marginTop: 8 }}>
+              {["13:30", "14:00"].map((h) => <button key={h} className={"rp-chip" + (r2abre === h ? " on" : "")} onClick={() => setR2abre(h)}>{h}</button>)}
+              <button className={"rp-chip" + (!["13:30", "14:00"].includes(r2abre) ? " on" : "")} onClick={() => setR2abre(["13:30", "14:00"].includes(r2abre) ? "15:00" : r2abre)}><Clock4 size={13} /> Escolher</button>
+            </div>
+            {!["13:30", "14:00"].includes(r2abre) && <div className="rp-custom" style={{ display: "flex", marginTop: 10 }}><span>Começa às</span><input type="time" value={r2abre} onChange={(e) => setR2abre(e.target.value || "15:00")} /></div>}
+            <b style={{ fontSize: "13px", display: "block", margin: "16px 0 8px" }}>Como distribui às {r2abre}</b>
+            <div className="rp-modos">
+              <button className={"rp-modo" + (r2modo === "login" ? " on" : "")} onClick={() => setR2modo("login")}>
+                <div className="rd" /><div className="mi"><LogIn size={17} /></div><b>Ordem de chegada</b><span>Quem chega depois entra no fim da fila.</span>
+              </button>
+              <button className={"rp-modo" + (r2modo === "sorteio" ? " on" : "")} onClick={() => setR2modo("sorteio")}>
+                <div className="rd" /><div className="mi"><Dices size={17} /></div><b>Novo sorteio</b><span>Às {r2abre}, embaralha de novo todo mundo presente.</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* resumo */}
-      <div className="rp-resumo"><div className="rp-ri"><Sparkles size={20} /></div><div className="rp-rt"><b>Resumo</b><p>Abre <span>{abre}</span> · distribui <span>{modoTxt}</span>{represa ? <> · <span>segurando</span> até abrir{liberacao === "manual" ? <> (<span>você solta</span>)</> : <> (<span>solta sozinho</span>)</>}</> : <> · <span>sem represa</span> (cai na hora)</>}{exige ? " · atrasado precisa de liberação." : " · atrasado entra direto no fim."}</p></div></div>
+      <div className="rp-resumo"><div className="rp-ri"><Sparkles size={20} /></div><div className="rp-rt"><b>Resumo</b><p>Abre <span>{abre}</span> · distribui <span>{modoTxt}</span>{represa ? <> · <span>segurando</span> até abrir{liberacao === "manual" ? <> (<span>você solta</span>)</> : <> (<span>solta sozinho</span>)</>}</> : <> · <span>sem represa</span> (cai na hora)</>}{exige ? " · atrasado precisa de liberação." : " · atrasado entra direto no fim."}{temR2 ? <> · <span>2ª roleta {r2abre}</span> ({r2modo === "sorteio" ? "sorteio" : "chegada"})</> : ""}</p></div></div>
 
       <div className="rp-salvar"><button className="rp-b1" onClick={salvar} disabled={saving}>{saving ? "Salvando…" : "Salvar regra da equipe"}</button></div>
       <p style={{ fontSize: "11.5px", color: "var(--mut)", marginTop: 10, lineHeight: 1.5, maxWidth: 720 }}>A regra vale pra <b>sua equipe</b>. A tela de ordem/ponteiro (quem é a vez) e o motor que distribui por essa regra entram na sequência.</p>
