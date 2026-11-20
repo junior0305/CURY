@@ -61,12 +61,14 @@ export default function DiscadorSessao({ leads }: { leads: Lead[] }) {
     queryFn: async () => {
       const { data: auth } = await supabase.auth.getUser();
       const uid = auth.user?.id || "";
-      const [{ data: prof }, cfg] = await Promise.all([
+      const [{ data: prof }, cfg, membro] = await Promise.all([
         supabase.from("profiles").select("manager_id, first_name").eq("id", uid).maybeSingle(),
         supabase.functions.invoke("discador-sip-config", { body: {} }),
+        supabase.rpc("discador_sou_membro"),
       ]);
-      const liberado = !cfg.error && !!(cfg.data as any)?.server;
-      return { uid, liberado, config: (cfg.data as SipConfig) || null, managerId: (prof as any)?.manager_id ?? null, nome: (prof as any)?.first_name ?? null, licencaPropria: !!(cfg.data as any)?.licenca_propria };
+      const poolMembro = !!(membro.data as any)?.membro;                 // está no bolo de linhas da equipe
+      const liberado = poolMembro || (!cfg.error && !!(cfg.data as any)?.server);
+      return { uid, liberado, poolMembro, config: (cfg.data as SipConfig) || null, managerId: (prof as any)?.manager_id ?? null, nome: (prof as any)?.first_name ?? null, licencaPropria: !!(cfg.data as any)?.licenca_propria };
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -79,7 +81,7 @@ export default function DiscadorSessao({ leads }: { leads: Lead[] }) {
       ) : !lic?.liberado ? (
         <GateLiberacao uid={lic?.uid} managerId={lic?.managerId} nome={lic?.nome} />
       ) : (
-        <Dialer fila={fila} uid={lic.uid} config={lic.config!} brokerNome={lic.nome} licencaPropria={lic.licencaPropria} />
+        <Dialer fila={fila} uid={lic.uid} config={lic.config} poolMembro={lic.poolMembro} brokerNome={lic.nome} licencaPropria={lic.licencaPropria} />
       )}
     </div>
   );
@@ -110,8 +112,16 @@ function GateLiberacao({ uid, managerId, nome }: { uid?: string; managerId?: str
 
 type Fase = "idle" | "discando" | "conectado" | "desfecho" | "vitoria" | "carregar";
 
-function Dialer({ fila, uid, config, brokerNome, licencaPropria }: { fila: Lead[]; uid: string; config: SipConfig; brokerNome?: string | null; licencaPropria?: boolean }) {
-  const engine = useMemo(() => new WebRTCDialerEngine(async () => config), [config]);
+function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: { fila: Lead[]; uid: string; config: SipConfig | null; poolMembro?: boolean; brokerNome?: string | null; licencaPropria?: boolean }) {
+  // Pool member: a credencial SIP vem de uma LINHA emprestada pelo porteiro (não do ramal fixo).
+  const cfgRef = useRef<SipConfig | null>(poolMembro ? null : config);
+  const linhaIdRef = useRef<string | null>(null);
+  const hbTimer = useRef<number | null>(null);
+  const esperaTimer = useRef<number | null>(null);
+  const [aguardando, setAguardando] = useState(false);
+  const engine = useMemo(() => new WebRTCDialerEngine(async () => {
+    const c = cfgRef.current; if (!c) throw new Error("sem linha"); return c;
+  }), []);
   const [fase, setFase] = useState<Fase>("idle");
   const [atual, setAtual] = useState<Lead | null>(null);
   const [avulso, setAvulso] = useState<CallTarget | null>(null);
@@ -212,8 +222,46 @@ function Dialer({ fila, uid, config, brokerNome, licencaPropria }: { fila: Lead[
     else encerrar();
   }
 
-  function iniciar() { setConfirmando(false); sessaoRef.current = true; proximo(); }
-  function encerrar() { sessaoRef.current = false; limparTimers(); engine.hangup().catch(() => {}); poolBatch.current = []; setFase("idle"); setAtual(null); setAvulso(null); setPoolAtual(null); }
+  // ---- PORTEIRO (bolo de linhas da equipe) ----
+  function pararHeartbeat() { if (hbTimer.current) { clearInterval(hbTimer.current); hbTimer.current = null; } }
+  function pararEspera() { if (esperaTimer.current) { clearTimeout(esperaTimer.current); esperaTimer.current = null; } }
+  async function soltarLinha() {
+    pararHeartbeat();
+    const id = linhaIdRef.current;
+    if (!id) return;
+    linhaIdRef.current = null; cfgRef.current = null;
+    try { await supabase.rpc("discador_linha_soltar", { p_linha: id }); } catch { /* 75s de staleness recupera */ }
+    try { await (engine as any).destruir?.(); } catch { /* */ }
+  }
+  async function tentarLinhaEComecar() {
+    try {
+      const { data, error } = await supabase.rpc("discador_linha_pegar");
+      const d = data as any;
+      if (error || !d || d.esperar || !d.linha_id) {   // as 2 linhas ocupadas → espera e tenta de novo
+        setAguardando(true);
+        esperaTimer.current = window.setTimeout(tentarLinhaEComecar, 5000);
+        return;
+      }
+      pararEspera(); setAguardando(false);
+      linhaIdRef.current = d.linha_id;
+      cfgRef.current = { server: d.server, domain: d.domain, user: d.user, password: d.password };
+      try { await (engine as any).destruir?.(); } catch { /* */ }   // re-registra com a credencial da linha emprestada
+      hbTimer.current = window.setInterval(() => { const id = linhaIdRef.current; if (id) supabase.rpc("discador_linha_heartbeat", { p_linha: id }).catch(() => {}); }, 25000);
+      sessaoRef.current = true;
+      proximo();
+    } catch {
+      setAguardando(true);
+      esperaTimer.current = window.setTimeout(tentarLinhaEComecar, 5000);
+    }
+  }
+  function cancelarEspera() { pararEspera(); setAguardando(false); }
+
+  function iniciar() {
+    setConfirmando(false);
+    if (poolMembro) { tentarLinhaEComecar(); return; }   // pega uma linha livre antes de começar
+    sessaoRef.current = true; proximo();
+  }
+  function encerrar() { sessaoRef.current = false; limparTimers(); pararEspera(); setAguardando(false); engine.hangup().catch(() => {}); poolBatch.current = []; setFase("idle"); setAtual(null); setAvulso(null); setPoolAtual(null); if (poolMembro) soltarLinha(); }
   function toggleMute() { const m = !muted; setMuted(m); engine.setMuted(m); }
   function toggleTag(t: string) { setTags((p) => p.includes(t) ? p.filter((x) => x !== t) : [...p, t]); }
 
@@ -288,7 +336,7 @@ function Dialer({ fila, uid, config, brokerNome, licencaPropria }: { fila: Lead[
   }
 
   // cleanup
-  useEffect(() => () => { limparTimers(); (engine as any).destruir?.(); }, [engine]);
+  useEffect(() => () => { limparTimers(); pararHeartbeat(); pararEspera(); const id = linhaIdRef.current; if (id) supabase.rpc("discador_linha_soltar", { p_linha: id }).catch(() => {}); (engine as any).destruir?.(); }, [engine]);
 
   // atalhos de teclado (lê pelos refs pra não ficar stale)
   const apiRef = useRef<any>({});
@@ -344,7 +392,17 @@ function Dialer({ fila, uid, config, brokerNome, licencaPropria }: { fila: Lead[
           {/* IDLE */}
           {fase === "idle" && (
             <div className="disc-stage">
-              {subindo ? (
+              {aguardando ? (
+                <>
+                  <div className="disc-radar"><span className="w" /><span className="w" /><span className="w" /><div className="core"><Clock size={28} /></div></div>
+                  <div style={{ maxWidth: 380 }}>
+                    <span className="disc-badge">Fila de linha</span>
+                    <h2 className="disc-h2" style={{ marginTop: 10 }}>As 2 linhas estão em uso</h2>
+                    <p className="disc-lead" style={{ marginTop: 8 }}>Sua equipe liga em <b style={{ color: "var(--ink)" }}>2 ao mesmo tempo</b>. Assim que uma liberar, você entra automático e começa a discar. Pode deixar aberto nesta tela.</p>
+                  </div>
+                  <button className="disc-ghost" onClick={cancelarEspera}><Square size={16} /> Cancelar</button>
+                </>
+              ) : subindo ? (
                 <>
                   <div className="disc-orb"><div className="halo" style={{ opacity: .15 }} /><div className="core" style={{ color: "var(--cy)" }}><Upload size={42} /></div></div>
                   <div style={{ maxWidth: 420 }}>
