@@ -88,10 +88,10 @@ export default function RegraPlantao({ como }: { como: string | null }) {
       {/* represa */}
       <div className="rp-card">
         <div className="rp-row">
-          <div className="rp-ct" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}><div className="rp-ci"><Pause size={18} /></div><div><b>Segurar leads antes de abrir</b><span style={{ display: "block", fontSize: "12.5px", color: "var(--mut)", marginTop: 2, lineHeight: 1.5 }}>Da noite até a hora de abrir, os leads esperam em vez de cair pra quem estiver online.</span></div></div>
+          <div className="rp-ct" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}><div className="rp-ci"><Pause size={18} /></div><div><b>Segurar leads (represa)</b><span style={{ display: "block", fontSize: "12.5px", color: "var(--mut)", marginTop: 2, lineHeight: 1.5 }}>A noite — e sempre que <b>ninguém da equipe estiver logado</b> — os leads esperam em vez de cair pra quem não está. Logado = fez check-in hoje e está online.</span></div></div>
           <div className={"rp-tg" + (represa ? " on" : "")} onClick={() => setRepresa(!represa)} />
         </div>
-        {represa && <div className="rp-sub">Segurando das <b>21:00</b> até <b>{abre}</b>. Fila de formulário/página do gerente continua entregando na hora.</div>}
+        {represa && <div className="rp-sub">{liberacao === "manual" ? <><b>Todos</b> os leads ficam represados até <b>você soltar</b> no botão — não solta por horário nem por login.</> : <>Segurando das <b>21:00</b> até <b>{abre}</b>, e sempre que <b>ninguém da equipe estiver logado</b>. Solta sozinho pros presentes conforme cada um entra.</>} Fila de formulário/página do gerente continua entregando na hora.</div>}
       </div>
 
       {/* liberação (só quando represa ligada) */}
@@ -100,10 +100,10 @@ export default function RegraPlantao({ como }: { como: string | null }) {
           <div className="rp-ch"><div className="rp-ci"><PlayCircle size={18} /></div><div className="rp-ct"><b>Liberação dos represados</b><span>Na hora de abrir, o sistema solta sozinho ou você aperta o botão?</span></div></div>
           <div className="rp-modos">
             <button className={"rp-modo" + (liberacao === "auto" ? " on" : "")} onClick={() => setLiberacao("auto")}>
-              <div className="rd" /><div className="mi"><Clock3 size={17} /></div><b>Automática</b><span>Na hora marcada, solta os leads sozinho.</span>
+              <div className="rd" /><div className="mi"><Clock3 size={17} /></div><b>Automática</b><span>Solta na hora marcada e conforme a equipe vai logando. Ninguém logado → segura até alguém entrar.</span>
             </button>
             <button className={"rp-modo" + (liberacao === "manual" ? " on" : "")} onClick={() => setLiberacao("manual")}>
-              <div className="rd" /><div className="mi"><Hand size={17} /></div><b>Eu solto (manual)</b><span>Os leads esperam até você clicar em “Soltar leads” no seu painel.</span>
+              <div className="rd" /><div className="mi"><Hand size={17} /></div><b>Eu solto (manual)</b><span><b>Todo</b> lead fica represado até você clicar em “Soltar leads”. Nunca solta por horário nem por login — sempre você.</span>
             </button>
           </div>
         </div>
@@ -146,7 +146,7 @@ export default function RegraPlantao({ como }: { como: string | null }) {
       </div>
 
       {/* resumo */}
-      <div className="rp-resumo"><div className="rp-ri"><Sparkles size={20} /></div><div className="rp-rt"><b>Resumo</b><p>Abre <span>{abre}</span> · distribui <span>{modoTxt}</span>{represa ? <> · <span>segurando</span> até abrir{liberacao === "manual" ? <> (<span>você solta</span>)</> : <> (<span>solta sozinho</span>)</>}</> : <> · <span>sem represa</span> (cai na hora)</>}{exige ? " · atrasado precisa de liberação." : " · atrasado entra direto no fim."}{temR2 ? <> · <span>2ª roleta {r2abre}</span> ({r2modo === "sorteio" ? "sorteio" : "chegada"})</> : ""}</p></div></div>
+      <div className="rp-resumo"><div className="rp-ri"><Sparkles size={20} /></div><div className="rp-rt"><b>Resumo</b><p>Abre <span>{abre}</span> · distribui <span>{modoTxt}</span>{represa ? (liberacao === "manual" ? <> · <span>segurando tudo</span> (<span>você solta</span>)</> : <> · <span>segurando</span> até abrir / sem ninguém logado (<span>solta sozinho</span>)</>) : <> · <span>sem represa</span> (cai na hora)</>}{exige ? " · atrasado precisa de liberação." : " · atrasado entra direto no fim."}{temR2 ? <> · <span>2ª roleta {r2abre}</span> ({r2modo === "sorteio" ? "sorteio" : "chegada"})</> : ""}</p></div></div>
 
       <div className="rp-salvar"><button className="rp-b1" onClick={salvar} disabled={saving}>{saving ? "Salvando…" : "Salvar regra da equipe"}</button></div>
       <p style={{ fontSize: "11.5px", color: "var(--mut)", marginTop: 10, lineHeight: 1.5, maxWidth: 720 }}>A regra vale pra <b>sua equipe</b>. A tela de ordem/ponteiro (quem é a vez) e o motor que distribui por essa regra entram na sequência.</p>
