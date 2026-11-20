@@ -347,6 +347,11 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
                   <td style={{ minWidth: 170 }}>
                     <div className="bc-bar"><div style={{ width: `${l.total ? Math.round((feitos / l.total) * 100) : 0}%` }} /></div>
                     <small>{feitos} de {l.total} {l.destino === "pool" ? "pescados" : "caíram"} · {l.status === "pausada" ? "pausada" : l.status === "concluida" ? "concluída" : "ativa"}</small>
+                    {l.destino !== "pool" && l.status === "ativa" && (() => {
+                      const prox = l.proximo_em ? new Date(l.proximo_em) : null;
+                      const txt = !prox ? "—" : (prox.getTime() <= Date.now() ? "agora" : prox.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }));
+                      return <small style={{ display: "block", marginTop: 3, fontWeight: 700, color: "#0E9F8E" }}>🟢 Hoje {l.hoje ?? 0}/{l.max_dia} · próxima {txt} · {l.restantes} na fila</small>;
+                    })()}
                   </td>
                   <td className="m">{l.viraram_lead}</td>
                   <td className="m">{l.com_contato} · {l.visitas} · {l.vendas}</td>
