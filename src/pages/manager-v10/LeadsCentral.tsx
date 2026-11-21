@@ -120,6 +120,7 @@ export default function LeadsCentral() {
   const nmTabRef = useRef<Record<string, string>>({});
   const filtroRef = useRef<{ seg: string; page: number; q: string; cor: string }>({ seg: "todos", page: 1, q: "", cor: "" });
   const renderRef = useRef<() => void>(() => {});
+  const periodoRef = useRef<string>("Hoje");
 
   // escopo: gerente vê a própria equipe (manager_id); super/diretor/admin deixam o RLS filtrar,
   // salvo "entrar como / drill" (?manager=<id>), que limita àquele gerente.
@@ -176,7 +177,7 @@ export default function LeadsCentral() {
   }, []);
   renderRef.current = renderTabela;
 
-  const carregar = useCallback(async (nome: string) => {
+  const carregar = useCallback(async (nome: string, keep = false) => {
     const root = box.current; if (!root) return;
     const [de, ate] = faixa(nome);
     let q = sb.from("leads")
@@ -232,8 +233,9 @@ export default function LeadsCentral() {
       selCor.innerHTML = `<option value="">Todos os Corretores</option>` + nomes.map((n) => `<option value="${esc(n.toLowerCase())}">${esc(n)}</option>`).join("");
     }
 
-    // TABELA — reset do filtro e render (controlada por renderTabela)
-    filtroRef.current = { seg: "todos", page: 1, q: "", cor: "" };
+    // TABELA — reset do filtro e render (controlada por renderTabela).
+    // No auto-refresh (keep) preserva o filtro/página que o gestor está usando.
+    if (!keep) filtroRef.current = { seg: "todos", page: 1, q: "", cor: "" };
     renderRef.current();
 
     // COPILOTO (topo) — insight real simples: corretor com mais leads sem toque
@@ -604,6 +606,7 @@ export default function LeadsCentral() {
     const orig = (window as any).selecionarPeriodo;
     (window as any).selecionarPeriodo = (nomeP: string, el: any) => {
       try { if (orig) orig(nomeP, el); } catch { /* ok */ }
+      periodoRef.current = nomeP;
       periodFns.current.carregar(nomeP);
       periodFns.current.resultados(nomeP);
     };
@@ -643,7 +646,8 @@ export default function LeadsCentral() {
     justica();
     filas();
     anuncios();
-    const t = setInterval(() => { pulso(); justica(); }, 60_000);
+    // refresca junto o funil/tabela do período atual (preservando filtro), pra não divergir do "entraram" do Hoje
+    const t = setInterval(() => { pulso(); justica(); carregar(periodoRef.current, true); }, 60_000);
     return () => clearInterval(t);
   }, [role, scopeManager, carregar, pulso, justica, resultados, filas, anuncios]);
 
