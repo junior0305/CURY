@@ -9,6 +9,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { CSS, HTML, JS } from "./leadsMockup";
 
+// garante a data grudada no topo ao rolar + token --good p/ a tabela da justiça
+const STY = `.mlr .sticky-header-bar{position:sticky;top:0;z-index:950;background:var(--bg)}.mlr{--good:#10B981}`;
+
 const sb = supabase as any;
 
 type Lead = {
@@ -271,49 +274,85 @@ export default function LeadsCentral() {
     }).join("");
   }, [scopeManager]);
 
-  // RESULTADOS — Tendência (período atual × anterior), real a partir de leads
+  // RESULTADOS — tudo real a partir dos leads do período (tendência, conversão por canal,
+  // quem mais transforma, 1ª resposta). Venda/meta/custo marcados (Junix/Facebook).
   const resultados = useCallback(async (nome: string) => {
     const root = box.current; if (!root) return;
     const view = root.querySelector("#view-resultados"); if (!view) return;
-    const carrega = async (de: string, ate: string) => {
-      let q = sb.from("leads").select("last_broker_whatsapp_at,visit_scheduled_at,status")
-        .gte("created_at", de).lt("created_at", ate).not("status", "in", "(EXCLUDED,ABANDONED)").limit(20000);
-      if (scopeManager) q = q.eq("manager_id", scopeManager);
-      const { data } = await q;
-      const ls = (data ?? []) as any[];
-      return { total: ls.length, resp: ls.filter((l) => l.last_broker_whatsapp_at).length, vis: ls.filter((l) => l.visit_scheduled_at).length };
-    };
     const [de, ate] = faixa(nome), [pde, pate] = faixaAnt(nome);
-    const [a, b] = await Promise.all([carrega(de, ate), carrega(pde, pate)]);
-    const pctResp = (x: { total: number; resp: number }) => x.total ? Math.round((x.resp / x.total) * 100) : 0;
-    const deltaN = (now: number, prev: number) => prev ? Math.round(((now - prev) / prev) * 100) : 0;
-    const rows = view.querySelectorAll<HTMLElement>(".trend-row");
-    const setRow = (el: HTMLElement | undefined, val: string, up: boolean | null, delta: string) => {
-      if (!el) return;
-      const bb = el.querySelector("b"); if (bb) bb.textContent = val;
-      const tr = el.querySelector(".tr"); if (tr) { tr.textContent = delta; (tr as HTMLElement).className = "tr " + (up == null ? "" : up ? "up" : "down"); }
-    };
-    setRow(rows[0], a.total.toLocaleString("pt-BR"), a.total >= b.total, `${a.total >= b.total ? "↑" : "↓"} ${Math.abs(deltaN(a.total, b.total))}%`);
-    setRow(rows[1], pctResp(a) + "%", pctResp(a) >= pctResp(b), `${pctResp(a) >= pctResp(b) ? "↑" : "↓"} ${Math.abs(pctResp(a) - pctResp(b))}pp`);
-    setRow(rows[2], String(a.vis), a.vis >= b.vis, `${a.vis >= b.vis ? "↑" : "↓"} ${Math.abs(deltaN(a.vis, b.vis))}%`);
-    setRow(rows[3], "—", null, "Junix");
-    // neutraliza o que ainda depende de Junix/Facebook (sem número de mentira)
+    const campos = "source,broker_id,last_broker_whatsapp_at,visit_scheduled_at,created_at,primeiro_contato_em,atribuido_em";
+    const qAtual = () => { let q = sb.from("leads").select(campos).gte("created_at", de).lt("created_at", ate).not("status", "in", "(EXCLUDED,ABANDONED)").limit(20000); if (scopeManager) q = q.eq("manager_id", scopeManager); return q; };
+    const qPrev = () => { let q = sb.from("leads").select("last_broker_whatsapp_at,visit_scheduled_at").gte("created_at", pde).lt("created_at", pate).not("status", "in", "(EXCLUDED,ABANDONED)").limit(20000); if (scopeManager) q = q.eq("manager_id", scopeManager); return q; };
+    let pq = sb.from("profiles").select("id,first_name,manager_id").eq("role", "BROKER");
+    if (scopeManager) pq = pq.eq("manager_id", scopeManager);
+    const [{ data: dA }, { data: dP }, { data: pf }] = await Promise.all([qAtual(), qPrev(), pq]);
+    const ls = (dA ?? []) as any[], prev = (dP ?? []) as any[];
+    const nmP: Record<string, string> = {}, mgrOf: Record<string, string | null> = {};
+    (pf ?? []).forEach((p: any) => { nmP[p.id] = p.first_name || "corretor"; mgrOf[p.id] = p.manager_id || null; });
+    const pctN = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
+    const deltaN = (a: number, b: number) => (b ? Math.round(((a - b) / b) * 100) : 0);
+    const find = (re: RegExp) => { let r: Element | null = null; view.querySelectorAll(".panel-box").forEach((p) => { const h = p.querySelector("h3"); if (h && re.test(h.textContent || "")) r = p; }); return r; };
+
+    const total = ls.length, resp = ls.filter((l) => l.last_broker_whatsapp_at).length, vis = ls.filter((l) => l.visit_scheduled_at).length;
+    const pTotal = prev.length, pResp = prev.filter((l) => l.last_broker_whatsapp_at).length, pVis = prev.filter((l) => l.visit_scheduled_at).length;
+
+    // TENDÊNCIA
+    const tp = find(/tend/i);
+    if (tp) {
+      const rows = tp.querySelectorAll<HTMLElement>(".trend-row");
+      const setRow = (el: HTMLElement | undefined, val: string, up: boolean | null, delta: string) => {
+        if (!el) return;
+        const bb = el.querySelector("b"); if (bb) bb.textContent = val;
+        const tr = el.querySelector(".tr"); if (tr) { tr.textContent = delta; (tr as HTMLElement).className = "tr " + (up == null ? "" : up ? "up" : "down"); }
+      };
+      setRow(rows[0], total.toLocaleString("pt-BR"), total >= pTotal, `${total >= pTotal ? "↑" : "↓"} ${Math.abs(deltaN(total, pTotal))}%`);
+      setRow(rows[1], pctN(resp, total) + "%", pctN(resp, total) >= pctN(pResp, pTotal), `${pctN(resp, total) >= pctN(pResp, pTotal) ? "↑" : "↓"} ${Math.abs(pctN(resp, total) - pctN(pResp, pTotal))}pp`);
+      setRow(rows[2], String(vis), vis >= pVis, `${vis >= pVis ? "↑" : "↓"} ${Math.abs(deltaN(vis, pVis))}%`);
+      setRow(rows[3], "—", null, "Junix");
+      const rod = tp.querySelector("p"); if (rod) rod.textContent = pctN(resp, total) < pctN(pResp, pTotal) ? "A % de resposta caiu — time atendendo pior, não lead pior." : "A % de resposta está estável ou subindo.";
+    }
+
+    // CONVERSÃO POR CANAL
+    const canalDe = (s: string) => (({ facebook_make: "📣 Anúncio (Meta)", lista: "🎣 Pescaria (repesca)", resgate: "♻️ Resgate", disparo: "📢 Disparo WhatsApp", whatsapp: "📢 Disparo WhatsApp", discador: "📞 Discador (ligações)", plantao: "🏪 Plantão (estande)", checkin: "🏪 Plantão (estande)", indicacao: "🤝 Indicação" } as any)[s] || (s || "Outros"));
+    const porCanal: Record<string, { n: number; r: number; v: number }> = {};
+    ls.forEach((l) => { const c = canalDe(l.source); const o = porCanal[c] || (porCanal[c] = { n: 0, r: 0, v: 0 }); o.n++; if (l.last_broker_whatsapp_at) o.r++; if (l.visit_scheduled_at) o.v++; });
+    const cp = find(/convers.*canal/i);
+    if (cp) { const tb = cp.querySelector("tbody"); if (tb) { const arr = Object.entries(porCanal).sort((a, b) => b[1].n - a[1].n);
+      tb.innerHTML = arr.length ? arr.map(([c, o]) => { const rp = pctN(o.r, o.n), vp = pctN(o.v, o.n); const bom = rp >= 25, ruim = rp < 15; const ver = bom ? "melhor retorno" : ruim ? "o que menos converte" : "volume, qualidade média"; const col = bom ? "var(--good)" : ruim ? "var(--rose)" : "var(--amber)"; return `<tr><td><b>${esc(c)}</b></td><td class="mono">${o.n}</td><td class="mono" style="color:${col}">${rp}%</td><td class="mono">${vp}%</td><td class="mono" style="color:var(--text-dim)">—</td><td><span style="color:${col};font-weight:700">${ver}</span></td></tr>`; }).join("") : `<tr><td colspan="6" style="padding:16px;color:var(--text-dim)">Sem leads no período.</td></tr>`;
+    }}
+
+    // QUEM MAIS TRANSFORMA
+    const porB: Record<string, { n: number; v: number }> = {};
+    ls.forEach((l) => { if (!l.broker_id) return; const o = porB[l.broker_id] || (porB[l.broker_id] = { n: 0, v: 0 }); o.n++; if (l.visit_scheduled_at) o.v++; });
+    const qt = find(/quem mais transforma/i);
+    if (qt) { const tb = qt.querySelector("tbody"); if (tb) {
+      const arr = Object.entries(porB).filter(([, o]) => o.n >= 5).map(([id, o]) => ({ id, n: o.n, taxa: o.v / o.n })).sort((a, b) => b.taxa - a.taxa).slice(0, 8);
+      const mgrIds = [...new Set(arr.map((r) => mgrOf[r.id]).filter(Boolean))] as string[];
+      const mgrN: Record<string, string> = {};
+      if (mgrIds.length) { const { data: mn } = await sb.from("profiles").select("id,first_name").in("id", mgrIds); (mn ?? []).forEach((m: any) => { mgrN[m.id] = m.first_name; }); }
+      tb.innerHTML = arr.length ? arr.map((r) => { const mg = mgrOf[r.id] && mgrN[mgrOf[r.id]!] ? ` <span style="color:var(--text-dim)">· ${esc(mgrN[mgrOf[r.id]!])}</span>` : ""; return `<tr><td><b>${esc(nmP[r.id] || "corretor")}</b>${mg}</td><td class="mono">${r.n} leads</td><td><span style="color:var(--good);font-weight:700">${Math.round(r.taxa * 100)}% viram visita</span></td></tr>`; }).join("") : `<tr><td colspan="3" style="padding:16px;color:var(--text-dim)">Ainda sem dados suficientes.</td></tr>`;
+    }}
+
+    // 1ª RESPOSTA — VELOCIDADE
+    const difs = ls.filter((l) => l.primeiro_contato_em && l.atribuido_em).map((l) => (new Date(l.primeiro_contato_em).getTime() - new Date(l.atribuido_em).getTime()) / 60000).filter((x) => x >= 0 && x < 60 * 72);
+    const vpnl = find(/resposta.*velocidade|1ª resposta/i);
+    if (vpnl) { const body = vpnl.querySelector(".panel-header")?.nextElementSibling as HTMLElement | null; const big = body?.firstElementChild as HTMLElement | null;
+      if (big) big.textContent = difs.length ? (() => { const med = difs.reduce((s, x) => s + x, 0) / difs.length; return med < 60 ? `${Math.round(med)} min` : `${(med / 60).toFixed(1)} h`; })() : "—";
+    }
+
+    // per-note + neutraliza meta/custo (Junix/Facebook)
+    const note = view.querySelector<HTMLElement>(".per-note");
+    if (note) note.innerHTML = `📊 O que está dando resultado — período <b>${esc(nome)}</b>. Troque o período lá em cima pra recalcular.`;
     view.querySelectorAll<HTMLElement>(".panel-box").forEach((p) => {
       const h = p.querySelector("h3")?.textContent || "";
       if (/meta de/i.test(h) || /custo/i.test(h)) {
         if (!p.querySelector(".em-breve")) {
           const body = p.querySelector(".panel-header")?.nextElementSibling as HTMLElement | null;
-          const nota = `<div class="em-breve" style="padding:18px;color:var(--text-dim);font-size:13px;line-height:1.5">Dado real em breve — depende de ligar vendas/pastas (Junix) e gasto de mídia (Facebook).</div>`;
+          const nota = `<div class="em-breve" style="padding:18px;color:var(--text-dim);font-size:13px;line-height:1.5">Dado real em breve — depende de vendas/pastas (Junix) e gasto de mídia (Facebook).</div>`;
           if (body) body.outerHTML = nota; else p.insertAdjacentHTML("beforeend", nota);
         }
       }
     });
-    const rodape = view.querySelector<HTMLElement>(".panel-box p");
-    if (rodape && /resposta caiu/i.test(rodape.textContent || "")) {
-      rodape.textContent = pctResp(a) < pctResp(b) ? "A % de resposta caiu — time atendendo pior, não lead pior." : "A % de resposta subiu — time atendendo melhor.";
-    }
-    const note = view.querySelector<HTMLElement>(".per-note");
-    if (note) note.innerHTML = `📊 O que está dando resultado — período <b>${esc(nome)}</b>. Troque o período lá em cima pra recalcular.`;
   }, [scopeManager]);
 
   // MÍDIA & FILAS — cards do mockup populados com as filas REAIS (formularios_catalogo + distribution_queues)
@@ -398,10 +437,20 @@ export default function LeadsCentral() {
   // (re)carrega quando o escopo/role muda
   useEffect(() => {
     if (!role) return;
-    carregar("Esta Semana");
+    const root = box.current;
+    // abre sempre no HOJE (o gerente troca se quiser)
+    if (root) {
+      const chips = root.querySelectorAll(".per-chip");
+      let hoje: Element | null = null;
+      chips.forEach((c) => { c.classList.remove("active"); if ((c.textContent || "").trim() === "Hoje") hoje = c; });
+      if (hoje) (hoje as HTMLElement).classList.add("active");
+      const desc = root.querySelector("#periodo-descricao-txt");
+      if (desc) desc.innerHTML = "Período Selecionado: <b>Hoje</b>";
+    }
+    carregar("Hoje");
+    resultados("Hoje");
     pulso();
     justica();
-    resultados("Esta Semana");
     filas();
     const t = setInterval(() => { pulso(); justica(); }, 60_000);
     return () => clearInterval(t);
@@ -411,6 +460,7 @@ export default function LeadsCentral() {
     <div className="mgr10 app2">
       <RailV10 atual={"leads" as any} mode={mode} toggle={toggle} />
       <style>{CSS}</style>
+      <style>{STY}</style>
       <div ref={box} className="mlr" dangerouslySetInnerHTML={{ __html: HTML }} />
     </div>
   );

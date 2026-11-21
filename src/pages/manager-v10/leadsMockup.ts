@@ -1165,7 +1165,7 @@ export const CSS = `
     .mlr .main-content{margin-left:0 !important;width:auto !important;max-width:none !important}
     .mlr .rail,.mlr .rail-v10,.mlr .theme-bar,.mlr #theme-bar{display:none !important}
 `;
-export const HTML = `<div style="background:#F59E0B;color:#000;padding:8px 16px;font-weight:800;font-size:12.5px;text-align:center;letter-spacing:.01em">⚠️ Tela nova em validação — o Hoje (entrada, distribuídos, represados, no vácuo) já é real; os demais números entram por fases.</div><main class="main-content">
+export const HTML = `<main class="main-content">
       
       <!-- ══════════════════════════════════════════════════════════════════════
            📌 CABEÇALHO FIXO COM SELETOR DE DATA STICKY (NUNCA SOME AO ROLAR)
