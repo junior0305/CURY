@@ -2,12 +2,17 @@
 // O visual/markup vem de leadsMockup.ts (CSS/HTML/JS escopados em .mlr). Aqui ligamos os
 // numeros reais: funil, pilulas de situacao, tabela de leads e o pulso do Hoje, respeitando
 // o periodo escolhido e o escopo do usuario (gerente = sua equipe; super/diretor/admin = RLS).
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTheme } from "@/contexts/ThemeContext";
 import { RailV10, loadFonts } from "@/components/manager-v10/RailV10";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
+import FilasFormulario from "@/components/leads/FilasFormulario";
 import { CSS, HTML, JS } from "./leadsMockup";
+
+// aliases de tokens: deixa os componentes reais (mgr10) renderizarem na paleta do mockup
+const ALIAS = `.mlr{--card:var(--surface-card);--line:var(--border);--ink:var(--text-main,#F8FAFC);--ink-2:var(--text-muted);--ink-3:var(--text-dim);--red:var(--rose,#F43F5E);--amber:var(--amber,#F59E0B);--good:#10B981;--blue:var(--brand,#0EA5E9);--cgbg:var(--bg);--tx:var(--text-main)}`;
 
 const sb = supabase as any;
 
@@ -56,12 +61,27 @@ function faixa(nome: string): [string, string] {
     case "Esta Semana": default: return [dia(y, m, d - dow).toISOString(), agora.toISOString()];
   }
 }
+// período equivalente anterior (p/ a Tendência "x passada")
+function faixaAnt(nome: string): [string, string] {
+  const nb = new Date(Date.now() - 3 * 3600 * 1000);
+  const y = nb.getUTCFullYear(), m = nb.getUTCMonth(), d = nb.getUTCDate();
+  const dia = (yy: number, mm: number, dd: number) => new Date(Date.UTC(yy, mm, dd, 3, 0, 0));
+  const dow = (nb.getUTCDay() + 6) % 7;
+  switch (nome) {
+    case "Hoje": return [dia(y, m, d - 1).toISOString(), dia(y, m, d).toISOString()];
+    case "Semana Passada": return [dia(y, m, d - dow - 14).toISOString(), dia(y, m, d - dow - 7).toISOString()];
+    case "Este Mês": return [dia(y, m - 1, 1).toISOString(), dia(y, m - 1, Math.min(d, 28)).toISOString()];
+    case "Mês Passado": return [dia(y, m - 2, 1).toISOString(), dia(y, m - 1, 1).toISOString()];
+    case "Esta Semana": default: return [dia(y, m, d - dow - 7).toISOString(), dia(y, m, d - dow).toISOString()];
+  }
+}
 
 export default function LeadsCentral() {
   const { mode, toggle } = useTheme();
   const { session, role } = useAuth() as any;
   const box = useRef<HTMLDivElement>(null);
   const injetado = useRef(false);
+  const [filasNode, setFilasNode] = useState<HTMLElement | null>(null);
 
   // escopo: gerente vê a própria equipe (manager_id); super/diretor/admin deixam o RLS filtrar,
   // salvo "entrar como / drill" (?manager=<id>), que limita àquele gerente.
@@ -228,6 +248,49 @@ export default function LeadsCentral() {
     }).join("");
   }, [scopeManager]);
 
+  // RESULTADOS — Tendência (período atual × anterior), real a partir de leads
+  const resultados = useCallback(async (nome: string) => {
+    const root = box.current; if (!root) return;
+    const view = root.querySelector("#view-resultados"); if (!view) return;
+    const carrega = async (de: string, ate: string) => {
+      let q = sb.from("leads").select("last_broker_whatsapp_at,visit_scheduled_at,status")
+        .gte("created_at", de).lt("created_at", ate).not("status", "in", "(EXCLUDED,ABANDONED)").limit(20000);
+      if (scopeManager) q = q.eq("manager_id", scopeManager);
+      const { data } = await q;
+      const ls = (data ?? []) as any[];
+      return { total: ls.length, resp: ls.filter((l) => l.last_broker_whatsapp_at).length, vis: ls.filter((l) => l.visit_scheduled_at).length };
+    };
+    const [de, ate] = faixa(nome), [pde, pate] = faixaAnt(nome);
+    const [a, b] = await Promise.all([carrega(de, ate), carrega(pde, pate)]);
+    const pctResp = (x: { total: number; resp: number }) => x.total ? Math.round((x.resp / x.total) * 100) : 0;
+    const deltaN = (now: number, prev: number) => prev ? Math.round(((now - prev) / prev) * 100) : 0;
+    const rows = view.querySelectorAll<HTMLElement>(".trend-row");
+    const setRow = (el: HTMLElement | undefined, val: string, up: boolean | null, delta: string) => {
+      if (!el) return;
+      const bb = el.querySelector("b"); if (bb) bb.textContent = val;
+      const tr = el.querySelector(".tr"); if (tr) { tr.textContent = delta; (tr as HTMLElement).className = "tr " + (up == null ? "" : up ? "up" : "down"); }
+    };
+    setRow(rows[0], a.total.toLocaleString("pt-BR"), a.total >= b.total, `${a.total >= b.total ? "↑" : "↓"} ${Math.abs(deltaN(a.total, b.total))}%`);
+    setRow(rows[1], pctResp(a) + "%", pctResp(a) >= pctResp(b), `${pctResp(a) >= pctResp(b) ? "↑" : "↓"} ${Math.abs(pctResp(a) - pctResp(b))}pp`);
+    setRow(rows[2], String(a.vis), a.vis >= b.vis, `${a.vis >= b.vis ? "↑" : "↓"} ${Math.abs(deltaN(a.vis, b.vis))}%`);
+    setRow(rows[3], "—", null, "Junix");
+    // neutraliza o que ainda depende de Junix/Facebook (sem número de mentira)
+    view.querySelectorAll<HTMLElement>(".panel-box").forEach((p) => {
+      const h = p.querySelector("h3")?.textContent || "";
+      if (/meta de/i.test(h) || /custo/i.test(h)) {
+        if (!p.querySelector(".em-breve")) {
+          const body = p.querySelector(".panel-header")?.nextElementSibling as HTMLElement | null;
+          const nota = `<div class="em-breve" style="padding:18px;color:var(--text-dim);font-size:13px;line-height:1.5">Dado real em breve — depende de ligar vendas/pastas (Junix) e gasto de mídia (Facebook).</div>`;
+          if (body) body.outerHTML = nota; else p.insertAdjacentHTML("beforeend", nota);
+        }
+      }
+    });
+    const rodape = view.querySelector<HTMLElement>(".panel-box p");
+    if (rodape && /resposta caiu/i.test(rodape.textContent || "")) {
+      rodape.textContent = pctResp(a) < pctResp(b) ? "A % de resposta caiu — time atendendo pior, não lead pior." : "A % de resposta subiu — time atendendo melhor.";
+    }
+  }, [scopeManager]);
+
   loadFonts();
 
   // injeta o JS do mockup uma vez e religa o seletor de período p/ recarregar dado real
@@ -241,9 +304,16 @@ export default function LeadsCentral() {
     (window as any).selecionarPeriodo = (nomeP: string, el: any) => {
       try { if (orig) orig(nomeP, el); } catch { /* ok */ }
       carregar(nomeP);
+      resultados(nomeP);
     };
+    // Mídia & Filas: troca os cards fictícios pelo componente real de filas; neutraliza o fake de anúncios.
+    const root = box.current;
+    const vf = root?.querySelector<HTMLElement>("#view-filas");
+    if (vf) { vf.innerHTML = ""; setFilasNode(vf); }
+    const vc = root?.querySelector<HTMLElement>("#view-campanhas");
+    if (vc) vc.innerHTML = `<div style="padding:22px;color:var(--text-dim);font-size:13px;line-height:1.6">Anúncios & gasto de mídia — dado real em breve (vem do Facebook). As <b>filas de distribuição</b> reais estão na aba ao lado.</div>`;
     return () => { const e = document.getElementById("mlr-script"); if (e) e.remove(); };
-  }, [carregar]);
+  }, [carregar, resultados]);
 
   // (re)carrega quando o escopo/role muda
   useEffect(() => {
@@ -251,15 +321,21 @@ export default function LeadsCentral() {
     carregar("Esta Semana");
     pulso();
     justica();
+    resultados("Esta Semana");
     const t = setInterval(() => { pulso(); justica(); }, 60_000);
     return () => clearInterval(t);
-  }, [role, scopeManager, carregar, pulso, justica]);
+  }, [role, scopeManager, carregar, pulso, justica, resultados]);
 
   return (
     <div className="mgr10 app2">
       <RailV10 atual={"leads" as any} mode={mode} toggle={toggle} />
       <style>{CSS}</style>
+      <style>{ALIAS}</style>
       <div ref={box} className="mlr" dangerouslySetInnerHTML={{ __html: HTML }} />
+      {filasNode && createPortal(
+        <div style={{ padding: "4px 2px" }}><FilasFormulario como={scopeManager} /></div>,
+        filasNode
+      )}
     </div>
   );
 }
