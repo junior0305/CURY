@@ -2434,6 +2434,79 @@ export default function LeadsCentral() {
     return () => { vivo = false; };
   }, [gerente]);
 
+  // Fase 2 de dado real: a TABELA de leads (aba Todos os leads) com os leads reais da conta.
+  useEffect(() => {
+    if (!gerente) return;
+    let vivo = true;
+    (async () => {
+      // semana comercial (seg 00:00 BR) para casar com "Esta Semana"
+      const agora = new Date(Date.now() - 3 * 3600 * 1000);
+      const dow = (agora.getUTCDay() + 6) % 7; // 0=segunda
+      const seg = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate() - dow, 3, 0, 0));
+      const { data: bs } = await (supabase as any).from("profiles")
+        .select("id,first_name").eq("manager_id", gerente);
+      const nome: Record<string, string> = {};
+      (bs ?? []).forEach((b: any) => { nome[b.id] = b.first_name || "corretor"; });
+      const { data } = await (supabase as any).from("leads")
+        .select("id,nome,telefone,campanha_nome,source,broker_id,last_broker_whatsapp_at,status,created_at")
+        .eq("manager_id", gerente).gte("created_at", seg.toISOString())
+        .not("status", "in", "(EXCLUDED,ABANDONED)")
+        .order("created_at", { ascending: false }).limit(400);
+      if (!vivo) return;
+      const ls = (data ?? []) as any[];
+      const root = box.current;
+      if (!root) return;
+      const tb = root.querySelector("#leads-tbody");
+      if (!tb) return;
+
+      const esc = (s: any) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" } as any)[c]);
+      const arg = (s: any) => esc(s).replace(/['"]/g, " ");
+      const fone = (t: any) => {
+        const d = String(t ?? "").replace(/\D/g, "").replace(/^55/, "");
+        if (d.length >= 10) { const dd = d.slice(0, 2), r = d.slice(2); return `(${dd}) ${r.slice(0, r.length - 4)}-${r.slice(-4)}`; }
+        return esc(t || "—");
+      };
+      const inic = (n: string) => (n || "?").trim().split(/\s+/).slice(0, 2).map((p) => p[0] || "").join("").toUpperCase() || "?";
+      const origem = (l: any) => l.campanha_nome || ({ facebook_make: "Meta Ads", lista: "Lista", resgate: "Resgate", indicacao: "Indicação", instagram: "Instagram" } as any)[l.source] || l.source || "—";
+      const tempo = (l: any) => {
+        const h = (Date.now() - new Date(l.created_at).getTime()) / 3600000;
+        if (h < 1) return "há minutos"; if (h < 24) return `há ${Math.floor(h)}h`;
+        const dias = Math.floor(h / 24); return `${dias} dia${dias > 1 ? "s" : ""}`;
+      };
+      const badge = (l: any) => {
+        if (l.last_broker_whatsapp_at) return ["avanco", "🟢 Em andamento"];
+        if (l.broker_id) return ["vacuo", "🟡 No vácuo"];
+        return ["fantasma", "🔴 Sem contato"];
+      };
+
+      if (ls.length === 0) {
+        tb.innerHTML = `<tr><td colspan="7" style="padding:28px;text-align:center;color:var(--text-dim)">Nenhum lead nesta semana.</td></tr>`;
+        return;
+      }
+      tb.innerHTML = ls.map((l) => {
+        const nm = esc(l.nome || "Sem nome");
+        const cor = l.broker_id ? esc(nome[l.broker_id] || "corretor") : "";
+        const [bc, bt] = badge(l);
+        const dcor = (l.broker_id ? (nome[l.broker_id] || "") : "sem").toLowerCase().split(" ")[0];
+        const corTd = l.broker_id
+          ? `<div style="display:flex;align-items:center;gap:8px"><div class="avatar-clean">${esc(inic(nome[l.broker_id] || ""))}</div><b>${cor}</b></div>`
+          : `<span style="color:var(--text-dim)">Sem corretor</span>`;
+        return `<tr data-type="${bc}" data-corretor="${esc(dcor)}">
+          <td><input type="checkbox" class="lead-chk" onclick="updateBatchBar()" /></td>
+          <td><b>${nm}</b><span class="mono" style="display:block;color:var(--text-dim);font-size:12px">${fone(l.telefone)}</span></td>
+          <td><span>${esc(origem(l))}</span></td>
+          <td>${corTd}</td>
+          <td><span class="sit-badge ${bc}">${bt}</span></td>
+          <td class="mono">${tempo(l)}</td>
+          <td><div class="action-btn-group">
+            <button class="act-btn ver" onclick="openModalVer('${arg(l.id)}','${arg(l.nome || "Sem nome")}','${arg(fone(l.telefone))}','${arg(origem(l))}','${arg(cor || "—")}','${arg(bt)}','${arg(tempo(l))}','${arg(origem(l))}')">👁️ Ver</button>
+          </div></td>
+        </tr>`;
+      }).join("");
+    })();
+    return () => { vivo = false; };
+  }, [gerente]);
+
   return (
     <div className="mgr10 app2">
       <RailV10 atual={"leads" as any} mode={mode} toggle={toggle} />
