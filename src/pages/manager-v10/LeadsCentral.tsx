@@ -8,12 +8,14 @@ import { RailV10, loadFonts } from "@/components/manager-v10/RailV10";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
+import { cobrarFila } from "@/hooks/useLeads";
 import { CSS, HTML, JS } from "./leadsMockup";
 
 // garante a data grudada no topo ao rolar + token --good p/ a tabela da justiça
 const STY = `.mlr .sticky-header-bar{position:sticky;top:0;z-index:950;background:var(--bg)}.mlr{--good:#10B981}
 /* valores/numeros que o mockup cravou em branco: usar o token de texto p/ ler no tema claro */
-.mlr .ptile b,.mlr .bar-row .vl,.mlr .dchip .v,.mlr .sline b,.mlr .rep-top b,.mlr .prev-l b,.mlr .repopt b,.mlr .pz b,.mlr .fstep b,.mlr .trend-row b,.mlr .copilot-bar b,.mlr .fld select,.mlr .fld input,.mlr .fe-row select{color:var(--text-main)}`;
+.mlr .ptile b,.mlr .bar-row .vl,.mlr .dchip .v,.mlr .sline b,.mlr .rep-top b,.mlr .prev-l b,.mlr .repopt b,.mlr .pz b,.mlr .fstep b,.mlr .trend-row b,.mlr .copilot-bar b,.mlr .fld select,.mlr .fld input,.mlr .fe-row select{color:var(--text-main)}
+.mlr .sit-badge.semdono{background:rgba(148,163,184,.16);color:var(--text-muted,#64748B);border:1px solid var(--border,#E2E8F0)}`;
 
 const sb = supabase as any;
 
@@ -40,18 +42,23 @@ const tempoTxt = (l: Lead) => {
   const dias = Math.floor(h / 24); return `${dias} dia${dias > 1 ? "s" : ""}`;
 };
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0) + "% conv.";
-// situacao exclusiva por lead (p/ a tabela e os data-type dos filtros do mockup)
-const situ = (l: Lead): ["avanco" | "vacuo" | "fantasma", string] => {
+// Situação exclusiva por lead — 4 estados claros p/ o gerente (sem sobrepor):
+//  avanço = já respondeu · sem contato = TEM corretor e não falou, até 2h (recém, no prazo)
+//  no vácuo = TEM corretor e não falou há +2h (passou do prazo, cobrar) · esperando = SEM corretor (represado/sem dono)
+const situ = (l: Lead): [string, string] => {
   if (l.last_broker_whatsapp_at) return ["avanco", "🟢 Em andamento"];
-  if (l.broker_id) return ["vacuo", "🟡 No vácuo"];
-  return ["fantasma", "🔴 Sem contato"];
+  if (!l.broker_id) return ["semdono", "⚪ Esperando distribuição"];
+  const age2h = (Date.now() - new Date(l.created_at).getTime()) > 2 * 3600000;
+  return age2h ? ["fantasma", "🔴 No vácuo (+2h)"] : ["vacuo", "🟡 Sem contato"];
 };
-// casa a pílula/etapa com o lead (bate com as contagens)
+// casa a pílula/etapa com o lead (as contagens são derivadas DAQUI, então pílula = linhas mostradas)
 function segMatch(l: Lead, seg: string): boolean {
   const age2h = (Date.now() - new Date(l.created_at).getTime()) > 2 * 3600000;
+  const semToque = !!l.broker_id && !l.last_broker_whatsapp_at; // recebeu e não falou
   switch (seg) {
-    case "fantasma": return !l.last_broker_whatsapp_at;                                 // Sem contato
-    case "vacuo": return !!l.broker_id && !l.last_broker_whatsapp_at && age2h;           // No vácuo (>2h)
+    case "fantasma": return semToque && !age2h;                                          // Sem contato (com dono, até 2h)
+    case "vacuo": return semToque && age2h;                                              // No vácuo (com dono, +2h)
+    case "semdono": return !l.broker_id;                                                 // Esperando distribuição (sem corretor)
     case "avanco": return !!l.last_broker_whatsapp_at;                                   // Avanço (respondeu)
     case "visita": return !!l.visit_scheduled_at;                                        // etapa Visita
     case "retorno": return !!l.visit_scheduled_at && new Date(l.visit_scheduled_at).getTime() >= Date.now();
@@ -74,9 +81,9 @@ function rowHtml(l: Lead, nm: Record<string, string>): string {
     <td><span class="sit-badge ${bc}">${bt}</span></td>
     <td class="mono">${tempoTxt(l)}</td>
     <td><div class="action-btn-group">
-      <button class="act-btn repassar" onclick="openModalRepassar('${arg(l.name || "Sem nome")}','${arg(origemTxt(l))}','${arg(cor || "—")}')">⚡ Repassar</button>
-      <button class="act-btn cobrar" onclick="showToast('Cobrança enviada pelo chip do gerente')">💬 Cobrar</button>
-      <button class="act-btn ver" onclick="openModalVer('${arg(l.id)}','${arg(l.name || "Sem nome")}','${arg(fone(l.phone))}','${arg(origemTxt(l))}','${arg(cor || "—")}','${arg(bt)}','${arg(tempoTxt(l))}','${arg(origemTxt(l))}')">👁️ Ver</button>
+      <button class="act-btn repassar" onclick="window.__repassarLead&&window.__repassarLead('${arg(l.id)}')">⚡ Repassar</button>
+      <button class="act-btn cobrar" onclick="window.__cobrarLead&&window.__cobrarLead('${arg(l.id)}')">💬 Cobrar</button>
+      <button class="act-btn ver" onclick="window.__verLead&&window.__verLead('${arg(l.id)}')">👁️ Ver</button>
     </div></td>
   </tr>`;
 }
@@ -191,13 +198,13 @@ export default function LeadsCentral() {
     leadsRef.current = ls; nmTabRef.current = nm;
 
     const total = ls.length;
-    const resposta = ls.filter((l) => l.last_broker_whatsapp_at).length;
-    const semToque = ls.filter((l) => l.broker_id && !l.last_broker_whatsapp_at &&
-      (Date.now() - new Date(l.created_at).getTime()) > 2 * 3600000).length;
+    // DERIVADAS do mesmo segMatch que filtra a tabela → a pílula sempre bate com as linhas
+    const resposta = ls.filter((l) => segMatch(l, "avanco")).length;
+    const vacuo = ls.filter((l) => segMatch(l, "vacuo")).length;        // com dono, sem falar +2h
     const visita = ls.filter((l) => l.visit_scheduled_at).length;
-    const semContato = ls.filter((l) => !l.last_broker_whatsapp_at).length;
+    const semContato = ls.filter((l) => segMatch(l, "fantasma")).length; // com dono, sem falar até 2h (recém)
     const avanco = resposta;
-    const retorno = ls.filter((l) => l.visit_scheduled_at && new Date(l.visit_scheduled_at).getTime() >= Date.now()).length;
+    const retorno = ls.filter((l) => segMatch(l, "retorno")).length;
 
     // FUNIL
     const sc = root.querySelectorAll<HTMLElement>(".funnel-stage-card .stage-count");
@@ -214,14 +221,14 @@ export default function LeadsCentral() {
     // sub-textos das etapas (CPL/previsão/VGV vêm de Facebook/Junix — marcados; sem toque e agendadas reais)
     const subs = root.querySelectorAll<HTMLElement>(".funnel-stage-card .stage-sub");
     if (subs[0]) subs[0].innerHTML = `<span>CPL médio: <b class="mono">—</b></span>`;
-    if (subs[1]) subs[1].innerHTML = `<span>⚠️ <b>${semToque}</b> sem toque (&gt;2h)</span>`;
+    if (subs[1]) subs[1].innerHTML = `<span>⚠️ <b>${vacuo}</b> no vácuo (&gt;2h)</span>`;
     if (subs[2]) subs[2].innerHTML = `<span>${visita} agendada${visita !== 1 ? "s" : ""}</span>`;
     if (subs[3]) subs[3].innerHTML = `<span>Previsão: <b>—</b> (Junix)</span>`;
     if (subs[4]) subs[4].innerHTML = `<span>VGV: <b>—</b> (Junix)</span>`;
 
     // PÍLULAS (ordem: todos, sem contato, vácuo, avanço, retorno)
     const pb = root.querySelectorAll<HTMLElement>(".pill-health .tab-badge");
-    const pv = [total, semContato, semToque, avanco, retorno];
+    const pv = [total, semContato, vacuo, avanco, retorno];
     pb.forEach((el, i) => { if (pv[i] != null) el.textContent = String(pv[i]); });
     const tabB = root.querySelectorAll<HTMLElement>(".lead-tab-btn .tab-badge");
     if (tabB[1]) tabB[1].textContent = total.toLocaleString("pt-BR");
@@ -282,9 +289,27 @@ export default function LeadsCentral() {
     if (sBtn) sBtn.setAttribute("onclick", "event.stopPropagation();window.__soltarRepresados&&window.__soltarRepresados()");
     const dBtn = reps[1]?.querySelector(".act-btn");
     if (dBtn) dBtn.setAttribute("onclick", "event.stopPropagation();window.__direcionarSemDono&&window.__direcionarSemDono()");
-    // prévia "se soltar agora" — sem nomes fictícios
+    // prévia "se soltar agora" — LISTA os corretores presentes que vão receber (quem está no rodízio)
+    let presentes: string[] = [];
+    if (represados) {
+      let bq = sb.from("profiles").select("first_name,last_seen_at,roleta_entrou_em,lead_assignment_enabled")
+        .eq("role", "BROKER").eq("is_active", true);
+      if (scopeManager) bq = bq.eq("manager_id", scopeManager);
+      const { data: bs } = await bq;
+      const online = Date.now() - 15 * 60_000;
+      const inicioHoje = new Date(de).getTime();
+      presentes = (bs ?? [])
+        .filter((b: any) => b.lead_assignment_enabled !== false &&
+          ((b.roleta_entrou_em && new Date(b.roleta_entrou_em).getTime() >= inicioHoje) ||
+           (b.last_seen_at && new Date(b.last_seen_at).getTime() > online)))
+        .map((b: any) => (b.first_name || "corretor"));
+    }
     const r1 = root.querySelector("#rec-r1");
-    if (r1) r1.innerHTML = `<span class="mini-lbl">${represados ? `Se soltar agora, os ${represados} represados vão para os corretores presentes, em rodízio.` : "Nenhum lead represado no momento."}</span>`;
+    if (r1) r1.innerHTML = `<span class="mini-lbl">${represados
+      ? (presentes.length
+          ? `Se soltar agora, os ${represados} represados vão, em rodízio, para: <b>${presentes.map(esc).join(", ")}</b> (${presentes.length} no plantão).`
+          : `Os ${represados} estão segurados — <b>ninguém da equipe fez check-in / está online</b> agora. Quando alguém entrar no plantão, o rodízio começa.`)
+      : "Nenhum lead represado no momento."}</span>`;
     const r2 = root.querySelector("#rec-r2");
     if (r2) r2.innerHTML = `<span class="mini-lbl">${semDono ? `Os ${semDono} sem dono vão para a fila exclusiva do formulário.` : "Nenhum lead sem dono no momento."}</span>`;
 
@@ -722,6 +747,83 @@ export default function LeadsCentral() {
     };
     return () => { try { delete (window as any).__filaRemover; delete (window as any).__filaAdd; delete (window as any).__filaCriar; } catch { /* ok */ } };
   }, [filas, manParam]);
+
+  // Ações REAIS da tabela "Todos os leads": Repassar (troca corretor DA EQUIPE), Cobrar (WhatsApp real), Ver (ficha real)
+  useEffect(() => {
+    const eu = session?.user?.id || null;
+    const como = manParam || null;
+    const acha = (id: string) => leadsRef.current.find((l) => l.id === id);
+    const overlay = (inner: string) => {
+      const ov = document.createElement("div");
+      ov.className = "mlr"; ov.setAttribute("data-theme", box.current?.getAttribute("data-theme") || "light");
+      ov.style.cssText = "position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px";
+      ov.innerHTML = `<div style="background:var(--surface,#fff);color:var(--text-main,#111);border:1px solid var(--border,#ddd);border-radius:14px;max-width:420px;width:100%;padding:18px;font-family:inherit">${inner}</div>`;
+      ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+      (box.current || document.body).appendChild(ov);
+      return ov;
+    };
+
+    (window as any).__cobrarLead = async (id: string) => {
+      const l = acha(id); if (!l) return;
+      if (!l.broker_id) { toast.info("Esse lead está sem corretor — use Repassar pra dar a alguém."); return; }
+      try {
+        const r: any = await cobrarFila([id], eu, "central-leads");
+        const ok = (r?.corretores || []).filter((c: any) => c.avisado_no_whats).length;
+        toast.success(ok ? "Cobrança enviada ao corretor no WhatsApp." : "Cobrança registrada (corretor sem chat ativo agora).");
+      } catch (e: any) { toast.error(e?.message || "Não consegui cobrar."); }
+    };
+
+    (window as any).__verLead = (id: string) => {
+      const l = acha(id); if (!l) return;
+      const nm = nmTabRef.current; const [, badge] = situ(l);
+      const linha = (k: string, v: string) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--border,#eee)"><span style="color:var(--text-dim)">${k}</span><b style="text-align:right">${esc(v)}</b></div>`;
+      const ov = overlay(`
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b style="font-size:16px">${esc(l.name || "Sem nome")}</b>
+          <button class="lc-x" style="background:none;border:0;font-size:20px;cursor:pointer;color:var(--text-dim)">×</button></div>
+        ${linha("Telefone", fone(l.phone))}
+        ${linha("Origem", origemTxt(l))}
+        ${linha("Corretor", l.broker_id ? (nm[l.broker_id] || "corretor") : "— sem corretor —")}
+        ${linha("Situação", badge)}
+        ${linha("Entrou", tempoTxt(l))}
+        ${linha("Falou no WhatsApp", l.last_broker_whatsapp_at ? "sim" : "ainda não")}
+        ${linha("Visita", l.visit_scheduled_at ? new Date(l.visit_scheduled_at).toLocaleString("pt-BR") : "não agendada")}`);
+      ov.querySelector(".lc-x")?.addEventListener("click", () => ov.remove());
+    };
+
+    (window as any).__repassarLead = async (id: string) => {
+      const l = acha(id); if (!l) return;
+      let pq = sb.from("profiles").select("id,first_name").eq("role", "BROKER").eq("is_active", true).neq("lead_assignment_enabled", false).order("first_name");
+      if (scopeManager) pq = pq.eq("manager_id", scopeManager);
+      const { data: pf } = await pq;
+      const brokers = (pf ?? []) as any[];
+      if (!brokers.length) { toast.error("Sem corretor da equipe pra receber."); return; }
+      const opts = brokers.filter((b) => b.id !== l.broker_id).map((b) => `<option value="${b.id}">${esc(b.first_name || "corretor")}</option>`).join("");
+      const atual = l.broker_id ? (nmTabRef.current[l.broker_id] || "corretor") : "sem corretor";
+      const ov = overlay(`
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <b style="font-size:16px">Repassar — ${esc(l.name || "Sem nome")}</b>
+          <button class="lc-x" style="background:none;border:0;font-size:20px;cursor:pointer;color:var(--text-dim)">×</button></div>
+        <p style="color:var(--text-dim);font-size:13px;margin:0 0 10px">Atual: <b>${esc(atual)}</b>. Escolha quem recebe (<b>só a sua equipe</b>):</p>
+        <select class="lc-sel" style="width:100%;padding:9px;border:1px solid var(--border,#ccc);border-radius:9px;background:var(--surface-subtle,#f6f6f6);color:var(--text-main);font-size:14px"><option value="">Escolher corretor…</option>${opts}</select>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+          <button class="lc-x" style="padding:8px 14px;border:1px solid var(--border,#ccc);border-radius:9px;background:none;cursor:pointer;color:var(--text-main)">Cancelar</button>
+          <button class="lc-ok" style="padding:8px 14px;border:0;border-radius:9px;background:var(--brand,#2563EB);color:#fff;cursor:pointer;font-weight:600">Repassar</button></div>`);
+      ov.querySelectorAll(".lc-x").forEach((b) => b.addEventListener("click", () => ov.remove()));
+      ov.querySelector(".lc-ok")?.addEventListener("click", async () => {
+        const sel = ov.querySelector<HTMLSelectElement>(".lc-sel"); const para = sel?.value;
+        if (!para) { toast.info("Escolha um corretor."); return; }
+        try {
+          const { error } = await sb.rpc("redistribuir_lote", { p_leads: [id], p_para: [para], p_como: como, p_motivo: "Repassado na Central de Leads" });
+          if (error) throw error;
+          toast.success(`Lead repassado para ${sel!.options[sel!.selectedIndex].text}.`);
+          ov.remove(); carregar(periodoRef.current, true); pulso();
+        } catch (e: any) { toast.error(e?.message || "Não consegui repassar."); }
+      });
+    };
+
+    return () => { try { delete (window as any).__repassarLead; delete (window as any).__cobrarLead; delete (window as any).__verLead; } catch { /* ok */ } };
+  }, [session, scopeManager, manParam, carregar, pulso]);
 
   return (
     <div className="mgr10 app2">
