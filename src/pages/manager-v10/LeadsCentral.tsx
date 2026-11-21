@@ -144,6 +144,9 @@ export default function LeadsCentral() {
     const pb = root.querySelectorAll<HTMLElement>(".pill-health .tab-badge");
     const pv = [total, semContato, semToque, avanco, retorno];
     pb.forEach((el, i) => { if (pv[i] != null) el.textContent = String(pv[i]); });
+    // selo da aba "Todos os leads" = total real do período
+    const tabB = root.querySelectorAll<HTMLElement>(".lead-tab-btn .tab-badge");
+    if (tabB[1]) tabB[1].textContent = total.toLocaleString("pt-BR");
 
     // TABELA
     const tb = root.querySelector("#leads-tbody");
@@ -167,6 +170,8 @@ export default function LeadsCentral() {
             <td><span class="sit-badge ${bc}">${bt}</span></td>
             <td class="mono">${tempoTxt(l)}</td>
             <td><div class="action-btn-group">
+              <button class="act-btn repassar" onclick="openModalRepassar('${arg(l.name || "Sem nome")}','${arg(origemTxt(l))}','${arg(cor || "—")}')">⚡ Repassar</button>
+              <button class="act-btn cobrar" onclick="showToast('Cobrança enviada pelo chip do gerente')">💬 Cobrar</button>
               <button class="act-btn ver" onclick="openModalVer('${arg(l.id)}','${arg(l.name || "Sem nome")}','${arg(fone(l.phone))}','${arg(origemTxt(l))}','${arg(cor || "—")}','${arg(bt)}','${arg(tempoTxt(l))}','${arg(origemTxt(l))}')">👁️ Ver</button>
             </div></td>
           </tr>`;
@@ -190,7 +195,7 @@ export default function LeadsCentral() {
   const pulso = useCallback(async () => {
     const root = box.current; if (!root) return;
     const [de] = faixa("Hoje");
-    let q = sb.from("leads").select("broker_id,last_broker_whatsapp_at,represa_at")
+    let q = sb.from("leads").select("broker_id,last_broker_whatsapp_at,represa_at,regiao_interesse")
       .gte("created_at", de).not("status", "in", "(EXCLUDED,ABANDONED)");
     if (scopeManager) q = q.eq("manager_id", scopeManager);
     const { data } = await q;
@@ -210,6 +215,30 @@ export default function LeadsCentral() {
     };
     setRep(reps[0], represados, "segurados", "Soltar");
     setRep(reps[1], semDono, "sem dono", "Direcionar");
+
+    // selos das abas: Hoje = "p/ resolver" (represados + sem dono); Mídia não tem contagem real → oculta
+    const tabB = root.querySelectorAll<HTMLElement>(".lead-tab-btn .tab-badge");
+    if (tabB[0]) tabB[0].textContent = `${represados + semDono} p/ resolver`;
+    if (tabB[2]) tabB[2].style.display = "none";
+
+    // Entrada de hoje por região (real)
+    const panels = root.querySelectorAll(".panel-box");
+    let entP: Element | null = null;
+    panels.forEach((p) => { const h = p.querySelector("h3"); if (h && /entrada de hoje/i.test(h.textContent || "")) entP = p; });
+    if (entP) {
+      const sub = entP.querySelector(".panel-header span");
+      if (sub) sub.textContent = `${entraram} entraram · ${distribuidos} distribuídos`;
+      const porReg: Record<string, number> = {};
+      ls.forEach((l) => { const r = (l.regiao_interesse || "").trim() || "Sem região"; porReg[r] = (porReg[r] || 0) + 1; });
+      const ord = Object.entries(porReg).sort((a, b) => b[1] - a[1]).slice(0, 6);
+      const max = ord.length ? ord[0][1] : 1;
+      const body = entP.querySelector(".panel-header")?.nextElementSibling as HTMLElement | null;
+      if (body) {
+        body.innerHTML = ord.length
+          ? ord.map(([r, n]) => `<div class="bar-row"><span class="nm">${esc(r)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.round((n / max) * 100)}%"></div></div><span class="vl">${n}</span></div>`).join("")
+          : `<div style="padding:14px;color:var(--text-dim)">Nenhum lead hoje ainda.</div>`;
+      }
+    }
   }, [scopeManager]);
 
   // "A distribuição está justa?" — por corretor, hoje (recebeu × respondeu de verdade × situação)
@@ -333,7 +362,7 @@ export default function LeadsCentral() {
       <style>{ALIAS}</style>
       <div ref={box} className="mlr" dangerouslySetInnerHTML={{ __html: HTML }} />
       {filasNode && createPortal(
-        <div style={{ padding: "4px 2px" }}><FilasFormulario como={scopeManager} /></div>,
+        <div style={{ padding: "4px 2px" }}><FilasFormulario como={scopeManager} abrir="*" /></div>,
         filasNode
       )}
     </div>
