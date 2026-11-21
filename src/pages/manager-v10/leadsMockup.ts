@@ -48,7 +48,7 @@ export const CSS = `
       --shadow-lg: 0 12px 32px rgba(0,0,0,0.55);
     }
 
-    .mlr [data-theme="light"] {
+    .mlr[data-theme="light"] {
       --bg: #F1F5F9;
       --surface: #FFFFFF;
       --surface-card: #FFFFFF;
@@ -279,7 +279,7 @@ export const CSS = `
       gap: 20px;
       margin-bottom: 24px;
     }
-    .mlr [data-theme="light"] .sticky-header-bar {
+    .mlr[data-theme="light"] .sticky-header-bar {
       background: rgba(241, 245, 249, 0.94);
     }
 

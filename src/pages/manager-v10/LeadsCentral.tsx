@@ -518,7 +518,7 @@ export default function LeadsCentral() {
       <RailV10 atual={"leads" as any} mode={mode} toggle={toggle} />
       <style>{CSS}</style>
       <style>{STY}</style>
-      <div ref={box} className="mlr" dangerouslySetInnerHTML={{ __html: HTML }} />
+      <div ref={box} className="mlr" data-theme={mode} dangerouslySetInnerHTML={{ __html: HTML }} />
     </div>
   );
 }
