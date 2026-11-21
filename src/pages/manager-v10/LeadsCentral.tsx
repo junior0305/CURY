@@ -312,6 +312,18 @@ export default function LeadsCentral() {
       const rod = tp.querySelector("p"); if (rod) rod.textContent = pctN(resp, total) < pctN(pResp, pTotal) ? "A % de resposta caiu — time atendendo pior, não lead pior." : "A % de resposta está estável ou subindo.";
     }
 
+    // DO LEAD ATÉ A VENDA — onde cai (Leads/Responderam/Visita reais; Pasta/Venda = Junix)
+    const fp = find(/do lead|onde cai/i);
+    if (fp) {
+      const steps = fp.querySelectorAll<HTMLElement>(".fstep b");
+      if (steps[0]) steps[0].textContent = total.toLocaleString("pt-BR");
+      if (steps[1]) steps[1].innerHTML = `${resp} <i>${pctN(resp, total)}%</i>`;
+      if (steps[2]) steps[2].innerHTML = `${vis} <i>${pctN(vis, total)}%</i>`;
+      if (steps[3]) steps[3].innerHTML = `— <i>Junix</i>`;
+      if (steps[4]) steps[4].innerHTML = `— <i>Junix</i>`;
+      const fpp = fp.querySelector("p"); if (fpp) fpp.innerHTML = `O maior tombo é de <b>lead → resposta</b> (${100 - pctN(resp, total)}% não respondem). É onde o SLA de 1ª resposta mais pesa.`;
+    }
+
     // CONVERSÃO POR CANAL
     const canalDe = (s: string) => (({ facebook_make: "📣 Anúncio (Meta)", lista: "🎣 Pescaria (repesca)", resgate: "♻️ Resgate", disparo: "📢 Disparo WhatsApp", whatsapp: "📢 Disparo WhatsApp", discador: "📞 Discador (ligações)", plantao: "🏪 Plantão (estande)", checkin: "🏪 Plantão (estande)", indicacao: "🤝 Indicação" } as any)[s] || (s || "Outros"));
     const porCanal: Record<string, { n: number; r: number; v: number }> = {};
@@ -409,6 +421,53 @@ export default function LeadsCentral() {
     }
   }, [scopeManager]);
 
+  // ANÚNCIOS (META) — painel do mockup populado com gasto/CPL reais (fb_saude)
+  const anuncios = useCallback(async () => {
+    const root = box.current; if (!root) return;
+    const sub = root.querySelector("#sub-anuncios"); if (!sub) return;
+    let arvore: string[] | null = null;
+    if (scopeManager) { const { data } = await sb.rpc("ids_da_arvore", { p: scopeManager }); arvore = (data ?? []).map((r: any) => (typeof r === "string" ? r : r.ids_da_arvore)); }
+    const { data: fs } = await sb.from("fb_saude").select("dono_id,dados");
+    let rows = (fs ?? []) as any[];
+    if (arvore) rows = rows.filter((r) => !r.dono_id || arvore!.includes(r.dono_id));
+    const camps: any[] = [];
+    rows.forEach((r) => { const cs = r.dados?.campanhas; if (Array.isArray(cs)) cs.forEach((c: any) => camps.push(c)); });
+    const comGasto = camps.filter((c) => (c.gasto || 0) > 0 || (c.leads || 0) > 0);
+    const cpl = (c: any) => (c.leads > 0 ? (c.gasto || 0) / c.leads : 0);
+    const brl = (n: number) => "R$ " + (n || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+
+    const tb = sub.querySelector(".leads-table tbody");
+    if (tb) {
+      const arr = comGasto.slice().sort((a, b) => (b.gasto || 0) - (a.gasto || 0)).slice(0, 30);
+      tb.innerHTML = arr.length ? arr.map((c) => `<tr>
+        <td><b>${esc(c.nome || "Campanha")}</b><span style="display:block;color:var(--text-dim);font-size:12px">Meta Ads</span></td>
+        <td class="mono">${brl(c.gasto || 0)}</td>
+        <td class="mono">${c.leads > 0 ? brl(cpl(c)) : "—"}</td>
+        <td class="mono">${c.leads || 0} leads</td>
+        <td class="mono" style="color:var(--text-dim)">—</td>
+        <td class="mono" style="color:var(--text-dim)">—</td>
+        <td><div class="action-btn-group"><button class="act-btn ver" onclick="showToast('${esc((c.nome || "Campanha").replace(/['"]/g, " "))}')">👁️ Ver</button></div></td>
+      </tr>`).join("") : `<tr><td colspan="7" style="padding:16px;color:var(--text-dim)">Sem gasto de mídia nesta estrutura (fb_saude vazio).</td></tr>`;
+    }
+
+    const comCpl = comGasto.filter((c) => c.leads > 0).sort((a, b) => cpl(b) - cpl(a));
+    const media = comCpl.length ? comCpl.reduce((s, c) => s + cpl(c), 0) / comCpl.length : 0;
+    const setCard = (cls: string, show: boolean, titulo?: string, texto?: string) => {
+      const card = sub.querySelector<HTMLElement>("." + cls); if (!card) return;
+      card.style.display = show ? "" : "none";
+      if (show) { const h = card.querySelector("h4"); if (h && titulo) h.textContent = titulo; const p = card.querySelector("p"); if (p && texto) p.innerHTML = texto; }
+    };
+    if (comCpl.length) {
+      const caro = comCpl[0], barato = comCpl[comCpl.length - 1];
+      setCard("lead-caro", true, `${caro.nome} — CPL ${brl(cpl(caro))}`, `Custo por lead ${cpl(caro) > media ? `acima da média (${brl(media)})` : "na média"}. Gasto de ${brl(caro.gasto)} gerou ${caro.leads} leads.`);
+      setCard("aumentar-verba", true, `${barato.nome} — CPL ${brl(cpl(barato))}`, `Melhor custo por lead da estrutura. Gasto de ${brl(barato.gasto)} gerou ${barato.leads} leads — dá pra escalar.`);
+    } else { setCard("lead-caro", false); setCard("aumentar-verba", false); }
+    setCard("trocar-criativo", false);
+    setCard("leads-queimados", false);
+    const note = sub.querySelector<HTMLElement>(".per-note");
+    if (note) note.innerHTML = `📅 Gasto e leads da Meta (fb_saude). Visitas e vendas por campanha entram com o cruzamento CRM/Junix.`;
+  }, [scopeManager]);
+
   loadFonts();
 
   // sempre aponta para as funções atuais (evita closure velho no seletor de período)
@@ -428,9 +487,6 @@ export default function LeadsCentral() {
       periodFns.current.carregar(nomeP);
       periodFns.current.resultados(nomeP);
     };
-    // Anúncios (Meta): gasto depende do Facebook — neutraliza sem número falso. As filas são reais (filas()).
-    const vc = box.current?.querySelector<HTMLElement>("#view-campanhas");
-    if (vc) vc.innerHTML = `<div style="padding:22px;color:var(--text-dim);font-size:13px;line-height:1.6">Anúncios & gasto de mídia — dado real em breve (vem do Facebook). As <b>filas de distribuição</b> ao lado já são reais.</div>`;
     return () => { const e = document.getElementById("mlr-script"); if (e) e.remove(); };
   }, [carregar, resultados]);
 
@@ -452,9 +508,10 @@ export default function LeadsCentral() {
     pulso();
     justica();
     filas();
+    anuncios();
     const t = setInterval(() => { pulso(); justica(); }, 60_000);
     return () => clearInterval(t);
-  }, [role, scopeManager, carregar, pulso, justica, resultados, filas]);
+  }, [role, scopeManager, carregar, pulso, justica, resultados, filas, anuncios]);
 
   return (
     <div className="mgr10 app2">
