@@ -38,6 +38,31 @@ const AVANCOU = new Set(["VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED"
 type Metrica = "leads" | "checkins" | "visitas" | "pastas" | "vendas";
 type PainelTipo = "plantao" | "online" | "atendimento" | "leads" | "fechamento";
 
+// Piloto da Justiça da roleta (Fase 1): só a equipe da Antonia (planoego) por enquanto.
+const JUSTICA_PILOTO = new Set(["0bd9f6d0-ea37-4354-a3f1-4319b98b4858"]);
+const JCSS = `
+  .cg-just{margin:18px 0;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .cg-just-h{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--line)}
+  .cg-just-h h2{font-size:16px;font-weight:800;margin:0}
+  .cg-just-h span{font-size:12px;color:var(--ink-3)}
+  .cg-just-empty{padding:18px;color:var(--ink-3);font-size:13px}
+  .cg-just-row{display:grid;grid-template-columns:1.4fr .7fr 1fr 1.1fr auto;gap:10px;align-items:center;padding:11px 18px;border-top:1px solid var(--line);font-size:13.5px}
+  .cg-just-head{color:var(--ink-3);font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-top:0}
+  .cg-just-row.afog{background:color-mix(in srgb,var(--red) 10%,transparent)}
+  .cg-just-row.pul{background:color-mix(in srgb,var(--amber) 10%,transparent)}
+  .cg-just-nm{font-weight:700;color:var(--ink)}
+  .cg-just .mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  .cg-just .vermelho{color:var(--red)} .cg-just .verde{color:var(--good)}
+  .cg-just-sit{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;justify-self:start}
+  .cg-just-sit.afogado{background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red)}
+  .cg-just-sit.pulado{background:color-mix(in srgb,var(--amber) 16%,transparent);color:var(--amber)}
+  .cg-just-sit.ok{background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)}
+  .cg-just-btn{background:none;border:1px solid var(--line);border-radius:8px;padding:5px 11px;color:var(--blue);font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .cg-just-btn:hover{border-color:var(--blue)}
+  .cg-just-foot{padding:10px 18px 14px;font-size:11.5px;color:var(--ink-3);line-height:1.5}
+  @media(max-width:640px){.cg-just-row{grid-template-columns:1fr auto;gap:6px}.cg-just-head{display:none}}
+`;
+
 export default function CockpitGeral() {
   const { session } = useAuth();
   const { mode, toggle } = useTheme();
@@ -172,6 +197,29 @@ export default function CockpitGeral() {
     return s;
   }, [ativos]);
   const atendendoLista = useMemo(() => brokers.filter((b) => atendendoIds.has(b.id)), [brokers, atendendoIds]);
+
+  // ── Justiça da roleta (Fase 1): recebeu hoje × respondeu de verdade × situação, só pelos presentes ──
+  const justica = useMemo(() => {
+    const recebidosHoje = leads.filter((l) => diaL(l) === hoje && l.broker_id);
+    const presentes = brokers.filter((b) => {
+      const p = presenca?.get(b.id);
+      return (p?.online || noPlantao(b.first_name)) && p?.roleta !== false;
+    });
+    const rows = presentes.map((b) => {
+      const ls = recebidosHoje.filter((l) => l.broker_id === b.id);
+      const respondeu = ls.filter((l) => !!l.last_broker_whatsapp_at).length;
+      const parados = ls.filter((l) => !l.last_broker_whatsapp_at).map((l) => l.id);
+      return { id: b.id, nome: b.first_name, recebeu: ls.length, respondeu, parados };
+    });
+    const media = rows.length ? rows.reduce((s, x) => s + x.recebeu, 0) / rows.length : 0;
+    return rows.map((x) => {
+      let sit: "afogado" | "pulado" | "ok" = "ok";
+      if (x.recebeu >= media + 4 && x.recebeu > 0 && x.respondeu < x.recebeu * 0.5) sit = "afogado";
+      else if (media >= 4 && x.recebeu <= Math.max(1, Math.floor(media - 4))) sit = "pulado";
+      return { ...x, sit };
+    }).sort((a, b) => (b.sit === "afogado" ? 1 : 0) - (a.sit === "afogado" ? 1 : 0) || b.recebeu - a.recebeu);
+  }, [leads, brokers, presenca, plantaoHoje, hoje]);
+  const justicaMedia = justica.length ? Math.round(justica.reduce((s, x) => s + x.recebeu, 0) / justica.length) : 0;
 
   // ── "o que fazer para salvar a semana" ──
   const esperandoLista = ativos.filter((l) => {
@@ -344,6 +392,33 @@ export default function CockpitGeral() {
         </header>
 
         <SoltarRepresados />
+
+        {JUSTICA_PILOTO.has(managerId) && (
+          <section className="cg-just">
+            <style>{JCSS}</style>
+            <div className="cg-just-h">
+              <h2>⚖️ A distribuição está justa?</h2>
+              <span>média <b>{justicaMedia}</b>/corretor presente · respondeu de verdade = falou no WhatsApp</span>
+            </div>
+            {justica.length === 0 ? (
+              <p className="cg-just-empty">Ninguém presente na roleta agora — sem distribuição de hoje pra avaliar.</p>
+            ) : (
+              <>
+                <div className="cg-just-row cg-just-head"><span>Corretor</span><span>Recebeu</span><span>Respondeu</span><span>Situação</span><span></span></div>
+                {justica.map((r) => (
+                  <div key={r.id} className={`cg-just-row${r.sit === "afogado" ? " afog" : r.sit === "pulado" ? " pul" : ""}`}>
+                    <span className="cg-just-nm">{r.nome || "corretor"}</span>
+                    <span className="mono">{r.recebeu}</span>
+                    <span className={`mono ${r.recebeu > 0 && r.respondeu < r.recebeu * 0.5 ? "vermelho" : "verde"}`}>● {r.respondeu}</span>
+                    <span className={`cg-just-sit ${r.sit}`}>{r.sit === "afogado" ? "afogado" : r.sit === "pulado" ? "sendo pulado" : "equilibrado"}</span>
+                    <span>{r.parados.length > 0 && <button className="cg-just-btn" onClick={() => setRepassar({ nome: r.nome || "corretor", leadIds: r.parados, fromId: r.id })}>Puxar {r.parados.length} parado{r.parados.length > 1 ? "s" : ""}</button>}</span>
+                  </div>
+                ))}
+                <div className="cg-just-foot">"Recebeu" = leads de hoje na mão dele. "Respondeu de verdade" = quantos ele já falou no WhatsApp (sinal real, não status). <b>Puxar parados</b> tira os sem 1º toque e abre o repasse pra quem está presente.</div>
+              </>
+            )}
+          </section>
+        )}
 
         {/* ── cartões ── */}
         <section className="cg-cards">
