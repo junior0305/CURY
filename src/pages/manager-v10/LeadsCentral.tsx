@@ -158,12 +158,12 @@ export default function LeadsCentral() {
     const porCorretor: Record<string, number> = {};
     ls.forEach((l) => { if (l.broker_id && !l.last_broker_whatsapp_at) porCorretor[l.broker_id] = (porCorretor[l.broker_id] || 0) + 1; });
     const pior = Object.entries(porCorretor).sort((a, b) => b[1] - a[1])[0];
-    const cop = root.querySelector<HTMLElement>(".copilot-text, #copilot-text, .suss-resumo");
-    if (cop) {
-      cop.textContent = pior
-        ? `${nm[pior[0]] || "corretor"} com ${pior[1]} sem toque · ${total} leads no período · ${semContato} sem contato`
-        : `${total} leads no período · ${semContato} sem contato`;
-    }
+    root.querySelectorAll<HTMLElement>(".copilot-bar .cb-tx").forEach((cop) => {
+      const txt = pior
+        ? `${esc(nm[pior[0]] || "corretor")} com ${pior[1]} sem toque · ${total} leads no período · ${semContato} sem contato`
+        : `${total} leads no período · ${semContato} sem contato · ${resposta} responderam`;
+      cop.innerHTML = `<b>Copiloto</b> — ${txt}`;
+    });
   }, [scopeManager, brokers]);
 
   // pulso do Hoje (sempre "hoje", independente do período do funil)
@@ -192,6 +192,42 @@ export default function LeadsCentral() {
     setRep(reps[1], semDono, "sem dono", "Direcionar");
   }, [scopeManager]);
 
+  // "A distribuição está justa?" — por corretor, hoje (recebeu × respondeu de verdade × situação)
+  const justica = useCallback(async () => {
+    const root = box.current; if (!root) return;
+    const panels = root.querySelectorAll(".panel-box");
+    let tbody: HTMLElement | null = null;
+    panels.forEach((p) => { const h = p.querySelector("h3"); if (h && /distribui.*just/i.test(h.textContent || "")) tbody = p.querySelector("tbody"); });
+    if (!tbody) return;
+    const [de] = faixa("Hoje");
+    let lq = sb.from("leads").select("broker_id,last_broker_whatsapp_at").gte("created_at", de).not("status", "in", "(EXCLUDED,ABANDONED)");
+    if (scopeManager) lq = lq.eq("manager_id", scopeManager);
+    let pq = sb.from("profiles").select("id,first_name,manager_id").eq("role", "BROKER");
+    if (scopeManager) pq = pq.eq("manager_id", scopeManager);
+    const [{ data: ld }, { data: pf }] = await Promise.all([lq, pq]);
+    const leads = (ld ?? []) as any[];
+    const nomeP: Record<string, string> = {}, mgrOf: Record<string, string | null> = {};
+    (pf ?? []).forEach((p: any) => { nomeP[p.id] = p.first_name || "corretor"; mgrOf[p.id] = p.manager_id || null; });
+    const g: Record<string, { rec: number; resp: number }> = {};
+    leads.forEach((l: any) => { if (!l.broker_id) return; const o = g[l.broker_id] || (g[l.broker_id] = { rec: 0, resp: 0 }); o.rec++; if (l.last_broker_whatsapp_at) o.resp++; });
+    let rows = Object.entries(g).map(([id, o]) => ({ id, nome: nomeP[id] || "corretor", mgr: mgrOf[id], rec: o.rec, resp: o.resp })).filter((r) => r.rec > 0);
+    if (!rows.length) { tbody.innerHTML = `<tr><td colspan="5" style="padding:18px;color:var(--text-dim)">Ninguém recebeu lead ainda hoje.</td></tr>`; return; }
+    const media = rows.reduce((s, r) => s + r.rec, 0) / rows.length;
+    const mgrIds = [...new Set(rows.map((r) => r.mgr).filter(Boolean))] as string[];
+    const mgrName: Record<string, string> = {};
+    if (mgrIds.length) { const { data: mn } = await sb.from("profiles").select("id,first_name").in("id", mgrIds); (mn ?? []).forEach((m: any) => { mgrName[m.id] = m.first_name; }); }
+    const cl = (r: typeof rows[0]) => (r.rec >= media + 4 && r.resp < r.rec * 0.5) ? "afog" : (media >= 4 && r.rec <= Math.max(1, Math.floor(media - 4))) ? "pul" : "ok";
+    rows.sort((a, b) => (cl(b) === "afog" ? 1 : 0) - (cl(a) === "afog" ? 1 : 0) || b.rec - a.rec);
+    tbody.innerHTML = rows.map((r) => {
+      const c = cl(r);
+      const sit = c === "afog" ? "afogado" : c === "pul" ? "sendo pulado" : "equilibrado";
+      const col = c === "afog" ? "var(--rose)" : c === "pul" ? "var(--amber)" : "var(--good)";
+      const dot = r.resp < r.rec * 0.5 ? "var(--rose)" : "var(--good)";
+      const sub = r.mgr && mgrName[r.mgr] ? ` <span style="color:var(--text-dim)">· ${esc(mgrName[r.mgr])}</span>` : "";
+      return `<tr><td><b>${esc(r.nome)}</b>${sub}</td><td class="mono">${r.rec}</td><td><span style="color:${dot};font-weight:700">● ${r.resp}</span></td><td><span style="color:${col};font-weight:700">${sit}</span></td><td></td></tr>`;
+    }).join("");
+  }, [scopeManager]);
+
   loadFonts();
 
   // injeta o JS do mockup uma vez e religa o seletor de período p/ recarregar dado real
@@ -214,9 +250,10 @@ export default function LeadsCentral() {
     if (!role) return;
     carregar("Esta Semana");
     pulso();
-    const t = setInterval(() => { pulso(); }, 60_000);
+    justica();
+    const t = setInterval(() => { pulso(); justica(); }, 60_000);
     return () => clearInterval(t);
-  }, [role, scopeManager, carregar, pulso]);
+  }, [role, scopeManager, carregar, pulso, justica]);
 
   return (
     <div className="mgr10 app2">
