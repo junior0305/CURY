@@ -207,7 +207,10 @@ export default function LeadsCentral() {
     const vacuo = ls.filter((l) => l.broker_id && !l.last_broker_whatsapp_at).length;
     const pz = root.querySelectorAll<HTMLElement>(".pulso .pz b");
     if (pz.length >= 4) { pz[0].textContent = String(entraram); pz[1].textContent = String(distribuidos); pz[2].textContent = String(represados); pz[3].textContent = String(vacuo); }
-    const reps = root.querySelectorAll(".rep-row");
+    // escopa as linhas ao painel "Leads esperando soltar" (há .rep-row em outros lugares)
+    let repPanel: Element | null = null;
+    root.querySelectorAll(".panel-box").forEach((p) => { const h = p.querySelector("h3"); if (h && /esperando soltar/i.test(h.textContent || "")) repPanel = p; });
+    const reps = repPanel ? (repPanel as Element).querySelectorAll(".rep-row") : root.querySelectorAll(".rep-row");
     const setRep = (el: Element | undefined, n: number, label: string, btn: string) => {
       if (!el) return;
       const b = el.querySelector("b"); if (b) b.textContent = `${n} ${label}`;
