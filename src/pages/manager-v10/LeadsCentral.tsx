@@ -12,7 +12,7 @@ import { CSS, HTML, JS } from "./leadsMockup";
 const sb = supabase as any;
 
 type Lead = {
-  id: string; nome: string | null; telefone: string | null;
+  id: string; name: string | null; phone: string | null;
   campanha_nome: string | null; source: string | null;
   broker_id: string | null; last_broker_whatsapp_at: string | null;
   visit_scheduled_at: string | null; status: string | null; created_at: string;
@@ -88,7 +88,7 @@ export default function LeadsCentral() {
     const root = box.current; if (!root) return;
     const [de, ate] = faixa(nome);
     let q = sb.from("leads")
-      .select("id,nome,telefone,campanha_nome,source,broker_id,last_broker_whatsapp_at,visit_scheduled_at,status,created_at")
+      .select("id,name,phone,campanha_nome,source,broker_id,last_broker_whatsapp_at,visit_scheduled_at,status,created_at")
       .gte("created_at", de).lt("created_at", ate)
       .not("status", "in", "(EXCLUDED,ABANDONED)")
       .order("created_at", { ascending: false }).limit(5000);
@@ -132,7 +132,7 @@ export default function LeadsCentral() {
         tb.innerHTML = `<tr><td colspan="7" style="padding:28px;text-align:center;color:var(--text-dim)">Nenhum lead neste período.</td></tr>`;
       } else {
         tb.innerHTML = ls.slice(0, 400).map((l) => {
-          const nome = esc(l.nome || "Sem nome");
+          const nome = esc(l.name || "Sem nome");
           const cor = l.broker_id ? esc(nm[l.broker_id] || "corretor") : "";
           const [bc, bt] = situ(l);
           const dcor = (l.broker_id ? (nm[l.broker_id] || "") : "sem").toLowerCase().split(" ")[0];
@@ -141,13 +141,13 @@ export default function LeadsCentral() {
             : `<span style="color:var(--text-dim)">Sem corretor</span>`;
           return `<tr data-type="${bc}" data-corretor="${esc(dcor)}">
             <td><input type="checkbox" class="lead-chk" onclick="updateBatchBar()" /></td>
-            <td><b>${nome}</b><span class="mono" style="display:block;color:var(--text-dim);font-size:12px">${fone(l.telefone)}</span></td>
+            <td><b>${nome}</b><span class="mono" style="display:block;color:var(--text-dim);font-size:12px">${fone(l.phone)}</span></td>
             <td><span>${esc(origemTxt(l))}</span></td>
             <td>${corTd}</td>
             <td><span class="sit-badge ${bc}">${bt}</span></td>
             <td class="mono">${tempoTxt(l)}</td>
             <td><div class="action-btn-group">
-              <button class="act-btn ver" onclick="openModalVer('${arg(l.id)}','${arg(l.nome || "Sem nome")}','${arg(fone(l.telefone))}','${arg(origemTxt(l))}','${arg(cor || "—")}','${arg(bt)}','${arg(tempoTxt(l))}','${arg(origemTxt(l))}')">👁️ Ver</button>
+              <button class="act-btn ver" onclick="openModalVer('${arg(l.id)}','${arg(l.name || "Sem nome")}','${arg(fone(l.phone))}','${arg(origemTxt(l))}','${arg(cor || "—")}','${arg(bt)}','${arg(tempoTxt(l))}','${arg(origemTxt(l))}')">👁️ Ver</button>
             </div></td>
           </tr>`;
         }).join("");
