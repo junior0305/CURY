@@ -7,6 +7,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { RailV10, loadFonts } from "@/components/manager-v10/RailV10";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
+import { toast } from "sonner";
 import { CSS, HTML, JS } from "./leadsMockup";
 
 // garante a data grudada no topo ao rolar + token --good p/ a tabela da justiça
@@ -214,6 +215,16 @@ export default function LeadsCentral() {
     };
     setRep(reps[0], represados, "segurados", "Soltar");
     setRep(reps[1], semDono, "sem dono", "Direcionar");
+    // o botão "Soltar" solta de verdade (represados_acao) — necessário p/ a Antonia
+    const sBtn = reps[0]?.querySelector(".act-btn");
+    if (sBtn) sBtn.setAttribute("onclick", "event.stopPropagation();window.__soltarRepresados&&window.__soltarRepresados()");
+    const dBtn = reps[1]?.querySelector(".act-btn");
+    if (dBtn) dBtn.setAttribute("onclick", "event.stopPropagation();window.__direcionarSemDono&&window.__direcionarSemDono()");
+    // prévia "se soltar agora" — sem nomes fictícios
+    const r1 = root.querySelector("#rec-r1");
+    if (r1) r1.innerHTML = `<span class="mini-lbl">${represados ? `Se soltar agora, os ${represados} represados vão para os corretores presentes, em rodízio.` : "Nenhum lead represado no momento."}</span>`;
+    const r2 = root.querySelector("#rec-r2");
+    if (r2) r2.innerHTML = `<span class="mini-lbl">${semDono ? `Os ${semDono} sem dono vão para a fila exclusiva do formulário.` : "Nenhum lead sem dono no momento."}</span>`;
 
     // selos das abas: Hoje = "p/ resolver" (represados + sem dono); Mídia não tem contagem real → oculta
     const tabB = root.querySelectorAll<HTMLElement>(".lead-tab-btn .tab-badge");
@@ -245,8 +256,10 @@ export default function LeadsCentral() {
     const root = box.current; if (!root) return;
     const panels = root.querySelectorAll(".panel-box");
     let tbody: HTMLElement | null = null;
-    panels.forEach((p) => { const h = p.querySelector("h3"); if (h && /distribui.*just/i.test(h.textContent || "")) tbody = p.querySelector("tbody"); });
+    let painel: Element | null = null;
+    panels.forEach((p) => { const h = p.querySelector("h3"); if (h && /distribui.*just/i.test(h.textContent || "")) { tbody = p.querySelector("tbody"); painel = p; } });
     if (!tbody) return;
+    const setFoot = (html: string) => { const f = painel?.querySelector("p"); if (f) f.innerHTML = html; };
     const [de] = faixa("Hoje");
     let lq = sb.from("leads").select("broker_id,last_broker_whatsapp_at").gte("created_at", de).not("status", "in", "(EXCLUDED,ABANDONED)");
     if (scopeManager) lq = lq.eq("manager_id", scopeManager);
@@ -259,7 +272,7 @@ export default function LeadsCentral() {
     const g: Record<string, { rec: number; resp: number }> = {};
     leads.forEach((l: any) => { if (!l.broker_id) return; const o = g[l.broker_id] || (g[l.broker_id] = { rec: 0, resp: 0 }); o.rec++; if (l.last_broker_whatsapp_at) o.resp++; });
     let rows = Object.entries(g).map(([id, o]) => ({ id, nome: nomeP[id] || "corretor", mgr: mgrOf[id], rec: o.rec, resp: o.resp })).filter((r) => r.rec > 0);
-    if (!rows.length) { tbody.innerHTML = `<tr><td colspan="5" style="padding:18px;color:var(--text-dim)">Ninguém recebeu lead ainda hoje.</td></tr>`; return; }
+    if (!rows.length) { tbody.innerHTML = `<tr><td colspan="5" style="padding:18px;color:var(--text-dim)">Ninguém recebeu lead ainda hoje.</td></tr>`; setFoot("Ninguém recebeu lead ainda hoje — sem distribuição pra avaliar."); return; }
     const media = rows.reduce((s, r) => s + r.rec, 0) / rows.length;
     const mgrIds = [...new Set(rows.map((r) => r.mgr).filter(Boolean))] as string[];
     const mgrName: Record<string, string> = {};
@@ -274,6 +287,12 @@ export default function LeadsCentral() {
       const sub = r.mgr && mgrName[r.mgr] ? ` <span style="color:var(--text-dim)">· ${esc(mgrName[r.mgr])}</span>` : "";
       return `<tr><td><b>${esc(r.nome)}</b>${sub}</td><td class="mono">${r.rec}</td><td><span style="color:${dot};font-weight:700">● ${r.resp}</span></td><td><span style="color:${col};font-weight:700">${sit}</span></td><td></td></tr>`;
     }).join("");
+    const afog = rows.filter((r) => cl(r) === "afog"), pul = rows.filter((r) => cl(r) === "pul");
+    const pontos = afog.length + pul.length;
+    if (pontos) {
+      const na = afog.slice(0, 2).map((r) => esc(r.nome)).join(", "), np = pul.slice(0, 2).map((r) => esc(r.nome)).join(", ");
+      setFoot(`<b>${pontos} ponto${pontos > 1 ? "s" : ""} de atenção</b> (de ${rows.length} que receberam hoje). ${afog.length ? `${na} afogado${afog.length > 1 ? "s" : ""}; ` : ""}${pul.length ? `${np} sendo pulado${pul.length > 1 ? "s" : ""}. ` : ""}`);
+    } else setFoot(`${rows.length} corretor${rows.length > 1 ? "es" : ""} receberam hoje — distribuição equilibrada.`);
   }, [scopeManager]);
 
   // RESULTADOS — tudo real a partir dos leads do período (tendência, conversão por canal,
@@ -514,6 +533,43 @@ export default function LeadsCentral() {
     const t = setInterval(() => { pulso(); justica(); }, 60_000);
     return () => clearInterval(t);
   }, [role, scopeManager, carregar, pulso, justica, resultados, filas, anuncios]);
+
+  // botão "Soltar" (represados) solta de verdade via RPC represados_acao
+  useEffect(() => {
+    (window as any).__soltarRepresados = async () => {
+      try {
+        const { data, error } = await sb.rpc("represados_acao", { p_como: manParam || null, p_executar: true });
+        if (error) throw error;
+        const n = (data as any)?.soltos ?? (data as any)?.total;
+        toast.success(`Represados soltos${n != null ? ` (${n})` : ""} — corretores avisados.`);
+        pulso(); justica();
+      } catch (e: any) {
+        const m = String(e?.message || "");
+        toast.error(m.includes("entrar_como") ? "Saia do 'Entrar como' pra soltar." : m.includes("sem_permissao") ? "Sem permissão pra soltar aqui." : "Não consegui soltar os represados.");
+      }
+    };
+    // "Direcionar" (sem dono): distribui os órfãos aos corretores presentes da própria estrutura (real)
+    (window as any).__direcionarSemDono = async () => {
+      try {
+        const [de] = faixa("Hoje");
+        let lq = sb.from("leads").select("id").is("broker_id", null).is("represa_at", null).gte("created_at", de).not("status", "in", "(EXCLUDED,ABANDONED)");
+        if (scopeManager) lq = lq.eq("manager_id", scopeManager);
+        const { data: ld } = await lq;
+        const ids = (ld ?? []).map((l: any) => l.id);
+        if (!ids.length) { toast.info("Nenhum lead sem dono pra direcionar."); return; }
+        let pq = sb.from("profiles").select("id").eq("role", "BROKER").eq("is_active", true).neq("lead_assignment_enabled", false);
+        if (scopeManager) pq = pq.eq("manager_id", scopeManager);
+        const { data: pf } = await pq;
+        const alvo = (pf ?? []).map((p: any) => p.id);
+        if (!alvo.length) { toast.error("Sem corretor elegível pra receber."); return; }
+        const { data, error } = await sb.rpc("redistribuir_lote", { p_leads: ids, p_para: alvo, p_como: manParam || null, p_motivo: "Direcionar sem dono — Central de Leads" });
+        if (error) throw error;
+        toast.success(`${(data as any)?.feitos ?? ids.length} lead(s) direcionado(s) aos corretores presentes.`);
+        pulso(); justica(); carregar("Hoje");
+      } catch (e: any) { toast.error(e?.message || "Não consegui direcionar os sem dono."); }
+    };
+    return () => { try { delete (window as any).__soltarRepresados; delete (window as any).__direcionarSemDono; } catch { /* ok */ } };
+  }, [manParam, scopeManager, pulso, justica, carregar]);
 
   return (
     <div className="mgr10 app2">
