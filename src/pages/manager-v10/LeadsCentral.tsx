@@ -252,7 +252,7 @@ export default function LeadsCentral() {
   const pulso = useCallback(async () => {
     const root = box.current; if (!root) return;
     const [de] = faixa("Hoje");
-    let q = sb.from("leads").select("broker_id,last_broker_whatsapp_at,represa_at,regiao_interesse")
+    let q = sb.from("leads").select("broker_id,last_broker_whatsapp_at,represa_at,regiao_interesse,fb_form_id,campanha_nome")
       .gte("created_at", de).not("status", "in", "(EXCLUDED,ABANDONED)");
     if (scopeManager) q = q.eq("manager_id", scopeManager);
     const { data } = await q;
@@ -298,8 +298,22 @@ export default function LeadsCentral() {
     if (entP) {
       const sub = entP.querySelector(".panel-header span");
       if (sub) sub.textContent = `${entraram} entraram · ${distribuidos} distribuídos`;
+      // Agrupa por REGIÃO real; quando não há região (o form não pergunta), pelo NOME DO FORMULÁRIO.
+      // Nunca mostra "Sim/Não" (isso é resposta de pergunta do form, não região).
+      const JUNK = new Set(["sim", "não", "nao", "yes", "no", "true", "false", "-", "n/a"]);
+      const formIds = Array.from(new Set(ls.map((l: any) => l.fb_form_id).filter(Boolean)));
+      const nomeForm: Record<string, string> = {};
+      if (formIds.length) {
+        const { data: cf } = await sb.from("formularios_catalogo").select("form_id,nome,nome_fonte").in("form_id", formIds as string[]);
+        (cf ?? []).forEach((f: any) => { nomeForm[f.form_id] = f.nome || f.nome_fonte || ""; });
+      }
+      const rotulo = (l: any) => {
+        const r = (l.regiao_interesse || "").trim();
+        if (r && !JUNK.has(r.toLowerCase())) return r;
+        return nomeForm[l.fb_form_id] || (l.campanha_nome || "").trim() || "Sem formulário";
+      };
       const porReg: Record<string, number> = {};
-      ls.forEach((l) => { const r = (l.regiao_interesse || "").trim() || "Sem região"; porReg[r] = (porReg[r] || 0) + 1; });
+      ls.forEach((l) => { const k = rotulo(l); porReg[k] = (porReg[k] || 0) + 1; });
       const ord = Object.entries(porReg).sort((a, b) => b[1] - a[1]).slice(0, 6);
       const max = ord.length ? ord[0][1] : 1;
       const body = entP.querySelector(".panel-header")?.nextElementSibling as HTMLElement | null;
@@ -518,7 +532,7 @@ export default function LeadsCentral() {
             <button class="act-btn ver" onclick="window.__filaAdd&&window.__filaAdd(this)">Adicionar</button>
           </div>
           <div style="margin-top:6px;color:var(--text-dim);font-size:11.5px">Tirando todos os corretores, os leads deste formulário voltam para a <b>roleta do plantão</b>.</div>
-          <div style="margin-top:8px;color:var(--text-dim);font-size:12px">${f.leads_7d ?? 0} leads em 7d${f.anuncio ? "" : " · <span style=\"color:var(--amber,#F59E0B)\">anúncio pausado</span>"}</div>
+          ${f.anuncio ? "" : `<div style="margin-top:8px;color:var(--amber,#F59E0B);font-size:12px">anúncio pausado</div>`}
         </div>`;
       }).join("") : `<div style="padding:16px;color:var(--text-dim)">Nenhum formulário ativo com fila nesta estrutura.</div>`;
     }
