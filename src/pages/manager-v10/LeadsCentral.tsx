@@ -460,8 +460,9 @@ export default function LeadsCentral() {
       arvore = (data ?? []).map((r: any) => (typeof r === "string" ? r : r.ids_da_arvore));
     }
     const [de] = faixa("Hoje");
-    let lq = sb.from("leads").select("fb_form_id").gte("created_at", de).not("status", "in", "(EXCLUDED,ABANDONED)");
-    if (scopeManager) lq = lq.eq("manager_id", scopeManager);
+    // "leads hoje" por formulário = contagem REAL do formulário (ele é desta estrutura), sem filtrar por manager_id —
+    // leads do form da Antonia que foram pra ela como corretora ficam com manager_id do super e sumiam da conta.
+    const lq = sb.from("leads").select("fb_form_id").gte("created_at", de).not("status", "in", "(EXCLUDED,ABANDONED)").not("fb_form_id", "is", null).limit(20000);
     let pq = sb.from("profiles").select("id,first_name").eq("role", "BROKER");
     if (scopeManager) pq = pq.eq("manager_id", scopeManager);
     const [{ data: cat }, { data: qs }, { data: lf }, { data: pf }] = await Promise.all([
@@ -511,7 +512,7 @@ export default function LeadsCentral() {
             <span class="queue-form-sub">${ativa ? "rodízio exclusivo" : "sem fila · roleta do plantão"}</span>
           </div><span class="sit-badge ${ativa ? "retorno" : "vacuo"}">${ativa ? "🟢 Ativa" : "⚠️ Sem fila"}</span></div>
           <div style="margin-top:8px"><span>👥 ${brokers.length} corretores na roleta · <b>${hoje} leads hoje</b></span>
-          <div class="queue-brokers-chips" style="margin-top:8px">${chips}</div></div>
+          <div class="queue-brokers-chips editing" style="margin-top:8px">${chips}</div></div>
           <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
             <select class="fila-add-sel" style="background:var(--surface-subtle);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text-main);font-size:12px;max-width:170px"><option value="">+ corretor…</option>${optsBrokers}</select>
             <button class="act-btn ver" onclick="window.__filaAdd&&window.__filaAdd(this)">Adicionar</button>
