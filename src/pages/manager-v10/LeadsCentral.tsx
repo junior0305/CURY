@@ -5,6 +5,9 @@
 import { useEffect, useRef } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { RailV10, loadFonts } from "@/components/manager-v10/RailV10";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/components/AuthProvider";
+import { useEffectiveManagerId } from "@/hooks/useSuperintendente";
 
 const CSS = `
     .mlr {
@@ -1169,7 +1172,7 @@ const CSS = `
     .mlr .main-content{margin-left:0 !important;width:auto !important;max-width:none !important}
     .mlr .rail,.mlr .rail-v10,.mlr .theme-bar,.mlr #theme-bar{display:none !important}
 `;
-const HTML = `<div style="background:#F59E0B;color:#000;padding:8px 16px;font-weight:800;font-size:12.5px;text-align:center;letter-spacing:.01em">⚠️ Tela nova em validação — represados e justiça da roleta já são reais; os outros números ainda são exemplo (entram por fases).</div><main class="main-content">
+const HTML = `<div style="background:#F59E0B;color:#000;padding:8px 16px;font-weight:800;font-size:12.5px;text-align:center;letter-spacing:.01em">⚠️ Tela nova em validação — o Hoje (entrada, distribuídos, represados, no vácuo) já é real; os demais números entram por fases.</div><main class="main-content">
       
       <!-- ══════════════════════════════════════════════════════════════════════
            📌 CABEÇALHO FIXO COM SELETOR DE DATA STICKY (NUNCA SOME AO ROLAR)
@@ -2376,8 +2379,12 @@ const JS = `
 
 export default function LeadsCentral() {
   const { mode, toggle } = useTheme();
+  const { session } = useAuth() as any;
+  const gerente = (useEffectiveManagerId() as any) ?? session?.user?.id ?? "";
   loadFonts();
+  const box = useRef<HTMLDivElement>(null);
   const done = useRef(false);
+
   useEffect(() => {
     if (done.current) return;
     done.current = true;
@@ -2387,11 +2394,51 @@ export default function LeadsCentral() {
     document.body.appendChild(s);
     return () => { const e = document.getElementById("mlr-script"); if (e) e.remove(); };
   }, []);
+
+  // Fase 1 de dado real: pulso + represados da aba Hoje (sem mexer no visual do mockup).
+  useEffect(() => {
+    if (!gerente) return;
+    let vivo = true;
+    (async () => {
+      const nb = new Date(Date.now() - 3 * 3600 * 1000);
+      const startBR = new Date(Date.UTC(nb.getUTCFullYear(), nb.getUTCMonth(), nb.getUTCDate(), 3, 0, 0)).toISOString();
+      const { data } = await (supabase as any).from("leads")
+        .select("broker_id,last_broker_whatsapp_at,represa_at")
+        .eq("manager_id", gerente).gte("created_at", startBR)
+        .not("status", "in", "(EXCLUDED,ABANDONED)");
+      if (!vivo) return;
+      const ls = (data ?? []) as any[];
+      const entraram = ls.length;
+      const distribuidos = ls.filter((l) => l.broker_id).length;
+      const represados = ls.filter((l) => l.represa_at && !l.broker_id).length;
+      const semDono = ls.filter((l) => !l.broker_id && !l.represa_at).length;
+      const vacuo = ls.filter((l) => l.broker_id && !l.last_broker_whatsapp_at).length;
+      const root = box.current;
+      if (!root) return;
+      const pz = root.querySelectorAll(".pulso .pz b");
+      if (pz.length >= 4) {
+        pz[0].textContent = String(entraram);
+        pz[1].textContent = String(distribuidos);
+        pz[2].textContent = String(represados);
+        pz[3].textContent = String(vacuo);
+      }
+      const reps = root.querySelectorAll(".rep-row");
+      const setRep = (el: Element | undefined, n: number, label: string, btn: string) => {
+        if (!el) return;
+        const b = el.querySelector("b"); if (b) b.textContent = `${n} ${label}`;
+        const bt = el.querySelector(".act-btn"); if (bt) bt.textContent = `${btn} (${n})`;
+      };
+      setRep(reps[0], represados, "segurados", "Soltar");
+      setRep(reps[1], semDono, "sem dono", "Direcionar");
+    })();
+    return () => { vivo = false; };
+  }, [gerente]);
+
   return (
     <div className="mgr10 app2">
       <RailV10 atual={"leads" as any} mode={mode} toggle={toggle} />
       <style>{CSS}</style>
-      <div className="mlr" dangerouslySetInnerHTML={{ __html: HTML }} />
+      <div ref={box} className="mlr" dangerouslySetInnerHTML={{ __html: HTML }} />
     </div>
   );
 }
