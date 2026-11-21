@@ -2,17 +2,12 @@
 // O visual/markup vem de leadsMockup.ts (CSS/HTML/JS escopados em .mlr). Aqui ligamos os
 // numeros reais: funil, pilulas de situacao, tabela de leads e o pulso do Hoje, respeitando
 // o periodo escolhido e o escopo do usuario (gerente = sua equipe; super/diretor/admin = RLS).
-import { useEffect, useRef, useCallback, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useCallback } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { RailV10, loadFonts } from "@/components/manager-v10/RailV10";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
-import FilasFormulario from "@/components/leads/FilasFormulario";
 import { CSS, HTML, JS } from "./leadsMockup";
-
-// aliases de tokens: deixa os componentes reais (mgr10) renderizarem na paleta do mockup
-const ALIAS = `.mlr{--card:var(--surface-card);--line:var(--border);--ink:var(--text-main,#F8FAFC);--ink-2:var(--text-muted);--ink-3:var(--text-dim);--red:var(--rose,#F43F5E);--amber:var(--amber,#F59E0B);--good:#10B981;--blue:var(--brand,#0EA5E9);--cgbg:var(--bg);--tx:var(--text-main)}`;
 
 const sb = supabase as any;
 
@@ -81,7 +76,6 @@ export default function LeadsCentral() {
   const { session, role } = useAuth() as any;
   const box = useRef<HTMLDivElement>(null);
   const injetado = useRef(false);
-  const [filasNode, setFilasNode] = useState<HTMLElement | null>(null);
 
   // escopo: gerente vê a própria equipe (manager_id); super/diretor/admin deixam o RLS filtrar,
   // salvo "entrar como / drill" (?manager=<id>), que limita àquele gerente.
@@ -318,9 +312,69 @@ export default function LeadsCentral() {
     if (rodape && /resposta caiu/i.test(rodape.textContent || "")) {
       rodape.textContent = pctResp(a) < pctResp(b) ? "A % de resposta caiu — time atendendo pior, não lead pior." : "A % de resposta subiu — time atendendo melhor.";
     }
+    const note = view.querySelector<HTMLElement>(".per-note");
+    if (note) note.innerHTML = `📊 O que está dando resultado — período <b>${esc(nome)}</b>. Troque o período lá em cima pra recalcular.`;
+  }, [scopeManager]);
+
+  // MÍDIA & FILAS — cards do mockup populados com as filas REAIS (formularios_catalogo + distribution_queues)
+  const filas = useCallback(async () => {
+    const root = box.current; if (!root) return;
+    const grid = root.querySelector("#view-filas .queues-grid");
+    const sel = root.querySelector<HTMLSelectElement>("#view-filas select");
+    if (!grid && !sel) return;
+    let arvore: string[] | null = null;
+    if (scopeManager) {
+      const { data } = await sb.rpc("ids_da_arvore", { p: scopeManager });
+      arvore = (data ?? []).map((r: any) => (typeof r === "string" ? r : r.ids_da_arvore));
+    }
+    const [de] = faixa("Hoje");
+    let lq = sb.from("leads").select("fb_form_id").gte("created_at", de).not("status", "in", "(EXCLUDED,ABANDONED)");
+    if (scopeManager) lq = lq.eq("manager_id", scopeManager);
+    let pq = sb.from("profiles").select("id,first_name").eq("role", "BROKER");
+    if (scopeManager) pq = pq.eq("manager_id", scopeManager);
+    const [{ data: cat }, { data: qs }, { data: lf }, { data: pf }] = await Promise.all([
+      sb.from("formularios_catalogo").select("form_id,nome,nome_fonte,status,leads_7d,anuncio_ativo,owner_id"),
+      sb.from("distribution_queues").select("match_value,broker_ids").eq("match_field", "form_id").eq("is_active", true),
+      lq, pq,
+    ]);
+    let forms = (cat ?? []) as any[];
+    if (arvore) forms = forms.filter((f) => !f.owner_id || arvore!.includes(f.owner_id));
+    const hojePorForm: Record<string, number> = {};
+    (lf ?? []).forEach((l: any) => { if (l.fb_form_id) hojePorForm[l.fb_form_id] = (hojePorForm[l.fb_form_id] || 0) + 1; });
+    const qByForm: Record<string, string[]> = {};
+    (qs ?? []).forEach((q: any) => { qByForm[q.match_value] = q.broker_ids || []; });
+    const nm: Record<string, string> = {};
+    (pf ?? []).forEach((p: any) => { nm[p.id] = p.first_name || "corretor"; });
+    const mostrar = forms.filter((f) => f.anuncio_ativo || qByForm[f.form_id]);
+    if (sel) sel.innerHTML = mostrar.length
+      ? mostrar.map((f) => `<option value="${esc(f.form_id)}">Formulário — ${esc(f.nome || f.nome_fonte || f.form_id)}</option>`).join("")
+      : `<option>Nenhum formulário ativo</option>`;
+    if (grid) {
+      grid.innerHTML = mostrar.length ? mostrar.slice(0, 24).map((f) => {
+        const brokers = qByForm[f.form_id] || [];
+        const ativa = brokers.length > 0;
+        const chips = brokers.length
+          ? brokers.slice(0, 10).map((id) => `<span class="broker-chip"><span class="dot"></span> ${esc(nm[id] || "corretor")}</span>`).join("")
+          : `<span style="color:var(--text-dim)">— sem corretores dedicados —</span>`;
+        const hoje = hojePorForm[f.form_id] || 0;
+        return `<div class="queue-form-card">
+          <div class="queue-form-top"><div>
+            <span class="queue-form-title">${esc(f.nome || f.nome_fonte || "Formulário")}</span>
+            <span class="queue-form-sub">${ativa ? "rodízio exclusivo" : "sem fila · roleta geral"}</span>
+          </div><span class="sit-badge ${ativa ? "retorno" : "vacuo"}">${ativa ? "🟢 Ativa" : "⚠️ Sem fila"}</span></div>
+          <div style="margin-top:8px"><span>👥 ${brokers.length} corretores na roleta · <b>${hoje} leads hoje</b></span>
+          <div class="queue-brokers-chips" style="margin-top:8px">${chips}</div></div>
+          <div style="margin-top:10px;color:var(--text-dim);font-size:12px">${f.leads_7d ?? 0} leads em 7d</div>
+        </div>`;
+      }).join("") : `<div style="padding:16px;color:var(--text-dim)">Nenhum formulário ativo com fila nesta estrutura.</div>`;
+    }
   }, [scopeManager]);
 
   loadFonts();
+
+  // sempre aponta para as funções atuais (evita closure velho no seletor de período)
+  const periodFns = useRef({ carregar, resultados });
+  periodFns.current = { carregar, resultados };
 
   // injeta o JS do mockup uma vez e religa o seletor de período p/ recarregar dado real
   useEffect(() => {
@@ -332,15 +386,12 @@ export default function LeadsCentral() {
     const orig = (window as any).selecionarPeriodo;
     (window as any).selecionarPeriodo = (nomeP: string, el: any) => {
       try { if (orig) orig(nomeP, el); } catch { /* ok */ }
-      carregar(nomeP);
-      resultados(nomeP);
+      periodFns.current.carregar(nomeP);
+      periodFns.current.resultados(nomeP);
     };
-    // Mídia & Filas: troca os cards fictícios pelo componente real de filas; neutraliza o fake de anúncios.
-    const root = box.current;
-    const vf = root?.querySelector<HTMLElement>("#view-filas");
-    if (vf) { vf.innerHTML = ""; setFilasNode(vf); }
-    const vc = root?.querySelector<HTMLElement>("#view-campanhas");
-    if (vc) vc.innerHTML = `<div style="padding:22px;color:var(--text-dim);font-size:13px;line-height:1.6">Anúncios & gasto de mídia — dado real em breve (vem do Facebook). As <b>filas de distribuição</b> reais estão na aba ao lado.</div>`;
+    // Anúncios (Meta): gasto depende do Facebook — neutraliza sem número falso. As filas são reais (filas()).
+    const vc = box.current?.querySelector<HTMLElement>("#view-campanhas");
+    if (vc) vc.innerHTML = `<div style="padding:22px;color:var(--text-dim);font-size:13px;line-height:1.6">Anúncios & gasto de mídia — dado real em breve (vem do Facebook). As <b>filas de distribuição</b> ao lado já são reais.</div>`;
     return () => { const e = document.getElementById("mlr-script"); if (e) e.remove(); };
   }, [carregar, resultados]);
 
@@ -351,20 +402,16 @@ export default function LeadsCentral() {
     pulso();
     justica();
     resultados("Esta Semana");
+    filas();
     const t = setInterval(() => { pulso(); justica(); }, 60_000);
     return () => clearInterval(t);
-  }, [role, scopeManager, carregar, pulso, justica, resultados]);
+  }, [role, scopeManager, carregar, pulso, justica, resultados, filas]);
 
   return (
     <div className="mgr10 app2">
       <RailV10 atual={"leads" as any} mode={mode} toggle={toggle} />
       <style>{CSS}</style>
-      <style>{ALIAS}</style>
       <div ref={box} className="mlr" dangerouslySetInnerHTML={{ __html: HTML }} />
-      {filasNode && createPortal(
-        <div style={{ padding: "4px 2px" }}><FilasFormulario como={scopeManager} abrir="*" /></div>,
-        filasNode
-      )}
     </div>
   );
 }
