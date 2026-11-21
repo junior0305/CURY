@@ -1470,7 +1470,7 @@ export const HTML = `<main class="main-content">
           <div class="panel-header"><h3>Se isso cai, a verba otimiza às cegas</h3><span style="color:var(--text-muted);font-size:12px">pixel manda o evento; CAPI reotimiza por valor</span></div>
           <div style="padding:14px">
             <div class="rep-row" style="border-color:var(--rose-border);background:var(--rose-light)">
-              <div><b style="color:#fff;font-size:14px">⚠️ 2 páginas SEM pixel</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">LILIANE e Giorge — gastando e <b>rastreando nada</b>. O Facebook está otimizando no escuro.</p></div>
+              <div><b style="color:var(--text-main);font-size:14px">⚠️ 2 páginas SEM pixel</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">LILIANE e Giorge — gastando e <b>rastreando nada</b>. O Facebook está otimizando no escuro.</p></div>
               <button class="act-btn cobrar" onclick="showToast('Criar pixel nessas 2 contas')">Resolver</button>
             </div>
             <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px">
@@ -1489,7 +1489,7 @@ export const HTML = `<main class="main-content">
 
       <div id="view-filas" class="tab-view" style="display: none;">
         <div class="sec-h">🔄 Filas de distribuição — criar &amp; manter</div>
-        <p style="color:var(--text-muted);font-size:12.5px;margin:-6px 0 16px;line-height:1.5">A fila diz <b style="color:#fff">pra quem vai cada lead</b> por origem (formulário, página, região). Crie novas e mantenha as que já rodam — quem está dentro, status e rodízio.</p>
+        <p style="color:var(--text-muted);font-size:12.5px;margin:-6px 0 16px;line-height:1.5">A fila diz <b style="color:var(--text-main)">pra quem vai cada lead</b> por origem (formulário, página, região). Crie novas e mantenha as que já rodam — quem está dentro, status e rodízio.</p>
         <div class="panel-box" style="margin-bottom:16px">
           <div class="panel-header"><h3>➕ Criar fila de distribuição</h3><span style="color:var(--text-muted);font-size:12px">respeita o isolamento da página/empresa</span></div>
           <div class="mkfila" style="padding:16px">
@@ -1521,7 +1521,7 @@ export const HTML = `<main class="main-content">
               <span class="sit-badge retorno">🟢 Ativa</span>
             </div>
             <div>
-              <span style="font-size:11.5px;color:var(--text-muted);display:block;margin-bottom:6px">👥 4 corretores na roleta · <b style="color:#fff">12 leads hoje</b></span>
+              <span style="font-size:11.5px;color:var(--text-muted);display:block;margin-bottom:6px">👥 4 corretores na roleta · <b style="color:var(--text-main)">12 leads hoje</b></span>
               <div class="queue-brokers-chips" id="chips-mooca">
                 <span class="broker-chip"><span class="dot" style="background:var(--green);"></span> Alba <button class="chip-x" onclick="showToast('Alba removida da fila')">×</button></span>
                 <span class="broker-chip"><span class="dot" style="background:var(--green);"></span> Pedro <button class="chip-x" onclick="showToast('Pedro removido')">×</button></span>
@@ -1799,7 +1799,7 @@ export const HTML = `<main class="main-content">
           <div class="panel-header"><h3>⏳ Leads esperando soltar</h3><label class="wa-toggle"><input type="checkbox" checked/> avisar no WhatsApp</label></div>
           <div style="padding:14px">
             <div class="rep-row" onclick="toggleRecebeu('r1')" style="cursor:pointer">
-              <div><b style="color:#fff;font-size:14px">8 segurados</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">ninguém logou às 09:30 · regra: <b>manual · sorteio</b> <span style="color:var(--brand)">· ver quem recebe ▾</span></p></div>
+              <div><b style="color:var(--text-main);font-size:14px">8 segurados</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">ninguém logou às 09:30 · regra: <b>manual · sorteio</b> <span style="color:var(--brand)">· ver quem recebe ▾</span></p></div>
               <button class="act-btn repassar" onclick="event.stopPropagation();showToast('8 soltos por sorteio — corretores avisados')">Soltar (8)</button>
             </div>
             <div id="rec-r1" class="recebeu" style="display:none">
@@ -1809,7 +1809,7 @@ export const HTML = `<main class="main-content">
               <div class="prev-l"><span>3º Claudete · Gouveia</span><b>2</b></div>
             </div>
             <div class="rep-row" onclick="toggleRecebeu('r2')" style="cursor:pointer">
-              <div><b style="color:#fff;font-size:14px">4 sem dono</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">fila exclusiva de líder sem corretor <span style="color:var(--brand)">· ver quem recebe ▾</span></p></div>
+              <div><b style="color:var(--text-main);font-size:14px">4 sem dono</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">fila exclusiva de líder sem corretor <span style="color:var(--brand)">· ver quem recebe ▾</span></p></div>
               <button class="act-btn cobrar" onclick="event.stopPropagation();showToast('Direcionar os 4')">Direcionar (4)</button>
             </div>
             <div id="rec-r2" class="recebeu" style="display:none">
@@ -1870,9 +1870,9 @@ export const HTML = `<main class="main-content">
           <div class="panel-box">
             <div class="panel-header"><h3>Meta de novembro</h3></div>
             <div style="padding:16px">
-              <div style="font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:800;color:#fff">30 <span style="font-size:16px;color:var(--text-muted);font-weight:600">projetado / 33 meta</span></div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:800;color:var(--text-main)">30 <span style="font-size:16px;color:var(--text-muted);font-weight:600">projetado / 33 meta</span></div>
               <div style="height:12px;background:var(--surface-subtle);border-radius:6px;overflow:hidden;margin:14px 0 8px"><div style="width:91%;height:100%;background:var(--amber)"></div></div>
-              <p style="color:var(--text-muted);font-size:12.5px">No ritmo de hoje fecha <b style="color:#fff">30</b>. Pra garantir a meta, <b style="color:var(--amber)">faltam 9 visitas e 4 pastas</b> — e tem 11 negócios a um passo.</p>
+              <p style="color:var(--text-muted);font-size:12.5px">No ritmo de hoje fecha <b style="color:var(--text-main)">30</b>. Pra garantir a meta, <b style="color:var(--amber)">faltam 9 visitas e 4 pastas</b> — e tem 11 negócios a um passo.</p>
             </div>
           </div>
         </div>
@@ -1954,7 +1954,7 @@ export const HTML = `<main class="main-content">
 
   <!-- ── BARRA FLUTUANTE DE AÇÕES EM LOTE (STICKY BOTTOM BAR) ── -->
   <div id="sticky-batch-bar" class="sticky-batch-bar" style="display: none;">
-    <span style="color: #fff; font-size: 13.5px; font-weight: 700;">
+    <span style="color:var(--text-main); font-size: 13.5px; font-weight: 700;">
       <span id="batch-count" style="color: #38BDF8;">0</span> leads selecionados <span style="color:var(--text-dim);font-size:12px;font-weight:400">&middot; toda a&ccedil;&atilde;o pede confirma&ccedil;&atilde;o e avisa o corretor</span>
     </span>
     
@@ -1984,7 +1984,7 @@ export const HTML = `<main class="main-content">
       <div class="modal-body">
         <div style="background: var(--surface-subtle); padding: 12px 16px; border-radius: var(--radius-sm); margin-bottom: 16px; border: 1px solid var(--border);">
           <span style="font-size: 12px; color: var(--text-muted); display: block;">Lead a ser transferido:</span>
-          <b style="font-size: 15px; color: #fff;" id="rep-lead-nome">Rodrigo Albuquerque</b>
+          <b style="font-size: 15px; color:var(--text-main);" id="rep-lead-nome">Rodrigo Albuquerque</b>
           <span style="display: block; font-size: 12px; color: var(--brand);" id="rep-lead-detalhe">Cury Mooca · Atual: Rios</span>
         </div>
 
@@ -1997,7 +1997,7 @@ export const HTML = `<main class="main-content">
             <div style="display: flex; align-items: center; gap: 10px;">
               <input type="radio" name="destino-repasse" value="online" checked onchange="repDestino('online')" />
               <div>
-                <b style="font-size: 13px; display: block; color: #fff;">Rodízio Entre Corretores Online Agora</b>
+                <b style="font-size: 13px; display: block; color:var(--text-main);">Rodízio Entre Corretores Online Agora</b>
                 <span style="font-size: 11.5px; color: var(--green);">● 6 corretores conectados no CRM</span>
               </div>
             </div>
@@ -2008,7 +2008,7 @@ export const HTML = `<main class="main-content">
             <div style="display: flex; align-items: center; gap: 10px;">
               <input type="radio" name="destino-repasse" value="plantao" onchange="repDestino('plantao')" />
               <div>
-                <b style="font-size: 13px; display: block; color: #fff;">Escala de Plantão no Estande</b>
+                <b style="font-size: 13px; display: block; color:var(--text-main);">Escala de Plantão no Estande</b>
                 <span style="font-size: 11.5px; color: var(--text-muted);">4 corretores escalados hoje</span>
               </div>
             </div>
@@ -2018,7 +2018,7 @@ export const HTML = `<main class="main-content">
             <div style="display: flex; align-items: center; gap: 10px;">
               <input type="radio" name="destino-repasse" value="escolher" onchange="repDestino('escolher')" />
               <div>
-                <b style="font-size: 13px; display: block; color: #fff;">Eu escolho o(s) corretor(es)</b>
+                <b style="font-size: 13px; display: block; color:var(--text-main);">Eu escolho o(s) corretor(es)</b>
                 <span style="font-size: 11.5px; color: var(--text-muted);">um ou vários — você seleciona na lista</span>
               </div>
             </div>
@@ -2028,7 +2028,7 @@ export const HTML = `<main class="main-content">
           <div id="rep-picker" style="display:none; margin-top:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface); overflow:hidden;">
             <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border)">
               <span>🔍</span>
-              <input type="text" placeholder="Buscar corretor..." style="flex:1;background:transparent;border:0;outline:0;color:#fff;font-size:13px;font-family:inherit" />
+              <input type="text" placeholder="Buscar corretor..." style="flex:1;background:transparent;border:0;outline:0;color:var(--text-main);font-size:13px;font-family:inherit" />
               <div style="display:flex;gap:6px">
                 <button class="link-btn" onclick="repFiltro('online',this)">● Online</button>
                 <button class="link-btn" onclick="repFiltro('plantao',this)">No plantão</button>
@@ -2065,11 +2065,11 @@ export const HTML = `<main class="main-content">
       <div class="modal-body">
         <div style="margin-bottom: 14px;">
           <span style="font-size: 12px; color: var(--text-muted);">Destinatário:</span>
-          <b style="display: block; font-size: 14px; color: #fff;" id="cob-destinatario">Rios · (11) 98711-2041</b>
+          <b style="display: block; font-size: 14px; color:var(--text-main);" id="cob-destinatario">Rios · (11) 98711-2041</b>
         </div>
 
         <span style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px;">Mensagem Pré-Formatada (Editável):</span>
-        <textarea id="cob-msg" rows="5" style="width: 100%; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; color: #fff; font-size: 13px; line-height: 1.45; outline: none; font-family: inherit; resize: none;"></textarea>
+        <textarea id="cob-msg" rows="5" style="width: 100%; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; color:var(--text-main); font-size: 13px; line-height: 1.45; outline: none; font-family: inherit; resize: none;"></textarea>
       </div>
       <div class="modal-foot">
         <button class="act-btn ver" onclick="closeModal('modal-cobrar')">Cancelar</button>
@@ -2087,7 +2087,7 @@ export const HTML = `<main class="main-content">
       <div class="modal-body">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
           <div>
-            <h2 style="font-size: 18px; font-weight: 900; color: #fff;" id="ver-nome">Rodrigo Albuquerque</h2>
+            <h2 style="font-size: 18px; font-weight: 900; color:var(--text-main);" id="ver-nome">Rodrigo Albuquerque</h2>
             <span class="mono" style="font-size: 13px; color: var(--text-muted);" id="ver-fone">(11) 98711-2041</span>
           </div>
           <span class="sit-badge fantasma" id="ver-badge">🔴 Sem contato</span>
@@ -2100,7 +2100,7 @@ export const HTML = `<main class="main-content">
           </div>
           <div style="background: var(--surface-subtle); padding: 10px 12px; border-radius: var(--radius-sm);">
             <span style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; font-weight: 800;">Corretor Responsável</span>
-            <b style="font-size: 13px; display: block; color: #fff; margin-top: 2px;" id="ver-corretor">Rios (71 atrasados)</b>
+            <b style="font-size: 13px; display: block; color:var(--text-main); margin-top: 2px;" id="ver-corretor">Rios (71 atrasados)</b>
           </div>
         </div>
       </div>
@@ -2142,8 +2142,8 @@ export const HTML = `<main class="main-content">
     <div class="modal-container" style="max-width:860px;width:94%;padding:0;overflow:hidden">
       <div class="modal-head" style="padding:16px 20px">
         <div>
-          <h2 style="font-size:16px;font-weight:900;color:#fff">Rodrigo Albuquerque <span style="font-weight:600;color:var(--text-muted);font-size:13px">· Barra Funda · Meta Ads</span></h2>
-          <span style="font-size:12px;color:var(--text-muted)">na mão de <b style="color:#fff">Rios</b> há <b style="color:var(--amber)">2h14</b> · <span class="sig-true">● respondeu de verdade 14:32</span></span>
+          <h2 style="font-size:16px;font-weight:900;color:var(--text-main)">Rodrigo Albuquerque <span style="font-weight:600;color:var(--text-muted);font-size:13px">· Barra Funda · Meta Ads</span></h2>
+          <span style="font-size:12px;color:var(--text-muted)">na mão de <b style="color:var(--text-main)">Rios</b> há <b style="color:var(--amber)">2h14</b> · <span class="sig-true">● respondeu de verdade 14:32</span></span>
         </div>
         <button class="modal-close" onclick="closeModal('modal-conversa')">✕</button>
       </div>

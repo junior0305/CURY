@@ -10,7 +10,9 @@ import { useAuth } from "@/components/AuthProvider";
 import { CSS, HTML, JS } from "./leadsMockup";
 
 // garante a data grudada no topo ao rolar + token --good p/ a tabela da justiça
-const STY = `.mlr .sticky-header-bar{position:sticky;top:0;z-index:950;background:var(--bg)}.mlr{--good:#10B981}`;
+const STY = `.mlr .sticky-header-bar{position:sticky;top:0;z-index:950;background:var(--bg)}.mlr{--good:#10B981}
+/* valores/numeros que o mockup cravou em branco: usar o token de texto p/ ler no tema claro */
+.mlr .ptile b,.mlr .bar-row .vl,.mlr .dchip .v,.mlr .sline b,.mlr .rep-top b,.mlr .prev-l b,.mlr .repopt b,.mlr .pz b,.mlr .fstep b,.mlr .trend-row b,.mlr .copilot-bar b,.mlr .fld select,.mlr .fld input,.mlr .fe-row select{color:var(--text-main)}`;
 
 const sb = supabase as any;
 

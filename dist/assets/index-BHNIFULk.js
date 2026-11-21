@@ -4689,7 +4689,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
           <div class="panel-header"><h3>Se isso cai, a verba otimiza às cegas</h3><span style="color:var(--text-muted);font-size:12px">pixel manda o evento; CAPI reotimiza por valor</span></div>
           <div style="padding:14px">
             <div class="rep-row" style="border-color:var(--rose-border);background:var(--rose-light)">
-              <div><b style="color:#fff;font-size:14px">⚠️ 2 páginas SEM pixel</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">LILIANE e Giorge — gastando e <b>rastreando nada</b>. O Facebook está otimizando no escuro.</p></div>
+              <div><b style="color:var(--text-main);font-size:14px">⚠️ 2 páginas SEM pixel</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">LILIANE e Giorge — gastando e <b>rastreando nada</b>. O Facebook está otimizando no escuro.</p></div>
               <button class="act-btn cobrar" onclick="showToast('Criar pixel nessas 2 contas')">Resolver</button>
             </div>
             <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px">
@@ -4708,7 +4708,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
 
       <div id="view-filas" class="tab-view" style="display: none;">
         <div class="sec-h">🔄 Filas de distribuição — criar &amp; manter</div>
-        <p style="color:var(--text-muted);font-size:12.5px;margin:-6px 0 16px;line-height:1.5">A fila diz <b style="color:#fff">pra quem vai cada lead</b> por origem (formulário, página, região). Crie novas e mantenha as que já rodam — quem está dentro, status e rodízio.</p>
+        <p style="color:var(--text-muted);font-size:12.5px;margin:-6px 0 16px;line-height:1.5">A fila diz <b style="color:var(--text-main)">pra quem vai cada lead</b> por origem (formulário, página, região). Crie novas e mantenha as que já rodam — quem está dentro, status e rodízio.</p>
         <div class="panel-box" style="margin-bottom:16px">
           <div class="panel-header"><h3>➕ Criar fila de distribuição</h3><span style="color:var(--text-muted);font-size:12px">respeita o isolamento da página/empresa</span></div>
           <div class="mkfila" style="padding:16px">
@@ -4740,7 +4740,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
               <span class="sit-badge retorno">🟢 Ativa</span>
             </div>
             <div>
-              <span style="font-size:11.5px;color:var(--text-muted);display:block;margin-bottom:6px">👥 4 corretores na roleta · <b style="color:#fff">12 leads hoje</b></span>
+              <span style="font-size:11.5px;color:var(--text-muted);display:block;margin-bottom:6px">👥 4 corretores na roleta · <b style="color:var(--text-main)">12 leads hoje</b></span>
               <div class="queue-brokers-chips" id="chips-mooca">
                 <span class="broker-chip"><span class="dot" style="background:var(--green);"></span> Alba <button class="chip-x" onclick="showToast('Alba removida da fila')">×</button></span>
                 <span class="broker-chip"><span class="dot" style="background:var(--green);"></span> Pedro <button class="chip-x" onclick="showToast('Pedro removido')">×</button></span>
@@ -5018,7 +5018,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
           <div class="panel-header"><h3>⏳ Leads esperando soltar</h3><label class="wa-toggle"><input type="checkbox" checked/> avisar no WhatsApp</label></div>
           <div style="padding:14px">
             <div class="rep-row" onclick="toggleRecebeu('r1')" style="cursor:pointer">
-              <div><b style="color:#fff;font-size:14px">8 segurados</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">ninguém logou às 09:30 · regra: <b>manual · sorteio</b> <span style="color:var(--brand)">· ver quem recebe ▾</span></p></div>
+              <div><b style="color:var(--text-main);font-size:14px">8 segurados</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">ninguém logou às 09:30 · regra: <b>manual · sorteio</b> <span style="color:var(--brand)">· ver quem recebe ▾</span></p></div>
               <button class="act-btn repassar" onclick="event.stopPropagation();showToast('8 soltos por sorteio — corretores avisados')">Soltar (8)</button>
             </div>
             <div id="rec-r1" class="recebeu" style="display:none">
@@ -5028,7 +5028,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
               <div class="prev-l"><span>3º Claudete · Gouveia</span><b>2</b></div>
             </div>
             <div class="rep-row" onclick="toggleRecebeu('r2')" style="cursor:pointer">
-              <div><b style="color:#fff;font-size:14px">4 sem dono</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">fila exclusiva de líder sem corretor <span style="color:var(--brand)">· ver quem recebe ▾</span></p></div>
+              <div><b style="color:var(--text-main);font-size:14px">4 sem dono</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">fila exclusiva de líder sem corretor <span style="color:var(--brand)">· ver quem recebe ▾</span></p></div>
               <button class="act-btn cobrar" onclick="event.stopPropagation();showToast('Direcionar os 4')">Direcionar (4)</button>
             </div>
             <div id="rec-r2" class="recebeu" style="display:none">
@@ -5089,9 +5089,9 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
           <div class="panel-box">
             <div class="panel-header"><h3>Meta de novembro</h3></div>
             <div style="padding:16px">
-              <div style="font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:800;color:#fff">30 <span style="font-size:16px;color:var(--text-muted);font-weight:600">projetado / 33 meta</span></div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:800;color:var(--text-main)">30 <span style="font-size:16px;color:var(--text-muted);font-weight:600">projetado / 33 meta</span></div>
               <div style="height:12px;background:var(--surface-subtle);border-radius:6px;overflow:hidden;margin:14px 0 8px"><div style="width:91%;height:100%;background:var(--amber)"></div></div>
-              <p style="color:var(--text-muted);font-size:12.5px">No ritmo de hoje fecha <b style="color:#fff">30</b>. Pra garantir a meta, <b style="color:var(--amber)">faltam 9 visitas e 4 pastas</b> — e tem 11 negócios a um passo.</p>
+              <p style="color:var(--text-muted);font-size:12.5px">No ritmo de hoje fecha <b style="color:var(--text-main)">30</b>. Pra garantir a meta, <b style="color:var(--amber)">faltam 9 visitas e 4 pastas</b> — e tem 11 negócios a um passo.</p>
             </div>
           </div>
         </div>
@@ -5173,7 +5173,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
 
   <!-- ── BARRA FLUTUANTE DE AÇÕES EM LOTE (STICKY BOTTOM BAR) ── -->
   <div id="sticky-batch-bar" class="sticky-batch-bar" style="display: none;">
-    <span style="color: #fff; font-size: 13.5px; font-weight: 700;">
+    <span style="color:var(--text-main); font-size: 13.5px; font-weight: 700;">
       <span id="batch-count" style="color: #38BDF8;">0</span> leads selecionados <span style="color:var(--text-dim);font-size:12px;font-weight:400">&middot; toda a&ccedil;&atilde;o pede confirma&ccedil;&atilde;o e avisa o corretor</span>
     </span>
     
@@ -5203,7 +5203,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
       <div class="modal-body">
         <div style="background: var(--surface-subtle); padding: 12px 16px; border-radius: var(--radius-sm); margin-bottom: 16px; border: 1px solid var(--border);">
           <span style="font-size: 12px; color: var(--text-muted); display: block;">Lead a ser transferido:</span>
-          <b style="font-size: 15px; color: #fff;" id="rep-lead-nome">Rodrigo Albuquerque</b>
+          <b style="font-size: 15px; color:var(--text-main);" id="rep-lead-nome">Rodrigo Albuquerque</b>
           <span style="display: block; font-size: 12px; color: var(--brand);" id="rep-lead-detalhe">Cury Mooca · Atual: Rios</span>
         </div>
 
@@ -5216,7 +5216,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
             <div style="display: flex; align-items: center; gap: 10px;">
               <input type="radio" name="destino-repasse" value="online" checked onchange="repDestino('online')" />
               <div>
-                <b style="font-size: 13px; display: block; color: #fff;">Rodízio Entre Corretores Online Agora</b>
+                <b style="font-size: 13px; display: block; color:var(--text-main);">Rodízio Entre Corretores Online Agora</b>
                 <span style="font-size: 11.5px; color: var(--green);">● 6 corretores conectados no CRM</span>
               </div>
             </div>
@@ -5227,7 +5227,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
             <div style="display: flex; align-items: center; gap: 10px;">
               <input type="radio" name="destino-repasse" value="plantao" onchange="repDestino('plantao')" />
               <div>
-                <b style="font-size: 13px; display: block; color: #fff;">Escala de Plantão no Estande</b>
+                <b style="font-size: 13px; display: block; color:var(--text-main);">Escala de Plantão no Estande</b>
                 <span style="font-size: 11.5px; color: var(--text-muted);">4 corretores escalados hoje</span>
               </div>
             </div>
@@ -5237,7 +5237,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
             <div style="display: flex; align-items: center; gap: 10px;">
               <input type="radio" name="destino-repasse" value="escolher" onchange="repDestino('escolher')" />
               <div>
-                <b style="font-size: 13px; display: block; color: #fff;">Eu escolho o(s) corretor(es)</b>
+                <b style="font-size: 13px; display: block; color:var(--text-main);">Eu escolho o(s) corretor(es)</b>
                 <span style="font-size: 11.5px; color: var(--text-muted);">um ou vários — você seleciona na lista</span>
               </div>
             </div>
@@ -5247,7 +5247,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
           <div id="rep-picker" style="display:none; margin-top:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface); overflow:hidden;">
             <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border)">
               <span>🔍</span>
-              <input type="text" placeholder="Buscar corretor..." style="flex:1;background:transparent;border:0;outline:0;color:#fff;font-size:13px;font-family:inherit" />
+              <input type="text" placeholder="Buscar corretor..." style="flex:1;background:transparent;border:0;outline:0;color:var(--text-main);font-size:13px;font-family:inherit" />
               <div style="display:flex;gap:6px">
                 <button class="link-btn" onclick="repFiltro('online',this)">● Online</button>
                 <button class="link-btn" onclick="repFiltro('plantao',this)">No plantão</button>
@@ -5284,11 +5284,11 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
       <div class="modal-body">
         <div style="margin-bottom: 14px;">
           <span style="font-size: 12px; color: var(--text-muted);">Destinatário:</span>
-          <b style="display: block; font-size: 14px; color: #fff;" id="cob-destinatario">Rios · (11) 98711-2041</b>
+          <b style="display: block; font-size: 14px; color:var(--text-main);" id="cob-destinatario">Rios · (11) 98711-2041</b>
         </div>
 
         <span style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px;">Mensagem Pré-Formatada (Editável):</span>
-        <textarea id="cob-msg" rows="5" style="width: 100%; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; color: #fff; font-size: 13px; line-height: 1.45; outline: none; font-family: inherit; resize: none;"></textarea>
+        <textarea id="cob-msg" rows="5" style="width: 100%; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; color:var(--text-main); font-size: 13px; line-height: 1.45; outline: none; font-family: inherit; resize: none;"></textarea>
       </div>
       <div class="modal-foot">
         <button class="act-btn ver" onclick="closeModal('modal-cobrar')">Cancelar</button>
@@ -5306,7 +5306,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
       <div class="modal-body">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
           <div>
-            <h2 style="font-size: 18px; font-weight: 900; color: #fff;" id="ver-nome">Rodrigo Albuquerque</h2>
+            <h2 style="font-size: 18px; font-weight: 900; color:var(--text-main);" id="ver-nome">Rodrigo Albuquerque</h2>
             <span class="mono" style="font-size: 13px; color: var(--text-muted);" id="ver-fone">(11) 98711-2041</span>
           </div>
           <span class="sit-badge fantasma" id="ver-badge">🔴 Sem contato</span>
@@ -5319,7 +5319,7 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
           </div>
           <div style="background: var(--surface-subtle); padding: 10px 12px; border-radius: var(--radius-sm);">
             <span style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; font-weight: 800;">Corretor Responsável</span>
-            <b style="font-size: 13px; display: block; color: #fff; margin-top: 2px;" id="ver-corretor">Rios (71 atrasados)</b>
+            <b style="font-size: 13px; display: block; color:var(--text-main); margin-top: 2px;" id="ver-corretor">Rios (71 atrasados)</b>
           </div>
         </div>
       </div>
@@ -5361,8 +5361,8 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
     <div class="modal-container" style="max-width:860px;width:94%;padding:0;overflow:hidden">
       <div class="modal-head" style="padding:16px 20px">
         <div>
-          <h2 style="font-size:16px;font-weight:900;color:#fff">Rodrigo Albuquerque <span style="font-weight:600;color:var(--text-muted);font-size:13px">· Barra Funda · Meta Ads</span></h2>
-          <span style="font-size:12px;color:var(--text-muted)">na mão de <b style="color:#fff">Rios</b> há <b style="color:var(--amber)">2h14</b> · <span class="sig-true">● respondeu de verdade 14:32</span></span>
+          <h2 style="font-size:16px;font-weight:900;color:var(--text-main)">Rodrigo Albuquerque <span style="font-weight:600;color:var(--text-muted);font-size:13px">· Barra Funda · Meta Ads</span></h2>
+          <span style="font-size:12px;color:var(--text-muted)">na mão de <b style="color:var(--text-main)">Rios</b> há <b style="color:var(--amber)">2h14</b> · <span class="sig-true">● respondeu de verdade 14:32</span></span>
         </div>
         <button class="modal-close" onclick="closeModal('modal-conversa')">✕</button>
       </div>
@@ -5586,7 +5586,9 @@ textarea.ln-inp{min-height:64px;padding:8px 10px;resize:vertical}
         t.style.display = 'none';
       }, 3500);
     }
-  `,Cxe=".mlr .sticky-header-bar{position:sticky;top:0;z-index:950;background:var(--bg)}.mlr{--good:#10B981}",$r=O,Js=t=>String(t??"").replace(/[&<>"]/g,a=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[a]),Go=t=>Js(t).replace(/['"]/g," "),J8=t=>{const a=String(t??"").replace(/\D/g,"").replace(/^55/,"");if(a.length>=10){const s=a.slice(0,2),r=a.slice(2);return`(${s}) ${r.slice(0,r.length-4)}-${r.slice(-4)}`}return Js(t||"—")},Exe=t=>(t||"?").trim().split(/\s+/).slice(0,2).map(a=>a[0]||"").join("").toUpperCase()||"?",zb=t=>t.campanha_nome||{facebook_make:"Meta Ads",lista:"Lista",resgate:"Resgate",indicacao:"Indicação",instagram:"Instagram",whatsapp:"WhatsApp"}[t.source||""]||t.source||"—",Y8=t=>{const a=(Date.now()-new Date(t.created_at).getTime())/36e5;if(a<1)return"há minutos";if(a<24)return`há ${Math.floor(a)}h`;const s=Math.floor(a/24);return`${s} dia${s>1?"s":""}`},X8=(t,a)=>(a>0?Math.round(t/a*100):0)+"% conv.",Axe=t=>t.last_broker_whatsapp_at?["avanco","🟢 Em andamento"]:t.broker_id?["vacuo","🟡 No vácuo"]:["fantasma","🔴 Sem contato"];function qx(t){const a=new Date(Date.now()-108e5),s=a.getUTCFullYear(),r=a.getUTCMonth(),n=a.getUTCDate(),o=(c,u,p)=>new Date(Date.UTC(c,u,p,3,0,0)),i=(a.getUTCDay()+6)%7,l=new Date;switch(t){case"Hoje":return[o(s,r,n).toISOString(),l.toISOString()];case"Semana Passada":return[o(s,r,n-i-7).toISOString(),o(s,r,n-i).toISOString()];case"Este Mês":return[o(s,r,1).toISOString(),l.toISOString()];case"Mês Passado":return[o(s,r-1,1).toISOString(),o(s,r,1).toISOString()];case"Esta Semana":default:return[o(s,r,n-i).toISOString(),l.toISOString()]}}function Dxe(t){const a=new Date(Date.now()-108e5),s=a.getUTCFullYear(),r=a.getUTCMonth(),n=a.getUTCDate(),o=(l,c,u)=>new Date(Date.UTC(l,c,u,3,0,0)),i=(a.getUTCDay()+6)%7;switch(t){case"Hoje":return[o(s,r,n-1).toISOString(),o(s,r,n).toISOString()];case"Semana Passada":return[o(s,r,n-i-14).toISOString(),o(s,r,n-i-7).toISOString()];case"Este Mês":return[o(s,r-1,1).toISOString(),o(s,r-1,Math.min(n,28)).toISOString()];case"Mês Passado":return[o(s,r-2,1).toISOString(),o(s,r-1,1).toISOString()];case"Esta Semana":default:return[o(s,r,n-i-7).toISOString(),o(s,r,n-i).toISOString()]}}function Txe(){var b,j;const{mode:t,toggle:a}=fs(),{session:s,role:r}=Lt(),n=d.useRef(null),o=d.useRef(!1),i=typeof window<"u"?new URLSearchParams(window.location.search).get("manager"):null,l=r==="MANAGER"?((b=s==null?void 0:s.user)==null?void 0:b.id)??null:["SUPERINTENDENT","ADMIN","DIRECTOR"].includes(r)?i||null:((j=s==null?void 0:s.user)==null?void 0:j.id)??null,c=d.useRef({}),u=d.useCallback(async()=>{if(Object.keys(c.current).length)return c.current;let N=$r.from("profiles").select("id,first_name").eq("role","BROKER");l&&(N=N.eq("manager_id",l));const{data:_}=await N,C={};return(_??[]).forEach(k=>{C[k.id]=k.first_name||"corretor"}),c.current=C,C},[l]),p=d.useCallback(async N=>{const _=n.current;if(!_)return;const[C,k]=qx(N);let A=$r.from("leads").select("id,name,phone,campanha_nome,source,broker_id,last_broker_whatsapp_at,visit_scheduled_at,status,created_at").gte("created_at",C).lt("created_at",k).not("status","in","(EXCLUDED,ABANDONED)").order("created_at",{ascending:!1}).limit(5e3);l&&(A=A.eq("manager_id",l));const[{data:$},z]=await Promise.all([A,u()]),T=$??[],S=T.length,D=T.filter(de=>de.last_broker_whatsapp_at).length,q=T.filter(de=>de.broker_id&&!de.last_broker_whatsapp_at&&Date.now()-new Date(de.created_at).getTime()>2*36e5).length,P=T.filter(de=>de.visit_scheduled_at).length,M=T.filter(de=>!de.last_broker_whatsapp_at).length,R=D,B=T.filter(de=>de.visit_scheduled_at&&new Date(de.visit_scheduled_at).getTime()>=Date.now()).length,I=_.querySelectorAll(".funnel-stage-card .stage-count"),V=_.querySelectorAll(".funnel-stage-card .stage-conv-rate");I[0]&&(I[0].textContent=String(S)),I[1]&&(I[1].textContent=String(D)),I[2]&&(I[2].textContent=String(P)),I[3]&&(I[3].textContent="—"),I[4]&&(I[4].textContent="—"),V[1]&&(V[1].textContent=X8(D,S)),V[2]&&(V[2].textContent=X8(P,D)),V[3]&&(V[3].textContent="—"),V[4]&&(V[4].textContent="—");const W=_.querySelector(".funnel-stage-card.bottleneck .stage-sub");W&&(W.innerHTML=`<span>⚠️ <b>${q}</b> sem toque (&gt;2h)</span>`);const F=_.querySelectorAll(".pill-health .tab-badge"),K=[S,M,q,R,B];F.forEach((de,oe)=>{K[oe]!=null&&(de.textContent=String(K[oe]))});const U=_.querySelectorAll(".lead-tab-btn .tab-badge");U[1]&&(U[1].textContent=S.toLocaleString("pt-BR"));const Y=_.querySelector("#leads-tbody");Y&&(T.length?Y.innerHTML=T.slice(0,400).map(de=>{const oe=Js(de.name||"Sem nome"),ee=de.broker_id?Js(z[de.broker_id]||"corretor"):"",[se,G]=Axe(de),X=(de.broker_id?z[de.broker_id]||"":"sem").toLowerCase().split(" ")[0],te=de.broker_id?`<div style="display:flex;align-items:center;gap:8px"><div class="avatar-clean">${Js(Exe(z[de.broker_id]||""))}</div><b>${ee}</b></div>`:'<span style="color:var(--text-dim)">Sem corretor</span>';return`<tr data-type="${se}" data-corretor="${Js(X)}">
+  `,Cxe=`.mlr .sticky-header-bar{position:sticky;top:0;z-index:950;background:var(--bg)}.mlr{--good:#10B981}
+/* valores/numeros que o mockup cravou em branco: usar o token de texto p/ ler no tema claro */
+.mlr .ptile b,.mlr .bar-row .vl,.mlr .dchip .v,.mlr .sline b,.mlr .rep-top b,.mlr .prev-l b,.mlr .repopt b,.mlr .pz b,.mlr .fstep b,.mlr .trend-row b,.mlr .copilot-bar b,.mlr .fld select,.mlr .fld input,.mlr .fe-row select{color:var(--text-main)}`,$r=O,Js=t=>String(t??"").replace(/[&<>"]/g,a=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[a]),Go=t=>Js(t).replace(/['"]/g," "),J8=t=>{const a=String(t??"").replace(/\D/g,"").replace(/^55/,"");if(a.length>=10){const s=a.slice(0,2),r=a.slice(2);return`(${s}) ${r.slice(0,r.length-4)}-${r.slice(-4)}`}return Js(t||"—")},Exe=t=>(t||"?").trim().split(/\s+/).slice(0,2).map(a=>a[0]||"").join("").toUpperCase()||"?",zb=t=>t.campanha_nome||{facebook_make:"Meta Ads",lista:"Lista",resgate:"Resgate",indicacao:"Indicação",instagram:"Instagram",whatsapp:"WhatsApp"}[t.source||""]||t.source||"—",Y8=t=>{const a=(Date.now()-new Date(t.created_at).getTime())/36e5;if(a<1)return"há minutos";if(a<24)return`há ${Math.floor(a)}h`;const s=Math.floor(a/24);return`${s} dia${s>1?"s":""}`},X8=(t,a)=>(a>0?Math.round(t/a*100):0)+"% conv.",Axe=t=>t.last_broker_whatsapp_at?["avanco","🟢 Em andamento"]:t.broker_id?["vacuo","🟡 No vácuo"]:["fantasma","🔴 Sem contato"];function qx(t){const a=new Date(Date.now()-108e5),s=a.getUTCFullYear(),r=a.getUTCMonth(),n=a.getUTCDate(),o=(c,u,p)=>new Date(Date.UTC(c,u,p,3,0,0)),i=(a.getUTCDay()+6)%7,l=new Date;switch(t){case"Hoje":return[o(s,r,n).toISOString(),l.toISOString()];case"Semana Passada":return[o(s,r,n-i-7).toISOString(),o(s,r,n-i).toISOString()];case"Este Mês":return[o(s,r,1).toISOString(),l.toISOString()];case"Mês Passado":return[o(s,r-1,1).toISOString(),o(s,r,1).toISOString()];case"Esta Semana":default:return[o(s,r,n-i).toISOString(),l.toISOString()]}}function Dxe(t){const a=new Date(Date.now()-108e5),s=a.getUTCFullYear(),r=a.getUTCMonth(),n=a.getUTCDate(),o=(l,c,u)=>new Date(Date.UTC(l,c,u,3,0,0)),i=(a.getUTCDay()+6)%7;switch(t){case"Hoje":return[o(s,r,n-1).toISOString(),o(s,r,n).toISOString()];case"Semana Passada":return[o(s,r,n-i-14).toISOString(),o(s,r,n-i-7).toISOString()];case"Este Mês":return[o(s,r-1,1).toISOString(),o(s,r-1,Math.min(n,28)).toISOString()];case"Mês Passado":return[o(s,r-2,1).toISOString(),o(s,r-1,1).toISOString()];case"Esta Semana":default:return[o(s,r,n-i-7).toISOString(),o(s,r,n-i).toISOString()]}}function Txe(){var b,j;const{mode:t,toggle:a}=fs(),{session:s,role:r}=Lt(),n=d.useRef(null),o=d.useRef(!1),i=typeof window<"u"?new URLSearchParams(window.location.search).get("manager"):null,l=r==="MANAGER"?((b=s==null?void 0:s.user)==null?void 0:b.id)??null:["SUPERINTENDENT","ADMIN","DIRECTOR"].includes(r)?i||null:((j=s==null?void 0:s.user)==null?void 0:j.id)??null,c=d.useRef({}),u=d.useCallback(async()=>{if(Object.keys(c.current).length)return c.current;let N=$r.from("profiles").select("id,first_name").eq("role","BROKER");l&&(N=N.eq("manager_id",l));const{data:_}=await N,C={};return(_??[]).forEach(k=>{C[k.id]=k.first_name||"corretor"}),c.current=C,C},[l]),p=d.useCallback(async N=>{const _=n.current;if(!_)return;const[C,k]=qx(N);let A=$r.from("leads").select("id,name,phone,campanha_nome,source,broker_id,last_broker_whatsapp_at,visit_scheduled_at,status,created_at").gte("created_at",C).lt("created_at",k).not("status","in","(EXCLUDED,ABANDONED)").order("created_at",{ascending:!1}).limit(5e3);l&&(A=A.eq("manager_id",l));const[{data:$},z]=await Promise.all([A,u()]),T=$??[],S=T.length,D=T.filter(de=>de.last_broker_whatsapp_at).length,q=T.filter(de=>de.broker_id&&!de.last_broker_whatsapp_at&&Date.now()-new Date(de.created_at).getTime()>2*36e5).length,P=T.filter(de=>de.visit_scheduled_at).length,M=T.filter(de=>!de.last_broker_whatsapp_at).length,R=D,B=T.filter(de=>de.visit_scheduled_at&&new Date(de.visit_scheduled_at).getTime()>=Date.now()).length,I=_.querySelectorAll(".funnel-stage-card .stage-count"),V=_.querySelectorAll(".funnel-stage-card .stage-conv-rate");I[0]&&(I[0].textContent=String(S)),I[1]&&(I[1].textContent=String(D)),I[2]&&(I[2].textContent=String(P)),I[3]&&(I[3].textContent="—"),I[4]&&(I[4].textContent="—"),V[1]&&(V[1].textContent=X8(D,S)),V[2]&&(V[2].textContent=X8(P,D)),V[3]&&(V[3].textContent="—"),V[4]&&(V[4].textContent="—");const W=_.querySelector(".funnel-stage-card.bottleneck .stage-sub");W&&(W.innerHTML=`<span>⚠️ <b>${q}</b> sem toque (&gt;2h)</span>`);const F=_.querySelectorAll(".pill-health .tab-badge"),K=[S,M,q,R,B];F.forEach((de,oe)=>{K[oe]!=null&&(de.textContent=String(K[oe]))});const U=_.querySelectorAll(".lead-tab-btn .tab-badge");U[1]&&(U[1].textContent=S.toLocaleString("pt-BR"));const Y=_.querySelector("#leads-tbody");Y&&(T.length?Y.innerHTML=T.slice(0,400).map(de=>{const oe=Js(de.name||"Sem nome"),ee=de.broker_id?Js(z[de.broker_id]||"corretor"):"",[se,G]=Axe(de),X=(de.broker_id?z[de.broker_id]||"":"sem").toLowerCase().split(" ")[0],te=de.broker_id?`<div style="display:flex;align-items:center;gap:8px"><div class="avatar-clean">${Js(Exe(z[de.broker_id]||""))}</div><b>${ee}</b></div>`:'<span style="color:var(--text-dim)">Sem corretor</span>';return`<tr data-type="${se}" data-corretor="${Js(X)}">
             <td><input type="checkbox" class="lead-chk" onclick="updateBatchBar()" /></td>
             <td><b>${oe}</b><span class="mono" style="display:block;color:var(--text-dim);font-size:12px">${J8(de.phone)}</span></td>
             <td><span>${Js(zb(de))}</span></td>
