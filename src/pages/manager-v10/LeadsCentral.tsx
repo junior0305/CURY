@@ -46,6 +46,40 @@ const situ = (l: Lead): ["avanco" | "vacuo" | "fantasma", string] => {
   if (l.broker_id) return ["vacuo", "🟡 No vácuo"];
   return ["fantasma", "🔴 Sem contato"];
 };
+// casa a pílula/etapa com o lead (bate com as contagens)
+function segMatch(l: Lead, seg: string): boolean {
+  const age2h = (Date.now() - new Date(l.created_at).getTime()) > 2 * 3600000;
+  switch (seg) {
+    case "fantasma": return !l.last_broker_whatsapp_at;                                 // Sem contato
+    case "vacuo": return !!l.broker_id && !l.last_broker_whatsapp_at && age2h;           // No vácuo (>2h)
+    case "avanco": return !!l.last_broker_whatsapp_at;                                   // Avanço (respondeu)
+    case "visita": return !!l.visit_scheduled_at;                                        // etapa Visita
+    case "retorno": return !!l.visit_scheduled_at && new Date(l.visit_scheduled_at).getTime() >= Date.now();
+    default: return true;                                                                 // Todos
+  }
+}
+function rowHtml(l: Lead, nm: Record<string, string>): string {
+  const nome = esc(l.name || "Sem nome");
+  const cor = l.broker_id ? esc(nm[l.broker_id] || "corretor") : "";
+  const [bc, bt] = situ(l);
+  const dcor = (l.broker_id ? (nm[l.broker_id] || "") : "sem").toLowerCase().split(" ")[0];
+  const corTd = l.broker_id
+    ? `<div style="display:flex;align-items:center;gap:8px"><div class="avatar-clean">${esc(inic(nm[l.broker_id] || ""))}</div><b>${cor}</b></div>`
+    : `<span style="color:var(--text-dim)">Sem corretor</span>`;
+  return `<tr data-type="${bc}" data-corretor="${esc(dcor)}">
+    <td><input type="checkbox" class="lead-chk" onclick="updateBatchBar()" /></td>
+    <td><b>${nome}</b><span class="mono" style="display:block;color:var(--text-dim);font-size:12px">${fone(l.phone)}</span></td>
+    <td><span>${esc(origemTxt(l))}</span></td>
+    <td>${corTd}</td>
+    <td><span class="sit-badge ${bc}">${bt}</span></td>
+    <td class="mono">${tempoTxt(l)}</td>
+    <td><div class="action-btn-group">
+      <button class="act-btn repassar" onclick="openModalRepassar('${arg(l.name || "Sem nome")}','${arg(origemTxt(l))}','${arg(cor || "—")}')">⚡ Repassar</button>
+      <button class="act-btn cobrar" onclick="showToast('Cobrança enviada pelo chip do gerente')">💬 Cobrar</button>
+      <button class="act-btn ver" onclick="openModalVer('${arg(l.id)}','${arg(l.name || "Sem nome")}','${arg(fone(l.phone))}','${arg(origemTxt(l))}','${arg(cor || "—")}','${arg(bt)}','${arg(tempoTxt(l))}','${arg(origemTxt(l))}')">👁️ Ver</button>
+    </div></td>
+  </tr>`;
+}
 
 // periodo (BR = UTC-3; meia-noite BR = 03:00 UTC)
 function faixa(nome: string): [string, string] {
@@ -82,6 +116,10 @@ export default function LeadsCentral() {
   const { session, role } = useAuth() as any;
   const box = useRef<HTMLDivElement>(null);
   const injetado = useRef(false);
+  const leadsRef = useRef<Lead[]>([]);
+  const nmTabRef = useRef<Record<string, string>>({});
+  const filtroRef = useRef<{ seg: string; page: number; q: string; cor: string }>({ seg: "todos", page: 1, q: "", cor: "" });
+  const renderRef = useRef<() => void>(() => {});
 
   // escopo: gerente vê a própria equipe (manager_id); super/diretor/admin deixam o RLS filtrar,
   // salvo "entrar como / drill" (?manager=<id>), que limita àquele gerente.
@@ -104,6 +142,40 @@ export default function LeadsCentral() {
   }, [scopeManager]);
 
   // carrega funil + pílulas + tabela para um período
+  // controla a TABELA (filtro por pílula/etapa, busca, corretor e paginação real)
+  const renderTabela = useCallback(() => {
+    const root = box.current; if (!root) return;
+    const tb = root.querySelector("#leads-tbody"); if (!tb) return;
+    const { seg, q, cor } = filtroRef.current;
+    const nm = nmTabRef.current;
+    let arr = leadsRef.current.filter((l) => segMatch(l, seg));
+    if (q) { const s = q.toLowerCase(); arr = arr.filter((l) => (l.name || "").toLowerCase().includes(s) || (l.phone || "").includes(s) || origemTxt(l).toLowerCase().includes(s)); }
+    if (cor) arr = arr.filter((l) => (l.broker_id ? (nm[l.broker_id] || "") : "").toLowerCase().split(" ")[0] === cor);
+    const perPage = 50;
+    const totalP = Math.max(1, Math.ceil(arr.length / perPage));
+    const pg = Math.min(Math.max(1, filtroRef.current.page), totalP);
+    filtroRef.current.page = pg;
+    const slice = arr.slice((pg - 1) * perPage, pg * perPage);
+    tb.innerHTML = slice.length ? slice.map((l) => rowHtml(l, nm)).join("") : `<tr><td colspan="7" style="padding:28px;text-align:center;color:var(--text-dim)">Nenhum lead neste filtro.</td></tr>`;
+    // rodapé "Mostrando X a Y de Z" + paginação funcional
+    let infoEl: HTMLElement | null = null;
+    root.querySelectorAll<HTMLElement>("span").forEach((s) => { if ((s.textContent || "").trim().startsWith("Mostrando")) infoEl = s; });
+    if (infoEl) {
+      const ini = arr.length ? (pg - 1) * perPage + 1 : 0;
+      const fim = Math.min(pg * perPage, arr.length);
+      (infoEl as HTMLElement).innerHTML = `Mostrando <b>${ini} a ${fim} de ${arr.length.toLocaleString("pt-BR")} leads</b>`;
+      const pagBox = (infoEl as HTMLElement).nextElementSibling as HTMLElement | null;
+      if (pagBox) {
+        const btn = (lbl: string, p: number, dis: boolean, atual = false) => `<button class="act-btn ${atual ? "repassar" : "ver"}" data-pg="${p}" ${dis ? "disabled" : ""}>${lbl}</button>`;
+        let a = Math.max(1, pg - 1); const b = Math.min(totalP, a + 2); a = Math.max(1, b - 2);
+        const nums: string[] = []; for (let i = a; i <= b; i++) nums.push(btn(String(i), i, false, i === pg));
+        pagBox.innerHTML = btn("Anterior", pg - 1, pg <= 1) + nums.join("") + btn("Próximo", pg + 1, pg >= totalP);
+        pagBox.querySelectorAll<HTMLButtonElement>("button[data-pg]").forEach((b2) => { if (!b2.disabled) b2.addEventListener("click", () => { filtroRef.current.page = +(b2.dataset.pg || "1"); renderRef.current(); }); });
+      }
+    }
+  }, []);
+  renderRef.current = renderTabela;
+
   const carregar = useCallback(async (nome: string) => {
     const root = box.current; if (!root) return;
     const [de, ate] = faixa(nome);
@@ -115,6 +187,7 @@ export default function LeadsCentral() {
     if (scopeManager) q = q.eq("manager_id", scopeManager);
     const [{ data }, nm] = await Promise.all([q, brokers()]);
     const ls = (data ?? []) as Lead[];
+    leadsRef.current = ls; nmTabRef.current = nm;
 
     const total = ls.length;
     const resposta = ls.filter((l) => l.last_broker_whatsapp_at).length;
@@ -137,47 +210,31 @@ export default function LeadsCentral() {
     if (cv[2]) cv[2].textContent = pct(visita, resposta);
     if (cv[3]) cv[3].textContent = "—";
     if (cv[4]) cv[4].textContent = "—";
-    const sub2 = root.querySelector<HTMLElement>(".funnel-stage-card.bottleneck .stage-sub");
-    if (sub2) sub2.innerHTML = `<span>⚠️ <b>${semToque}</b> sem toque (&gt;2h)</span>`;
+    // sub-textos das etapas (CPL/previsão/VGV vêm de Facebook/Junix — marcados; sem toque e agendadas reais)
+    const subs = root.querySelectorAll<HTMLElement>(".funnel-stage-card .stage-sub");
+    if (subs[0]) subs[0].innerHTML = `<span>CPL médio: <b class="mono">—</b></span>`;
+    if (subs[1]) subs[1].innerHTML = `<span>⚠️ <b>${semToque}</b> sem toque (&gt;2h)</span>`;
+    if (subs[2]) subs[2].innerHTML = `<span>${visita} agendada${visita !== 1 ? "s" : ""}</span>`;
+    if (subs[3]) subs[3].innerHTML = `<span>Previsão: <b>—</b> (Junix)</span>`;
+    if (subs[4]) subs[4].innerHTML = `<span>VGV: <b>—</b> (Junix)</span>`;
 
     // PÍLULAS (ordem: todos, sem contato, vácuo, avanço, retorno)
     const pb = root.querySelectorAll<HTMLElement>(".pill-health .tab-badge");
     const pv = [total, semContato, semToque, avanco, retorno];
     pb.forEach((el, i) => { if (pv[i] != null) el.textContent = String(pv[i]); });
-    // selo da aba "Todos os leads" = total real do período
     const tabB = root.querySelectorAll<HTMLElement>(".lead-tab-btn .tab-badge");
     if (tabB[1]) tabB[1].textContent = total.toLocaleString("pt-BR");
 
-    // TABELA
-    const tb = root.querySelector("#leads-tbody");
-    if (tb) {
-      if (!ls.length) {
-        tb.innerHTML = `<tr><td colspan="7" style="padding:28px;text-align:center;color:var(--text-dim)">Nenhum lead neste período.</td></tr>`;
-      } else {
-        tb.innerHTML = ls.slice(0, 400).map((l) => {
-          const nome = esc(l.name || "Sem nome");
-          const cor = l.broker_id ? esc(nm[l.broker_id] || "corretor") : "";
-          const [bc, bt] = situ(l);
-          const dcor = (l.broker_id ? (nm[l.broker_id] || "") : "sem").toLowerCase().split(" ")[0];
-          const corTd = l.broker_id
-            ? `<div style="display:flex;align-items:center;gap:8px"><div class="avatar-clean">${esc(inic(nm[l.broker_id] || ""))}</div><b>${cor}</b></div>`
-            : `<span style="color:var(--text-dim)">Sem corretor</span>`;
-          return `<tr data-type="${bc}" data-corretor="${esc(dcor)}">
-            <td><input type="checkbox" class="lead-chk" onclick="updateBatchBar()" /></td>
-            <td><b>${nome}</b><span class="mono" style="display:block;color:var(--text-dim);font-size:12px">${fone(l.phone)}</span></td>
-            <td><span>${esc(origemTxt(l))}</span></td>
-            <td>${corTd}</td>
-            <td><span class="sit-badge ${bc}">${bt}</span></td>
-            <td class="mono">${tempoTxt(l)}</td>
-            <td><div class="action-btn-group">
-              <button class="act-btn repassar" onclick="openModalRepassar('${arg(l.name || "Sem nome")}','${arg(origemTxt(l))}','${arg(cor || "—")}')">⚡ Repassar</button>
-              <button class="act-btn cobrar" onclick="showToast('Cobrança enviada pelo chip do gerente')">💬 Cobrar</button>
-              <button class="act-btn ver" onclick="openModalVer('${arg(l.id)}','${arg(l.name || "Sem nome")}','${arg(fone(l.phone))}','${arg(origemTxt(l))}','${arg(cor || "—")}','${arg(bt)}','${arg(tempoTxt(l))}','${arg(origemTxt(l))}')">👁️ Ver</button>
-            </div></td>
-          </tr>`;
-        }).join("");
-      }
+    // opções reais do seletor de corretor
+    const selCor = root.querySelector<HTMLSelectElement>("#select-corretor");
+    if (selCor) {
+      const nomes = [...new Set(ls.filter((l) => l.broker_id).map((l) => (nm[l.broker_id!] || "").split(" ")[0]).filter(Boolean))].sort();
+      selCor.innerHTML = `<option value="">Todos os Corretores</option>` + nomes.map((n) => `<option value="${esc(n.toLowerCase())}">${esc(n)}</option>`).join("");
     }
+
+    // TABELA — reset do filtro e render (controlada por renderTabela)
+    filtroRef.current = { seg: "todos", page: 1, q: "", cor: "" };
+    renderRef.current();
 
     // COPILOTO (topo) — insight real simples: corretor com mais leads sem toque
     const porCorretor: Record<string, number> = {};
@@ -511,6 +568,20 @@ export default function LeadsCentral() {
       periodFns.current.carregar(nomeP);
       periodFns.current.resultados(nomeP);
     };
+    // controle real da tabela: pílulas, etapas do funil, busca e corretor
+    (window as any).filterPill = (type: string, el: any) => {
+      if (el) { box.current?.querySelectorAll(".pill-health").forEach((p) => p.classList.remove("active")); el.classList.add("active"); }
+      filtroRef.current.seg = type; filtroRef.current.page = 1; renderRef.current();
+    };
+    (window as any).selectFunnelStage = (n: number, el: any) => {
+      box.current?.querySelectorAll(".funnel-stage-card").forEach((c) => c.classList.remove("active")); if (el) el.classList.add("active");
+      const map = ["todos", "todos", "avanco", "visita", "todos", "todos"];
+      filtroRef.current.seg = map[n] || "todos"; filtroRef.current.page = 1; renderRef.current();
+    };
+    const si = box.current?.querySelector<HTMLInputElement>("#search-leads-input");
+    if (si) si.addEventListener("input", () => { filtroRef.current.q = si.value; filtroRef.current.page = 1; renderRef.current(); });
+    const scSel = box.current?.querySelector<HTMLSelectElement>("#select-corretor");
+    if (scSel) scSel.addEventListener("change", () => { filtroRef.current.cor = scSel.value; filtroRef.current.page = 1; renderRef.current(); });
     return () => { const e = document.getElementById("mlr-script"); if (e) e.remove(); };
   }, [carregar, resultados]);
 
