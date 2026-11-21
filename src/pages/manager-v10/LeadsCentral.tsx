@@ -479,20 +479,20 @@ export default function LeadsCentral() {
     const qByForm: Record<string, string[]> = {};
     (qs ?? []).forEach((q: any) => {
       if (!(inArv(q.roleta_de) || inArv(q.criado_por) || overlaps(q.broker_ids))) return;
-      const prev = qByForm[q.match_value] || [];
-      qByForm[q.match_value] = Array.from(new Set([...prev, ...((q.broker_ids as string[]) || [])]));
+      qByForm[q.match_value] = (q.broker_ids as string[]) || []; // 1 fila ativa por form (backend colapsa duplicadas)
     });
     const catByForm: Record<string, any> = {};
     (cat ?? []).forEach((f: any) => { catByForm[f.form_id] = f; });
-    // forms visíveis: tem fila desta estrutura  OU  anúncio ativo cuja conta está na árvore
+    // forms visíveis: TODOS os formulários da conta de anúncio desta estrutura (owner na árvore) + os que têm fila da estrutura.
+    // Assim a gestora vê a conta dela inteira (ativos e pausados), não só os com anúncio rodando.
     const idsForm = new Set<string>(Object.keys(qByForm));
-    (cat ?? []).forEach((f: any) => { if (f.anuncio_ativo && inArv(f.owner_id)) idsForm.add(f.form_id); });
+    (cat ?? []).forEach((f: any) => { if (inArv(f.owner_id)) idsForm.add(f.form_id); });
     const nm: Record<string, string> = {};
     (pf ?? []).forEach((p: any) => { nm[p.id] = p.first_name || "corretor"; });
     const mostrar = Array.from(idsForm).map((fid) => {
       const f = catByForm[fid] || {};
-      return { form_id: fid, page_id: f.page_id || "", nome: f.nome || "", nome_fonte: f.nome_fonte || "", leads_7d: f.leads_7d ?? 0 };
-    }).sort((a, b) => (qByForm[b.form_id] ? 1 : 0) - (qByForm[a.form_id] ? 1 : 0) || (b.leads_7d - a.leads_7d));
+      return { form_id: fid, page_id: f.page_id || "", nome: f.nome || "", nome_fonte: f.nome_fonte || "", leads_7d: f.leads_7d ?? 0, anuncio: !!f.anuncio_ativo };
+    }).sort((a, b) => (Number(b.anuncio) - Number(a.anuncio)) || ((qByForm[b.form_id] ? 1 : 0) - (qByForm[a.form_id] ? 1 : 0)) || (b.leads_7d - a.leads_7d));
     const optsBrokers = Object.entries(nm).sort((a, b) => a[1].localeCompare(b[1])).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join("");
     if (sel) sel.innerHTML = mostrar.length
       ? mostrar.map((f) => `<option value="${esc(f.form_id)}">Formulário — ${esc(f.nome || f.nome_fonte || f.form_id)}</option>`).join("")
@@ -517,7 +517,7 @@ export default function LeadsCentral() {
             <button class="act-btn ver" onclick="window.__filaAdd&&window.__filaAdd(this)">Adicionar</button>
           </div>
           <div style="margin-top:6px;color:var(--text-dim);font-size:11.5px">Tirando todos os corretores, os leads deste formulário voltam para a <b>roleta do plantão</b>.</div>
-          <div style="margin-top:8px;color:var(--text-dim);font-size:12px">${f.leads_7d ?? 0} leads em 7d</div>
+          <div style="margin-top:8px;color:var(--text-dim);font-size:12px">${f.leads_7d ?? 0} leads em 7d${f.anuncio ? "" : " · <span style=\"color:var(--amber,#F59E0B)\">anúncio pausado</span>"}</div>
         </div>`;
       }).join("") : `<div style="padding:16px;color:var(--text-dim)">Nenhum formulário ativo com fila nesta estrutura.</div>`;
     }
