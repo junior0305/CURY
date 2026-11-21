@@ -1474,7 +1474,7 @@ export const HTML = `<main class="main-content">
         <div class="panel-box" style="margin-bottom:16px">
           <div class="panel-header"><h3>➕ Criar fila de distribuição</h3><span style="color:var(--text-muted);font-size:12px">respeita o isolamento da página/empresa</span></div>
           <div class="mkfila" style="padding:16px">
-            <div class="fld"><label>Origem (gatilho)</label><select><option>Formulário — [DANIELA] Barra Funda</option><option>Página — Econ Zona Leste</option><option>Região — Penha</option></select></div>
+            <div class="fld"><label>Origem (gatilho)</label><select><option value="">Escolha o formulário…</option></select></div>
             <div class="fld"><label>Vai para</label><div class="seg2"><button class="on">🔄 Roleta da equipe</button><button>🎯 Corretores específicos</button></div></div>
           </div>
           <div style="padding:0 16px 16px"><button class="act-btn repassar" style="justify-content:center">Criar fila</button></div>
@@ -1486,71 +1486,12 @@ export const HTML = `<main class="main-content">
               A fila do formulário <strong>MANDA</strong>: corretores escolhidos recebem em rodízio exclusivo mesmo fora do estande.
             </p>
           </div>
-          <button class="act-btn repassar" style="padding: 10px 18px;" onclick="openModalConfigFila('novo')">
+          <button class="act-btn repassar" style="padding: 10px 18px;" onclick="window.__filaCriar&&window.__filaCriar()">
             ➕ Criar Nova Fila de Formulário
           </button>
         </div>
 
-        <div class="queues-grid">
-          <!-- MOOCA -->
-          <div class="queue-form-card">
-            <div class="queue-form-top">
-              <div>
-                <span class="queue-form-title">Cury Mooca — Apartamentos 2 Dorms</span>
-                <span class="queue-form-sub">Formulário [DANIELA] · rodízio exclusivo</span>
-              </div>
-              <span class="sit-badge retorno">🟢 Ativa</span>
-            </div>
-            <div>
-              <span style="font-size:11.5px;color:var(--text-muted);display:block;margin-bottom:6px">👥 4 corretores na roleta · <b style="color:var(--text-main)">12 leads hoje</b></span>
-              <div class="queue-brokers-chips" id="chips-mooca">
-                <span class="broker-chip"><span class="dot" style="background:var(--green);"></span> Alba <button class="chip-x" onclick="showToast('Alba removida da fila')">×</button></span>
-                <span class="broker-chip"><span class="dot" style="background:var(--green);"></span> Pedro <button class="chip-x" onclick="showToast('Pedro removido')">×</button></span>
-                <span class="broker-chip"><span class="dot" style="background:var(--green);"></span> Marcos <button class="chip-x" onclick="showToast('Marcos removido')">×</button></span>
-                <span class="broker-chip"><span class="dot" style="background:var(--amber);"></span> Carla <button class="chip-x" onclick="showToast('Carla removida')">×</button></span>
-              </div>
-            </div>
-            <div id="edit-mooca" class="fila-edit" style="display:none">
-              <div class="fe-row"><label>Adicionar corretor</label><select onchange="if(this.value){showToast(this.value+' adicionado à fila');this.value=''}"><option value="">+ escolher corretor…</option><option>Diego</option><option>Silas</option><option>Baeta</option><option>Xande</option></select></div>
-              <p style="font-size:11px;color:var(--text-dim);margin:0">Tirar: clique no × do corretor acima. A ordem de distribuição é automática — você só define quem está na fila. Salva sem sair da tela.</p>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border-subtle);padding-top:10px">
-              <span style="font-size:11.5px;color:var(--text-muted)">102 leads em 7d · exclusivo</span>
-              <div class="action-btn-group">
-                <button class="act-btn repassar" id="btn-ed-mooca" onclick="editarFila('mooca')">⚙️ Editar aqui</button>
-                <button class="act-btn cobrar" onclick="showToast('✓ Aviso enviado pelo chip do gerente (Evolution) — 4 corretores da fila')">💬 Avisar fila</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- ITAQUERA (SEM FILA) -->
-          <div class="queue-form-card" style="border-color: var(--amber-border); background: linear-gradient(180deg, var(--surface-card) 0%, rgba(245, 158, 11, 0.05) 100%);">
-            <div class="queue-form-top">
-              <div>
-                <span class="queue-form-title">Cury Itaquera — Fase 2 Stories</span>
-                <span class="queue-form-sub">Formulário [MARCIO] · sem fila</span>
-              </div>
-              <span class="sit-badge vacuo">⚠️ Sem fila</span>
-            </div>
-            <div>
-              <span style="font-size:11.5px;color:var(--text-muted);display:block;margin-bottom:6px">👥 Ninguém na fila · <b style="color:var(--amber)">8 leads hoje na roleta geral</b></span>
-              <div class="queue-brokers-chips" id="chips-itaquera">
-                <span style="color:var(--text-dim);font-size:12.5px">— sem corretores dedicados —</span>
-              </div>
-            </div>
-            <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: var(--radius-sm); padding: 10px;">
-              <p style="font-size: 12px; color: var(--amber); line-height: 1.4;"><strong>Atenção:</strong> anúncio ativo e sem corretores — os leads caem na roleta ampla.</p>
-            </div>
-            <div id="edit-itaquera" class="fila-edit" style="display:none">
-              <div class="fe-row"><label>Adicionar corretor à fila</label><select onchange="if(this.value){showToast(this.value+' adicionado à fila');this.value=''}"><option value="">+ escolher corretor…</option><option>Alba</option><option>Pedro</option><option>Marcos</option><option>Diego</option></select></div>
-              <p style="font-size:11px;color:var(--text-dim);margin:0">Escolha quem recebe os leads dessa campanha. A ordem é automática.</p>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border-subtle);padding-top:10px">
-              <span style="font-size:11.5px;color:var(--text-muted)">52 leads · roleta geral</span>
-              <button class="act-btn repassar" id="btn-ed-itaquera" style="font-weight:800" onclick="editarFila('itaquera','⚡ Criar fila aqui')">⚡ Criar fila aqui</button>
-            </div>
-          </div>
-        </div>
+        <div class="queues-grid"><div style="padding:16px;color:var(--text-dim)">Carregando filas…</div></div>
       </div>
 
       <!-- ══════════════════════════════════════════════════════════════════════
