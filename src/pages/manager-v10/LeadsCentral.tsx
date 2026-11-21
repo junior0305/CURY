@@ -23,7 +23,7 @@ import FilasV4 from "@/components/manager-v10/FilasV4";
 import PaginasAtivar from "@/components/leads/PaginasAtivar";
 
 const sb = supabase as any;
-type Aba = "funil" | "campanhas" | "filas" | "leads" | "tarefas";
+type Aba = "hoje" | "leads" | "midia" | "resultados" | "agenda";
 type Canal = "todos" | "urgencia" | "oportunidade" | "trafego";
 const dias = (iso?: string | null) => (iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 864e5) : 0);
 const brl = (n: number) => "R$ " + (n || 0).toLocaleString("pt-BR", { maximumFractionDigits: n >= 100 ? 0 : 2 });
@@ -33,7 +33,7 @@ export default function LeadsCentral() {
   const { mode, toggle } = useTheme();
   const gerente = useEffectiveManagerId() ?? session?.user?.id ?? "";
   const como = gerente !== session?.user?.id ? gerente : undefined;
-  const [aba, setAba] = useState<Aba>("funil");
+  const [aba, setAba] = useState<Aba>("hoje");
   const [canal, setCanal] = useState<Canal>("todos");
   loadFonts();
 
@@ -105,8 +105,6 @@ export default function LeadsCentral() {
           <div className="lx-top-dir"><SeletorPeriodo /></div>
         </header>
 
-        <SoltarRepresados />
-        <JusticaRoleta managerId={gerente} como={como ?? null} />
 
         {/* ── O SUSSURRO DA COMANDRA (radar do gestor) ── */}
         {nAvisos > 0 && (
@@ -144,8 +142,8 @@ export default function LeadsCentral() {
                   </div>
                   <div className="lx-s-impact">🚀 Melhor retorno de mídia agora</div>
                   <div className="lx-s-acts">
-                    <button className="lx-act rep" onClick={() => setAba("campanhas")}>👥 Ajustar fila</button>
-                    <button className="lx-act ver" onClick={() => setAba("campanhas")}>📊 Ver campanha</button>
+                    <button className="lx-act rep" onClick={() => setAba("midia")}>👥 Ajustar fila</button>
+                    <button className="lx-act ver" onClick={() => setAba("midia")}>📊 Ver campanha</button>
                   </div>
                 </article>
               )}
@@ -157,8 +155,8 @@ export default function LeadsCentral() {
                   </div>
                   <div className="lx-s-impact">⚠️ Custo subindo · criativo pode estar saturado</div>
                   <div className="lx-s-acts">
-                    <button className="lx-act cob" onClick={() => setAba("campanhas")}>📲 Cobrar tráfego</button>
-                    <button className="lx-act ver" onClick={() => setAba("campanhas")}>🔍 Ver métricas</button>
+                    <button className="lx-act cob" onClick={() => setAba("midia")}>📲 Cobrar tráfego</button>
+                    <button className="lx-act ver" onClick={() => setAba("midia")}>🔍 Ver métricas</button>
                   </div>
                 </article>
               )}
@@ -171,11 +169,11 @@ export default function LeadsCentral() {
         {/* ── abas ── */}
         <nav className="lx-tabs" role="tablist">
           {([
-            ["funil", "📊", "Funil comercial interativo", "5 etapas", ""],
-            ["campanhas", "🎯", "Campanhas & mídia", diag.nAtivas ? `${diag.nAtivas} ativas` : "mídia", "amber"],
-            ["filas", "🔄", "Filas & roletas de anúncios", data?.forms ? `${data.forms} formulários` : "filas", "brand"],
-            ["leads", "📋", "Todos os leads & ação em lote", diag.semToque ? `${diag.semToque} sem toque` : "a carteira", "rose"],
-            ["tarefas", "🗓️", "Agenda da equipe", "compromissos", ""],
+            ["hoje", "📥", "Hoje", "resolver agora", "rose"],
+            ["leads", "📋", "Todos os leads", "funil + lista", ""],
+            ["midia", "📡", "Mídia & filas", diag.nAtivas ? `${diag.nAtivas} ativas` : "filas", "amber"],
+            ["resultados", "📊", "Resultados", "conversão", "brand"],
+            ["agenda", "🗓️", "Agenda da equipe", "compromissos", ""],
           ] as [Aba, string, string, string, string][]).map(([k, ic, lb, badge, cor]) => (
             <button key={k} role="tab" aria-selected={aba === k} className={`lx-tab${aba === k ? " on" : ""}`} onClick={() => setAba(k)}>
               <span className="lx-tab-ic">{ic}</span>
@@ -186,11 +184,22 @@ export default function LeadsCentral() {
         </nav>
 
         <section className="lx-conteudo">
-          {aba === "funil" && <FunilV4 managerId={gerente} como={como ?? null} />}
-          {aba === "campanhas" && <CampanhasV4 donoId={gerente} como={como ?? null} />}
-          {aba === "filas" && <FilasV4 donoId={gerente} como={como ?? null} />}
-          {aba === "leads" && <TodosLeadsV4 como={como ?? null} />}
-          {aba === "tarefas" && <TarefasV4 managerId={gerente} como={como ?? null} />}
+          {aba === "hoje" && (<>
+            <SoltarRepresados />
+            <JusticaRoleta managerId={gerente} como={como ?? null} />
+            <div style={{ marginTop: 16, padding: "14px 16px", background: "var(--card)", border: "1px solid var(--line)", borderRadius: 14, color: "var(--ink-3)", fontSize: 13, lineHeight: 1.5 }}>
+              <b style={{ color: "var(--ink)" }}>Entrada do dia</b> e previsão entram aqui na próxima fase. Por enquanto o Hoje mostra o que precisa <b>soltar</b> (represados) e se a <b>distribuição está justa</b> — o resto da esteira está em "Todos os leads".
+            </div>
+          </>)}
+          {aba === "leads" && (<><FunilV4 managerId={gerente} como={como ?? null} /><TodosLeadsV4 como={como ?? null} /></>)}
+          {aba === "midia" && (<><CampanhasV4 donoId={gerente} como={como ?? null} /><FilasV4 donoId={gerente} como={como ?? null} /></>)}
+          {aba === "resultados" && (
+            <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--ink-3)", fontSize: 13.5, lineHeight: 1.6 }}>
+              <h3 style={{ color: "var(--ink)", marginBottom: 8 }}>Resultados</h3>
+              <p style={{ maxWidth: 520, margin: "0 auto" }}>Conversão por canal, custo por resultado e tendência entram aqui na próxima fase — precisam ligar o gasto da Meta e as datas do Junix pra serem números reais. Enquanto isso, a conversão do funil está em <b>"Todos os leads"</b>.</p>
+            </div>
+          )}
+          {aba === "agenda" && <TarefasV4 managerId={gerente} como={como ?? null} />}
         </section>
       </main>
     </div>
