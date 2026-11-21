@@ -1164,10 +1164,10 @@ const CSS = `
     .fe-row label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px}
     .fe-row select{width:100%;background:var(--surface-card);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:#fff;font-size:13px;font-family:inherit;outline:none}
   
-    .mlr{min-height:100vh}
+    .mlr{height:100%;min-height:0;overflow-y:auto;overflow-x:hidden}
+    .mlr .app-shell,.mlr .main-content{height:auto !important;min-height:0 !important;overflow:visible !important}
     .mlr .main-content{margin-left:0 !important;width:auto !important;max-width:none !important}
-    .mlr .app-shell,.mlr .rail{} /* rail do mockup fica oculto abaixo */
-    .mlr .rail-v10,.mlr .theme-bar,.mlr #theme-bar{display:none !important}
+    .mlr .rail,.mlr .rail-v10,.mlr .theme-bar,.mlr #theme-bar{display:none !important}
 `;
 const HTML = `<div style="background:#F59E0B;color:#000;padding:8px 16px;font-weight:800;font-size:12.5px;text-align:center;letter-spacing:.01em">⚠️ Tela nova em validação — represados e justiça da roleta já são reais; os outros números ainda são exemplo (entram por fases).</div><main class="main-content">
       
@@ -1954,7 +1954,7 @@ const HTML = `<div style="background:#F59E0B;color:#000;padding:8px 16px;font-we
       </div>
 
     </main>
-  </div>
+  
 
   <!-- ── BARRA FLUTUANTE DE AÇÕES EM LOTE (STICKY BOTTOM BAR) ── -->
   <div id="sticky-batch-bar" class="sticky-batch-bar" style="display: none;">
