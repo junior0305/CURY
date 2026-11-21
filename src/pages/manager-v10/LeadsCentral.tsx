@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
 import { cobrarFila } from "@/hooks/useLeads";
+import { lerContasDoDono } from "@/lib/fbContas";
 import { CSS, HTML, JS } from "./leadsMockup";
 
 // garante a data grudada no topo ao rolar + token --good p/ a tabela da justiça
@@ -128,6 +129,7 @@ export default function LeadsCentral() {
   const filtroRef = useRef<{ seg: string; page: number; q: string; cor: string }>({ seg: "todos", page: 1, q: "", cor: "" });
   const renderRef = useRef<() => void>(() => {});
   const periodoRef = useRef<string>("Hoje");
+  const anunLeadsRef = useRef<any[]>([]);
 
   // escopo: gerente vê a própria equipe (manager_id); super/diretor/admin deixam o RLS filtrar,
   // salvo "entrar como / drill" (?manager=<id>), que limita àquele gerente.
@@ -568,58 +570,66 @@ export default function LeadsCentral() {
     if (criarBtn) criarBtn.setAttribute("onclick", "window.__filaCriar&&window.__filaCriar()");
   }, [scopeManager]);
 
-  // ANÚNCIOS (META) — painel do mockup populado com gasto/CPL reais (fb_saude)
-  const anuncios = useCallback(async () => {
+  // ANÚNCIOS (META) — por DATA do período (edge fb-conta-gerente, ao vivo da conta) + "Ver" lista os leads da campanha
+  const anuncios = useCallback(async (nome: string) => {
     const root = box.current; if (!root) return;
     const sub = root.querySelector("#sub-anuncios"); if (!sub) return;
-    let arvore: string[] | null = null;
-    if (scopeManager) { const { data } = await sb.rpc("ids_da_arvore", { p: scopeManager }); arvore = (data ?? []).map((r: any) => (typeof r === "string" ? r : r.ids_da_arvore)); }
-    const { data: fs } = await sb.from("fb_saude").select("dono_id,dados");
-    let rows = (fs ?? []) as any[];
-    if (arvore) rows = rows.filter((r) => !r.dono_id || arvore!.includes(r.dono_id));
-    const camps: any[] = [];
-    rows.forEach((r) => { const cs = r.dados?.campanhas; if (Array.isArray(cs)) cs.forEach((c: any) => camps.push(c)); });
-    const comGasto = camps.filter((c) => (c.gasto || 0) > 0 || (c.leads || 0) > 0);
-    const cpl = (c: any) => (c.leads > 0 ? (c.gasto || 0) / c.leads : 0);
-    const brl = (n: number) => "R$ " + (n || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
-
+    const dono = scopeManager;
     const tb = sub.querySelector(".leads-table tbody");
-    if (tb) {
-      const arr = comGasto.slice().sort((a, b) => (b.gasto || 0) - (a.gasto || 0)).slice(0, 30);
-      tb.innerHTML = arr.length ? arr.map((c) => `<tr>
-        <td><b>${esc(c.nome || "Campanha")}</b><span style="display:block;color:var(--text-dim);font-size:12px">Meta Ads</span></td>
-        <td class="mono">${brl(c.gasto || 0)}</td>
-        <td class="mono">${c.leads > 0 ? brl(cpl(c)) : "—"}</td>
-        <td class="mono">${c.leads || 0} leads</td>
-        <td class="mono" style="color:var(--text-dim)">—</td>
-        <td class="mono" style="color:var(--text-dim)">—</td>
-        <td><div class="action-btn-group"><button class="act-btn ver" onclick="showToast('${esc((c.nome || "Campanha").replace(/['"]/g, " "))}')">👁️ Ver</button></div></td>
-      </tr>`).join("") : `<tr><td colspan="7" style="padding:16px;color:var(--text-dim)">Sem gasto de mídia nesta estrutura (fb_saude vazio).</td></tr>`;
-    }
-
-    const comCpl = comGasto.filter((c) => c.leads > 0).sort((a, b) => cpl(b) - cpl(a));
-    const media = comCpl.length ? comCpl.reduce((s, c) => s + cpl(c), 0) / comCpl.length : 0;
+    const note = sub.querySelector<HTMLElement>(".per-note");
+    const brl = (n: number) => "R$ " + (n || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
     const setCard = (cls: string, show: boolean, titulo?: string, texto?: string) => {
       const card = sub.querySelector<HTMLElement>("." + cls); if (!card) return;
       card.style.display = show ? "" : "none";
       if (show) { const h = card.querySelector("h4"); if (h && titulo) h.textContent = titulo; const p = card.querySelector("p"); if (p && texto) p.innerHTML = texto; }
     };
+    const semAlerta = () => ["lead-caro", "aumentar-verba", "trocar-criativo", "leads-queimados"].forEach((c) => setCard(c, false));
+    if (!dono) { if (tb) tb.innerHTML = `<tr><td colspan="7" style="padding:16px;color:var(--text-dim)">Entre na página de um gerente pra ver os anúncios da conta dele.</td></tr>`; semAlerta(); return; }
+    const [de0, ate0] = faixa(nome);
+    const ymd = (iso: string, a: boolean) => new Date(new Date(iso).getTime() - 3 * 3600 * 1000 - (a ? 1000 : 0)).toISOString().slice(0, 10);
+    const de = ymd(de0, false), ate = ymd(ate0, true);
+    if (tb) tb.innerHTML = `<tr><td colspan="7" style="padding:16px;color:var(--text-dim)">Lendo as campanhas no Facebook (${esc(nome)})… pode levar alguns segundos.</td></tr>`;
+    if (note) note.innerHTML = `📅 Gasto, leads e CPL da Meta no período <b>${esc(nome)}</b> (ao vivo da conta). Visita/venda por campanha entram com Junix.`;
+    let lq = sb.from("leads").select("id,name,phone,fb_campaign_id,campanha_nome,broker_id,created_at,status")
+      .gte("created_at", de0).lt("created_at", ate0).not("status", "in", "(EXCLUDED,ABANDONED)").not("fb_campaign_id", "is", null).limit(20000);
+    if (dono) lq = lq.eq("manager_id", dono);
+    const [contas, { data: ld }] = await Promise.all([lerContasDoDono(dono, de, ate), lq]);
+    anunLeadsRef.current = (ld ?? []) as any[];
+    const porCamp: Record<string, number> = {};
+    (ld ?? []).forEach((l: any) => { const k = String(l.fb_campaign_id); porCamp[k] = (porCamp[k] || 0) + 1; });
+    const camps: any[] = [];
+    (contas || []).forEach((c: any) => (c.campanhas || []).forEach((cp: any) => camps.push(cp)));
+    const cpl = (c: any) => { const n = c.leads || 0; return n > 0 ? (c.gasto || 0) / n : 0; };
+    if (!tb) return;
+    if (!camps.length) { tb.innerHTML = `<tr><td colspan="7" style="padding:16px;color:var(--text-dim)">Nenhuma campanha com gasto no período <b>${esc(nome)}</b> (ou a conta não respondeu agora).</td></tr>`; semAlerta(); return; }
+    const arr = camps.slice().sort((a, b) => (b.ativa ? 1 : 0) - (a.ativa ? 1 : 0) || (b.gasto || 0) - (a.gasto || 0)).slice(0, 40);
+    tb.innerHTML = arr.map((c: any) => {
+      const n = c.leads || 0, chg = porCamp[String(c.id)] ?? n;
+      return `<tr>
+        <td><b>${esc(c.nome || "Campanha")}</b><span style="display:block;color:var(--text-dim);font-size:12px">Meta Ads${c.ativa ? "" : " · pausada"}</span></td>
+        <td class="mono">${brl(c.gasto || 0)}</td>
+        <td class="mono">${n > 0 ? brl(cpl(c)) : "—"}</td>
+        <td class="mono">${chg} leads</td>
+        <td class="mono" style="color:var(--text-dim)">—</td>
+        <td class="mono" style="color:var(--text-dim)">—</td>
+        <td><div class="action-btn-group"><button class="act-btn ver" onclick="window.__verCampanha&&window.__verCampanha('${esc(String(c.id))}','${arg(c.nome || "Campanha")}')">👁️ Ver</button></div></td>
+      </tr>`;
+    }).join("");
+    const comCpl = camps.filter((c: any) => (c.leads || 0) > 0).sort((a: any, b: any) => cpl(b) - cpl(a));
+    const media = comCpl.length ? comCpl.reduce((s: number, c: any) => s + cpl(c), 0) / comCpl.length : 0;
     if (comCpl.length) {
       const caro = comCpl[0], barato = comCpl[comCpl.length - 1];
-      setCard("lead-caro", true, `${caro.nome} — CPL ${brl(cpl(caro))}`, `Custo por lead ${cpl(caro) > media ? `acima da média (${brl(media)})` : "na média"}. Gasto de ${brl(caro.gasto)} gerou ${caro.leads} leads.`);
-      setCard("aumentar-verba", true, `${barato.nome} — CPL ${brl(cpl(barato))}`, `Melhor custo por lead da estrutura. Gasto de ${brl(barato.gasto)} gerou ${barato.leads} leads — dá pra escalar.`);
+      setCard("lead-caro", true, `${caro.nome} — CPL ${brl(cpl(caro))}`, `Custo por lead ${cpl(caro) > media ? `acima da média (${brl(media)})` : "na média"} no período. Gasto ${brl(caro.gasto)} → ${caro.leads} leads.`);
+      setCard("aumentar-verba", true, `${barato.nome} — CPL ${brl(cpl(barato))}`, `Melhor custo por lead do período. Gasto ${brl(barato.gasto)} → ${barato.leads} leads — dá pra escalar.`);
     } else { setCard("lead-caro", false); setCard("aumentar-verba", false); }
-    setCard("trocar-criativo", false);
-    setCard("leads-queimados", false);
-    const note = sub.querySelector<HTMLElement>(".per-note");
-    if (note) note.innerHTML = `📅 Gasto e leads da Meta (fb_saude). Visitas e vendas por campanha entram com o cruzamento CRM/Junix.`;
+    setCard("trocar-criativo", false); setCard("leads-queimados", false);
   }, [scopeManager]);
 
   loadFonts();
 
   // sempre aponta para as funções atuais (evita closure velho no seletor de período)
-  const periodFns = useRef({ carregar, resultados });
-  periodFns.current = { carregar, resultados };
+  const periodFns = useRef({ carregar, resultados, anuncios });
+  periodFns.current = { carregar, resultados, anuncios };
 
   // injeta o JS do mockup uma vez e religa o seletor de período p/ recarregar dado real
   useEffect(() => {
@@ -634,6 +644,7 @@ export default function LeadsCentral() {
       periodoRef.current = nomeP;
       periodFns.current.carregar(nomeP);
       periodFns.current.resultados(nomeP);
+      periodFns.current.anuncios(nomeP);
     };
     // controle real da tabela: pílulas, etapas do funil, busca e corretor
     (window as any).filterPill = (type: string, el: any) => {
@@ -670,7 +681,7 @@ export default function LeadsCentral() {
     pulso();
     justica();
     filas();
-    anuncios();
+    anuncios("Hoje");
     // refresca junto o funil/tabela do período atual (preservando filtro), pra não divergir do "entraram" do Hoje
     const t = setInterval(() => { pulso(); justica(); carregar(periodoRef.current, true); }, 60_000);
     return () => clearInterval(t);
@@ -793,12 +804,20 @@ export default function LeadsCentral() {
 
     (window as any).__repassarLead = async (id: string) => {
       const l = acha(id); if (!l) return;
-      let pq = sb.from("profiles").select("id,first_name").eq("role", "BROKER").eq("is_active", true).neq("lead_assignment_enabled", false).order("first_name");
+      // lista TODOS os corretores da equipe (o gerente decide dar pra quem está ou não na roleta),
+      // ordenados: no plantão (roleta) → online no sistema → demais
+      let pq = sb.from("profiles").select("id,first_name,last_seen_at,roleta_entrou_em").eq("role", "BROKER").eq("is_active", true);
       if (scopeManager) pq = pq.eq("manager_id", scopeManager);
       const { data: pf } = await pq;
-      const brokers = (pf ?? []) as any[];
+      const brokers = ((pf ?? []) as any[]).filter((b) => b.id !== l.broker_id);
       if (!brokers.length) { toast.error("Sem corretor da equipe pra receber."); return; }
-      const opts = brokers.filter((b) => b.id !== l.broker_id).map((b) => `<option value="${b.id}">${esc(b.first_name || "corretor")}</option>`).join("");
+      const inicioHoje = new Date(faixa("Hoje")[0]).getTime();
+      const onlineT = Date.now() - 15 * 60_000;
+      const grupo = (b: any) => (b.roleta_entrou_em && new Date(b.roleta_entrou_em).getTime() >= inicioHoje) ? 0
+        : (b.last_seen_at && new Date(b.last_seen_at).getTime() > onlineT) ? 1 : 2;
+      brokers.sort((a, b) => grupo(a) - grupo(b) || (a.first_name || "").localeCompare(b.first_name || ""));
+      const og = (titulo: string, g: number) => { const arr = brokers.filter((b) => grupo(b) === g); return arr.length ? `<optgroup label="${titulo}">${arr.map((b) => `<option value="${b.id}">${esc(b.first_name || "corretor")}</option>`).join("")}</optgroup>` : ""; };
+      const opts = og("🟢 No plantão (roleta)", 0) + og("🔵 Online no sistema", 1) + og("Demais corretores", 2);
       const atual = l.broker_id ? (nmTabRef.current[l.broker_id] || "corretor") : "sem corretor";
       const ov = overlay(`
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -822,7 +841,17 @@ export default function LeadsCentral() {
       });
     };
 
-    return () => { try { delete (window as any).__repassarLead; delete (window as any).__cobrarLead; delete (window as any).__verLead; } catch { /* ok */ } };
+    (window as any).__verCampanha = (id: string, nome: string) => {
+      const leads = anunLeadsRef.current.filter((l) => String(l.fb_campaign_id) === String(id));
+      const nm = nmTabRef.current;
+      const linhas = leads.length
+        ? leads.slice(0, 300).map((l) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--border,#eee)"><span><b>${esc(l.name || "Sem nome")}</b><span class="mono" style="display:block;color:var(--text-dim);font-size:12px">${fone(l.phone)}</span></span><span style="text-align:right;color:var(--text-dim);font-size:12px">${l.broker_id ? esc(nm[l.broker_id] || "corretor") : "sem corretor"}<br>${tempoTxt(l)}</span></div>`).join("")
+        : `<p style="color:var(--text-dim);padding:10px 0">Nenhum lead dessa campanha no período (pode ser campanha de conversa/WhatsApp, que não gera lead de formulário).</p>`;
+      const ov = overlay(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-size:15px">${esc(nome)} — ${leads.length} lead(s)</b><button class="lc-x" style="background:none;border:0;font-size:20px;cursor:pointer;color:var(--text-dim)">×</button></div><div style="max-height:60vh;overflow:auto">${linhas}</div>`);
+      ov.querySelector(".lc-x")?.addEventListener("click", () => ov.remove());
+    };
+
+    return () => { try { delete (window as any).__repassarLead; delete (window as any).__cobrarLead; delete (window as any).__verLead; delete (window as any).__verCampanha; } catch { /* ok */ } };
   }, [session, scopeManager, manParam, carregar, pulso]);
 
   return (
