@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import SoltarRepresados from "@/components/plantao/SoltarRepresados";
+import JusticaRoleta from "@/components/plantao/JusticaRoleta";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
 import { RailV10, loadFonts } from "@/components/manager-v10/RailV10";
@@ -105,6 +106,7 @@ export default function LeadsCentral() {
         </header>
 
         <SoltarRepresados />
+        <JusticaRoleta managerId={gerente} como={como ?? null} />
 
         {/* ── O SUSSURRO DA COMANDRA (radar do gestor) ── */}
         {nAvisos > 0 && (
