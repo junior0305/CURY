@@ -704,8 +704,37 @@ export default function LeadsCentral() {
       try {
         const { data, error } = await sb.rpc("represados_acao", { p_como: manParam || null, p_executar: true });
         if (error) throw error;
-        const n = (data as any)?.soltos ?? (data as any)?.total;
-        toast.success(`Represados soltos${n != null ? ` (${n})` : ""} — corretores avisados.`);
+        const d = data as any;
+        const n = d?.total ?? 0, pend = d?.pendentes ?? 0;
+        if (n > 0) {
+          const nomes = (d?.divisao || []).map((x: any) => `${x.nome} (${x.qtd})`).join(", ");
+          toast.success(`${n} represado(s) solto(s)${nomes ? ` para: ${nomes}` : ""} — corretores avisados.`);
+        } else if (pend > 0) {
+          const forcar = async () => {
+            try {
+              let lq2 = sb.from("leads").select("id").not("represa_at", "is", null).is("broker_id", null).not("status", "in", "(EXCLUDED,CONCLUDED,ABANDONED)");
+              if (scopeManager) lq2 = lq2.eq("represa_equipe", scopeManager);
+              const { data: ls2 } = await lq2;
+              const ids2 = (ls2 ?? []).map((l: any) => l.id);
+              if (!ids2.length) { toast.info("Nenhum represado."); return; }
+              let pq2 = sb.from("profiles").select("id").eq("role", "BROKER").eq("is_active", true).neq("lead_assignment_enabled", false);
+              if (scopeManager) pq2 = pq2.eq("manager_id", scopeManager);
+              const { data: pf2 } = await pq2;
+              const alvo2 = (pf2 ?? []).map((p: any) => p.id);
+              if (!alvo2.length) { toast.error("Sem corretor ativo na equipe pra receber."); return; }
+              const { data: r2, error: e2 } = await sb.rpc("redistribuir_lote", { p_leads: ids2, p_para: alvo2, p_como: manParam || null, p_motivo: "Soltar represados (forçado pelo gerente) — Central de Leads" });
+              if (e2) throw e2;
+              toast.success(`${(r2 as any)?.feitos ?? ids2.length} represado(s) distribuído(s) para a equipe.`);
+              pulso(); justica();
+            } catch (err: any) { toast.error(err?.message || "Não consegui distribuir."); }
+          };
+          toast.warning(`Ninguém da equipe está no plantão (check-in) nem online agora — os ${pend} leads ficam segurados e saem quando alguém entrar.`, {
+            duration: 12000,
+            action: { label: "Distribuir mesmo assim", onClick: forcar },
+          });
+        } else {
+          toast.info("Nenhum lead represado pra soltar no momento.");
+        }
         pulso(); justica();
       } catch (e: any) {
         const m = String(e?.message || "");
