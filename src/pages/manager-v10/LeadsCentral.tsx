@@ -590,17 +590,23 @@ export default function LeadsCentral() {
     const de = ymd(de0, false), ate = ymd(ate0, true);
     if (tb) tb.innerHTML = `<tr><td colspan="7" style="padding:16px;color:var(--text-dim)">Lendo as campanhas no Facebook (${esc(nome)})… pode levar alguns segundos.</td></tr>`;
     if (note) note.innerHTML = `📅 Gasto, leads e CPL da Meta no período <b>${esc(nome)}</b> (ao vivo da conta). Visita/venda por campanha entram com Junix.`;
-    let lq = sb.from("leads").select("id,name,phone,fb_campaign_id,campanha_nome,broker_id,created_at,status")
+    let lq = sb.from("leads").select("id,name,phone,fb_campaign_id,fb_form_id,campanha_nome,broker_id,created_at,status")
       .gte("created_at", de0).lt("created_at", ate0).not("status", "in", "(EXCLUDED,ABANDONED)").limit(20000);
     if (dono) lq = lq.eq("manager_id", dono);
-    const [contas, { data: ld }] = await Promise.all([lerContasDoDono(dono, de, ate), lq]);
-    anunLeadsRef.current = (ld ?? []) as any[];
     const norm = (s: any) => (s || "").toString().trim().toLowerCase();
-    const porCampId: Record<string, number> = {}, porCampNome: Record<string, number> = {};
-    (ld ?? []).forEach((l: any) => {
-      if (l.fb_campaign_id) { const k = String(l.fb_campaign_id); porCampId[k] = (porCampId[k] || 0) + 1; }
-      if (l.campanha_nome) { const n = norm(l.campanha_nome); porCampNome[n] = (porCampNome[n] || 0) + 1; }
+    const [contas, { data: ld }, { data: cat }] = await Promise.all([
+      lerContasDoDono(dono, de, ate), lq,
+      sb.from("formularios_catalogo").select("form_id,nome,anuncios"),
+    ]);
+    anunLeadsRef.current = (ld ?? []) as any[];
+    // os leads são por FORMULÁRIO; o catálogo liga cada nome de campanha ao seu form (anuncios = "camp1 · camp2 · …")
+    const campToForm: Record<string, string> = {};
+    (cat ?? []).forEach((f: any) => {
+      if (f.nome) campToForm[norm(f.nome)] = f.form_id;
+      String(f.anuncios || "").split("·").forEach((a: string) => { const k = norm(a); if (k) campToForm[k] = f.form_id; });
     });
+    const porForm: Record<string, number> = {};
+    (ld ?? []).forEach((l: any) => { const k = String(l.fb_form_id || l.fb_campaign_id || ""); if (k) porForm[k] = (porForm[k] || 0) + 1; });
     const camps: any[] = [];
     (contas || []).forEach((c: any) => (c.campanhas || []).forEach((cp: any) => camps.push(cp)));
     const cpl = (c: any) => { const n = c.leads || 0; return n > 0 ? (c.gasto || 0) / n : 0; };
@@ -608,15 +614,16 @@ export default function LeadsCentral() {
     if (!camps.length) { tb.innerHTML = `<tr><td colspan="7" style="padding:16px;color:var(--text-dim)">Nenhuma campanha com gasto no período <b>${esc(nome)}</b> (ou a conta não respondeu agora).</td></tr>`; semAlerta(); return; }
     const arr = camps.slice().sort((a, b) => (b.ativa ? 1 : 0) - (a.ativa ? 1 : 0) || (b.gasto || 0) - (a.gasto || 0)).slice(0, 40);
     tb.innerHTML = arr.map((c: any) => {
-      const n = c.leads || 0, chg = porCampId[String(c.id)] ?? porCampNome[norm(c.nome)] ?? n;
+      const n = c.leads || 0, formId = campToForm[norm(c.nome)] || "";
+      const crm = formId ? (porForm[formId] ?? 0) : null;
       return `<tr>
         <td><b>${esc(c.nome || "Campanha")}</b><span style="display:block;color:var(--text-dim);font-size:12px">Meta Ads${c.ativa ? "" : " · pausada"}</span></td>
         <td class="mono">${brl(c.gasto || 0)}</td>
         <td class="mono">${n > 0 ? brl(cpl(c)) : "—"}</td>
-        <td class="mono">${chg} leads</td>
+        <td class="mono">${n} leads${crm != null ? ` <span style="color:var(--text-dim)">· ${crm} no CRM</span>` : ""}</td>
         <td class="mono" style="color:var(--text-dim)">—</td>
         <td class="mono" style="color:var(--text-dim)">—</td>
-        <td><div class="action-btn-group"><button class="act-btn ver" onclick="window.__verCampanha&&window.__verCampanha('${esc(String(c.id))}','${arg(c.nome || "Campanha")}')">👁️ Ver</button></div></td>
+        <td><div class="action-btn-group"><button class="act-btn ver" onclick="window.__verCampanha&&window.__verCampanha('${esc(formId)}','${arg(c.nome || "Campanha")}')">👁️ Ver</button></div></td>
       </tr>`;
     }).join("");
     const comCpl = camps.filter((c: any) => (c.leads || 0) > 0).sort((a: any, b: any) => cpl(b) - cpl(a));
@@ -735,7 +742,7 @@ export default function LeadsCentral() {
         const card = box.current?.querySelector<HTMLElement>(`[data-form="${formId}"]`);
         let brokers: string[] = []; try { brokers = JSON.parse(card?.dataset.brokers || "[]"); } catch { /* */ }
         brokers = brokers.filter((b) => b !== brokerId);
-        if (!brokers.length) { const { error } = await sb.rpc("ligar_formulario", { p_form: formId, p_modo: "roleta", p_destino: null, p_como: manParam || null, p_corretores: [] }); if (error) throw error; toast.success("Sem corretor dedicado — o formulário ficou na roleta do plantão."); }
+        if (!brokers.length) { const { error } = await sb.rpc("ligar_formulario", { p_form: formId, p_modo: "todas", p_destino: null, p_como: manParam || null, p_corretores: null }); if (error) throw error; toast.success("Sem corretor dedicado — o formulário ficou na roleta do plantão."); }
         else { const { error } = await sb.rpc("salvar_fila_formulario", { p_form_id: formId, p_page_id: card?.dataset.page || null, p_nome: card?.dataset.nome || "", p_broker_ids: brokers }); if (error) throw error; toast.success("Corretor removido da fila."); }
         filas();
       } catch (e: any) { toast.error(e?.message || "Não consegui atualizar a fila."); }
@@ -756,7 +763,7 @@ export default function LeadsCentral() {
       try {
         const selEl = box.current?.querySelector<HTMLSelectElement>("#view-filas select"); const form = selEl?.value;
         if (!form) { toast.info("Escolha um formulário."); return; }
-        const { error } = await sb.rpc("ligar_formulario", { p_form: form, p_modo: "roleta", p_destino: null, p_como: manParam || null, p_corretores: [] });
+        const { error } = await sb.rpc("ligar_formulario", { p_form: form, p_modo: "todas", p_destino: null, p_como: manParam || null, p_corretores: null });
         if (error) throw error; toast.success("Fila criada na roleta da equipe."); filas();
       } catch (e: any) { toast.error(e?.message || "Não consegui criar a fila."); }
     };
@@ -845,9 +852,8 @@ export default function LeadsCentral() {
       });
     };
 
-    (window as any).__verCampanha = (id: string, nome: string) => {
-      const n = (s: any) => (s || "").toString().trim().toLowerCase();
-      const leads = anunLeadsRef.current.filter((l) => String(l.fb_campaign_id) === String(id) || (l.campanha_nome && n(l.campanha_nome) === n(nome)));
+    (window as any).__verCampanha = (formId: string, nome: string) => {
+      const leads = formId ? anunLeadsRef.current.filter((l) => String(l.fb_form_id || l.fb_campaign_id) === String(formId)) : [];
       const nm = nmTabRef.current;
       const linhas = leads.length
         ? leads.slice(0, 300).map((l) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--border,#eee)"><span><b>${esc(l.name || "Sem nome")}</b><span class="mono" style="display:block;color:var(--text-dim);font-size:12px">${fone(l.phone)}</span></span><span style="text-align:right;color:var(--text-dim);font-size:12px">${l.broker_id ? esc(nm[l.broker_id] || "corretor") : "sem corretor"}<br>${tempoTxt(l)}</span></div>`).join("")
