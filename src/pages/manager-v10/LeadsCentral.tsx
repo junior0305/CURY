@@ -465,19 +465,34 @@ export default function LeadsCentral() {
     let pq = sb.from("profiles").select("id,first_name").eq("role", "BROKER");
     if (scopeManager) pq = pq.eq("manager_id", scopeManager);
     const [{ data: cat }, { data: qs }, { data: lf }, { data: pf }] = await Promise.all([
-      sb.from("formularios_catalogo").select("form_id,page_id,nome,nome_fonte,status,leads_7d,anuncio_ativo,owner_id"),
-      sb.from("distribution_queues").select("match_value,broker_ids").eq("match_field", "form_id").eq("is_active", true),
+      sb.from("formularios_catalogo").select("form_id,page_id,nome,nome_fonte,leads_7d,anuncio_ativo,owner_id"),
+      sb.from("distribution_queues").select("match_value,broker_ids,roleta_de,criado_por").eq("match_field", "form_id").eq("is_active", true),
       lq, pq,
     ]);
-    let forms = (cat ?? []) as any[];
-    if (arvore) forms = forms.filter((f) => !f.owner_id || arvore!.includes(f.owner_id));
+    const arvSet = arvore ? new Set(arvore) : null;
+    const inArv = (id: any) => !arvSet || (!!id && arvSet.has(id));
+    const overlaps = (ids: any[]) => !arvSet || (ids || []).some((b) => arvSet!.has(b));
     const hojePorForm: Record<string, number> = {};
     (lf ?? []).forEach((l: any) => { if (l.fb_form_id) hojePorForm[l.fb_form_id] = (hojePorForm[l.fb_form_id] || 0) + 1; });
+    // Visibilidade da fila = quem é DONO da fila (roleta_de / criado_por na árvore, ou corretor da árvore),
+    // NÃO o owner_id do catálogo (que é chute de robô). Isolamento igual ao resto do app (hierarquia).
     const qByForm: Record<string, string[]> = {};
-    (qs ?? []).forEach((q: any) => { qByForm[q.match_value] = q.broker_ids || []; });
+    (qs ?? []).forEach((q: any) => {
+      if (!(inArv(q.roleta_de) || inArv(q.criado_por) || overlaps(q.broker_ids))) return;
+      const prev = qByForm[q.match_value] || [];
+      qByForm[q.match_value] = Array.from(new Set([...prev, ...((q.broker_ids as string[]) || [])]));
+    });
+    const catByForm: Record<string, any> = {};
+    (cat ?? []).forEach((f: any) => { catByForm[f.form_id] = f; });
+    // forms visíveis: tem fila desta estrutura  OU  anúncio ativo cuja conta está na árvore
+    const idsForm = new Set<string>(Object.keys(qByForm));
+    (cat ?? []).forEach((f: any) => { if (f.anuncio_ativo && inArv(f.owner_id)) idsForm.add(f.form_id); });
     const nm: Record<string, string> = {};
     (pf ?? []).forEach((p: any) => { nm[p.id] = p.first_name || "corretor"; });
-    const mostrar = forms.filter((f) => f.anuncio_ativo || qByForm[f.form_id]);
+    const mostrar = Array.from(idsForm).map((fid) => {
+      const f = catByForm[fid] || {};
+      return { form_id: fid, page_id: f.page_id || "", nome: f.nome || "", nome_fonte: f.nome_fonte || "", leads_7d: f.leads_7d ?? 0 };
+    }).sort((a, b) => (qByForm[b.form_id] ? 1 : 0) - (qByForm[a.form_id] ? 1 : 0) || (b.leads_7d - a.leads_7d));
     const optsBrokers = Object.entries(nm).sort((a, b) => a[1].localeCompare(b[1])).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join("");
     if (sel) sel.innerHTML = mostrar.length
       ? mostrar.map((f) => `<option value="${esc(f.form_id)}">Formulário — ${esc(f.nome || f.nome_fonte || f.form_id)}</option>`).join("")

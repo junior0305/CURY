@@ -1464,25 +1464,6 @@ export const HTML = `<main class="main-content">
             </tbody>
           </table>
         </div>
-        <!-- PIXEL & CAPI -->
-        <div class="sec-h">🎯 Rastreamento (pixel &amp; CAPI)</div>
-        <div class="panel-box" style="margin-bottom:16px">
-          <div class="panel-header"><h3>Se isso cai, a verba otimiza às cegas</h3><span style="color:var(--text-muted);font-size:12px">pixel manda o evento; CAPI reotimiza por valor</span></div>
-          <div style="padding:14px">
-            <div class="rep-row" style="border-color:var(--rose-border);background:var(--rose-light)">
-              <div><b style="color:var(--text-main);font-size:14px">⚠️ 2 páginas SEM pixel</b><p style="color:var(--text-muted);font-size:12px;margin-top:2px">LILIANE e Giorge — gastando e <b>rastreando nada</b>. O Facebook está otimizando no escuro.</p></div>
-              <button class="act-btn cobrar" onclick="showToast('Criar pixel nessas 2 contas')">Resolver</button>
-            </div>
-            <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px">
-              <div class="ptile"><span>Páginas com pixel</span><b>10 <i>/ 12</i></b></div>
-              <div class="ptile good"><span>CAPI enviou hoje</span><b>214 <i>eventos</i></b></div>
-              <div class="ptile"><span>Qualidade match (EMQ)</span><b>7,2 <i>/ 10</i></b></div>
-              <div class="ptile"><span>Campanhas c/ Conversion Leads</span><b>5 <i>/ 12</i></b></div>
-            </div>
-            <p style="color:var(--text-dim);font-size:11.5px;margin-top:12px;line-height:1.5">O CAPI devolve <b>QualifiedLead / Visita / Venda</b> pro Facebook reotimizar por <b>valor</b>. 7 campanhas ainda não ligaram Conversion Leads — perdem essa força.</p>
-          </div>
-        </div>
-
         </div><!-- /sub-anuncios -->
 
       </div><!-- /view-campanhas -->
