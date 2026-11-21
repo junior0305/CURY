@@ -465,7 +465,7 @@ export default function LeadsCentral() {
     let pq = sb.from("profiles").select("id,first_name").eq("role", "BROKER");
     if (scopeManager) pq = pq.eq("manager_id", scopeManager);
     const [{ data: cat }, { data: qs }, { data: lf }, { data: pf }] = await Promise.all([
-      sb.from("formularios_catalogo").select("form_id,nome,nome_fonte,status,leads_7d,anuncio_ativo,owner_id"),
+      sb.from("formularios_catalogo").select("form_id,page_id,nome,nome_fonte,status,leads_7d,anuncio_ativo,owner_id"),
       sb.from("distribution_queues").select("match_value,broker_ids").eq("match_field", "form_id").eq("is_active", true),
       lq, pq,
     ]);
@@ -478,6 +478,7 @@ export default function LeadsCentral() {
     const nm: Record<string, string> = {};
     (pf ?? []).forEach((p: any) => { nm[p.id] = p.first_name || "corretor"; });
     const mostrar = forms.filter((f) => f.anuncio_ativo || qByForm[f.form_id]);
+    const optsBrokers = Object.entries(nm).sort((a, b) => a[1].localeCompare(b[1])).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join("");
     if (sel) sel.innerHTML = mostrar.length
       ? mostrar.map((f) => `<option value="${esc(f.form_id)}">Formulário — ${esc(f.nome || f.nome_fonte || f.form_id)}</option>`).join("")
       : `<option>Nenhum formulário ativo</option>`;
@@ -486,20 +487,28 @@ export default function LeadsCentral() {
         const brokers = qByForm[f.form_id] || [];
         const ativa = brokers.length > 0;
         const chips = brokers.length
-          ? brokers.slice(0, 10).map((id) => `<span class="broker-chip"><span class="dot"></span> ${esc(nm[id] || "corretor")}</span>`).join("")
+          ? brokers.slice(0, 12).map((id) => `<span class="broker-chip"><span class="dot"></span> ${esc(nm[id] || "corretor")} <button class="chip-x" title="remover" onclick="window.__filaRemover&&window.__filaRemover('${esc(f.form_id)}','${id}')">×</button></span>`).join("")
           : `<span style="color:var(--text-dim)">— sem corretores dedicados —</span>`;
         const hoje = hojePorForm[f.form_id] || 0;
-        return `<div class="queue-form-card">
+        return `<div class="queue-form-card" data-form="${esc(f.form_id)}" data-page="${esc(f.page_id || "")}" data-nome="${esc(f.nome || f.nome_fonte || "")}" data-brokers='${esc(JSON.stringify(brokers))}'>
           <div class="queue-form-top"><div>
             <span class="queue-form-title">${esc(f.nome || f.nome_fonte || "Formulário")}</span>
-            <span class="queue-form-sub">${ativa ? "rodízio exclusivo" : "sem fila · roleta geral"}</span>
+            <span class="queue-form-sub">${ativa ? "rodízio exclusivo" : "sem fila · roleta do plantão"}</span>
           </div><span class="sit-badge ${ativa ? "retorno" : "vacuo"}">${ativa ? "🟢 Ativa" : "⚠️ Sem fila"}</span></div>
           <div style="margin-top:8px"><span>👥 ${brokers.length} corretores na roleta · <b>${hoje} leads hoje</b></span>
           <div class="queue-brokers-chips" style="margin-top:8px">${chips}</div></div>
-          <div style="margin-top:10px;color:var(--text-dim);font-size:12px">${f.leads_7d ?? 0} leads em 7d</div>
+          <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <select class="fila-add-sel" style="background:var(--surface-subtle);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text-main);font-size:12px;max-width:170px"><option value="">+ corretor…</option>${optsBrokers}</select>
+            <button class="act-btn ver" onclick="window.__filaAdd&&window.__filaAdd(this)">Adicionar</button>
+          </div>
+          <div style="margin-top:6px;color:var(--text-dim);font-size:11.5px">Tirando todos os corretores, os leads deste formulário voltam para a <b>roleta do plantão</b>.</div>
+          <div style="margin-top:8px;color:var(--text-dim);font-size:12px">${f.leads_7d ?? 0} leads em 7d</div>
         </div>`;
       }).join("") : `<div style="padding:16px;color:var(--text-dim)">Nenhum formulário ativo com fila nesta estrutura.</div>`;
     }
+    // botão "Criar fila" (topo) — liga a roleta da equipe pro formulário selecionado
+    const criarBtn = Array.from(root.querySelectorAll<HTMLButtonElement>("#view-filas button")).find((b) => (b.textContent || "").trim() === "Criar fila");
+    if (criarBtn) criarBtn.setAttribute("onclick", "window.__filaCriar&&window.__filaCriar()");
   }, [scopeManager]);
 
   // ANÚNCIOS (META) — painel do mockup populado com gasto/CPL reais (fb_saude)
@@ -644,6 +653,41 @@ export default function LeadsCentral() {
     };
     return () => { try { delete (window as any).__soltarRepresados; delete (window as any).__direcionarSemDono; } catch { /* ok */ } };
   }, [manParam, scopeManager, pulso, justica, carregar]);
+
+  // filas (Mídia & Filas): add/remover corretor e criar fila de verdade (RPCs reais)
+  useEffect(() => {
+    (window as any).__filaRemover = async (formId: string, brokerId: string) => {
+      try {
+        const card = box.current?.querySelector<HTMLElement>(`[data-form="${formId}"]`);
+        let brokers: string[] = []; try { brokers = JSON.parse(card?.dataset.brokers || "[]"); } catch { /* */ }
+        brokers = brokers.filter((b) => b !== brokerId);
+        if (!brokers.length) { const { error } = await sb.rpc("tirar_fila_formulario", { p_form_id: formId }); if (error) throw error; toast.success("Fila removida — os leads voltam para a roleta do plantão."); }
+        else { const { error } = await sb.rpc("salvar_fila_formulario", { p_form_id: formId, p_page_id: card?.dataset.page || null, p_nome: card?.dataset.nome || "", p_broker_ids: brokers }); if (error) throw error; toast.success("Corretor removido da fila."); }
+        filas();
+      } catch (e: any) { toast.error(e?.message || "Não consegui atualizar a fila."); }
+    };
+    (window as any).__filaAdd = async (btn: HTMLElement) => {
+      try {
+        const card = btn.closest<HTMLElement>("[data-form]"); if (!card) return;
+        const selEl = card.querySelector<HTMLSelectElement>(".fila-add-sel"); const id = selEl?.value;
+        if (!id) { toast.info("Escolha um corretor."); return; }
+        let brokers: string[] = []; try { brokers = JSON.parse(card.dataset.brokers || "[]"); } catch { /* */ }
+        if (brokers.includes(id)) { toast.info("Esse corretor já está na fila."); return; }
+        brokers.push(id);
+        const { error } = await sb.rpc("salvar_fila_formulario", { p_form_id: card.dataset.form, p_page_id: card.dataset.page || null, p_nome: card.dataset.nome || "", p_broker_ids: brokers });
+        if (error) throw error; toast.success("Corretor adicionado à fila."); filas();
+      } catch (e: any) { toast.error(e?.message || "Não consegui adicionar."); }
+    };
+    (window as any).__filaCriar = async () => {
+      try {
+        const selEl = box.current?.querySelector<HTMLSelectElement>("#view-filas select"); const form = selEl?.value;
+        if (!form) { toast.info("Escolha um formulário."); return; }
+        const { error } = await sb.rpc("ligar_formulario", { p_form: form, p_modo: "roleta", p_destino: null, p_como: manParam || null, p_corretores: [] });
+        if (error) throw error; toast.success("Fila criada na roleta da equipe."); filas();
+      } catch (e: any) { toast.error(e?.message || "Não consegui criar a fila."); }
+    };
+    return () => { try { delete (window as any).__filaRemover; delete (window as any).__filaAdd; delete (window as any).__filaCriar; } catch { /* ok */ } };
+  }, [filas, manParam]);
 
   return (
     <div className="mgr10 app2">
