@@ -342,23 +342,20 @@ export default function CockpitGeral() {
       <RailV10 atual="tempo" sub={`${nome} · ${brokers.length} corretores`} mode={mode} toggle={toggle} />
 
       <main className="shell2 cg">
+        <div className="cg-datebar"><SeletorPeriodo /></div>
         <header className="cg-top">
           <div>
             <h1>Cockpit Geral de Comando</h1>
-            <p>Semana de {dm(segAtual)} a {dm(somaDias(segAtual, 6))} · <b>{diasParaFechar === 0 ? "a semana fecha hoje à meia-noite" : `faltam ${diasParaFechar} dia${diasParaFechar > 1 ? "s" : ""} para fechar`}</b></p>
-            <div className="cg-agora">
-              <span className="cg-agora-lbl">● Dados de agora:</span>
-              <button className="cg-badge" onClick={() => setPainel("plantao")}><span className="cg-dot azul" /> <b>{noPlantaoLista.length} no plantão</b> <span className="cg-ver">ver ▾</span></button>
-              <button className="cg-badge" onClick={() => setPainel("online")}><span className="cg-dot verde" /> <b>{online.length} logados</b> <span className="cg-ver">ver ▾</span></button>
-              <button className="cg-badge" onClick={() => setPainel("atendimento")}><span className="cg-dot ambar" /> <b>{atendendoLista.length} em atendimento</b> <span className="cg-ver">ver ▾</span></button>
+            <div className="cg-sub">
+              <span className="cg-sem">Semana {dm(segAtual)}–{dm(somaDias(segAtual, 6))} · <b>{diasParaFechar === 0 ? "fecha hoje à meia-noite" : `faltam ${diasParaFechar} dia${diasParaFechar > 1 ? "s" : ""}`}</b></span>
+              <button className="cg-badge sm" onClick={() => setPainel("plantao")}><span className="cg-dot azul" /> <b>{noPlantaoLista.length}</b> no plantão <span className="cg-ver">▾</span></button>
+              <button className="cg-badge sm" onClick={() => setPainel("online")}><span className="cg-dot verde" /> <b>{online.length}</b> logados <span className="cg-ver">▾</span></button>
+              <button className="cg-badge sm" onClick={() => setPainel("atendimento")}><span className="cg-dot ambar" /> <b>{atendendoLista.length}</b> atendendo <span className="cg-ver">▾</span></button>
               {pedindoRoleta.length > 0 && (
-                <button className="cg-badge cg-pulse" onClick={() => setPainel("plantao")}>
-                  <span className="cg-dot roxo" /> <b>✋ {pedindoRoleta.length} no plantão fora da roleta</b> <span className="cg-mini">ativar</span>
-                </button>
+                <button className="cg-badge sm cg-pulse" onClick={() => setPainel("plantao")}><span className="cg-dot roxo" /> <b>✋ {pedindoRoleta.length}</b> fora da roleta</button>
               )}
             </div>
           </div>
-          <SeletorPeriodo />
         </header>
 
         <SoltarRepresados />
@@ -615,7 +612,11 @@ const CSS = `
 .cg>*{flex:0 0 auto;min-width:0}
 .cg .mono,.cg-val,.cg-pred-val,.cg-pcol-n,.cg-col-v,.cg-prod{font-family:"JetBrains Mono",monospace}
 
-.cg-top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;position:sticky;top:0;z-index:30;background:var(--cgbg);background:color-mix(in srgb,var(--cgbg) 94%,transparent);backdrop-filter:blur(14px);padding:18px 0 14px;border-bottom:1px solid var(--bd)}
+.cg-top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;padding:2px 0 12px;border-bottom:1px solid var(--bd)}
+.cg-datebar{position:sticky;top:0;z-index:30;display:flex;justify-content:flex-end;padding:10px 0 8px;background:color-mix(in srgb,var(--cgbg) 94%,transparent);backdrop-filter:blur(14px)}
+.cg-sub{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:5px}
+.cg-sem{font-size:13px;color:var(--tm)}.cg-sem b{color:var(--amber,#F59E0B);font-weight:800}
+.cgx .cg-badge.sm{padding:3px 9px;font-size:11.5px;gap:5px}
 .cg-top h1{font-size:26px;font-weight:900;letter-spacing:-.02em;color:var(--tx)}
 .cg-top p{font-size:14.5px;color:var(--tm);margin-top:3px}
 .cg-top p b{color:var(--amber,#F59E0B)}
