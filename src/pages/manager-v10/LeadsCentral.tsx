@@ -641,16 +641,30 @@ export default function LeadsCentral() {
     const ymd = (iso: string, a: boolean) => new Date(new Date(iso).getTime() - 3 * 3600 * 1000 - (a ? 1000 : 0)).toISOString().slice(0, 10);
     const de = ymd(de0, false), ate = ymd(ate0, true);
     if (tb) tb.innerHTML = `<tr><td colspan="7" style="padding:16px;color:var(--text-dim)">Lendo as campanhas no Facebook (${esc(nome)})… pode levar alguns segundos.</td></tr>`;
-    if (note) note.innerHTML = `📅 Gasto, leads e CPL da Meta no período <b>${esc(nome)}</b> (ao vivo da conta). Visita/venda por campanha entram com Junix.`;
+    if (note) note.innerHTML = `📅 Gasto, leads e CPL da Meta no período <b>${esc(nome)}</b> dos anúncios que alimentam seus formulários (inclui os direcionados por um diretor/super). <b>Só leitura</b> — pra você apontar ajustes ao dono da campanha. Visita/venda entram com Junix.`;
     let lq = sb.from("leads").select("id,name,phone,fb_campaign_id,fb_form_id,campanha_nome,broker_id,created_at,status")
       .gte("created_at", de0).lt("created_at", ate0).not("status", "in", "(EXCLUDED,ABANDONED)").limit(20000);
     if (dono) lq = lq.eq("manager_id", dono);
     const norm = (s: any) => (s || "").toString().trim().toLowerCase();
-    const [contas, { data: ld }, { data: cat }] = await Promise.all([
-      lerContasDoDono(dono, de, ate), lq,
-      sb.from("formularios_catalogo").select("form_id,nome,anuncios"),
+    // árvore do gestor — pra saber quais forms são DELE (ele recebe os leads), mesmo que a CONTA seja do diretor
+    let arvSet: Set<string> | null = null;
+    if (dono) { const { data: arvD } = await sb.rpc("ids_da_arvore", { p: dono }); arvSet = new Set((arvD ?? []).map((r: any) => (typeof r === "string" ? r : r.ids_da_arvore))); }
+    const inArv = (id: any) => !arvSet || (!!id && arvSet.has(id));
+    const overlap = (ids: any[]) => !arvSet || (ids || []).some((b: string) => arvSet!.has(b));
+    const [{ data: qs }, { data: cat }, { data: ld }] = await Promise.all([
+      sb.from("distribution_queues").select("match_value,roleta_de,criado_por,broker_ids").eq("match_field", "form_id").eq("is_active", true),
+      sb.from("formularios_catalogo").select("form_id,nome,anuncios,owner_id"),
+      lq,
     ]);
     anunLeadsRef.current = (ld ?? []) as any[];
+    // forms direcionados a este gestor (ele RECEBE) ou que a conta dele possui
+    const meusForms = new Set<string>();
+    (qs ?? []).forEach((q: any) => { if (inArv(q.roleta_de) || inArv(q.criado_por) || overlap(q.broker_ids)) meusForms.add(q.match_value); });
+    (cat ?? []).forEach((f: any) => { if (inArv(f.owner_id)) meusForms.add(f.form_id); });
+    // contas a ler = a do gestor + a de quem é DONO dos forms dele (ex.: o diretor que direcionou o form)
+    const donos = new Set<string>(); if (dono) donos.add(dono);
+    (cat ?? []).forEach((f: any) => { if (meusForms.has(f.form_id) && f.owner_id) donos.add(f.owner_id); });
+    const contas = (await Promise.all([...donos].map((d) => lerContasDoDono(d, de, ate)))).flat();
     // os leads são por FORMULÁRIO; o catálogo liga cada nome de campanha ao seu form (anuncios = "camp1 · camp2 · …")
     const campToForm: Record<string, string> = {};
     (cat ?? []).forEach((f: any) => {
@@ -659,8 +673,10 @@ export default function LeadsCentral() {
     });
     const porForm: Record<string, number> = {};
     (ld ?? []).forEach((l: any) => { const k = String(l.fb_form_id || l.fb_campaign_id || ""); if (k) porForm[k] = (porForm[k] || 0) + 1; });
-    const camps: any[] = [];
+    let camps: any[] = [];
     (contas || []).forEach((c: any) => (c.campanhas || []).forEach((cp: any) => camps.push(cp)));
+    // só as campanhas cujo FORMULÁRIO é da estrutura do gestor (não expõe as outras campanhas do diretor)
+    if (arvSet) camps = camps.filter((c: any) => { const fid = campToForm[norm(c.nome)]; return !!fid && meusForms.has(fid); });
     const cpl = (c: any) => { const n = c.leads || 0; return n > 0 ? (c.gasto || 0) / n : 0; };
     if (!tb) return;
     if (!camps.length) { tb.innerHTML = `<tr><td colspan="7" style="padding:16px;color:var(--text-dim)">Nenhuma campanha com gasto no período <b>${esc(nome)}</b> (ou a conta não respondeu agora).</td></tr>`; semAlerta(); return; }
