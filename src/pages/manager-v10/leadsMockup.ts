@@ -1179,11 +1179,11 @@ export const HTML = `<main class="main-content">
         <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
           <!-- SELETOR DE PERÍODO FIXO -->
           <div class="periodo-pills">
-            <button class="per-chip" onclick="selecionarPeriodo('Hoje', this)">Hoje</button>
-            <button class="per-chip active" onclick="selecionarPeriodo('Esta Semana', this)">Esta Semana</button>
-            <button class="per-chip" onclick="selecionarPeriodo('Semana Passada', this)">Semana Passada</button>
+            <button class="per-chip active" onclick="selecionarPeriodo('Hoje', this)">Hoje</button>
+            <button class="per-chip" onclick="selecionarPeriodo('Ontem', this)">Ontem</button>
+            <button class="per-chip" onclick="selecionarPeriodo('Esta Semana', this)">Esta Semana</button>
             <button class="per-chip" onclick="selecionarPeriodo('Este Mês', this)">Este Mês</button>
-            <button class="per-chip" onclick="selecionarPeriodo('Mês Passado', this)">Mês Passado</button>
+            <input type="date" id="per-data" title="Escolher uma data" onchange="if(this.value){document.querySelectorAll('.per-chip').forEach(function(c){c.classList.remove('active')});selecionarPeriodo('Dia:'+this.value, null)}" style="border:1px solid var(--border);background:var(--surface-subtle);color:var(--text-main);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer" />
           </div>
 
           <button class="act-btn repassar" style="padding: 8px 14px;" onclick="switchTab('filas')">
@@ -1542,7 +1542,7 @@ export const HTML = `<main class="main-content">
             <option value="diego">Diego (2 parados) 🟢</option>
           </select>
 
-          <select class="filter-select">
+          <select class="filter-select" id="select-origem">
             <option value="todas">Todas as origens</option>
               <option value="meta">Anúncio (Meta Ads)</option>
               <option value="disparo">Disparo WhatsApp</option>

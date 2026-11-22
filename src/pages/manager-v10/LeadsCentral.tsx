@@ -51,6 +51,19 @@ function origemLabel(l: any, formNome: Record<string, string>): string {
   return prod || nome || "Meta Ads";
 }
 const origemTxt = (l: any) => l._origem || l.campanha_nome || ({ facebook_make: "Meta Ads", lista: "🎣 Pescaria", resgate: "♻️ Resgate", indicacao: "🤝 Indicação", instagram: "📸 Instagram", whatsapp: "📢 Disparo", disparo: "📢 Disparo" } as any)[l.source || ""] || l.source || "—";
+// casa o lead com o filtro "Origem" da tabela (valores do seletor: meta/disparo/discador/pescaria/plantao/indicacao)
+function origemMatch(l: any, og: string): boolean {
+  const s = (l.source || "").toLowerCase();
+  switch (og) {
+    case "meta": return s === "facebook_make" || s === "instagram";
+    case "disparo": return s === "whatsapp" || s === "disparo";
+    case "discador": return s === "discador";
+    case "pescaria": return s === "lista";
+    case "plantao": return s === "plantao" || s === "checkin";
+    case "indicacao": return s === "indicacao";
+    default: return true;
+  }
+}
 const tempoTxt = (l: Lead) => {
   const h = (Date.now() - new Date(l.created_at).getTime()) / 3600000;
   if (h < 1) return "há minutos"; if (h < 24) return `há ${Math.floor(h)}h`;
@@ -111,8 +124,13 @@ function faixa(nome: string): [string, string] {
   const dia = (yy: number, mm: number, dd: number) => new Date(Date.UTC(yy, mm, dd, 3, 0, 0));
   const dow = (nb.getUTCDay() + 6) % 7; // 0 = segunda
   const agora = new Date();
+  if (nome && nome.startsWith("Dia:")) {
+    const [yy, mm, dd] = nome.slice(4).split("-").map(Number);
+    return [dia(yy, mm - 1, dd).toISOString(), dia(yy, mm - 1, dd + 1).toISOString()];
+  }
   switch (nome) {
     case "Hoje": return [dia(y, m, d).toISOString(), agora.toISOString()];
+    case "Ontem": return [dia(y, m, d - 1).toISOString(), dia(y, m, d).toISOString()];
     case "Semana Passada": return [dia(y, m, d - dow - 7).toISOString(), dia(y, m, d - dow).toISOString()];
     case "Este Mês": return [dia(y, m, 1).toISOString(), agora.toISOString()];
     case "Mês Passado": return [dia(y, m - 1, 1).toISOString(), dia(y, m, 1).toISOString()];
@@ -125,8 +143,13 @@ function faixaAnt(nome: string): [string, string] {
   const y = nb.getUTCFullYear(), m = nb.getUTCMonth(), d = nb.getUTCDate();
   const dia = (yy: number, mm: number, dd: number) => new Date(Date.UTC(yy, mm, dd, 3, 0, 0));
   const dow = (nb.getUTCDay() + 6) % 7;
+  if (nome && nome.startsWith("Dia:")) {
+    const [yy, mm, dd] = nome.slice(4).split("-").map(Number);
+    return [dia(yy, mm - 1, dd - 1).toISOString(), dia(yy, mm - 1, dd).toISOString()];
+  }
   switch (nome) {
     case "Hoje": return [dia(y, m, d - 1).toISOString(), dia(y, m, d).toISOString()];
+    case "Ontem": return [dia(y, m, d - 2).toISOString(), dia(y, m, d - 1).toISOString()];
     case "Semana Passada": return [dia(y, m, d - dow - 14).toISOString(), dia(y, m, d - dow - 7).toISOString()];
     case "Este Mês": return [dia(y, m - 1, 1).toISOString(), dia(y, m - 1, Math.min(d, 28)).toISOString()];
     case "Mês Passado": return [dia(y, m - 2, 1).toISOString(), dia(y, m - 1, 1).toISOString()];
@@ -141,7 +164,7 @@ export default function LeadsCentral() {
   const injetado = useRef(false);
   const leadsRef = useRef<Lead[]>([]);
   const nmTabRef = useRef<Record<string, string>>({});
-  const filtroRef = useRef<{ seg: string; page: number; q: string; cor: string }>({ seg: "todos", page: 1, q: "", cor: "" });
+  const filtroRef = useRef<{ seg: string; page: number; q: string; cor: string; og: string }>({ seg: "todos", page: 1, q: "", cor: "", og: "" });
   const renderRef = useRef<() => void>(() => {});
   const periodoRef = useRef<string>("Hoje");
   const anunLeadsRef = useRef<any[]>([]);
@@ -171,11 +194,12 @@ export default function LeadsCentral() {
   const renderTabela = useCallback(() => {
     const root = box.current; if (!root) return;
     const tb = root.querySelector("#leads-tbody"); if (!tb) return;
-    const { seg, q, cor } = filtroRef.current;
+    const { seg, q, cor, og } = filtroRef.current;
     const nm = nmTabRef.current;
     let arr = leadsRef.current.filter((l) => segMatch(l, seg));
     if (q) { const s = q.toLowerCase(); arr = arr.filter((l) => (l.name || "").toLowerCase().includes(s) || (l.phone || "").includes(s) || origemTxt(l).toLowerCase().includes(s)); }
     if (cor) arr = arr.filter((l) => (l.broker_id ? (nm[l.broker_id] || "") : "").toLowerCase().split(" ")[0] === cor);
+    if (og && og !== "todas") arr = arr.filter((l) => origemMatch(l, og));
     const perPage = 50;
     const totalP = Math.max(1, Math.ceil(arr.length / perPage));
     const pg = Math.min(Math.max(1, filtroRef.current.page), totalP);
@@ -272,7 +296,7 @@ export default function LeadsCentral() {
 
     // TABELA — reset do filtro e render (controlada por renderTabela).
     // No auto-refresh (keep) preserva o filtro/página que o gestor está usando.
-    if (!keep) filtroRef.current = { seg: "todos", page: 1, q: "", cor: "" };
+    if (!keep) filtroRef.current = { seg: "todos", page: 1, q: "", cor: "", og: "" };
     renderRef.current();
 
     // COPILOTO (topo) — insight real simples: corretor com mais leads sem toque
@@ -681,6 +705,12 @@ export default function LeadsCentral() {
     (window as any).selecionarPeriodo = (nomeP: string, el: any) => {
       try { if (orig) orig(nomeP, el); } catch { /* ok */ }
       periodoRef.current = nomeP;
+      if (nomeP.startsWith("Dia:")) {
+        const d = nomeP.slice(4).split("-");
+        const desc = box.current?.querySelector("#periodo-descricao-txt");
+        if (desc) desc.innerHTML = `Período Selecionado: <b>${d[2]}/${d[1]}/${d[0]}</b>`;
+        box.current?.querySelectorAll(".per-chip").forEach((c) => c.classList.remove("active"));
+      }
       periodFns.current.carregar(nomeP);
       periodFns.current.resultados(nomeP);
       periodFns.current.anuncios(nomeP);
@@ -700,6 +730,8 @@ export default function LeadsCentral() {
     if (si) si.addEventListener("input", () => { filtroRef.current.q = si.value; filtroRef.current.page = 1; renderRef.current(); });
     const scSel = box.current?.querySelector<HTMLSelectElement>("#select-corretor");
     if (scSel) scSel.addEventListener("change", () => { filtroRef.current.cor = scSel.value; filtroRef.current.page = 1; renderRef.current(); });
+    const soSel = box.current?.querySelector<HTMLSelectElement>("#select-origem");
+    if (soSel) soSel.addEventListener("change", () => { filtroRef.current.og = soSel.value; filtroRef.current.page = 1; renderRef.current(); });
     return () => { const e = document.getElementById("mlr-script"); if (e) e.remove(); };
   }, [carregar, resultados]);
 
