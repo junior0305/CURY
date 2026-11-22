@@ -36,7 +36,21 @@ const fone = (t: any) => {
   return esc(t || "—");
 };
 const inic = (n: string) => (n || "?").trim().split(/\s+/).slice(0, 2).map((p) => p[0] || "").join("").toUpperCase() || "?";
-const origemTxt = (l: Lead) => l.campanha_nome || ({ facebook_make: "Meta Ads", lista: "Lista", resgate: "Resgate", indicacao: "Indicação", instagram: "Instagram", whatsapp: "WhatsApp" } as any)[l.source || ""] || l.source || "—";
+// origem legível: canal (Pescaria/Disparo/Resgate/Plantão/Discador) ou, p/ anúncio, o PRODUTO/REGIÃO do formulário (sem o "[VENDEDOR]")
+function origemLabel(l: any, formNome: Record<string, string>): string {
+  const s = (l.source || "").toLowerCase();
+  if (s === "lista") return "🎣 Pescaria";
+  if (s === "resgate") return "♻️ Resgate";
+  if (s === "whatsapp" || s === "disparo") return "📢 Disparo";
+  if (s === "discador") return "📞 Discador";
+  if (s === "plantao" || s === "checkin") return "🏪 Plantão";
+  if (s === "indicacao") return "🤝 Indicação";
+  if (s === "instagram") return "📸 Instagram";
+  const nome = (l.fb_form_id && formNome[l.fb_form_id]) || l.campanha_nome || "";
+  const prod = nome.replace(/^\s*\[[^\]]*\]\s*/, "").trim();
+  return prod || nome || "Meta Ads";
+}
+const origemTxt = (l: any) => l._origem || l.campanha_nome || ({ facebook_make: "Meta Ads", lista: "🎣 Pescaria", resgate: "♻️ Resgate", indicacao: "🤝 Indicação", instagram: "📸 Instagram", whatsapp: "📢 Disparo", disparo: "📢 Disparo" } as any)[l.source || ""] || l.source || "—";
 const tempoTxt = (l: Lead) => {
   const h = (Date.now() - new Date(l.created_at).getTime()) / 3600000;
   if (h < 1) return "há minutos"; if (h < 24) return `há ${Math.floor(h)}h`;
@@ -190,14 +204,26 @@ export default function LeadsCentral() {
     const root = box.current; if (!root) return;
     const [de, ate] = faixa(nome);
     let q = sb.from("leads")
-      .select("id,name,phone,campanha_nome,source,broker_id,last_broker_whatsapp_at,visit_scheduled_at,status,created_at")
+      .select("id,name,phone,campanha_nome,source,fb_form_id,broker_id,last_broker_whatsapp_at,visit_scheduled_at,status,created_at")
       .gte("created_at", de).lt("created_at", ate)
       .not("status", "in", "(EXCLUDED,ABANDONED)")
       .order("created_at", { ascending: false }).limit(5000);
     if (scopeManager) q = q.eq("manager_id", scopeManager);
-    const [{ data }, nm] = await Promise.all([q, brokers()]);
-    const ls = (data ?? []) as Lead[];
-    leadsRef.current = ls; nmTabRef.current = nm;
+    const [{ data }, nm0] = await Promise.all([q, brokers()]);
+    const ls = (data ?? []) as any[];
+    // resolve o nome de QUALQUER corretor que aparece (gerente recebendo direto, ou corretor de outra equipe) + nome do form p/ a origem
+    const nm: Record<string, string> = { ...nm0 };
+    const faltam = [...new Set(ls.map((l) => l.broker_id).filter((id: any) => !!id && !nm[id]))] as string[];
+    const formIds = [...new Set(ls.map((l) => l.fb_form_id).filter(Boolean))] as string[];
+    const [pfRes, catRes] = await Promise.all([
+      faltam.length ? sb.from("profiles").select("id,first_name,role").in("id", faltam) : Promise.resolve({ data: [] as any[] }),
+      formIds.length ? sb.from("formularios_catalogo").select("form_id,nome,nome_fonte").in("form_id", formIds) : Promise.resolve({ data: [] as any[] }),
+    ]);
+    (pfRes.data ?? []).forEach((p: any) => { nm[p.id] = p.first_name || (p.role === "MANAGER" ? "gerente" : "corretor"); });
+    const formNome: Record<string, string> = {};
+    (catRes.data ?? []).forEach((f: any) => { formNome[f.form_id] = f.nome || f.nome_fonte || ""; });
+    ls.forEach((l: any) => { l._origem = origemLabel(l, formNome); });
+    leadsRef.current = ls as Lead[]; nmTabRef.current = nm;
 
     const total = ls.length;
     // DERIVADAS do mesmo segMatch que filtra a tabela → a pílula sempre bate com as linhas
