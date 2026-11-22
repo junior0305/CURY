@@ -10,10 +10,9 @@ import { usePeriodo, diaSP, tempoAteDomingo, type Preset } from "@/hooks/usePeri
 // A semana roda de segunda 00:00 a domingo 23:59.
 const OPCOES: { k: Preset; label: string }[] = [
   { k: "hoje", label: "Hoje" },
+  { k: "ontem", label: "Ontem" },
   { k: "esta_semana", label: "Esta Semana" },
-  { k: "semana_passada", label: "Semana Passada" },
   { k: "este_mes", label: "Este Mês" },
-  { k: "mes_passado", label: "Mês Passado" },
 ];
 
 export default function SeletorPeriodo() {
@@ -35,7 +34,7 @@ export default function SeletorPeriodo() {
         <button type="button" className={periodo.preset === "custom" ? "on" : ""}
           aria-pressed={periodo.preset === "custom"} aria-expanded={abrir}
           onClick={() => setAbrir((v) => !v)}>
-          {periodo.preset === "custom" ? periodo.rotulo : "Escolher período"}
+          {periodo.preset === "custom" ? periodo.rotulo : "📅 Escolher data"}
         </button>
       </div>
 

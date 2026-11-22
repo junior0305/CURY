@@ -44,8 +44,8 @@ const inicioMes = () => { const d = new Date(); return new Date(d.getFullYear(),
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 export default function RecrutamentoPainel({ como }: { como?: string | null }) {
-  const [per, setPer] = useState<"mes" | "90">("mes");
-  const de = per === "mes" ? iso(inicioMes()) : iso(new Date(Date.now() - 90 * 864e5));
+  const [per, setPer] = useState<"mes" | "30">("mes");
+  const de = per === "mes" ? iso(inicioMes()) : iso(new Date(Date.now() - 30 * 864e5));
   const { data, isLoading } = useQuery({
     queryKey: ["recrutamento-painel", como ?? null, de],
     staleTime: 60_000,
@@ -70,7 +70,7 @@ export default function RecrutamentoPainel({ como }: { como?: string | null }) {
         <h3>Recrutamento</h3>
         <div className="rp-per">
           <button type="button" className={per === "mes" ? "on" : ""} aria-pressed={per === "mes"} onClick={() => setPer("mes")}>Este mês</button>
-          <button type="button" className={per === "90" ? "on" : ""} aria-pressed={per === "90"} onClick={() => setPer("90")}>Últimos 90 dias</button>
+          <button type="button" className={per === "30" ? "on" : ""} aria-pressed={per === "30"} onClick={() => setPer("30")}>Últimos 30 dias</button>
         </div>
       </div>
       {isLoading || !data ? <span className="rp-m">Carregando…</span> : (
