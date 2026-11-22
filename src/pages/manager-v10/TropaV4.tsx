@@ -22,6 +22,7 @@ import { atendido } from "@/lib/situacaoLead";
 import RaioXPlantaoDrawer from "@/components/manager-v10/RaioXPlantaoDrawer";
 import RendimentoEquipe from "@/components/equipe/RendimentoEquipe";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
+import Candidatos from "@/components/recrutamento/Candidatos";
 
 const sb = supabase as any;
 const diaSP = (d: Date | number = new Date()) => new Date(d).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
@@ -292,8 +293,8 @@ export default function TropaV4() {
               <div className="tv-vagas-tx">
                 <b>Capacidade da equipe</b>
                 {typeof vagas === "number" && vagas > 0
-                  ? <span><b className="tv-mono">{tropa.length}</b> / {vagas} vagas · <b className={tropa.length < vagas ? "verde" : "amb"}>{Math.max(0, vagas - tropa.length)} abertas</b></span>
-                  : <span>Defina quantas vagas (posições) a equipe tem para calcular as abertas.</span>}
+                  ? <span><b className="tv-mono">{tropa.length}</b> / {vagas} posições · <b className={tropa.length < vagas ? "verde" : "amb"}>{Math.max(0, vagas - tropa.length)} vaga(s) aberta(s)</b>{vagas - tropa.length > 0 && emEsteira.length ? <> · <b className="azul">{emEsteira.length}</b> candidato(s) na esteira pra preencher</> : null}</span>
+                  : <span>Quantas <b>posições de corretor</b> a equipe comporta? Defina o total — o sistema mostra quantas vagas estão <b>abertas</b> (a preencher) e cruza com os candidatos da esteira.</span>}
               </div>
               {typeof vagas === "number" && vagas > 0 && (
                 <div className="tv-vagas-bar"><div className="tv-vagas-fill" style={{ width: `${Math.min(100, Math.round((tropa.length / vagas) * 100))}%` }} /></div>
@@ -311,23 +312,9 @@ export default function TropaV4() {
               <article className="tv-card rose"><div className="tv-card-h"><span>Sem contato +24h</span><span className="tv-tag amb">atenção</span></div><div className="tv-val"><b className={semContato24 ? "rose" : "verde"}>{semContato24}</b><i>candidatos</i></div><div className="tv-card-f">entraram e ninguém chamou ainda</div></article>
             </section>
 
-            <section className="tv-panel">
-              <div className="tv-panel-h2"><b>📋 Esteira de contratação</b><Link to="/manager?aba=time" className="tv-act ver" style={{ width: "auto", padding: "6px 12px", fontSize: 13 }}>Entrevistar / contratar na esteira completa →</Link></div>
-              <div className="tv-tbl">
-                <div className="tv-tr2 tv-th"><span>Candidato</span><span>Origem / região</span><span>Etapa</span><span>Gerente</span><span>Entrou / status</span><span className="r">Ação</span></div>
-                {!emEsteira.length ? <div className="tv-vazio">Nenhum candidato em contato ou entrevista agora.</div> : emEsteira.slice(0, 20).map((c) => (
-                  <div className={`tv-tr2${parado24(c) ? " alerta" : ""}`} key={c.id}>
-                    <span className="tv-corr"><span className="tv-av">{ini2(c.nome ?? "?")}</span><span><b>{c.nome || "Candidato"}</b><small>{c.telefone || ""}</small></span></span>
-                    <span className="tv-dim2">{c.campanha || c.formulario || "—"}{c.regiao ? ` · ${c.regiao}` : ""}</span>
-                    <span>{c.etapa === "entrevista" ? <em className="tv-b roxoB">entrevista</em> : <em className="tv-b azul">em contato</em>}</span>
-                    <span className="tv-dim2">{c.gerente || "—"}</span>
-                    <span className="tv-dim2">{parado24(c) ? <b className="tv-red">🚨 {Math.round((Date.now() - new Date(c.criado_em).getTime()) / 36e5)}h sem chamar</b> : c.etapa === "entrevista" && c.entrevista_em ? `entrevista ${hhmm(c.entrevista_em)}${c.entrevista_local ? ` · ${c.entrevista_local}` : ""}` : `entrou há ${Math.round((Date.now() - new Date(c.criado_em).getTime()) / 36e5)}h`}</span>
-                    <span className="r"><button className="tv-rol on" onClick={() => chamarCand(c)}>📲 Chamar</button></span>
-                  </div>
-                ))}
-              </div>
-            </section>
-            <p className="tv-nota">Fonte real: formulário de contratação → roleta de gerentes → esteira (em contato · entrevista · contratado · não seguiu). O <b>checklist CRECI</b> do mockup ainda não tem campo — fica para depois. Entrevista e contratação (abrem cadastro) ficam na esteira completa.</p>
+            {/* esteira completa embutida (Chamar · marcar entrevista · contratar) — não joga mais pra tela antiga */}
+            <Candidatos como={como} titulo="📋 Esteira de contratação" />
+            <p className="tv-nota">Fonte real: formulário de contratação → roleta de gerentes → esteira (em contato · entrevista · contratado · não seguiu). <b>Chamar, marcar entrevista e contratar</b> são feitos aqui mesmo.</p>
           </>
         ) : modo === "gestao" ? (
           <>
