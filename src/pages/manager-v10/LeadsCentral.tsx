@@ -74,6 +74,7 @@ function segMatch(l: Lead, seg: string): boolean {
     case "fantasma": return semToque && !age2h;                                          // Sem contato (com dono, até 2h)
     case "vacuo": return semToque && age2h;                                              // No vácuo (com dono, +2h)
     case "semdono": return !l.broker_id;                                                 // Esperando distribuição (sem corretor)
+    case "junix": return false;                                                          // Pastas/Vendas vêm do Junix, não desta tabela
     case "avanco": return !!l.last_broker_whatsapp_at;                                   // Avanço (respondeu)
     case "visita": return !!l.visit_scheduled_at;                                        // etapa Visita
     case "retorno": return !!l.visit_scheduled_at && new Date(l.visit_scheduled_at).getTime() >= Date.now();
@@ -180,7 +181,8 @@ export default function LeadsCentral() {
     const pg = Math.min(Math.max(1, filtroRef.current.page), totalP);
     filtroRef.current.page = pg;
     const slice = arr.slice((pg - 1) * perPage, pg * perPage);
-    tb.innerHTML = slice.length ? slice.map((l) => rowHtml(l, nm)).join("") : `<tr><td colspan="7" style="padding:28px;text-align:center;color:var(--text-dim)">Nenhum lead neste filtro.</td></tr>`;
+    tb.innerHTML = slice.length ? slice.map((l) => rowHtml(l, nm)).join("")
+      : `<tr><td colspan="7" style="padding:28px;text-align:center;color:var(--text-dim)">${seg === "junix" ? "Pastas e Vendas vêm do Junix — veja na aba Pastas." : "Nenhum lead neste filtro."}</td></tr>`;
     // rodapé "Mostrando X a Y de Z" + paginação funcional
     let infoEl: HTMLElement | null = null;
     root.querySelectorAll<HTMLElement>("span").forEach((s) => { if ((s.textContent || "").trim().startsWith("Mostrando")) infoEl = s; });
@@ -690,7 +692,8 @@ export default function LeadsCentral() {
     };
     (window as any).selectFunnelStage = (n: number, el: any) => {
       box.current?.querySelectorAll(".funnel-stage-card").forEach((c) => c.classList.remove("active")); if (el) el.classList.add("active");
-      const map = ["todos", "todos", "avanco", "visita", "todos", "todos"];
+      // 1=Leads(todos) · 2=1ª resposta(avanço) · 3=Visita · 4=Pastas / 5=Vendas = Junix (não são leads desta tabela)
+      const map = ["todos", "todos", "avanco", "visita", "junix", "junix"];
       filtroRef.current.seg = map[n] || "todos"; filtroRef.current.page = 1; renderRef.current();
     };
     const si = box.current?.querySelector<HTMLInputElement>("#search-leads-input");
