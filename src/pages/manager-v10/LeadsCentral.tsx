@@ -611,6 +611,7 @@ export default function LeadsCentral() {
           <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
             <select class="fila-add-sel" style="background:var(--surface-subtle);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text-main);font-size:12px;max-width:170px"><option value="">+ corretor…</option>${optsBrokers}</select>
             <button class="act-btn ver" onclick="window.__filaAdd&&window.__filaAdd(this)">Adicionar</button>
+            ${ativa ? `<button class="act-btn cobrar" title="Tira todos os corretores e deixa na roleta do plantão" onclick="window.__filaRoleta&&window.__filaRoleta('${esc(f.form_id)}')">🔄 Só roleta</button>` : ""}
           </div>
           <div style="margin-top:6px;color:var(--text-dim);font-size:11.5px">Tirando todos os corretores, os leads deste formulário voltam para a <b>roleta do plantão</b>.</div>
           ${f.anuncio ? "" : `<div style="margin-top:8px;color:var(--amber,#F59E0B);font-size:12px">anúncio pausado</div>`}
@@ -865,16 +866,52 @@ export default function LeadsCentral() {
         if (error) throw error; toast.success("Corretor adicionado à fila."); filas();
       } catch (e: any) { toast.error(e?.message || "Não consegui adicionar."); }
     };
+    // "Só roleta" por card: tira todos os corretores e deixa na roleta do plantão
+    (window as any).__filaRoleta = async (formId: string) => {
+      try {
+        const { error } = await sb.rpc("ligar_formulario", { p_form: formId, p_modo: "todas", p_destino: null, p_como: manParam || null, p_corretores: null });
+        if (error) throw error; toast.success("Formulário na roleta do plantão (sem corretor dedicado)."); filas();
+      } catch (e: any) { toast.error(e?.message || "Não consegui."); }
+    };
+    // overlay simples pro picker de "corretores específicos"
+    const overlayF = (inner: string) => {
+      const ov = document.createElement("div"); ov.className = "mlr"; ov.setAttribute("data-theme", box.current?.getAttribute("data-theme") || "light");
+      ov.style.cssText = "position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px";
+      ov.innerHTML = `<div style="background:var(--surface,#fff);color:var(--text-main,#111);border:1px solid var(--border,#ddd);border-radius:14px;max-width:420px;width:100%;padding:18px;max-height:80vh;overflow:auto">${inner}</div>`;
+      ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); }); (box.current || document.body).appendChild(ov); return ov;
+    };
     (window as any).__filaCriar = async () => {
       try {
         const selEl = box.current?.querySelector<HTMLSelectElement>("#view-filas select"); const form = selEl?.value;
         if (!form) { toast.info("Escolha um formulário."); return; }
+        const nomeForm = selEl?.options[selEl.selectedIndex]?.text || form;
+        const seg = box.current?.querySelector("#view-filas .seg2 button.on");
+        const especifico = !!seg && /espec[ií]fic/i.test(seg.textContent || "");
+        if (especifico) {
+          let pq = sb.from("profiles").select("id,first_name").eq("role", "BROKER").eq("is_active", true);
+          if (scopeManager) pq = pq.eq("manager_id", scopeManager);
+          const { data: bs } = await pq;
+          const brokers = ((bs ?? []) as any[]).sort((a, b) => (a.first_name || "").localeCompare(b.first_name || ""));
+          if (!brokers.length) { toast.error("Sem corretor na equipe."); return; }
+          const ov = overlayF(`<b style="font-size:15px">Corretores específicos — ${esc(nomeForm)}</b><p style="color:var(--text-dim);font-size:12.5px;margin:6px 0 10px">Marque quem recebe os leads deste formulário (rodízio exclusivo).</p>${brokers.map((b) => `<label style="display:flex;gap:8px;align-items:center;padding:6px 0"><input type="checkbox" class="fc-chk" value="${b.id}"> ${esc(b.first_name || "corretor")}</label>`).join("")}<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="fc-x" style="padding:8px 14px;border:1px solid var(--border);border-radius:9px;background:none;cursor:pointer;color:var(--text-main)">Cancelar</button><button class="fc-ok" style="padding:8px 14px;border:0;border-radius:9px;background:var(--brand,#2563EB);color:#fff;cursor:pointer;font-weight:600">Criar fila</button></div>`);
+          ov.querySelector(".fc-x")?.addEventListener("click", () => ov.remove());
+          ov.querySelector(".fc-ok")?.addEventListener("click", async () => {
+            const ids = Array.from(ov.querySelectorAll<HTMLInputElement>(".fc-chk:checked")).map((c) => c.value);
+            if (!ids.length) { toast.info("Marque pelo menos um corretor."); return; }
+            try { const { error } = await sb.rpc("ligar_formulario", { p_form: form, p_modo: "escolhidos", p_destino: null, p_como: manParam || null, p_corretores: ids }); if (error) throw error; toast.success("Fila criada com os corretores escolhidos."); ov.remove(); filas(); } catch (e: any) { toast.error(e?.message || "Não consegui criar."); }
+          });
+          return;
+        }
         const { error } = await sb.rpc("ligar_formulario", { p_form: form, p_modo: "todas", p_destino: null, p_como: manParam || null, p_corretores: null });
         if (error) throw error; toast.success("Fila criada na roleta da equipe."); filas();
       } catch (e: any) { toast.error(e?.message || "Não consegui criar a fila."); }
     };
-    return () => { try { delete (window as any).__filaRemover; delete (window as any).__filaAdd; delete (window as any).__filaCriar; } catch { /* ok */ } };
-  }, [filas, manParam]);
+    // toggle "Roleta da equipe / Corretores específicos" (estava sem função)
+    box.current?.querySelectorAll<HTMLButtonElement>("#view-filas .seg2 button").forEach((b) => {
+      b.onclick = () => { b.parentElement?.querySelectorAll("button").forEach((x) => x.classList.remove("on")); b.classList.add("on"); };
+    });
+    return () => { try { ["__filaRemover", "__filaAdd", "__filaCriar", "__filaRoleta"].forEach((k) => delete (window as any)[k]); } catch { /* ok */ } };
+  }, [filas, manParam, scopeManager]);
 
   // Ações REAIS da tabela "Todos os leads": Repassar (troca corretor DA EQUIPE), Cobrar (WhatsApp real), Ver (ficha real)
   useEffect(() => {
