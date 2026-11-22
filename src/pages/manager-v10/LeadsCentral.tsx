@@ -89,7 +89,7 @@ function rowHtml(l: Lead, nm: Record<string, string>): string {
     ? `<div style="display:flex;align-items:center;gap:8px"><div class="avatar-clean">${esc(inic(nm[l.broker_id] || ""))}</div><b>${cor}</b></div>`
     : `<span style="color:var(--text-dim)">Sem corretor</span>`;
   return `<tr data-type="${bc}" data-corretor="${esc(dcor)}">
-    <td><input type="checkbox" class="lead-chk" onclick="updateBatchBar()" /></td>
+    <td><input type="checkbox" class="lead-chk" data-id="${arg(l.id)}" onclick="updateBatchBar()" /></td>
     <td><b>${nome}</b><span class="mono" style="display:block;color:var(--text-dim);font-size:12px">${fone(l.phone)}</span></td>
     <td><span>${esc(origemTxt(l))}</span></td>
     <td>${corTd}</td>
@@ -917,7 +917,46 @@ export default function LeadsCentral() {
       ov.querySelector(".lc-x")?.addEventListener("click", () => ov.remove());
     };
 
-    return () => { try { delete (window as any).__repassarLead; delete (window as any).__cobrarLead; delete (window as any).__verLead; delete (window as any).__verCampanha; } catch { /* ok */ } };
+    // ----- Barra de LOTE (estava fake) — religa Repassar/Cobrar reais e esconde Descartar (perigoso em massa) -----
+    const idsSelecionados = () => Array.from(box.current?.querySelectorAll<HTMLInputElement>(".lead-chk:checked") || []).map((c) => c.dataset.id).filter(Boolean) as string[];
+    (window as any).__loteRepassar = async () => {
+      const ids = idsSelecionados();
+      if (!ids.length) { toast.info("Selecione pelo menos um lead."); return; }
+      let pq = sb.from("profiles").select("id,roleta_entrou_em,last_seen_at").eq("role", "BROKER").eq("is_active", true).neq("lead_assignment_enabled", false);
+      if (scopeManager) pq = pq.eq("manager_id", scopeManager);
+      const { data: pf } = await pq;
+      const inicioHoje = new Date(faixa("Hoje")[0]).getTime(), onlineT = Date.now() - 15 * 60_000;
+      let alvo = (pf ?? []).filter((b: any) => (b.roleta_entrou_em && new Date(b.roleta_entrou_em).getTime() >= inicioHoje) || (b.last_seen_at && new Date(b.last_seen_at).getTime() > onlineT)).map((b: any) => b.id);
+      if (!alvo.length) alvo = (pf ?? []).map((b: any) => b.id);
+      if (!alvo.length) { toast.error("Sem corretor ativo na equipe pra receber."); return; }
+      try {
+        const { data, error } = await sb.rpc("redistribuir_lote", { p_leads: ids, p_para: alvo, p_como: manParam || null, p_motivo: "Repasse em lote — Central de Leads" });
+        if (error) throw error;
+        toast.success(`${(data as any)?.feitos ?? ids.length} lead(s) repassado(s) ao plantão da equipe.`);
+        carregar(periodoRef.current, true); pulso();
+      } catch (e: any) { toast.error(e?.message || "Não consegui repassar em lote."); }
+    };
+    (window as any).__loteCobrar = async () => {
+      const ids = idsSelecionados();
+      if (!ids.length) { toast.info("Selecione pelo menos um lead."); return; }
+      try {
+        const r: any = await cobrarFila(ids, session?.user?.id || null, "central-lote");
+        const ok = (r?.corretores || []).filter((c: any) => c.avisado_no_whats).length;
+        toast.success(`Cobrança enviada${ok ? ` (${ok} corretor(es) no WhatsApp)` : ""}.`);
+      } catch (e: any) { toast.error(e?.message || "Não consegui cobrar."); }
+    };
+    const bar = box.current?.querySelector("#sticky-batch-bar");
+    if (bar) {
+      const bs = bar.querySelectorAll<HTMLButtonElement>("button");
+      bs[0]?.setAttribute("onclick", "window.__loteRepassar&&window.__loteRepassar()");
+      bs[1]?.setAttribute("onclick", "window.__loteCobrar&&window.__loteCobrar()");
+      if (bs[2]) bs[2].style.display = "none";
+    }
+    // remove o painel "copiloto (ver as 4)" com dados de exemplo (Rios/R$ 9.570 etc.) — a barra de copiloto real fica
+    box.current?.querySelector("#copilot-panel")?.remove();
+    box.current?.querySelectorAll<HTMLElement>(".cb-toggle").forEach((t) => (t.style.display = "none"));
+
+    return () => { try { ["__repassarLead", "__cobrarLead", "__verLead", "__verCampanha", "__loteRepassar", "__loteCobrar"].forEach((k) => delete (window as any)[k]); } catch { /* ok */ } };
   }, [session, scopeManager, manParam, carregar, pulso]);
 
   return (
