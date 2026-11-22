@@ -36,7 +36,7 @@ const pctN = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : null
 const ENCERRADO = new Set(["CONCLUDED", "EXCLUDED", "ABANDONED", "LOST"]);
 const AVANCOU = new Set(["VISIT_SCHEDULED", "VISITA_REALIZADA", "DOCS_REQUESTED", "NEGOTIATING", "CONCLUDED"]);
 type Metrica = "leads" | "checkins" | "visitas" | "pastas" | "vendas";
-type PainelTipo = "plantao" | "online" | "atendimento" | "leads" | "fechamento";
+type PainelTipo = "plantao" | "online" | "atendimento" | "leads" | "fechamento" | "visita";
 
 export default function CockpitGeral() {
   const { session } = useAuth();
@@ -162,6 +162,24 @@ export default function CockpitGeral() {
   // ── leads de hoje (só anúncio) ──
   const leadsHojeAnuncio = useMemo(() => pagos.filter((l) => diaL(l) === hoje && origemDe(l) === "anuncio"), [pagos, hoje]);
   const leadsHojeSemContato = leadsHojeAnuncio.filter((l) => !atendido(l)).length;
+  // ── Leads no PERÍODO escolhido (só anúncio) — respeita a data ──
+  const leadsPeriodo = useMemo(() => pagos.filter((l) => { const d = diaL(l); return d >= per.de && d <= per.ate && origemDe(l) === "anuncio"; }), [pagos, per.de, per.ate]);
+  const leadsPeriodoSemContato = leadsPeriodo.filter((l) => !atendido(l)).length;
+  // ── Visitas no período: agendadas (visit_scheduled_at) × compareceram (C2S = atendimentos do período) ──
+  const { data: agendadasData } = useQuery({
+    queryKey: ["cg-agendadas", managerId, per.de, per.ate], enabled: !!managerId, staleTime: 60_000,
+    queryFn: async () => {
+      const { data: bs } = await supabase.from("profiles").select("id").eq("manager_id", managerId).eq("role", "BROKER");
+      const ids = (bs ?? []).map((b: any) => b.id); if (!ids.length) return [] as any[];
+      const { data } = await supabase.from("leads").select("id,name,broker_id,visit_scheduled_at,status,last_broker_whatsapp_at")
+        .in("broker_id", ids).not("visit_scheduled_at", "is", null)
+        .gte("visit_scheduled_at", `${per.de}T00:00:00`).lte("visit_scheduled_at", `${per.ate}T23:59:59.999`).limit(2000);
+      return (data ?? []) as any[];
+    },
+  });
+  const agendadas = (agendadasData ?? []) as any[];
+  const compareceu = doPer.visitas;
+  const visitaPct = agendadas.length ? Math.min(100, Math.round((compareceu / agendadas.length) * 100)) : null;
 
   // ── dados de agora ──
   const online = useMemo(() => brokers.filter((b) => presenca?.get(b.id)?.online), [brokers, presenca]);
@@ -355,13 +373,6 @@ export default function CockpitGeral() {
             {faltam != null && faltam > 0 && <div className="cg-card-nota">Faltam <b>{faltam} venda{faltam > 1 ? "s" : ""}</b> para 100% · ~{restantes} dias úteis</div>}
           </article>
 
-          <article className="cg-card click" onClick={() => setPainel("fechamento")}>
-            <div className="cg-card-h"><span>Em fechamento</span><span className="cg-tag roxo">Pastas quentes</span></div>
-            <div className="cg-val"><b className="roxo">{fechamento.length}</b><i>pastas</i></div>
-            <div className="cg-card-f"><span>Prováveis até domingo</span><b>{provaveis}</b></div>
-            <div className="cg-card-nota roxoNota">Clique p/ ver as pastas quentes ▾</div>
-          </article>
-
           <article className="cg-card click" onClick={() => setPainel("plantao")}>
             <div className="cg-card-h"><span>Plantão hoje</span><span className="cg-tag azul">C2S</span></div>
             <div className="cg-val"><b className="azul">{noPlantaoLista.length}</b><i>check-ins</i></div>
@@ -370,10 +381,24 @@ export default function CockpitGeral() {
           </article>
 
           <article className="cg-card click" onClick={() => setPainel("leads")}>
-            <div className="cg-card-h"><span>Leads hoje</span><span className="cg-tag azul">Só anúncio</span></div>
-            <div className="cg-val"><b className="azul">{leadsHojeAnuncio.length}</b><i>novos</i></div>
-            <div className="cg-card-f"><span>Sem contato ainda</span><b className={leadsHojeSemContato ? "ambar" : "verde"}>{leadsHojeSemContato}</b></div>
+            <div className="cg-card-h"><span>Leads</span><span className="cg-tag azul">Só anúncio</span></div>
+            <div className="cg-val"><b className="azul">{leadsPeriodo.length}</b><i>novos</i></div>
+            <div className="cg-card-f"><span>Sem contato ainda</span><b className={leadsPeriodoSemContato ? "ambar" : "verde"}>{leadsPeriodoSemContato}</b></div>
             <div className="cg-card-nota azul">Clique p/ atender agora ▾</div>
+          </article>
+
+          <article className="cg-card click" onClick={() => setPainel("visita")}>
+            <div className="cg-card-h"><span>Visita</span><span className="cg-tag verde">agendada × veio</span></div>
+            <div className="cg-val"><b className="verde">{agendadas.length}</b><i>agendadas</i></div>
+            <div className="cg-card-f"><span>Compareceram (C2S)</span><b className={visitaPct == null ? "" : visitaPct >= 60 ? "verde" : visitaPct >= 40 ? "ambar" : "roxo"}>{compareceu}{visitaPct != null ? ` · ${visitaPct}%` : ""}</b></div>
+            <div className="cg-card-nota azul">Clique p/ ver agendadas e quem veio ▾</div>
+          </article>
+
+          <article className="cg-card click" onClick={() => setPainel("fechamento")}>
+            <div className="cg-card-h"><span>Em fechamento</span><span className="cg-tag roxo">Pastas quentes</span></div>
+            <div className="cg-val"><b className="roxo">{fechamento.length}</b><i>pastas</i></div>
+            <div className="cg-card-f"><span>Prováveis até domingo</span><b>{provaveis}</b></div>
+            <div className="cg-card-nota roxoNota">Clique p/ ver as pastas quentes ▾</div>
           </article>
         </section>
 
@@ -507,8 +532,8 @@ export default function CockpitGeral() {
           <aside className="cg-side">
             <header className="cg-side-h">
               <div>
-                <h3>{painel === "plantao" ? "Quem está no plantão" : painel === "online" ? "Quem está logado no CRM" : painel === "atendimento" ? "Quem está em atendimento" : painel === "fechamento" ? "Pastas em fechamento" : "Leads de hoje · só anúncio"}</h3>
-                <p>{painel === "plantao" ? "Check-in físico no stand (C2S) hoje." : painel === "online" ? "Ativos no Comandra nos últimos 15 minutos." : painel === "atendimento" ? "Cliente respondeu nas últimas 2 horas." : painel === "fechamento" ? "Laudo, Proposta e Emissão — podem virar venda em dias." : `${leadsHojeAnuncio.length} novos · ${leadsHojeSemContato} sem contato.`}</p>
+                <h3>{painel === "plantao" ? "Quem está no plantão" : painel === "online" ? "Quem está logado no CRM" : painel === "atendimento" ? "Quem está em atendimento" : painel === "fechamento" ? "Pastas em fechamento" : painel === "visita" ? "Visitas — agendadas × compareceram" : "Leads do período · só anúncio"}</h3>
+                <p>{painel === "plantao" ? "Check-in físico no stand (C2S) hoje." : painel === "online" ? "Ativos no Comandra nos últimos 15 minutos." : painel === "atendimento" ? "Cliente respondeu nas últimas 2 horas." : painel === "fechamento" ? "Laudo, Proposta e Emissão — podem virar venda em dias." : painel === "visita" ? `${agendadas.length} agendadas · ${compareceu} compareceram no C2S${visitaPct != null ? ` (${visitaPct}%)` : ""}.` : `${leadsPeriodo.length} novos · ${leadsPeriodoSemContato} sem contato.`}</p>
               </div>
               <button className="cg-side-x" onClick={() => setPainel(null)}>✕</button>
             </header>
@@ -520,8 +545,15 @@ export default function CockpitGeral() {
                     <span className="cg-b" style={{ color: p.dias >= 4 ? "#C77700" : "#0D7C66", background: "transparent", whiteSpace: "nowrap" }}>parada há {p.dias}d</span>
                   </div>
                 )) : <p className="cg-vazio">Nenhuma pasta em fechamento agora.</p>
+              ) : painel === "visita" ? (
+                agendadas.length ? agendadas.map((l: any) => (
+                  <div className="cg-lrow" key={l.id}>
+                    <span className="cg-lrow-i"><b>{l.name || "Cliente"}</b><small>{nomeBroker(l.broker_id)} · agendada {new Date(l.visit_scheduled_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</small></span>
+                    <span className="cg-b" style={{ color: l.last_broker_whatsapp_at ? "#0D7C66" : "#C77700", background: "transparent", whiteSpace: "nowrap" }}>{l.last_broker_whatsapp_at ? "confirmada no Whats" : "sem confirmar"}</span>
+                  </div>
+                )) : <p className="cg-vazio">Nenhuma visita agendada no período. (Comparecimento do C2S no topo.)</p>
               ) : painel === "leads" ? (
-                leadsHojeAnuncio.length ? leadsHojeAnuncio.map((l) => {
+                leadsPeriodo.length ? leadsPeriodo.map((l) => {
                   const esp = Math.round((Date.now() - new Date(l.last_lead_response_at ?? l.created_at).getTime()) / 6e4);
                   const alerta = !atendido(l) && esp >= 60;
                   return (
@@ -536,7 +568,7 @@ export default function CockpitGeral() {
                       </div>
                     </div>
                   );
-                }) : <p className="cg-vazio">Nenhum lead de anúncio hoje.</p>
+                }) : <p className="cg-vazio">Nenhum lead de anúncio no período.</p>
               ) : (
                 (painel === "plantao" ? noPlantaoLista : painel === "online" ? online : atendendoLista).length ? (
                   (painel === "plantao" ? noPlantaoLista : painel === "online" ? online : atendendoLista).map((b) => {
