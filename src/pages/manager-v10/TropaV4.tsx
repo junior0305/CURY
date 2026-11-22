@@ -23,6 +23,7 @@ import RaioXPlantaoDrawer from "@/components/manager-v10/RaioXPlantaoDrawer";
 import RendimentoEquipe from "@/components/equipe/RendimentoEquipe";
 import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import Candidatos from "@/components/recrutamento/Candidatos";
+import SaudeTropa from "@/components/recrutamento/SaudeTropa";
 
 const sb = supabase as any;
 const diaSP = (d: Date | number = new Date()) => new Date(d).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
@@ -311,6 +312,9 @@ export default function TropaV4() {
               <article className="tv-card verde"><div className="tv-card-h"><span>Contratados</span></div><div className="tv-val"><b className="verde">{funil.contratado}</b><i>viraram corretor</i></div><div className="tv-card-f">Comandra acompanha 1º acesso/check-in</div></article>
               <article className="tv-card rose"><div className="tv-card-h"><span>Sem contato +24h</span><span className="tv-tag amb">atenção</span></div><div className="tv-val"><b className={semContato24 ? "rose" : "verde"}>{semContato24}</b><i>candidatos</i></div><div className="tv-card-f">entraram e ninguém chamou ainda</div></article>
             </section>
+
+            {/* indicadores de recrutamento e retenção (entrada · retenção · precisa de atenção) */}
+            <SaudeTropa como={como} candidatos={candidatos} />
 
             {/* esteira completa embutida (Chamar · marcar entrevista · contratar) — não joga mais pra tela antiga */}
             <Candidatos como={como} titulo="📋 Esteira de contratação" />
