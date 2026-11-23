@@ -23,21 +23,31 @@ export default function DiscadorDono() {
     queryFn: async () => { const { data, error } = await sb.rpc("disc_dono_painel"); if (error) throw error; return data as { linhas: Linha[]; pool: Membro[]; ind: Ind; rodizio: { minutos: number | null } }; },
     refetchInterval: 15000,
   });
-  const { data: gerentes } = useQuery({ queryKey: ["disc-ger"], queryFn: async () => { const { data } = await sb.rpc("disc_dono_gerentes"); return (data ?? []) as { id: string; nome: string }[]; } });
   const recarrega = () => qc.invalidateQueries({ queryKey: ["disc-dono"] });
 
   const [busca, setBusca] = useState("");
-  const [gerSel, setGerSel] = useState("");
-  const { data: achados } = useQuery({ queryKey: ["disc-busca", busca], enabled: busca.length >= 2, queryFn: async () => { const { data } = await sb.rpc("disc_dono_buscar", { p_q: busca }); return (data ?? []) as { id: string; nome: string; equipe: string }[]; } });
+  const { data: corretores } = useQuery({ queryKey: ["disc-cor"], queryFn: async () => { const { data } = await sb.rpc("disc_dono_corretores"); return (data ?? []) as { id: string; nome: string; gerente_id: string; gerente: string; no_pool: boolean }[]; } });
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [selInit, setSelInit] = useState(false);
+  useEffect(() => { if (corretores && !selInit) { setSel(new Set(corretores.filter((c) => c.no_pool).map((c) => c.id))); setSelInit(true); } }, [corretores, selInit]);
 
-  const poolIds = useMemo(() => new Set((data?.pool ?? []).map((m) => m.id)), [data]);
   const ind = data?.ind;
   const temLinha = (data?.linhas ?? []).length > 0;
 
-  async function miraEquipe() { const { data: n, error } = await sb.rpc("disc_dono_pool_set", { p_modo: "equipe", p_gerente: null, p_corretores: null }); if (error) return toast.error(error.message); toast.success(`${n} corretores no pool.`); recarrega(); }
-  async function miraGerente() { if (!gerSel) return toast.error("Escolha um gerente."); const { data: n, error } = await sb.rpc("disc_dono_pool_set", { p_modo: "gerente", p_gerente: gerSel, p_corretores: null }); if (error) return toast.error(error.message); toast.success(`${n} corretores no pool.`); recarrega(); }
-  async function adicionar(id: string) { const ids = [...poolIds, id]; const { error } = await sb.rpc("disc_dono_pool_set", { p_modo: "escolher", p_gerente: null, p_corretores: ids }); if (error) return toast.error(error.message); setBusca(""); toast.success("Adicionado ao pool."); recarrega(); }
-  async function excluir(id: string) { const { error } = await sb.rpc("disc_dono_pool_rm", { p_user: id }); if (error) return toast.error(error.message); recarrega(); }
+  // agrupa por gerente, com filtro de busca
+  const grupos = useMemo(() => {
+    const m = new Map<string, { gerente: string; cs: { id: string; nome: string }[] }>();
+    (corretores ?? []).filter((c) => (c.nome + " " + c.gerente).toLowerCase().includes(busca.toLowerCase()))
+      .forEach((c) => { const k = c.gerente_id || "sem"; if (!m.has(k)) m.set(k, { gerente: c.gerente, cs: [] }); m.get(k)!.cs.push({ id: c.id, nome: c.nome }); });
+    return [...m.values()];
+  }, [corretores, busca]);
+
+  const dirty = corretores ? sel.size !== corretores.filter((c) => c.no_pool).length || corretores.some((c) => c.no_pool !== sel.has(c.id)) : false;
+  const toggle = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const marcarGrupo = (cs: { id: string }[], on: boolean) => setSel((s) => { const n = new Set(s); cs.forEach((c) => on ? n.add(c.id) : n.delete(c.id)); return n; });
+
+  async function miraEquipe() { setSel(new Set((corretores ?? []).map((c) => c.id))); await sb.rpc("disc_dono_pool_set", { p_modo: "equipe", p_gerente: null, p_corretores: null }); toast.success("Equipe toda no pool."); recarrega(); }
+  async function salvarSelecao() { const { data: n, error } = await sb.rpc("disc_dono_pool_set", { p_modo: "escolher", p_gerente: null, p_corretores: [...sel] }); if (error) return toast.error(error.message); toast.success(`${n} corretores no pool.`); setSelInit(false); recarrega(); }
   async function setRodizio(min: number | null) { const { error } = await sb.rpc("disc_dono_rodizio", { p_minutos: min ?? 0 }); if (error) return toast.error(error.message); recarrega(); }
 
   const rod = data?.rodizio?.minutos ?? null;
@@ -72,26 +82,29 @@ export default function DiscadorDono() {
 
         {/* QUEM PODE USAR */}
         <div className="ddn-card">
-          <div className="ddn-ch">Quem pode usar as linhas <span className="ddn-cnt">{data?.pool.length ?? 0} no pool</span></div>
+          <div className="ddn-ch">Quem pode usar as linhas <span className="ddn-cnt">{sel.size} marcados</span></div>
           <div className="ddn-mira">
             <button className="ddn-b" onClick={miraEquipe}>Equipe toda</button>
-            <div className="ddn-ger">
-              <select value={gerSel} onChange={(e) => setGerSel(e.target.value)}><option value="">Equipe de um gerente…</option>{(gerentes ?? []).map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}</select>
-              <button className="ddn-b" onClick={miraGerente}>Aplicar</button>
-            </div>
+            <button className="ddn-b2" onClick={() => setSel(new Set())}>Limpar</button>
+            <input className="ddn-busca" placeholder="Buscar corretor ou gerente…" value={busca} onChange={(e) => setBusca(e.target.value)} />
           </div>
-          <div className="ddn-add">
-            <input placeholder="+ adicionar um corretor…" value={busca} onChange={(e) => setBusca(e.target.value)} />
-            {busca.length >= 2 && (achados ?? []).length > 0 && (
-              <div className="ddn-res">{(achados ?? []).filter((c) => !poolIds.has(c.id)).map((c) => <button key={c.id} onClick={() => adicionar(c.id)}>{c.nome} <small>{c.equipe}</small></button>)}</div>
-            )}
+          <div className="ddn-grps">
+            {grupos.map((g, i) => {
+              const todosOn = g.cs.length > 0 && g.cs.every((c) => sel.has(c.id));
+              return (
+                <div className="ddn-grp" key={i}>
+                  <div className="ddn-grph"><span>{g.gerente} · {g.cs.length}</span><button onClick={() => marcarGrupo(g.cs, !todosOn)}>{todosOn ? "desmarcar equipe" : "marcar equipe"}</button></div>
+                  <div className="ddn-cks">
+                    {g.cs.map((c) => (
+                      <label key={c.id} className={`ddn-ck${sel.has(c.id) ? " on" : ""}`} onClick={(e) => { e.preventDefault(); toggle(c.id); }}><span className="bx" />{c.nome}</label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            {!grupos.length && <small className="ddn-mut">Nenhum corretor encontrado.</small>}
           </div>
-          <div className="ddn-pool">
-            {(data?.pool ?? []).map((m) => (
-              <span className="ddn-mem" key={m.id}>{m.nome}{m.ligacoes > 0 && <i> · {m.ligacoes}</i>}<button className="rm" title="Excluir do pool" onClick={() => excluir(m.id)}>✕</button></span>
-            ))}
-            {!data?.pool.length && <small className="ddn-mut">Ninguém no pool. Escolha "Equipe toda" ou adicione corretores.</small>}
-          </div>
+          <div className="ddn-save"><button className="ddn-b" disabled={!dirty} onClick={salvarSelecao}>{dirty ? `Salvar seleção (${sel.size})` : "Seleção salva"}</button></div>
         </div>
 
         {/* RODÍZIO */}
@@ -140,16 +153,20 @@ html[data-theme="dark"] .ddn{--sf:#111d33;--sf2:#0e1a2e;--ln:#23344f;--ln2:#1c2c
 .ddn-linha:last-child{border-bottom:0}
 .dot{width:9px;height:9px;border-radius:50%;flex:none} .dot.free{background:var(--good)} .dot.busy{background:var(--warn)} .dot.off{background:var(--ink3)}
 .mono{font-variant-numeric:tabular-nums} .ddn-lst{color:var(--ink2);margin-left:2px}
-.ddn-mira{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-.ddn-ger{display:flex;gap:7px}
+.ddn-mira{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px;align-items:center}
 .ddn-b{border:1px solid var(--ac);background:var(--ac-s);color:var(--ac);font:inherit;font-weight:700;font-size:12.5px;padding:8px 13px;border-radius:9px;cursor:pointer}
-.ddn select,.ddn-add input{border:1px solid var(--ln);border-radius:9px;background:var(--sf);color:var(--ink);font:inherit;font-size:13px;padding:8px 10px}
-.ddn-add{position:relative;margin-bottom:10px} .ddn-add input{width:100%}
-.ddn-res{position:absolute;z-index:5;top:100%;left:0;right:0;background:var(--sf);border:1px solid var(--ln);border-radius:10px;margin-top:4px;box-shadow:0 10px 30px -12px rgba(0,0,0,.4);max-height:220px;overflow:auto}
-.ddn-res button{display:block;width:100%;text-align:left;border:0;background:none;color:var(--ink);font:inherit;font-size:13px;padding:9px 11px;cursor:pointer;border-bottom:1px solid var(--ln2)} .ddn-res button:hover{background:var(--ac-s)} .ddn-res small{color:var(--ink3)}
-.ddn-pool{display:flex;flex-wrap:wrap;gap:7px}
-.ddn-mem{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--ln);border-radius:999px;padding:5px 6px 5px 11px;font-size:12.5px} .ddn-mem i{font-style:normal;color:var(--ink3)}
-.ddn-mem .rm{border:0;background:var(--ln2);color:var(--ink2);width:18px;height:18px;border-radius:50%;cursor:pointer;font-size:11px} .ddn-mem .rm:hover{background:var(--red-s);color:var(--red)}
+.ddn-b:disabled{opacity:.5;cursor:default}
+.ddn-b2{border:1px solid var(--ln);background:var(--sf);color:var(--ink2);font:inherit;font-weight:700;font-size:12.5px;padding:8px 13px;border-radius:9px;cursor:pointer}
+.ddn-busca{flex:1;min-width:150px;border:1px solid var(--ln);border-radius:9px;background:var(--sf);color:var(--ink);font:inherit;font-size:13px;padding:8px 10px}
+.ddn-grps{display:grid;gap:9px;max-height:320px;overflow:auto;padding-right:2px}
+.ddn-grph{display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:var(--ink3);margin:4px 2px 5px}
+.ddn-grph button{border:0;background:none;color:var(--ac);font:inherit;font-weight:700;font-size:12px;cursor:pointer}
+.ddn-cks{display:flex;flex-wrap:wrap;gap:6px}
+.ddn-ck{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--ln);border-radius:9px;padding:6px 10px;cursor:pointer;font-size:12.5px;color:var(--ink)}
+.ddn-ck.on{border-color:var(--ac);background:var(--ac-s)}
+.ddn-ck .bx{width:15px;height:15px;border-radius:4px;border:2px solid var(--ink3);position:relative;flex:none}
+.ddn-ck.on .bx{border-color:var(--ac);background:var(--ac)} .ddn-ck.on .bx::after{content:"✓";color:#fff;font-size:10px;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:900}
+.ddn-save{margin-top:11px}
 .ddn-mut{color:var(--ink3);font-size:12.5px}
 .ddn-seg{display:inline-flex;background:var(--sf2);border:1px solid var(--ln);border-radius:10px;padding:3px;gap:3px;flex-wrap:wrap}
 .ddn-seg button{border:0;background:transparent;color:var(--ink2);font:inherit;font-weight:700;font-size:12.5px;padding:7px 13px;border-radius:8px;cursor:pointer} .ddn-seg button.on{background:var(--ac);color:#fff}
