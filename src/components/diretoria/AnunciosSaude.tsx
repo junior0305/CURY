@@ -29,14 +29,15 @@ const COR: Record<string, string> = { red: "c-red", org: "c-org", grn: "c-grn" }
 const ST: Record<string, string> = { ACTIVE: "no ar", PAUSED: "pausada", CAMPAIGN_PAUSED: "pausada", ADSET_PAUSED: "pausada", WITH_ISSUES: "com problema", DISAPPROVED: "reprovada", IN_PROCESS: "em análise" };
 
 function porTipo(c: Conta) {
-  const f = c.campanhas.filter((x) => x.tipo !== "conversa"), v = c.campanhas.filter((x) => x.tipo === "conversa");
+  const cps = c.campanhas ?? [];
+  const f = cps.filter((x) => x.tipo !== "conversa"), v = cps.filter((x) => x.tipo === "conversa");
   const gf = f.reduce((a, x) => a + x.gasto, 0), gv = v.reduce((a, x) => a + x.gasto, 0);
   return { form: c.form_7d ?? 0, conv: c.conversas_7d ?? 0, cpl: c.form_7d ? gf / c.form_7d : null, cpc: c.conversas_7d ? gv / c.conversas_7d : null, gf, gv };
 }
 
 function situacao(c: Conta) {
   if (c.erro) return { txt: "sem acesso", cls: "c-red" };
-  const ativas = c.campanhas.filter((x) => x.status === "ACTIVE").length;
+  const ativas = (c.campanhas ?? []).filter((x) => x.status === "ACTIVE").length;
   const hoje = c.gasto_por_dia?.[hojeSP()] ?? 0;
   if (!ativas) return { txt: c.gasto_7d ? "tudo pausado" : "parada", cls: c.gasto_7d ? "c-red" : "c-gray" };
   return hoje > 0 ? { txt: `no ar · ${ativas} campanha${ativas > 1 ? "s" : ""}`, cls: "c-grn" } : { txt: "no ar, sem gastar hoje", cls: "c-org" };
@@ -131,7 +132,7 @@ export default function AnunciosSaude({ diretorId, supers }: { diretorId: string
                   <table className="ads-camp">
                     <thead><tr><th>Campanha / anúncio</th><th>Situação</th><th>Orçamento/dia</th><th>Gasto 7d</th><th>Resultado</th><th>Custo por resultado</th></tr></thead>
                     <tbody>
-                      {[...c.campanhas].sort((a, b) => b.gasto - a.gasto).flatMap((cp) => {
+                      {[...(c.campanhas ?? [])].sort((a, b) => b.gasto - a.gasto).flatMap((cp) => {
                         const k = `${l.account_id}:${cp.id}`;
                         return [
                           <tr key={k} className="n1" onClick={() => setCampAberta((v) => ({ ...v, [k]: !v[k] }))}>
