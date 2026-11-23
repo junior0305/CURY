@@ -119,6 +119,7 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
   const hbTimer = useRef<number | null>(null);
   const esperaTimer = useRef<number | null>(null);
   const [aguardando, setAguardando] = useState(false);
+  const [qtdLinhas, setQtdLinhas] = useState(1);
   const engine = useMemo(() => new WebRTCDialerEngine(async () => {
     const c = cfgRef.current; if (!c) throw new Error("sem linha"); return c;
   }), []);
@@ -237,7 +238,8 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
     try {
       const { data, error } = await supabase.rpc("discador_linha_pegar");
       const d = data as any;
-      if (error || !d || d.esperar || !d.linha_id) {   // as 2 linhas ocupadas → espera e tenta de novo
+      if (d?.total) setQtdLinhas(d.total);   // nº real de linhas da equipe (p/ a mensagem de espera)
+      if (error || !d || d.esperar || !d.linha_id) {   // linhas ocupadas → espera e tenta de novo
         setAguardando(true);
         esperaTimer.current = window.setTimeout(tentarLinhaEComecar, 5000);
         return;
@@ -397,8 +399,8 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
                   <div className="disc-radar"><span className="w" /><span className="w" /><span className="w" /><div className="core"><Clock size={28} /></div></div>
                   <div style={{ maxWidth: 380 }}>
                     <span className="disc-badge">Fila de linha</span>
-                    <h2 className="disc-h2" style={{ marginTop: 10 }}>As 2 linhas estão em uso</h2>
-                    <p className="disc-lead" style={{ marginTop: 8 }}>Sua equipe liga em <b style={{ color: "var(--ink)" }}>2 ao mesmo tempo</b>. Assim que uma liberar, você entra automático e começa a discar. Pode deixar aberto nesta tela.</p>
+                    <h2 className="disc-h2" style={{ marginTop: 10 }}>{qtdLinhas === 1 ? "A linha está em uso" : `As ${qtdLinhas} linhas estão em uso`}</h2>
+                    <p className="disc-lead" style={{ marginTop: 8 }}>Sua equipe liga em <b style={{ color: "var(--ink)" }}>{qtdLinhas} ao mesmo tempo</b>. Assim que {qtdLinhas === 1 ? "ela" : "uma"} liberar, você entra automático e começa a discar. Pode deixar aberto nesta tela.</p>
                   </div>
                   <button className="disc-ghost" onClick={cancelarEspera}><Square size={16} /> Cancelar</button>
                 </>
