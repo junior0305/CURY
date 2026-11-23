@@ -13,6 +13,7 @@ const NIVEL: Record<string, string> = { DIRECTOR: "diretor", SUPERINTENDENT: "su
 
 type Linha = { id: string; ramal: string; bina: string | null; sip_server: string; sip_domain: string; tem_senha: boolean; ativo: boolean; dono_id: string; dono_nome: string; dono_nivel: string; pool: number; em_uso: boolean; em_uso_nome: string | null };
 type Lic = { dono_id: string; dono_nome: string; dono_nivel: string; posicoes: number; minutos: number | null; minutos_usados: number };
+type Pacote = { canais: number; minutos: number; usados: number };
 
 export default function DiscadorAdmin() {
   const qc = useQueryClient();
@@ -21,10 +22,11 @@ export default function DiscadorAdmin() {
     queryFn: async () => {
       const { data, error } = await sb.rpc("disc_admin_painel");
       if (error) throw error;
-      return data as { linhas: Linha[]; licencas: Lic[] };
+      return data as { pacote: Pacote; linhas: Linha[]; licencas: Lic[] };
     },
   });
   const [form, setForm] = useState<Partial<Linha> & { senha?: string } | null>(null);
+  const [pacForm, setPacForm] = useState<{ canais?: number; minutos?: number } | null>(null);
   const [licForm, setLicForm] = useState<{ dono_id?: string; dono_nome?: string; posicoes?: number; minutos?: number } | null>(null);
   const recarrega = () => qc.invalidateQueries({ queryKey: ["disc-admin"] });
 
@@ -33,6 +35,24 @@ export default function DiscadorAdmin() {
   return (
     <div className="dadm"><style>{CSS}</style>
       <div className="dadm-h"><b>📞 Discador — ramais e licenças</b><span>Você compra na Nvoip e aloca aqui. Só o admin vê isto.</span></div>
+
+      {/* PACOTE DA CONTA */}
+      <div className="dadm-card">
+        <div className="dadm-ch">Pacote da conta Nvoip
+          <button className="dadm-add" onClick={() => setPacForm({ canais: data?.pacote?.canais || 5, minutos: data?.pacote?.minutos || 300 })}>Editar pacote</button>
+        </div>
+        {pacForm && <PacoteForm pac={pacForm} setPac={setPacForm} onPronto={() => { setPacForm(null); recarrega(); }} />}
+        {data?.pacote && (
+          <div className="dadm-pac">
+            <div className="dadm-pacn"><b>{data.pacote.canais}</b><span>canais simultâneos</span></div>
+            <div className="dadm-pacn"><b>{Math.max(0, (data.pacote.minutos || 0) - data.pacote.usados)}</b><span>min restantes</span></div>
+            <div className="dadm-pacbar">
+              <small>{data.pacote.usados} de {data.pacote.minutos || 0} min usados</small>
+              <div className="bar"><span style={{ width: `${data.pacote.minutos ? Math.min(100, Math.round((data.pacote.usados / data.pacote.minutos) * 100)) : 0}%` }} /></div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* LICENÇAS */}
       <div className="dadm-card">
@@ -167,6 +187,29 @@ function LicencaForm({ lic, setLic, onPronto }: { lic: any; setLic: (l: any) => 
   );
 }
 
+function PacoteForm({ pac, setPac, onPronto }: { pac: any; setPac: (p: any) => void; onPronto: () => void }) {
+  const [salvando, setSalvando] = useState(false);
+  async function salvar() {
+    setSalvando(true);
+    const { error } = await sb.rpc("disc_admin_salvar_pacote", { p_canais: pac.canais ?? 5, p_minutos: pac.minutos ?? 0 });
+    setSalvando(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Pacote salvo."); onPronto();
+  }
+  return (
+    <div className="dadm-form">
+      <div className="dadm-grid">
+        <label>Canais simultâneos (total da conta)<input type="number" min={1} value={pac.canais ?? 5} onChange={(e) => setPac({ ...pac, canais: +e.target.value })} /></label>
+        <label>Minutos do pacote<input type="number" min={0} value={pac.minutos ?? 0} onChange={(e) => setPac({ ...pac, minutos: +e.target.value })} placeholder="ex. 300" /></label>
+      </div>
+      <div className="dadm-fbtn">
+        <button className="dadm-salvar" disabled={salvando} onClick={salvar}>{salvando ? "Salvando…" : "Salvar pacote"}</button>
+        <button className="dadm-cancel" onClick={() => setPac(null)}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
 const CSS = `
 .dadm{--sf:#fff;--sf2:#f6f8fb;--ln:#dce3ec;--ln2:#e8edf3;--ink:#0d1f3c;--ink2:#3a4a63;--ink3:#7c8aa0;--ac:#1766d6;--ac-s:#e4efff;--good:#0f9d6b;--warn:#c77a0a;--warn-s:#fdf0db;--red:#d1443a;font-family:inherit;color:var(--ink)}
 html[data-theme="dark"] .dadm{--sf:#111d33;--sf2:#0e1a2e;--ln:#23344f;--ln2:#1c2c45;--ink:#eaf0fa;--ink2:#aab8cf;--ink3:#6f8099;--ac:#4d93f0;--ac-s:#16294a;--good:#2bc389;--warn:#e0a53f;--warn-s:#3a2d12;--red:#ef6d63}
@@ -178,6 +221,10 @@ html[data-theme="dark"] .dadm{--sf:#111d33;--sf2:#0e1a2e;--ln:#23344f;--ln2:#1c2
 .dadm-ch{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:800;margin-bottom:10px;flex-wrap:wrap}
 .dadm-add{margin-left:auto;border:1px solid var(--ac);background:var(--ac-s);color:var(--ac);font:inherit;font-weight:700;font-size:12.5px;padding:7px 12px;border-radius:9px;cursor:pointer}
 .dadm-m{font-size:12.5px;color:var(--ink2);margin:4px 0}
+.dadm-pac{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.dadm-pacn{display:flex;flex-direction:column} .dadm-pacn b{font-size:28px;font-weight:900;line-height:1} .dadm-pacn span{font-size:11.5px;color:var(--ink3);font-weight:700;margin-top:3px}
+.dadm-pacbar{flex:1;min-width:160px} .dadm-pacbar small{font-size:12px;color:var(--ink2);display:block;margin-bottom:6px}
+.dadm-pacbar .bar{height:9px;border-radius:6px;background:var(--ln2);overflow:hidden} .dadm-pacbar .bar>span{display:block;height:100%;background:var(--ac)}
 .dadm-lics{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
 .dadm-lic{border:1px solid var(--ln);border-radius:11px;padding:11px 12px;cursor:pointer;background:var(--sf2)}
 .dadm-lic b{font-size:13.5px} .dadm-licn{font-size:12.5px;color:var(--ink2);margin-top:6px}
