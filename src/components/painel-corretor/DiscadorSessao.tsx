@@ -350,8 +350,9 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
 
   async function lerArquivo(file: File): Promise<string> {
     const buf = await file.arrayBuffer();
-    let txt = new TextDecoder("utf-8").decode(buf);
-    if (txt.includes("�")) txt = new TextDecoder("windows-1252").decode(buf);
+    let txt: string;
+    try { txt = new TextDecoder("utf-8", { fatal: true }).decode(buf); }   // Excel salva em Windows-1252: tenta UTF-8 e cai p/ 1252
+    catch { txt = new TextDecoder("windows-1252").decode(buf); }
     return txt;
   }
   function parseCsv(txt: string): { nome: string; telefone: string }[] {
