@@ -123,6 +123,9 @@ export default function Diretoria() {
         <Link to="/manager/whatsapp" title="Disparar mensagens pelo WhatsApp oficial">
           <svg viewBox="0 0 24 24" aria-hidden><path d="M21 3L10 14M21 3l-7 18-4-7-7-4z" /></svg>Disparar
         </Link>
+        <Link to="/manager/discador" title="Discador — ligações pela equipe">
+          <svg viewBox="0 0 24 24" aria-hidden><path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11 11 0 0 0 3.4.55 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.3a1 1 0 0 1 1 1 11 11 0 0 0 .55 3.4 1 1 0 0 1-.24 1z" /></svg>Discador
+        </Link>
         <span className="dir-rail-sep" />
         <Link to="/super?aba=time" title="Tela anterior, com cadastro e desligamento">
           <svg viewBox="0 0 24 24" aria-hidden><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM3 21v-1a6 6 0 0 1 12 0v1M16 3.5a4 4 0 0 1 0 7.5M21 21v-1a6 6 0 0 0-4-5.6" /></svg>Gestão do time
