@@ -1216,6 +1216,9 @@ export const HTML = `<main class="main-content">
         <button class="lead-tab-btn" id="tab-result-btn" onclick="switchTab('resultados')">
           <span>📊</span> Resultados
         </button>
+        <button class="lead-tab-btn" id="btn-csv-leads" style="margin-left:auto" title="Baixar os leads do período escolhido em CSV" onclick="window.__baixarCsvLeads&&window.__baixarCsvLeads()">
+          <span>⬇</span> Baixar CSV
+        </button>
       </div>
 
       <!-- ══════════════════════════════════════════════════════════════════════

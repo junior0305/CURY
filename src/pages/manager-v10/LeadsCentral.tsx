@@ -839,7 +839,27 @@ export default function LeadsCentral() {
         pulso(); justica(); carregar("Hoje");
       } catch (e: any) { toast.error(e?.message || "Não consegui direcionar os sem dono."); }
     };
-    return () => { try { delete (window as any).__soltarRepresados; delete (window as any).__direcionarSemDono; } catch { /* ok */ } };
+    // Baixar CSV dos leads do período escolhido (gerente e super) — mesmo RPC do painel do super
+    (window as any).__baixarCsvLeads = async () => {
+      try {
+        const [de, ate] = faixa(periodoRef.current || "Hoje");
+        const { data, error } = await sb.rpc("leads_origem", { p_como: scopeManager || null, p_de: de, p_ate: ate });
+        if (error) throw error;
+        const ls = ((data as any)?.leads ?? []) as any[];
+        if (!ls.length) { toast.error("Nenhum lead nesse período."); return; }
+        const dh = (v: any) => (v ? new Date(v).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "");
+        const esc = (v: unknown) => { const s = String(v ?? ""); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+        const cab = ["data de entrada", "nome", "telefone", "email", "região", "renda", "tipo de origem", "página", "campanha", "formulário", "anúncio", "corretor", "equipe", "como chegou", "situação", "motivo de descarte", "último contato"];
+        const linhas = ls.map((l: any) => [dh(l.entrou), l.nome, l.telefone, l.email, l.regiao, l.renda, l.tipo, l.pagina_nome ?? l.pagina, l.campanha, l.formulario, l.anuncio, l.corretor_nome, l.equipe_nome, l.como, l.status, l.motivo_descarte, dh(l.ultimo_contato)].map(esc).join(";"));
+        const csv = "﻿" + [cab.join(";"), ...linhas].join("\n");
+        try { await sb.rpc("registrar_csv", { p_filtros: { de, ate }, p_quantos: ls.length }); } catch { /* ok */ }
+        const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+        const a = document.createElement("a"); a.href = url; a.download = `leads_${de}_a_${ate}.csv`; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        toast.success(`${ls.length} leads no CSV (${de} a ${ate}).`);
+      } catch (e: any) { toast.error(e?.message || "Não consegui gerar o CSV."); }
+    };
+    return () => { try { delete (window as any).__soltarRepresados; delete (window as any).__direcionarSemDono; delete (window as any).__baixarCsvLeads; } catch { /* ok */ } };
   }, [manParam, scopeManager, pulso, justica, carregar]);
 
   // filas (Mídia & Filas): add/remover corretor e criar fila de verdade (RPCs reais)
