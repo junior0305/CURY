@@ -223,6 +223,27 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
     else encerrar();
   }
 
+  // ---- ANTI-LINHA-MUDA: nenhuma ligação fica aberta sem o corretor olhando ----
+  // (secretária eletrônica, distração, troca de aba, hibernação) queimam crédito/minuto.
+  useEffect(() => {
+    if (fase !== "conectado") return;
+    const fim = (motivo: string) => { toast(motivo); apiRef.current?.desligar?.(); };
+    const MAX_MS = 5 * 60 * 1000;   // tempo máximo de uma ligação
+    const GRACE_MS = 45 * 1000;     // fora da tela por mais que isso = encerra
+    const max = window.setTimeout(() => fim("Ligação encerrada: passou do tempo máximo (5 min)."), MAX_MS);
+    let hide: number | undefined;
+    const onVis = () => {
+      if (document.hidden) { toast("Você saiu da tela — a ligação encerra em 45s se não voltar."); hide = window.setTimeout(() => fim("Ligação encerrada: você ficou fora da tela (linha muda)."), GRACE_MS); }
+      else if (hide) { clearTimeout(hide); hide = undefined; toast("De volta à ligação."); }
+    };
+    const derruba = () => { engine.hangup().catch(() => {}); };   // pagehide/freeze/offline: mata a chamada na hora
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", derruba);
+    window.addEventListener("freeze", derruba as any);
+    window.addEventListener("offline", derruba);
+    return () => { clearTimeout(max); if (hide) clearTimeout(hide); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("pagehide", derruba); window.removeEventListener("freeze", derruba as any); window.removeEventListener("offline", derruba); };
+  }, [fase]);
+
   // ---- PORTEIRO (bolo de linhas da equipe) ----
   function pararHeartbeat() { if (hbTimer.current) { clearInterval(hbTimer.current); hbTimer.current = null; } }
   function pararEspera() { if (esperaTimer.current) { clearTimeout(esperaTimer.current); esperaTimer.current = null; } }
