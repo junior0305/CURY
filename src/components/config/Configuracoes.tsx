@@ -28,10 +28,11 @@ import CadastrarCorretor from "@/components/manager-v10/CadastrarCorretor";
 import VincularNomes from "@/components/manager-v10/VincularNomes";
 import IntegracaoFacebook from "@/pages/admin/IntegracaoFacebook";
 import FacebookLeads from "@/components/config/FacebookLeads";
+import DiscadorAdmin from "@/components/config/DiscadorAdmin";
 import "@/styles/manager-v10.css";
 
 type Nivel = "diretor" | "super" | "gerente";
-type Secao = "avisos" | "equipe" | "plantoes" | "base" | "whatsapp" | "facebook" | "fontes" | "empresa";
+type Secao = "avisos" | "equipe" | "plantoes" | "base" | "whatsapp" | "facebook" | "fontes" | "empresa" | "discador";
 const SECOES: { k: Secao; label: string; sub: string }[] = [
   { k: "avisos", label: "Avisos e cobranças", sub: "O que o sistema cobra e quando" },
   { k: "equipe", label: "Equipe", sub: "Cadastrar, desabilitar e desligar corretor" },
@@ -39,6 +40,7 @@ const SECOES: { k: Secao; label: string; sub: string }[] = [
   { k: "base", label: "Base de contatos", sub: "Listas para o Pescar ou lead caindo" },
   { k: "whatsapp", label: "Meu WhatsApp", sub: "O chip que envia as suas mensagens" },
   { k: "facebook", label: "Facebook e leads", sub: "Páginas, formulários e quem recebe" },
+  { k: "discador", label: "Discador", sub: "Ramais, linhas e licenças (só admin)" },
   { k: "fontes", label: "Fontes de dados", sub: "C2S, Junix, Salesforce" },
   { k: "empresa", label: "Dados da empresa", sub: "Nome, diretoria no C2S, apelidos" },
 ];
@@ -53,8 +55,9 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
     setSecao(k);
     const p = new URLSearchParams(params); p.set("secao", k); setParams(p, { replace: true });
   };
-  // fontes de dados: só o diretor escolhe
-  const secoes = SECOES.filter((s) => (s.k !== "fontes" && s.k !== "empresa") || nivel === "diretor");
+  const { role } = useAuth();
+  // fontes de dados: só o diretor escolhe; discador: só admin
+  const secoes = SECOES.filter((s) => ((s.k !== "fontes" && s.k !== "empresa") || nivel === "diretor") && (s.k !== "discador" || role === "ADMIN"));
   const secaoOk: Secao = secoes.some((x) => x.k === secao) ? secao : "avisos";
 
   return (
@@ -79,6 +82,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
           : secaoOk === "whatsapp" ? <MeuWhatsApp />
           : secaoOk === "fontes" ? <FontesDados />
           : secaoOk === "empresa" ? <DadosEmpresa />
+          : secaoOk === "discador" ? <DiscadorAdmin />
           : <FacebookLeads como={donoId} avancado={<><ContasAnuncio como={donoId} /><GestorTrafego donoId={donoId} /><div className="integ-shell"><IntegracaoFacebook /></div></>} />}
       </section>
     </div>
