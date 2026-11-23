@@ -116,6 +116,7 @@ export function RailV10({ atual, sub, mode, toggle, onAba }: {
       label: ehSuper ? a.label : (LABEL_LARGO[a.k] ?? a.label), icon: svg(ICONES[a.k]) });
   }
   if (!ehSuper) itens.push({ key: "bi", aba: "bi", to: "/manager?aba=bi", on: atual === "bi", grupo: "Comando", label: "B.I.", icon: svg(ICONES.bi) });
+  itens.push({ key: "discador", to: "/manager/discador", on: pathname === "/manager/discador", grupo: "Comando", label: "Discador", icon: svg("M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11 11 0 0 0 3.4.55 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.3a1 1 0 0 1 1 1 11 11 0 0 0 .55 3.4 1 1 0 0 1-.24 1z") });
   if (role === "ADMIN" || role === "DIRECTOR") itens.push({ key: "diretoria", to: "/diretor", on: false, grupo: "Sistema", label: "Diretoria", icon: svg("M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6") });
   if (role === "ADMIN") itens.push({ key: "admin", to: "/admin", on: false, grupo: "Sistema", label: "Admin", icon: svg("M15 18l-6-6 6-6") });
 

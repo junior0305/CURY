@@ -49,6 +49,7 @@ import PastasV10 from "./pages/manager-v10/Pastas";
 import EstrategiaV10 from "./pages/manager-v10/Estrategia";
 import IntegracaoFacebook, { IntegracaoGerente } from "./pages/admin/IntegracaoFacebook";
 import { ConfiguracoesGerente } from "./components/config/Configuracoes";
+import { DiscadorGestor } from "./components/discador/DiscadorDono";
 import AnunciosGerente from "./components/anuncios/AnunciosGerente";
 import PlantaoV10 from "./pages/manager-v10/Plantao";
 import CoachIndex from "./pages/manager-v2/CoachIndex";
@@ -255,6 +256,7 @@ const App = () => (
             <Route path="/manager/leads-antiga" element={<ProtectedManagerRoute><LeadsV10 /></ProtectedManagerRoute>} />
             <Route path="/manager/pastas" element={<ProtectedManagerRoute><PastasV10 /></ProtectedManagerRoute>} />
             <Route path="/manager/config" element={<ProtectedManagerRoute><ConfiguracoesGerente /></ProtectedManagerRoute>} />
+            <Route path="/manager/discador" element={<ProtectedManagerRoute><DiscadorGestor /></ProtectedManagerRoute>} />
             <Route path="/manager/regua" element={<Navigate to="/manager/config?secao=avisos" replace />} />
             <Route path="/manager/anuncios" element={<ProtectedManagerRoute><AnunciosGerente /></ProtectedManagerRoute>} />
             <Route path="/manager/whatsapp" element={<ProtectedManagerRoute><DispararV10 /></ProtectedManagerRoute>} />
