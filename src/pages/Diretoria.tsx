@@ -87,6 +87,7 @@ export default function Diretoria() {
   const [deD, setDeD] = useState(periodo.de);
   const [ateD, setAteD] = useState(periodo.ate);
   const [aberto, setAberto] = useState<Record<string, boolean>>({});
+  const [fechOff, setFechOff] = useState(false); // banco sem o motor de Fechamento (planoego): painel do Junix vira o principal
   const tog = (k: string) => setAberto((v) => ({ ...v, [k]: !v[k] }));
   const abrirPainel = (id: string) => nav(`/manager?manager=${id}`);
 
@@ -193,14 +194,24 @@ export default function Diretoria() {
             {aba === "leads" && <AnunciosSaude diretorId={diretorId!} supers={supers} />}
             {aba === "leads" && <Leads dias={dias} deP={periodo.de} supers={supers} linhasDoSuper={linhasDoSuper} total={totalEmpresa} aberto={aberto} tog={tog} abrirPainel={abrirPainel} carregandoCons={carregandoCons} />}
             {aba === "pastas" && <>
-              <FechamentoAcelerador />
-              <details className="fech-old">
-                <summary>📂 Painel de pastas completo do Junix — pipeline, valor (R$), ataque de hoje e limpeza detalhada</summary>
-                <PastasPainel diretorId={diretorId!} supers={supers} pastas={dir.pastas} />
-                <button className="dir-btn" style={{ alignSelf: "flex-start" }} onClick={() => tog("tabela-pastas")}>
-                  {aberto["tabela-pastas"] ? "▾ Esconder a árvore completa" : "▸ Árvore completa: super → gerente → corretor → cliente"}</button>
-                {aberto["tabela-pastas"] ? <Pastas supers={supers} pastas={dir.pastas} aberto={aberto} tog={tog} /> : null}
-              </details>
+              <FechamentoAcelerador onIndisponivel={() => setFechOff(true)} />
+              {fechOff ? (
+                // Sem o motor de Fechamento (planoego): o painel do Junix é o principal — mostra direto, sem acordeão.
+                <>
+                  <PastasPainel diretorId={diretorId!} supers={supers} pastas={dir.pastas} />
+                  <button className="dir-btn" style={{ alignSelf: "flex-start" }} onClick={() => tog("tabela-pastas")}>
+                    {aberto["tabela-pastas"] ? "▾ Esconder a árvore completa" : "▸ Árvore completa: super → gerente → corretor → cliente"}</button>
+                  {aberto["tabela-pastas"] ? <Pastas supers={supers} pastas={dir.pastas} aberto={aberto} tog={tog} /> : null}
+                </>
+              ) : (
+                <details className="fech-old">
+                  <summary>📂 Painel de pastas completo do Junix — pipeline, valor (R$), ataque de hoje e limpeza detalhada</summary>
+                  <PastasPainel diretorId={diretorId!} supers={supers} pastas={dir.pastas} />
+                  <button className="dir-btn" style={{ alignSelf: "flex-start" }} onClick={() => tog("tabela-pastas")}>
+                    {aberto["tabela-pastas"] ? "▾ Esconder a árvore completa" : "▸ Árvore completa: super → gerente → corretor → cliente"}</button>
+                  {aberto["tabela-pastas"] ? <Pastas supers={supers} pastas={dir.pastas} aberto={aberto} tog={tog} /> : null}
+                </details>
+              )}
             </>}
             {aba === "bi" && <BiTab scope="super" managerId={diretorId ?? undefined} />}
             {aba === "estrategia" && diretorId && <Estrategia diretorId={diretorId} supers={supers} pastas={dir.pastas} />}

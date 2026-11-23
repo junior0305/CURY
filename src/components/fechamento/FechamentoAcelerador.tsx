@@ -45,7 +45,7 @@ function dataDoArquivo(nome: string): string {
   return m ? `20${m[3]}-${m[2]}-${m[1]}` : new Date().toISOString().slice(0, 10);
 }
 
-export default function FechamentoAcelerador({ podeSubir = true }: { podeSubir?: boolean }) {
+export default function FechamentoAcelerador({ podeSubir = true, onIndisponivel }: { podeSubir?: boolean; onIndisponivel?: () => void }) {
   const [periodo, setPeriodo] = useState<Periodo>("sem");
   const [dir, setDir] = useState<string | null>(null);
   const [ger, setGer] = useState<string | null>(null);
@@ -69,6 +69,7 @@ export default function FechamentoAcelerador({ podeSubir = true }: { podeSubir?:
     setD(data);
   }
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [de, ate, dir, ger, etapaSel]);
+  useEffect(() => { if (indisponivel) onIndisponivel?.(); /* eslint-disable-next-line */ }, [indisponivel]);
 
   async function subir(f?: File) {
     if (!f) return; setSubindo(true);
