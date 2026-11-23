@@ -1173,7 +1173,7 @@ export const HTML = `<main class="main-content">
       <header class="sticky-header-bar">
         <div class="leads-title">
           <h1>Central de Leads & Performance</h1>
-          <p id="periodo-descricao-txt">Período Selecionado: <b>Esta Semana</b> (Seg 00:00 → Dom 23:59)</p>
+          <p id="periodo-descricao-txt" style="font-weight:700;font-size:14px">📅 Mostrando os leads de <b>Esta Semana</b></p>
         </div>
 
         <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
@@ -1183,7 +1183,8 @@ export const HTML = `<main class="main-content">
             <button class="per-chip" onclick="selecionarPeriodo('Ontem', this)">Ontem</button>
             <button class="per-chip" onclick="selecionarPeriodo('Esta Semana', this)">Esta Semana</button>
             <button class="per-chip" onclick="selecionarPeriodo('Este Mês', this)">Este Mês</button>
-            <input type="date" id="per-data" title="Escolher uma data" onchange="if(this.value){document.querySelectorAll('.per-chip').forEach(function(c){c.classList.remove('active')});selecionarPeriodo('Dia:'+this.value, null)}" style="border:1px solid var(--border);background:var(--surface-subtle);color:var(--text-main);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer" />
+            <span style="font-size:12px;color:#8795a8;align-self:center;margin-left:4px">ou um dia:</span>
+            <input type="date" id="per-data" title="Escolher uma data específica" onchange="if(this.value){document.querySelectorAll('.per-chip').forEach(function(c){c.classList.remove('active')});selecionarPeriodo('Dia:'+this.value, null)}" style="border:1px solid var(--border);background:var(--surface-subtle);color:var(--text-main);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer" />
           </div>
 
           <button class="act-btn repassar" style="padding: 8px 14px;" onclick="switchTab('filas')">
@@ -1913,8 +1914,8 @@ export const JS = `
 
     function selecionarPeriodo(nome, btn) {
       document.querySelectorAll('.per-chip').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById('periodo-descricao-txt').innerHTML = 'Período Selecionado: <b>' + nome + '</b>';
+      if (btn) btn.classList.add('active');
+      document.getElementById('periodo-descricao-txt').innerHTML = '📅 Mostrando os leads de <b>' + nome + '</b>';
       showToast('📅 Dados atualizados para: ' + nome);
     }
 

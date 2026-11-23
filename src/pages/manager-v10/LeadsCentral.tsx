@@ -725,7 +725,7 @@ export default function LeadsCentral() {
       if (nomeP.startsWith("Dia:")) {
         const d = nomeP.slice(4).split("-");
         const desc = box.current?.querySelector("#periodo-descricao-txt");
-        if (desc) desc.innerHTML = `Período Selecionado: <b>${d[2]}/${d[1]}/${d[0]}</b>`;
+        if (desc) desc.innerHTML = `📅 Mostrando os leads de <b>${d[2]}/${d[1]}/${d[0]}</b>`;
         box.current?.querySelectorAll(".per-chip").forEach((c) => c.classList.remove("active"));
       }
       periodFns.current.carregar(nomeP);
@@ -763,7 +763,7 @@ export default function LeadsCentral() {
       chips.forEach((c) => { c.classList.remove("active"); if ((c.textContent || "").trim() === "Hoje") hoje = c; });
       if (hoje) (hoje as HTMLElement).classList.add("active");
       const desc = root.querySelector("#periodo-descricao-txt");
-      if (desc) desc.innerHTML = "Período Selecionado: <b>Hoje</b>";
+      if (desc) desc.innerHTML = "📅 Mostrando os leads de <b>Hoje</b>";
     }
     carregar("Hoje");
     resultados("Hoje");
