@@ -11,7 +11,7 @@ import { toast } from "sonner";
 const sb = supabase as any;
 
 type Linha = { id: string; ramal: string; ativo: boolean; em_uso: boolean; em_uso_nome: string | null; desde: string | null };
-type Membro = { id: string; nome: string; equipe: string; ligacoes: number };
+type Membro = { id: string; nome: string; equipe: string; ligacoes: number; atendidas: number; visitas: number };
 type Ind = { ligacoes: number; atenderam: number; minutos: number; linhas_total: number; linhas_uso: number; visitas: number };
 
 const hhmm = (iso: string | null) => { if (!iso) return ""; const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000)); const m = Math.floor(s / 60); return m < 1 ? "agora" : `há ${m}min`; };
@@ -33,6 +33,9 @@ export default function DiscadorDono() {
 
   const ind = data?.ind;
   const temLinha = (data?.linhas ?? []).length > 0;
+  const score = (m: Membro) => m.visitas * 10 + m.atendidas * 2 + m.ligacoes;
+  const ranking = useMemo(() => (data?.pool ?? []).filter((m) => m.ligacoes > 0 || m.visitas > 0).sort((a, b) => score(b) - score(a)).slice(0, 8), [data]);
+  const topScore = ranking.length ? score(ranking[0]) : 1;
 
   // agrupa por gerente, com filtro de busca
   const grupos = useMemo(() => {
@@ -81,6 +84,19 @@ export default function DiscadorDono() {
         </div>
 
         {/* QUEM PODE USAR */}
+        {/* RANKING DE SUCESSO */}
+        <div className="ddn-card">
+          <div className="ddn-ch">Ranking de sucesso — hoje <span className="ddn-opt">visita vale mais que ligação</span></div>
+          {ranking.length ? ranking.map((m, i) => (
+            <div className="ddn-rk" key={m.id}>
+              <span className="pos">{i + 1}</span>
+              <span className="nm">{m.nome}</span>
+              <span className="barw"><span style={{ width: `${Math.max(6, Math.round((score(m) / topScore) * 100))}%` }} /></span>
+              <span className="vals"><b>{m.visitas}</b> vis · <b>{m.atendidas}</b> at · {m.ligacoes} lig</span>
+            </div>
+          )) : <small className="ddn-mut">Ninguém registrou ligação hoje ainda.</small>}
+        </div>
+
         <div className="ddn-card">
           <div className="ddn-ch">Quem pode usar as linhas <span className="ddn-cnt">{sel.size} marcados</span></div>
           <div className="ddn-mira">
@@ -168,6 +184,13 @@ html[data-theme="dark"] .ddn{--sf:#111d33;--sf2:#0e1a2e;--ln:#23344f;--ln2:#1c2c
 .ddn-ck.on .bx{border-color:var(--ac);background:var(--ac)} .ddn-ck.on .bx::after{content:"✓";color:#fff;font-size:10px;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:900}
 .ddn-save{margin-top:11px}
 .ddn-mut{color:var(--ink3);font-size:12.5px}
+.ddn-rk{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--ln2);font-size:13px}
+.ddn-rk:last-child{border-bottom:0}
+.ddn-rk .pos{width:20px;height:20px;border-radius:50%;background:var(--ac-s);color:var(--ac);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none}
+.ddn-rk .nm{width:120px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ddn-rk .barw{flex:1;min-width:60px;height:8px;border-radius:5px;background:var(--ln2);overflow:hidden} .ddn-rk .barw>span{display:block;height:100%;background:var(--good)}
+.ddn-rk .vals{font-size:12px;color:var(--ink2);white-space:nowrap} .ddn-rk .vals b{color:var(--ink)}
+@media(max-width:560px){.ddn-rk .nm{width:80px}.ddn-rk .vals{font-size:11px}}
 .ddn-seg{display:inline-flex;background:var(--sf2);border:1px solid var(--ln);border-radius:10px;padding:3px;gap:3px;flex-wrap:wrap}
 .ddn-seg button{border:0;background:transparent;color:var(--ink2);font:inherit;font-weight:700;font-size:12.5px;padding:7px 13px;border-radius:8px;cursor:pointer} .ddn-seg button.on{background:var(--ac);color:#fff}
 .ddn-note{font-size:12px;color:var(--ink2);margin:9px 0 0;line-height:1.5}
