@@ -98,7 +98,7 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
   const [nome, setNome] = useState("");
   const [arquivo, setArquivo] = useState("");
   const [linhas, setLinhas] = useState<Linha[]>([]);
-  const [destino, setDestino] = useState<"pool" | "gota">("pool");
+  const [destino, setDestino] = useState<"pool" | "gota" | "ligacao">("pool");
   const [intervalo, setIntervalo] = useState(15);
   const [para, setPara] = useState<"roleta" | "escolher">("roleta");
   const [marc, setMarc] = useState<Set<string>>(new Set());
@@ -175,7 +175,7 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
 
   const conta = (s: Linha["situacao"]) => linhas.filter((l) => l.situacao === s).length;
   const validos = conta("ok");
-  const pronto = validos > 0 && lgpd && nome.trim() && (destino === "pool" || para === "roleta" || marc.size > 0);
+  const pronto = validos > 0 && lgpd && nome.trim() && (destino !== "gota" || para === "roleta" || marc.size > 0);
 
   async function subir() {
     if (!pronto) return;
@@ -187,9 +187,11 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
     });
     setBusy(false);
     if (error) { toast.error(ERROS[(error.message || "").trim()] ?? `Não consegui subir: ${error.message}`); return; }
-    toast.success(destino === "pool"
-      ? `${data?.inseridos ?? 0} contatos no Pescar da sua equipe.`
-      : `Gotejamento começou: ${data?.inseridos ?? 0} contatos, 1 a cada ${intervalo} min no horário da equipe.`, { duration: 8000 });
+    toast.success(destino === "gota"
+      ? `Gotejamento começou: ${data?.inseridos ?? 0} contatos, 1 a cada ${intervalo} min no horário da equipe.`
+      : destino === "ligacao"
+        ? `${data?.inseridos ?? 0} contatos prontos pra ligar no Discador da sua equipe.`
+        : `${data?.inseridos ?? 0} contatos no Pescar da sua equipe.`, { duration: 8000 });
     setLinhas([]); setArquivo(""); setNome(""); setLgpd(false); setLeitura(null);
     qc.invalidateQueries({ queryKey: ["base-listas"] });
   }
@@ -267,6 +269,10 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
       <section className="bc-box">
         <h3>2 · Para onde vai a lista</h3>
         <div className="bc-2">
+          <button type="button" className={`bc-op${destino === "ligacao" ? " on" : ""}`} onClick={() => setDestino("ligacao")} aria-pressed={destino === "ligacao"}>
+            <b>📞 Só ligação (Discador)</b>
+            <span>Os contatos ficam prontos pra o corretor <b>ligar no Discador</b>. Não goteja e não vira lead sozinho — só vira lead quando o corretor marca interesse na ligação.</span>
+          </button>
           <button type="button" className={`bc-op${destino === "pool" ? " on" : ""}`} onClick={() => setDestino("pool")} aria-pressed={destino === "pool"}>
             <b>Pool (Pescar)</b>
             <span>Os contatos ficam no carrossel do Pescar, por região, só para a sua equipe. O corretor escolhe quem pega (até 50 por dia).</span>
@@ -320,7 +326,7 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
           <span>Confirmo que estes contatos foram obtidos com autorização para contato (LGPD).</span>
         </label>
         <button type="button" className="bc-btn" disabled={!pronto || busy} onClick={subir}>
-          {busy ? "Subindo…" : destino === "pool" ? `Subir ${validos || ""} contatos para o Pescar` : `Começar o gotejamento (${validos || 0} contatos)`}
+          {busy ? "Subindo…" : destino === "gota" ? `Começar o gotejamento (${validos || 0} contatos)` : destino === "ligacao" ? `Subir ${validos || ""} contatos pro Discador` : `Subir ${validos || ""} contatos para o Pescar`}
         </button>
       </section>
 
@@ -343,11 +349,11 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
                       </span>
                     ) : <><b>{l.nome}</b> <button type="button" className="bc-link" style={{ fontSize: 12 }} onClick={() => setRenomear({ id: l.id, nome: l.nome })}>Renomear</button></>}
                     <br /><small>por {l.criado_por_nome ?? "—"} em {new Date(l.criado_em).toLocaleDateString("pt-BR")}</small></td>
-                  <td>{l.destino === "pool" ? "Pool (Pescar)" : `Gotejamento · 1 a cada ${l.intervalo_min} min · ${l.para === "roleta" ? "roleta" : "escolhidos"}`}</td>
+                  <td>{l.destino === "gota" ? `Gotejamento · 1 a cada ${l.intervalo_min} min · ${l.para === "roleta" ? "roleta" : "escolhidos"}` : l.destino === "ligacao" ? "📞 Só ligação (Discador)" : "Pool (Pescar)"}</td>
                   <td style={{ minWidth: 170 }}>
                     <div className="bc-bar"><div style={{ width: `${l.total ? Math.round((feitos / l.total) * 100) : 0}%` }} /></div>
-                    <small>{feitos} de {l.total} {l.destino === "pool" ? "pescados" : "caíram"} · {l.status === "pausada" ? "pausada" : l.status === "concluida" ? "concluída" : "ativa"}</small>
-                    {l.destino !== "pool" && l.status === "ativa" && (() => {
+                    <small>{feitos} de {l.total} {l.destino === "gota" ? "caíram" : "disponíveis"} · {l.status === "pausada" ? "pausada" : l.status === "concluida" ? "concluída" : "ativa"}</small>
+                    {l.destino === "gota" && l.status === "ativa" && (() => {
                       const prox = l.proximo_em ? new Date(l.proximo_em) : null;
                       const txt = !prox ? "—" : (prox.getTime() <= Date.now() ? "agora" : prox.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }));
                       return <small style={{ display: "block", marginTop: 3, fontWeight: 700, color: "#0E9F8E" }}>🟢 Hoje {l.hoje ?? 0}/{l.max_dia} · próxima {txt} · {l.restantes} na fila</small>;
@@ -356,7 +362,7 @@ export default function BaseContatos({ donoId }: { donoId?: string | null }) {
                   <td className="m">{l.viraram_lead}</td>
                   <td className="m">{l.com_contato} · {l.visitas} · {l.vendas}</td>
                   <td style={{ textAlign: "right" }}>
-                    {l.destino !== "pool" && l.status !== "concluida" && <button type="button" className="bc-link" onClick={() => abrirEditar(l)}>Trocar corretores</button>}
+                    {l.destino === "gota" && l.status !== "concluida" && <button type="button" className="bc-link" onClick={() => abrirEditar(l)}>Trocar corretores</button>}
                     {l.status === "ativa" && <button type="button" className="bc-link" onClick={() => pausar(l.id, true)}>Pausar</button>}
                     {l.status === "pausada" && <button type="button" className="bc-link" onClick={() => pausar(l.id, false)}>Retomar</button>}
                   </td>
