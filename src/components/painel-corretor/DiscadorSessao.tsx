@@ -135,6 +135,7 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
   const [muted, setMuted] = useState(false);
   const [stats, setStats] = useState({ discadas: 0, atenderam: 0, agendadas: 0, falado: 0 });
   const [nota, setNota] = useState("");
+  const [nomeDesfecho, setNomeDesfecho] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [manual, setManual] = useState("");
   const [mostraManual, setMostraManual] = useState(false);
@@ -246,6 +247,9 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
     return () => { clearTimeout(max); if (hide) clearTimeout(hide); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("pagehide", derruba); window.removeEventListener("freeze", derruba as any); window.removeEventListener("offline", derruba); };
   }, [fase]);
 
+  // ao abrir o desfecho de um lead da LISTA, pré-preenche o nome (corretor confirma/corrige)
+  useEffect(() => { if (fase === "desfecho") setNomeDesfecho(poolAtualRef.current?.nome || ""); }, [fase]);
+
   // ---- PORTEIRO (bolo de linhas da equipe) ----
   function pararHeartbeat() { if (hbTimer.current) { clearInterval(hbTimer.current); hbTimer.current = null; } }
   function pararEspera() { if (esperaTimer.current) { clearTimeout(esperaTimer.current); esperaTimer.current = null; } }
@@ -320,11 +324,15 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
       } catch { /* não trava */ }
     } else if (pa) {
       try {
-        const { data } = await supabase.rpc("discador_ligou", { p_id: pa.id, p_resultado: sucesso ? "sucesso" : "nao_atendeu", p_desfecho: desfecho, p_duracao: dur });
-        if (sucesso && (data as any)?.virou_lead) { toast.success("Virou cliente — foi pra sua Central de Leads ✅"); setPoolQtde((q) => (q != null ? Math.max(0, q - 1) : q)); }
+        if (sucesso) {
+          await supabase.rpc("discador_lead_interesse", { p_contact_id: pa.id, p_nome: (nomeDesfecho || pa.nome || "").trim(), p_telefone: pa.telefone, p_desfecho: desfecho, p_nota: obs, p_duracao: dur });
+          toast.success("Lead salvo no seu Atender (origem Ligação) ✅"); setPoolQtde((q) => (q != null ? Math.max(0, q - 1) : q));
+        } else {
+          await supabase.rpc("discador_ligou", { p_id: pa.id, p_resultado: "nao_atendeu", p_desfecho: desfecho, p_duracao: dur });
+        }
       } catch { /* não trava */ }
     }
-    setNota(""); setTags([]);
+    setNota(""); setTags([]); setNomeDesfecho("");
     window.setTimeout(() => proximo(), 300);
   }
 
@@ -585,6 +593,13 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
                 <h2 className="disc-h2" style={{ marginTop: 10 }}>Como foi com <span style={{ color: "var(--em)" }}>{atual?.name || poolAtual?.nome}</span>?</h2>
                 <p className="disc-lead" style={{ marginTop: 6 }}>Falou <b className="mono" style={{ color: "var(--ink)" }}>{mmss(seconds)}</b> · escolha o desfecho ou tecle <b>[1–5]</b>. Depois o Comandra liga o próximo sozinho.</p>
               </div>
+              {poolAtual && !atual && (
+                <div style={{ width: "100%", maxWidth: 420 }}>
+                  <input value={nomeDesfecho} onChange={(e) => setNomeDesfecho(e.target.value)} placeholder="Nome do cliente — confirme ou digite antes de marcar"
+                    style={{ width: "100%", border: "1px solid rgba(127,127,127,.35)", borderRadius: 12, background: "transparent", color: "var(--ink)", font: "inherit", fontSize: 15, padding: "12px 14px" }} />
+                  <p className="disc-lead" style={{ marginTop: 6, fontSize: 12 }}>Com interesse, o lead vai pro seu <b style={{ color: "var(--ink)" }}>Atender</b> (origem Ligação).</p>
+                </div>
+              )}
               <div className="disc-desf" style={{ width: "100%" }}>
                 <Chip cls="ok" k="1" ic={<CalendarCheck size={18} />} t="Agendou visita 🎉" d="Visita confirmada no plantão" onClick={() => marcar("agendou")} />
                 <Chip cls="cy" k="2" ic={<ThumbsUp size={18} />} t="Atendeu com interesse" d="Pediu simulação ou retorno" onClick={() => marcar("interesse")} />
