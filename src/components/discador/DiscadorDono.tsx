@@ -1,7 +1,7 @@
 // Área do Dono do Discador (diretor/super/gerente) — vê as linhas que o admin alocou,
 // mira quem usa (equipe toda / equipe de um gerente / escolher), acompanha indicadores,
 // e configura o rodízio por tempo. Só gerencia o próprio pool; a infra é do admin.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
@@ -29,6 +29,9 @@ export default function DiscadorDono() {
   const { data: corretores } = useQuery({ queryKey: ["disc-cor"], queryFn: async () => { const { data } = await sb.rpc("disc_dono_corretores"); return (data ?? []) as { id: string; nome: string; gerente_id: string; gerente: string; no_pool: boolean }[]; } });
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [selInit, setSelInit] = useState(false);
+  const tocou = useRef(false);
+  const saveTimer = useRef<number | null>(null);
+  const [salvando, setSalvando] = useState<"" | "salvando" | "ok">("");
   useEffect(() => { if (corretores && !selInit) { setSel(new Set(corretores.filter((c) => c.no_pool).map((c) => c.id))); setSelInit(true); } }, [corretores, selInit]);
 
   const ind = data?.ind;
@@ -45,13 +48,24 @@ export default function DiscadorDono() {
     return [...m.values()];
   }, [corretores, busca]);
 
-  const dirty = corretores ? sel.size !== corretores.filter((c) => c.no_pool).length || corretores.some((c) => c.no_pool !== sel.has(c.id)) : false;
-  const toggle = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const marcarGrupo = (cs: { id: string }[], on: boolean) => setSel((s) => { const n = new Set(s); cs.forEach((c) => on ? n.add(c.id) : n.delete(c.id)); return n; });
-
-  async function miraEquipe() { setSel(new Set((corretores ?? []).map((c) => c.id))); await sb.rpc("disc_dono_pool_set", { p_modo: "equipe", p_gerente: null, p_corretores: null }); toast.success("Equipe toda no pool."); recarrega(); }
-  async function salvarSelecao() { const { data: n, error } = await sb.rpc("disc_dono_pool_set", { p_modo: "escolher", p_gerente: null, p_corretores: [...sel] }); if (error) return toast.error(error.message); toast.success(`${n} corretores no pool.`); setSelInit(false); recarrega(); }
+  const toggle = (id: string) => { tocou.current = true; setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; }); };
+  const marcarGrupo = (cs: { id: string }[], on: boolean) => { tocou.current = true; setSel((s) => { const n = new Set(s); cs.forEach((c) => (on ? n.add(c.id) : n.delete(c.id))); return n; }); };
+  function miraEquipe() { tocou.current = true; setSel(new Set((corretores ?? []).map((c) => c.id))); }
+  function limpar() { tocou.current = true; setSel(new Set()); }
   async function setRodizio(min: number | null) { const { error } = await sb.rpc("disc_dono_rodizio", { p_minutos: min ?? 0 }); if (error) return toast.error(error.message); recarrega(); }
+
+  // salva a seleção NA HORA (sem botão) — marcar/desmarcar libera igual ao "Equipe toda"
+  useEffect(() => {
+    if (!tocou.current) return;
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    setSalvando("salvando");
+    saveTimer.current = window.setTimeout(async () => {
+      const { error } = await sb.rpc("disc_dono_pool_set", { p_modo: "escolher", p_gerente: null, p_corretores: [...sel] });
+      if (error) { toast.error(error.message); setSalvando(""); return; }
+      setSalvando("ok"); qc.invalidateQueries({ queryKey: ["disc-cor"] }); qc.invalidateQueries({ queryKey: ["disc-dono"] });
+      window.setTimeout(() => setSalvando(""), 1500);
+    }, 700);
+  }, [sel]);
 
   const rod = data?.rodizio?.minutos ?? null;
 
@@ -101,7 +115,7 @@ export default function DiscadorDono() {
           <div className="ddn-ch">Quem pode usar as linhas <span className="ddn-cnt">{sel.size} marcados</span></div>
           <div className="ddn-mira">
             <button className="ddn-b" onClick={miraEquipe}>Equipe toda</button>
-            <button className="ddn-b2" onClick={() => setSel(new Set())}>Limpar</button>
+            <button className="ddn-b2" onClick={limpar}>Limpar</button>
             <input className="ddn-busca" placeholder="Buscar corretor ou gerente…" value={busca} onChange={(e) => setBusca(e.target.value)} />
           </div>
           <div className="ddn-grps">
@@ -120,7 +134,7 @@ export default function DiscadorDono() {
             })}
             {!grupos.length && <small className="ddn-mut">Nenhum corretor encontrado.</small>}
           </div>
-          <div className="ddn-save"><button className="ddn-b" disabled={!dirty} onClick={salvarSelecao}>{dirty ? `Salvar seleção (${sel.size})` : "Seleção salva"}</button></div>
+          <div className="ddn-save">{salvando === "salvando" ? <span className="ddn-mut">salvando…</span> : salvando === "ok" ? <span style={{ color: "var(--good)", fontSize: 12.5, fontWeight: 700 }}>✓ liberado na hora</span> : <span className="ddn-mut">Marque ou desmarque — libera na hora, sem botão.</span>}</div>
         </div>
 
         {/* RODÍZIO */}
