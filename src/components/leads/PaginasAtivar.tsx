@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import "@/styles/ativar-pagina.css";
+import DistribuirParados from "./DistribuirParados";
 
 /* "Páginas pra ativar" — aparece SÓ quando há página conectada esperando setup
    (sem fila ou com lead represado). Vazio → não renderiza nada (não bagunça a aba).
@@ -15,6 +16,7 @@ type Pag = { page_id: string; page_name: string; dono_email: string; forms: numb
 export default function PaginasAtivar({ como }: { como?: string | null } = {}) {
   const [lista, setLista] = useState<Pag[]>([]);
   const [modal, setModal] = useState<Pag | null>(null);
+  const [distrib, setDistrib] = useState<Pag | null>(null);
 
   async function carregar() {
     const { data, error } = await sb.rpc("paginas_pra_ativar", { p_como: como ?? null });
@@ -41,11 +43,15 @@ export default function PaginasAtivar({ como }: { como?: string | null } = {}) {
                 {p.dono_email ? <span className="c">{nome(p.dono_email)}</span> : null}
               </div>
             </div>
-            <button className="go" onClick={() => setModal(p)}>Ativar</button>
+            <div className="apg-acts">
+              {p.represados > 0 && <button className="go" onClick={() => setDistrib(p)}>Distribuir {p.represados}</button>}
+              <button className={p.represados > 0 ? "go2" : "go"} onClick={() => setModal(p)}>Ativar</button>
+            </div>
           </div>
         ))}
       </div>
       {modal && <Modal pag={modal} onFechar={() => setModal(null)} onPronto={() => { setModal(null); carregar(); }} />}
+      {distrib && <DistribuirParados pag={distrib} onFechar={() => setDistrib(null)} onPronto={() => { setDistrib(null); carregar(); }} />}
     </div>
   );
 }

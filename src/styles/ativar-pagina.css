@@ -18,6 +18,9 @@ html[data-theme="dark"] .apg{--surface:#111d33;--surface-2:#0e1a2e;--line:#23344
 .c.warn{color:var(--warn);background:var(--warn-soft);border-color:transparent}
 .apg-row .go{border:none;background:var(--accent);color:#fff;font:700 12.5px Archivo;padding:9px 15px;border-radius:10px;cursor:pointer;white-space:nowrap}
 .apg-row .go:hover{filter:brightness(1.07)}
+.apg-row .apg-acts{display:flex;gap:7px;flex-wrap:wrap}
+.apg-row .go2{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);font:700 12.5px Archivo;padding:9px 15px;border-radius:10px;cursor:pointer;white-space:nowrap}
+.apg-row .go2:hover{background:var(--surface-2)}
 
 /* modal */
 .apg-ov{position:fixed;inset:0;background:rgba(10,20,36,.55);z-index:80;display:grid;place-items:start center;padding:24px 14px;overflow:auto}
