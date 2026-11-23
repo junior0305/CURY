@@ -198,8 +198,8 @@ export default function DistribuirParados({ pag, onFechar, onPronto }: { pag: Pa
 }
 
 const CSS = `
-.apg-card.dp{width:min(560px,100%)}
-.dp-body{padding:16px 20px;display:flex;flex-direction:column;gap:11px}
+.apg-card.dp{width:min(560px,100%);max-height:calc(100vh - 48px);display:flex;flex-direction:column}
+.dp-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:11px}
 .dp-bl{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:13px 14px}
 .dp-passo{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin:0 0 9px;display:flex;align-items:center;gap:7px}
 .dp-passo i{width:18px;height:18px;border-radius:50%;background:var(--accent);color:#fff;font-style:normal;font-size:10.5px;display:inline-flex;align-items:center;justify-content:center;font-weight:800}
