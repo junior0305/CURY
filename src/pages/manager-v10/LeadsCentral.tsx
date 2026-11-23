@@ -839,10 +839,9 @@ export default function LeadsCentral() {
         pulso(); justica(); carregar("Hoje");
       } catch (e: any) { toast.error(e?.message || "Não consegui direcionar os sem dono."); }
     };
-    // Baixar CSV dos leads do período escolhido (gerente e super) — mesmo RPC do painel do super
-    (window as any).__baixarCsvLeads = async () => {
+    // Gera o CSV de um período (independente do que está na tela)
+    const gerarCsv = async (de: string, ate: string) => {
       try {
-        const [de, ate] = faixa(periodoRef.current || "Hoje");
         const { data, error } = await sb.rpc("leads_origem", { p_como: scopeManager || null, p_de: de, p_ate: ate });
         if (error) throw error;
         const ls = ((data as any)?.leads ?? []) as any[];
@@ -858,6 +857,34 @@ export default function LeadsCentral() {
         setTimeout(() => URL.revokeObjectURL(url), 2000);
         toast.success(`${ls.length} leads no CSV (${de} a ${ate}).`);
       } catch (e: any) { toast.error(e?.message || "Não consegui gerar o CSV."); }
+    };
+    // Botão "Baixar CSV": abre um seletor de datas PRÓPRIO (não mexe no período da tela)
+    (window as any).__baixarCsvLeads = () => {
+      const [pde, pate] = faixa(periodoRef.current || "Hoje");   // só pré-preenche com o da tela
+      const host = box.current || document.body;
+      const ov = document.createElement("div");
+      ov.style.cssText = "position:fixed;inset:0;background:rgba(10,20,36,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px";
+      ov.innerHTML = `<div style="background:var(--surface,#fff);color:var(--text-main,#132338);border-radius:16px;max-width:380px;width:100%;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:inherit">
+        <h3 style="margin:0 0 4px;font-size:16px;font-weight:800">⬇ Baixar leads em CSV</h3>
+        <p style="margin:0 0 14px;font-size:12.5px;color:var(--text-soft,#5d6b80)">Escolha o período só do arquivo. <b>Não muda</b> o que está na tela.</p>
+        <label style="display:block;font-size:12px;font-weight:700;color:var(--text-soft,#5d6b80);margin-bottom:4px">De</label>
+        <input id="__csv_de" type="date" value="${pde}" style="width:100%;box-sizing:border-box;border:1px solid var(--border,#dce3ec);background:var(--surface,#fff);color:var(--text-main,#132338);border-radius:9px;padding:9px 11px;font:inherit;margin-bottom:10px">
+        <label style="display:block;font-size:12px;font-weight:700;color:var(--text-soft,#5d6b80);margin-bottom:4px">Até</label>
+        <input id="__csv_ate" type="date" value="${pate}" style="width:100%;box-sizing:border-box;border:1px solid var(--border,#dce3ec);background:var(--surface,#fff);color:var(--text-main,#132338);border-radius:9px;padding:9px 11px;font:inherit;margin-bottom:16px">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button id="__csv_cancel" style="border:1px solid var(--border,#dce3ec);background:var(--surface,#fff);color:var(--text-soft,#3a4a63);font:inherit;font-weight:700;padding:9px 14px;border-radius:9px;cursor:pointer">Cancelar</button>
+          <button id="__csv_ok" style="border:0;background:var(--accent,#1766d6);color:#fff;font:inherit;font-weight:800;padding:9px 16px;border-radius:9px;cursor:pointer">Baixar CSV</button>
+        </div></div>`;
+      host.appendChild(ov);
+      const fechar = () => ov.remove();
+      ov.addEventListener("click", (e) => { if (e.target === ov) fechar(); });
+      (ov.querySelector("#__csv_cancel") as HTMLElement).onclick = fechar;
+      (ov.querySelector("#__csv_ok") as HTMLElement).onclick = async () => {
+        const de = (ov.querySelector("#__csv_de") as HTMLInputElement).value;
+        const ate = (ov.querySelector("#__csv_ate") as HTMLInputElement).value;
+        if (!de || !ate || de > ate) { toast.error("Escolha De e Até (De não pode ser depois de Até)."); return; }
+        fechar(); await gerarCsv(de, ate);
+      };
     };
     return () => { try { delete (window as any).__soltarRepresados; delete (window as any).__direcionarSemDono; delete (window as any).__baixarCsvLeads; } catch { /* ok */ } };
   }, [manParam, scopeManager, pulso, justica, carregar]);
