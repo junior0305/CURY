@@ -15,6 +15,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/contexts/ThemeContext";
 import { loadFonts, RailV10 } from "@/components/manager-v10/RailV10";
 import ReguaEquipe from "@/components/regua/ReguaEquipe";
+import AvisoCandidato from "@/components/recrutamento/AvisoCandidato";
 import DesligarCorretor from "@/components/manager-v10/DesligarCorretor";
 import DesligarGerente from "@/components/equipe/DesligarGerente";
 import { TrocarEquipe, CarteirasPendentes } from "@/components/equipe/TrocaEquipe";
@@ -75,7 +76,7 @@ export default function Configuracoes({ nivel, donoId }: { nivel: Nivel; donoId:
         ))}
       </nav>
       <section className="cfg-corpo">
-        {secaoOk === "avisos" ? <ReguaEquipe nivel={nivel} donoId={donoId} />
+        {secaoOk === "avisos" ? <>{nivel === "diretor" ? <AvisoCandidato /> : null}<ReguaEquipe nivel={nivel} donoId={donoId} /></>
           : secaoOk === "equipe" ? <Equipe nivel={nivel} donoId={donoId} />
           : secaoOk === "plantoes" ? <><RegraPlantao como={donoId} /><div style={{ height: 22 }} /><PlantoesCadastro como={donoId} /></>
           : secaoOk === "base" ? <BaseContatos donoId={donoId} />

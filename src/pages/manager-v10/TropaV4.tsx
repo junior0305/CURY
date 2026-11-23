@@ -5,7 +5,7 @@
 // SLA MÉDIO por corretor e WoW NÃO entram ainda (sem fonte) — ficam de fora, nada inventado.
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
@@ -42,7 +42,11 @@ export default function TropaV4() {
   const gerente = useEffectiveManagerId() ?? session?.user?.id ?? "";
   const [ft, setFt] = useState<FT>("todos");
   const [ocupado, setOcupado] = useState<string | null>(null);
-  const [modo, setModo] = useState<"plantao" | "contratacao" | "gestao" | "rendimento">("plantao");
+  const [sp] = useSearchParams();
+  const modoUrl = sp.get("modo");
+  const [modo, setModo] = useState<"plantao" | "contratacao" | "gestao" | "rendimento">(
+    modoUrl === "contratacao" || modoUrl === "gestao" || modoUrl === "rendimento" ? modoUrl : "plantao"
+  );
   const como = gerente !== session?.user?.id ? gerente : null;
   loadFonts();
 
