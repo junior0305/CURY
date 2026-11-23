@@ -53,6 +53,7 @@ export default function FechamentoAcelerador({ podeSubir = true }: { podeSubir?:
   const [d, setD] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [subindo, setSubindo] = useState(false);
+  const [indisponivel, setIndisponivel] = useState(false); // banco sem o motor de Fechamento (ex.: planoego) → some
   const fileRef = useRef<HTMLInputElement>(null);
   const [de, ate] = useMemo(() => janela(periodo), [periodo]);
 
@@ -60,7 +61,11 @@ export default function FechamentoAcelerador({ podeSubir = true }: { podeSubir?:
     setCarregando(true);
     const { data, error } = await sb.rpc("fechamento_painel", { p_de: de, p_ate: ate, p_diretor: dir, p_gerente: ger, p_etapa: etapaSel });
     setCarregando(false);
-    if (error) { toast.error("Não consegui ler o painel: " + error.message); return; }
+    if (error) {
+      // Motor de Fechamento não existe neste banco (planoego): some sem erro.
+      if ((error as any).code === "PGRST202" || /Could not find the function|schema cache/i.test(error.message)) { setIndisponivel(true); return; }
+      toast.error("Não consegui ler o painel: " + error.message); return;
+    }
     setD(data);
   }
   useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [de, ate, dir, ger, etapaSel]);
@@ -132,6 +137,8 @@ export default function FechamentoAcelerador({ podeSubir = true }: { podeSubir?:
 
   const etSel = porEtapa.find((e) => e.ordem === etapaSel);
   const nivelLabel = nivel === "diretor" ? "superintendências · clique p/ ver gerências" : nivel === "gerente" ? "gerências · clique p/ ver corretores" : "corretores desta gerência";
+
+  if (indisponivel) return null;
 
   return (
     <div className="fech">
