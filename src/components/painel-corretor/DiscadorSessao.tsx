@@ -120,6 +120,8 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
   const esperaTimer = useRef<number | null>(null);
   const [aguardando, setAguardando] = useState(false);
   const [qtdLinhas, setQtdLinhas] = useState(1);
+  const [espInfo, setEspInfo] = useState<{ posicao?: number; rodizio?: number | null }>({});
+  const [cederInfo, setCederInfo] = useState<{ esperando: number; prazo?: string; quem?: string; ceder?: boolean } | null>(null);
   const engine = useMemo(() => new WebRTCDialerEngine(async () => {
     const c = cfgRef.current; if (!c) throw new Error("sem linha"); return c;
   }), []);
@@ -261,15 +263,23 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
       const d = data as any;
       if (d?.total) setQtdLinhas(d.total);   // nº real de linhas da equipe (p/ a mensagem de espera)
       if (error || !d || d.esperar || !d.linha_id) {   // linhas ocupadas → espera e tenta de novo
+        if (d?.esperar) setEspInfo({ posicao: d.posicao, rodizio: d.rodizio_min });
         setAguardando(true);
         esperaTimer.current = window.setTimeout(tentarLinhaEComecar, 5000);
         return;
       }
-      pararEspera(); setAguardando(false);
+      pararEspera(); setAguardando(false); setEspInfo({});
       linhaIdRef.current = d.linha_id;
       cfgRef.current = { server: d.server, domain: d.domain, user: d.user, password: d.password };
       try { await (engine as any).destruir?.(); } catch { /* */ }   // re-registra com a credencial da linha emprestada
-      hbTimer.current = window.setInterval(() => { const id = linhaIdRef.current; if (id) supabase.rpc("discador_linha_heartbeat", { p_linha: id }).catch(() => {}); }, 25000);
+      hbTimer.current = window.setInterval(async () => {
+        const id = linhaIdRef.current; if (!id) return;
+        try {
+          const { data } = await supabase.rpc("discador_linha_heartbeat", { p_linha: id });
+          const h = data as any;
+          if (h && h.ok) { setCederInfo(h.esperando > 0 ? h : null); if (h.ceder) cederAgora(); }
+        } catch { /* */ }
+      }, 25000);
       sessaoRef.current = true;
       proximo();
     } catch {
@@ -277,7 +287,15 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
       esperaTimer.current = window.setTimeout(tentarLinhaEComecar, 5000);
     }
   }
-  function cancelarEspera() { pararEspera(); setAguardando(false); }
+  function cancelarEspera() { pararEspera(); setAguardando(false); setEspInfo({}); supabase.rpc("discador_espera_sair").catch(() => {}); }
+
+  // RODÍZIO: o dono da linha passa pro próximo da fila (tempo acabou ou "passar agora")
+  async function cederAgora() {
+    setCederInfo(null);
+    toast("Passando a linha pro colega da fila.");
+    await desligar();        // encerra a chamada e vai pro desfecho
+    await soltarLinha();     // libera a linha → o próximo da fila pega
+  }
 
   function iniciar() {
     setConfirmando(false);
@@ -412,6 +430,13 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
         <div className="disc-glass disc-palco">
           <div className="disc-ambient" style={{ background: ambientCor }} />
 
+          {cederInfo && (fase === "conectado" || fase === "discando") && (
+            <div style={{ position: "relative", zIndex: 3, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "color-mix(in srgb,var(--am) 16%,transparent)", border: "1px solid color-mix(in srgb,var(--am) 35%,transparent)", borderRadius: 12, padding: "9px 12px", margin: "0 0 10px", fontSize: 13 }}>
+              <span>⏳ <b>{cederInfo.quem}</b> está esperando a linha{cederInfo.prazo ? <> — você passa às <b>{new Date(cederInfo.prazo).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</b></> : ""}.</span>
+              <button className="disc-ghost" style={{ marginLeft: "auto", padding: "6px 12px" }} onClick={cederAgora}>Passar agora</button>
+            </div>
+          )}
+
           {/* IDLE */}
           {fase === "idle" && (
             <div className="disc-stage">
@@ -422,6 +447,7 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
                     <span className="disc-badge">Fila de linha</span>
                     <h2 className="disc-h2" style={{ marginTop: 10 }}>{qtdLinhas === 1 ? "A linha está em uso" : `As ${qtdLinhas} linhas estão em uso`}</h2>
                     <p className="disc-lead" style={{ marginTop: 8 }}>Sua equipe liga em <b style={{ color: "var(--ink)" }}>{qtdLinhas} ao mesmo tempo</b>. Assim que {qtdLinhas === 1 ? "ela" : "uma"} liberar, você entra automático e começa a discar. Pode deixar aberto nesta tela.</p>
+                    {espInfo.posicao ? <p className="disc-lead" style={{ marginTop: 6 }}>Você é o <b style={{ color: "var(--ink)" }}>{espInfo.posicao}º</b> da fila{espInfo.rodizio ? <> · pelo rodízio, a linha libera em até <b style={{ color: "var(--ink)" }}>{espInfo.rodizio} min</b></> : ""}.</p> : null}
                   </div>
                   <button className="disc-ghost" onClick={cancelarEspera}><Square size={16} /> Cancelar</button>
                 </>
