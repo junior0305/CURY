@@ -478,7 +478,7 @@ function Hoje({ diretorId, supers, total, cons, carregandoCons, plantaoHojeTotal
       acoes: [["Ver pastas", () => irPara("pastas")]]
     });
   }
-  const atrasadasPlano = (planosMes ?? []).flatMap((p) => p.acoes.filter(atrasada));
+  const atrasadasPlano = (planosMes ?? []).flatMap((p) => (p.acoes ?? []).filter(atrasada));
   if (atrasadasPlano.length) {
     decs.push({
       id: "plano-atrasado",
