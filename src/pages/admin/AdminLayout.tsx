@@ -70,6 +70,7 @@ import WppOficial from "./WppOficial";
 import IntegracaoFacebook from "./IntegracaoFacebook";
 import AudioSettings from "@/components/admin/AudioSettings";
 import SistemaControl from "@/components/admin/SistemaControl";
+import DiscadorAdmin from "@/components/config/DiscadorAdmin";
 import Agentes from "./Agentes";
 import LeadDistribution from "@/components/admin/LeadDistribution";
 import Inteligencia from "./Inteligencia";
@@ -148,6 +149,7 @@ const GROUPS = [
       { value: "webhooks", label: "Webhooks",     roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "sons",     label: "Arena Sonora", roles: ["ADMIN", "SUPERINTENDENT"] },
       { value: "monitor",  label: "Sistema",      roles: ["ADMIN", "SUPERINTENDENT"] },
+      { value: "discador", label: "Discador",     roles: ["ADMIN"] },
     ],
   },
   {
@@ -498,10 +500,12 @@ function AdminLayoutInner() {
             { v: "webhooks", l: "Webhooks",     roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "sons",     l: "Arena Sonora", roles: ["ADMIN","SUPERINTENDENT"] },
             { v: "monitor",  l: "Sistema",      roles: ["ADMIN","SUPERINTENDENT"] },
+            { v: "discador", l: "Discador",     roles: ["ADMIN"] },
           ]} role={gateRole}>
             <TabsContent value="webhooks"><Webhooks /></TabsContent>
             <TabsContent value="sons" className="p-6"><AudioSettings /></TabsContent>
             <TabsContent value="monitor" className="p-6"><SistemaControl /></TabsContent>
+            <TabsContent value="discador" className="p-6"><DiscadorAdmin /></TabsContent>
           </SubTabs>
         )}
 
