@@ -724,20 +724,23 @@ export async function mandarMensagem(
    Uma fila por gerente, reaproveitada a cada disparo. É ela que o wa-webhook
    consulta quando alguém responde: sem fila, a resposta não vira lead de
    ninguém — que é como 44 pessoas responderam e nenhuma foi atendida.        */
-async function filaDoGerente(managerId: string, brokerIds: string[]) {
+async function filaDoGerente(managerId: string, brokerIds: string[], manual: boolean) {
   const nome = `DISPARO_${managerId.slice(0, 8).toUpperCase()}`;
+  // Corretores escolhidos na mão => a resposta vai para TODOS os escolhidos,
+  // esteja ou não no plantão/roleta (ignora_plantao). Escolha "plantão" =>
+  // respeita o plantão (ignora_plantao false). Regra do Junior (24/11).
   const { data: existe } = await supabase.from("distribution_queues")
     .select("id").eq("name", nome).maybeSingle();
   if (existe) {
     await supabase.from("distribution_queues")
-      .update({ broker_ids: brokerIds, is_active: true }).eq("id", existe.id);
+      .update({ broker_ids: brokerIds, is_active: true, ignora_plantao: manual }).eq("id", existe.id);
     return existe.id as string;
   }
   const { data, error } = await supabase.from("distribution_queues").insert({
     // "campaign", em ingles: e a chave que o incoming-lead conhece. Escrito
     // "campanha" a fila nunca casava, o lead caia no FALLBACK e nascia sem dono.
     name: nome, match_field: "campaign", match_value: nome,
-    broker_ids: brokerIds, is_active: true, last_assigned_index: 0,
+    broker_ids: brokerIds, is_active: true, last_assigned_index: 0, ignora_plantao: manual,
   }).select("id").single();
   if (error) throw error;
   return data.id as string;
@@ -763,7 +766,7 @@ export async function dispararCampanha(opts: {
   kind?: "lead" | "outro";
 }) {
   if (!opts.alvos.length) throw new Error("Nenhuma pessoa na seleção.");
-  const queueId = await filaDoGerente(opts.managerId, opts.brokerIds);
+  const queueId = await filaDoGerente(opts.managerId, opts.brokerIds, opts.manual === true);
 
   // Nome com o GERENTE no fim: "simulacao · 17/09 · Liliane". Sem isso, dois
   // gerentes disparando o mesmo template criam campanhas de nome idêntico e
