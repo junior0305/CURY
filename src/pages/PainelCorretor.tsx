@@ -23,6 +23,7 @@ import type { Task } from "@/types/task";
 import Ficha from "@/components/painel-corretor/Ficha";
 import Pescar from "@/components/painel-corretor/Pescar";
 import AvisoLeadPush from "@/components/painel-corretor/AvisoLeadPush";
+import BrindeLead from "@/components/painel-corretor/BrindeLead";
 import MeuPlacar from "@/components/painel-corretor/MeuPlacar";
 import InicioCorretor from "@/components/painel-corretor/InicioCorretor";
 import CheckinAviso from "@/components/painel-corretor/CheckinAviso";
@@ -287,10 +288,11 @@ export default function PainelCorretor() {
 
   // Notebook/desktop: o painel de sempre (CorretorPainel), no padrão do antigo — pedido do Junior (30/10).
   // O painel novo é o do celular.
-  if (desk) return <CorretorPainel />;
+  if (desk) return <><BrindeLead uid={uid} /><CorretorPainel /></>;
 
   return (
     <div className={`pc${claro ? " claro" : ""}`}>
+      <BrindeLead uid={uid} />
       <CheckinAviso uid={uid} c={{ titulo: "lbl", meta: "meta", btn: "btn", pri: "btn pri", inp: "inp" }} />
       <div className={`pc-app${desk ? " desk" : ""}`}>
         <div className={`pc-col${desk && !["hoje", "cli"].includes(aba) ? " wide" : ""}`}>
