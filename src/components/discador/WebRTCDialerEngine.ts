@@ -106,6 +106,9 @@ export class WebRTCDialerEngine implements DialerEngine {
         onServerDisconnect: () => cb.onStatus("failed"),
       };
 
+      // encerra qualquer sessão anterior que tenha ficado pendente (toque não atendido),
+      // senão a próxima ligação falha por "já existe chamada". Teto de 1,2s pra não travar.
+      await Promise.race([this.simple.hangup().catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
       cb.onStatus("ringing");
       await this.simple.call(alvo, {
         // peça áudio apenas (sem vídeo)

@@ -213,7 +213,9 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
     limparTimers();
     const pa = poolAtualRef.current;
     if (fonteRef.current === "pool" && pa) supabase.rpc("discador_ligou", { p_id: pa.id, p_resultado: "nao_atendeu", p_duracao: 0 }).catch(() => {});
-    await engine.hangup().catch(() => {});
+    // hangup num toque (chamada não atendida) às vezes não resolve e travava o avanço.
+    // Corre com um teto de 1,5s: desliga se der, mas segue pro próximo de qualquer jeito.
+    await Promise.race([engine.hangup().catch(() => {}), new Promise((r) => setTimeout(r, 1500))]);
     setFase("discando");
     window.setTimeout(() => proximo(), 450);
   }
@@ -221,7 +223,7 @@ function Dialer({ fila, uid, config, poolMembro, brokerNome, licencaPropria }: {
   async function desligar() {
     limparTimers();
     setStats((p) => ({ ...p, falado: p.falado + seconds }));
-    await engine.hangup().catch(() => {});
+    await Promise.race([engine.hangup().catch(() => {}), new Promise((r) => setTimeout(r, 1500))]);
     if (atual || poolAtual) setFase("desfecho");
     else encerrar();
   }
