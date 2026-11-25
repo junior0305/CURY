@@ -24,6 +24,7 @@ export default function RegraPlantao({ como }: { como: string | null }) {
   const [modo, setModo] = useState<"login" | "sorteio">("login");
   const [represa, setRepresa] = useState(false);
   const [exige, setExige] = useState(false);
+  const [libRoletas, setLibRoletas] = useState<"ambas" | "manha" | "tarde">("ambas");
   const [liberacao, setLiberacao] = useState<"auto" | "manual">("auto");
   const [temR2, setTemR2] = useState(false);
   const [r2abre, setR2abre] = useState("14:00");
@@ -36,6 +37,7 @@ export default function RegraPlantao({ como }: { como: string | null }) {
     setModo(data.roleta_modo === "sorteio" ? "sorteio" : "login");
     setRepresa(!!data.represa_on);
     setExige(!!data.exige_liberacao);
+    setLibRoletas(data.liberacao_roletas === "manha" ? "manha" : data.liberacao_roletas === "tarde" ? "tarde" : "ambas");
     setLiberacao(data.liberacao === "manual" ? "manual" : "auto");
     setTemR2(!!data.tem_roleta2);
     setR2abre(data.roleta2_abre || "14:00");
@@ -47,7 +49,7 @@ export default function RegraPlantao({ como }: { como: string | null }) {
 
   async function salvar() {
     setSaving(true);
-    const { error } = await sb.rpc("plantao_config_salvar", { p_exige: exige, p_como: como, p_abre: abre || "09:00", p_modo: modo, p_represa: represa, p_liberacao: liberacao, p_r2: temR2, p_r2abre: r2abre || "14:00", p_r2modo: r2modo });
+    const { error } = await sb.rpc("plantao_config_salvar", { p_exige: exige, p_como: como, p_abre: abre || "09:00", p_modo: modo, p_represa: represa, p_liberacao: liberacao, p_lib_roletas: libRoletas, p_r2: temR2, p_r2abre: r2abre || "14:00", p_r2modo: r2modo });
     setSaving(false);
     if (error) {
       const m = String(error.message || "");
@@ -116,6 +118,21 @@ export default function RegraPlantao({ como }: { como: string | null }) {
           <div className={"rp-tg" + (exige ? " on" : "")} onClick={() => setExige(!exige)} />
         </div>
         {exige && <div className="rp-sub">Entra como <b>“aguardando”</b> (não recebe). Você admite e ele vai <b>pro fim da fila</b> — sem furar quem já estava.</div>}
+        {exige && temR2 && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px dashed var(--line)" }}>
+            <b style={{ fontSize: "13px", display: "block", marginBottom: 8 }}>Em quais roletas vale a liberação?</b>
+            <div className="rp-chips">
+              {([["ambas", "Nas duas"], ["manha", "Só na manhã"], ["tarde", "Só na tarde"]] as const).map(([v, t]) => (
+                <button key={v} className={"rp-chip" + (libRoletas === v ? " on" : "")} onClick={() => setLibRoletas(v)}>{t}</button>
+              ))}
+            </div>
+            <div className="rp-sub" style={{ marginTop: 10 }}>
+              {libRoletas === "ambas" ? <>Quem chega depois do sorteio — <b>na manhã ou na tarde</b> — espera você liberar.</>
+                : libRoletas === "manha" ? <>Só na <b>manhã</b>: atrasado da manhã espera; na <b>tarde</b> entra direto no fim.</>
+                : <>Só na <b>tarde</b>: atrasado da manhã entra direto no fim; na <b>tarde</b> espera você liberar.</>}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* roleta 2 (tarde) */}
@@ -146,7 +163,7 @@ export default function RegraPlantao({ como }: { como: string | null }) {
       </div>
 
       {/* resumo */}
-      <div className="rp-resumo"><div className="rp-ri"><Sparkles size={20} /></div><div className="rp-rt"><b>Resumo</b><p>Abre <span>{abre}</span> · distribui <span>{modoTxt}</span>{represa ? (liberacao === "manual" ? <> · <span>segurando tudo</span> (<span>você solta</span>)</> : <> · <span>segurando</span> até abrir / sem ninguém logado (<span>solta sozinho</span>)</>) : <> · <span>sem represa</span> (cai na hora)</>}{exige ? " · atrasado precisa de liberação." : " · atrasado entra direto no fim."}{temR2 ? <> · <span>2ª roleta {r2abre}</span> ({r2modo === "sorteio" ? "sorteio" : "chegada"})</> : ""}</p></div></div>
+      <div className="rp-resumo"><div className="rp-ri"><Sparkles size={20} /></div><div className="rp-rt"><b>Resumo</b><p>Abre <span>{abre}</span> · distribui <span>{modoTxt}</span>{represa ? (liberacao === "manual" ? <> · <span>segurando tudo</span> (<span>você solta</span>)</> : <> · <span>segurando</span> até abrir / sem ninguém logado (<span>solta sozinho</span>)</>) : <> · <span>sem represa</span> (cai na hora)</>}{exige ? (temR2 ? ` · atrasado precisa de liberação (${libRoletas === "ambas" ? "nas duas roletas" : libRoletas === "manha" ? "só manhã" : "só tarde"}).` : " · atrasado precisa de liberação.") : " · atrasado entra direto no fim."}{temR2 ? <> · <span>2ª roleta {r2abre}</span> ({r2modo === "sorteio" ? "sorteio" : "chegada"})</> : ""}</p></div></div>
 
       <div className="rp-salvar"><button className="rp-b1" onClick={salvar} disabled={saving}>{saving ? "Salvando…" : "Salvar regra da equipe"}</button></div>
       <p style={{ fontSize: "11.5px", color: "var(--mut)", marginTop: 10, lineHeight: 1.5, maxWidth: 720 }}>A regra vale pra <b>sua equipe</b>. A tela de ordem/ponteiro (quem é a vez) e o motor que distribui por essa regra entram na sequência.</p>
