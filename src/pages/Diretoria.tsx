@@ -21,6 +21,7 @@ import BiTab from "@/components/manager-v10/BiTab";
 import AnunciosSaude from "@/components/diretoria/AnunciosSaude";
 import PastasPainel from "@/components/diretoria/PastasPainel";
 import FechamentoAcelerador from "@/components/fechamento/FechamentoAcelerador";
+import VisitasDiretoria from "@/components/diretoria/VisitasDiretoria";
 import PaginasAtivar from "@/components/leads/PaginasAtivar";
 import { lerPastas, resumoPastas } from "@/components/diretoria/pastasAnalise";
 import { usePlanos, atrasada } from "@/hooks/usePlano";
@@ -182,6 +183,7 @@ export default function Diretoria() {
               carregandoCons={carregandoCons} plantaoHojeTotal={dir.plantaoHojeTotal} cobrancas={dir.cobrancas} pastas={dir.pastas}
               irPara={(a, k) => { setAba(a); if (k) setAberto((v) => ({ ...v, [k]: true })); }} abrirPainel={abrirPainel} />}
             {aba === "equipes" && <>
+              <VisitasDiretoria />
               <EquipeTopo donoId={diretorId ?? undefined} />
               <EquipesCards diretorId={diretorId!} supers={supers} linhasDoSuper={linhasDoSuper} dias={dias} carregandoCons={carregandoCons} abrirPainel={abrirPainel} />
               <button className="dir-btn" style={{ alignSelf: "flex-start" }} onClick={() => tog("tabela-equipes")}>
