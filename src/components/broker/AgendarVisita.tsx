@@ -71,6 +71,8 @@ export default function AgendarVisita({ leadId, nome, brokerId, onFechar, onFeit
       const quando = new Date(`${dia}T${h}:00-03:00`).toISOString();
       const { error } = await sb.from("leads").update({
         status: "VISIT_SCHEDULED", visit_scheduled_at: quando, visita_local: local.trim() || null, visita_confirmada: false,
+        // a visita vira o próximo passo: limpa retorno/tarefa pendente pra não virar "tarefa de hoje" fantasma
+        next_action_date: null,
         visit_vespera_sent_at: null, visit_dia_sent_at: null, last_interaction_at: new Date().toISOString(),
       }).eq("id", leadId);
       if (error) throw error;
