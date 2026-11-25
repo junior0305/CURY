@@ -142,7 +142,23 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
   // diretor/admin olham o placar da diretoria: sem a venda de antes de uma super entrar (junix_vendas.fora_do_placar)
   const { role } = useAuth();
   const placar = role === "DIRECTOR" || role === "ADMIN";
-  const [dias, setDias] = useState(30);
+  const [per, setPer] = useState<"hoje" | "ontem" | "sem" | "mes" | "custom">("mes");
+  const [cDe, setCDe] = useState(() => new Date(Date.now() - 3 * 36e5 - 6 * 864e5).toISOString().slice(0, 10));
+  const [cAte, setCAte] = useState(() => new Date(Date.now() - 3 * 36e5).toISOString().slice(0, 10));
+  const rng = useMemo(() => {
+    const spMs = Date.now() - 3 * 36e5;
+    const ymd = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+    const hoje = ymd(spMs);
+    let desde = hoje, ate = hoje;
+    if (per === "ontem") { desde = ymd(spMs - 864e5); ate = desde; }
+    else if (per === "sem") { const dow = (new Date(spMs).getUTCDay() + 6) % 7; desde = ymd(spMs - dow * 864e5); ate = hoje; }
+    else if (per === "mes") { desde = hoje.slice(0, 8) + "01"; ate = hoje; }
+    else if (per === "custom") { desde = cDe <= cAte ? cDe : cAte; ate = cDe <= cAte ? cAte : cDe; }
+    const nDias = Math.round((Date.parse(ate) - Date.parse(desde)) / 864e5) + 1;
+    const label = per === "hoje" ? "Hoje" : per === "ontem" ? "Ontem" : per === "sem" ? "Esta semana" : per === "mes" ? "Este mês" : `${desde.split("-").reverse().slice(0, 2).join("/")}–${ate.split("-").reverse().slice(0, 2).join("/")}`;
+    return { desde, ate, antDe: ymd(Date.parse(desde) - nDias * 864e5), antAte: ymd(Date.parse(desde) - 864e5), nDias, hoje, label };
+  }, [per, cDe, cAte]);
+  const dias = rng.nDias;
   const [screen, setScreen] = useState(1);
   const [nivel, setNivel] = useState<Nivel>("gerente");
   const [busca, setBusca] = useState("");
@@ -151,7 +167,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
   // B.I. da DIRETORIA (empresa inteira): informação COMPARTILHADA — todo gerente/super
   // vê o mesmo consolidado, não filtrado por equipe. p_manager sempre null → toda a diretoria.
   const { data, isLoading } = useQuery({
-    queryKey: ["biFechamento", dias],
+    queryKey: ["biFechamento", dias, per],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("bi_fechamento", { p_dias: dias, p_escopo: "diretoria", p_manager: null });
       if (error) throw error;
@@ -162,12 +178,11 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
   // VENDAS = Junix (ImobFlow), venda a venda com VGV real — espelhado em junix_vendas
   // pelo /root/junix/vendas.py. Só gestor lê (a linha traz comissão de todos os níveis).
   const { data: vendasJunix = [] } = useQuery({
-    queryKey: ["junixVendas", dias, placar],
+    queryKey: ["junixVendas", rng.desde, rng.ate, placar],
     queryFn: async () => {
-      const desde = new Date(Date.now() - 3 * 3600 * 1000 - (dias - 1) * 86400000).toISOString().slice(0, 10);
       const { data, error } = await supabase.from("junix_vendas" as any)
         .select("oc, empreendimento, bloco, unidade, fase, data_contrato, data_venda, diretor, superintendente, gerente, corretor, vgv, qtd, sinal_status")
-        .eq("ativo", true).in("fora_do_placar", placar ? [false] : [false, true]).gte("data_venda", desde).order("data_venda", { ascending: false });
+        .eq("ativo", true).in("fora_do_placar", placar ? [false] : [false, true]).gte("data_venda", rng.desde).lte("data_venda", rng.ate).order("data_venda", { ascending: false });
       if (error) throw error;
       return (data || []) as any[];
     },
@@ -176,19 +191,19 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
   // check-in, então filtra pela diretoria do token (a mesma que o Junix enxerga).
   const DIRETORIA_C2S = empresa().diretoria_c2s;
   const { data: op } = useQuery({
-    queryKey: ["biOperacaoEcon", dias],
+    queryKey: ["biOperacaoEcon", rng.desde, rng.ate],
     queryFn: async () => {
-      const desde = new Date(Date.now() - 3 * 3600 * 1000 - (dias - 1) * 86400000).toISOString().slice(0, 10);
+      const desde = rng.desde;
       const plantao: any[] = [];
       for (let from = 0; ; from += 1000) {
         const { data, error } = await supabase.from("c2s_plantao" as any).select("dia, corretor, gerente")
-          .eq("diretor", DIRETORIA_C2S).gte("dia", desde).range(from, from + 999);
+          .eq("diretor", DIRETORIA_C2S).gte("dia", desde).lte("dia", rng.ate).range(from, from + 999);
         if (error) throw error;
         plantao.push(...(data || []));
         if (!data || data.length < 1000) break;
       }
       const { data: vis } = await supabase.from("c2s_checkins" as any).select("corretor, visit_type")
-        .eq("diretor", DIRETORIA_C2S).gte("created_at", desde + "T03:00:00Z");
+        .eq("diretor", DIRETORIA_C2S).gte("created_at", desde + "T03:00:00Z").lt("created_at", new Date(Date.parse(rng.ate + "T03:00:00Z") + 864e5).toISOString());
       const visitasRows = (vis || []) as any[];
       const { data: pastas } = await supabase.from("junix_pastas" as any).select("etapa, etapa_ordem");
       // gerente que bate check-in no proprio nome (ex.: "JAGUAR" na equipe do Jaguar) nao conta como corretor
@@ -262,11 +277,11 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
   const maxRank = Math.max(1, ...rankEcon.map((l) => (ordem === "vgv" ? l.vgv : ordem === "checkins" ? l.checkins : l.visitas)));
 
   const { data: ant } = useQuery({
-    queryKey: ["biAnteriorEcon", dias, placar],
+    queryKey: ["biAnteriorEcon", rng.antDe, rng.antAte, placar],
     queryFn: async () => {
-      const ms = 86400000, agora = Date.now() - 3 * 3600 * 1000;
-      const ate = new Date(agora - dias * ms).toISOString().slice(0, 10);          // último dia do anterior
-      const de = new Date(agora - (2 * dias - 1) * ms).toISOString().slice(0, 10);  // primeiro dia do anterior
+      const ms = 86400000;
+      const ate = rng.antAte;  // último dia do período anterior
+      const de = rng.antDe;    // primeiro dia do período anterior
       const { data: vs } = await supabase.from("junix_vendas" as any).select("vgv, qtd")
         .eq("ativo", true).in("fora_do_placar", placar ? [false] : [false, true]).gte("data_venda", de).lte("data_venda", ate);
       const plantao: any[] = [];
@@ -349,19 +364,27 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                 <div className="hero-title-block">
                   <h1>Fechamento &amp; Comparativo — Vendas × Visitas × Documentos</h1>
                   <span className="hero-filter-badge">
-                    DIRETORIA (visão compartilhada) · {nf(porGerenteEcon.length)} Gerentes · {nf(porCorretorEcon.length)} Corretores · Últimos {dias} dias
+                    DIRETORIA (visão compartilhada) · {nf(porGerenteEcon.length)} Gerentes · {nf(porCorretorEcon.length)} Corretores · {rng.label}
                   </span>
                 </div>
               </div>
               <div className="hero-controls">
                 <div className="hc-box">
                   <label>Período</label>
-                  <select value={dias} onChange={(e) => setDias(Number(e.target.value))}>
-                    <option value={1}>Hoje</option>
-                    <option value={7}>Semana (7 dias)</option>
-                    <option value={30}>Mês (30 dias)</option>
+                  <select value={per} onChange={(e) => setPer(e.target.value as any)}>
+                    <option value="hoje">Hoje</option>
+                    <option value="ontem">Ontem</option>
+                    <option value="sem">Esta semana</option>
+                    <option value="mes">Este mês</option>
+                    <option value="custom">Escolher data…</option>
                   </select>
                 </div>
+                {per === "custom" && (
+                  <div className="hc-box" style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
+                    <div><label>De</label><input type="date" value={cDe} max={rng.hoje} onChange={(e) => e.target.value && setCDe(e.target.value)} style={{ background: "var(--bi-navy)", color: "#fff", border: "1px solid var(--bi-navy3)", borderRadius: 5, padding: "3px 5px", fontSize: 11.5, colorScheme: "dark" }} /></div>
+                    <div><label>Até</label><input type="date" value={cAte} max={rng.hoje} onChange={(e) => e.target.value && setCAte(e.target.value)} style={{ background: "var(--bi-navy)", color: "#fff", border: "1px solid var(--bi-navy3)", borderRadius: 5, padding: "3px 5px", fontSize: 11.5, colorScheme: "dark" }} /></div>
+                  </div>
+                )}
                 <div className="hc-buttons">
                   <button className={`hc-btn${nivel === "gerente" ? " active" : ""}`} onClick={() => setNivel("gerente")}>🧑‍💼 {nf(porGerenteEcon.length)} Gerentes</button>
                   <button className={`hc-btn${nivel === "corretor" ? " active" : ""}`} onClick={() => setNivel("corretor")}>{nf(porCorretorEcon.length)} Corretores</button>
@@ -406,8 +429,8 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                     <div className="gk-icon"></div>
                     <div className="gk-body">
                       <div className="gk-lbl">Check-in no plantão (Comandra)</div>
-                      <div className="gk-val">{dias === 1 ? `${nf(op?.presentesHoje ?? 0)} hoje` : `${nf1(op?.mediaDia ?? 0)} por dia`}</div>
-                      <div className="gk-delta">{dias === 1 ? `${nf(op?.presencas ?? 0)} check-ins` : `hoje ${nf(op?.presentesHoje ?? 0)} · ${nf(op?.corretoresPlantao ?? 0)} corretores bateram em ${dias} dias`}</div>
+                      <div className="gk-val">{dias === 1 ? `${nf(op?.presencas ?? 0)} check-ins` : `${nf1(op?.mediaDia ?? 0)} por dia`}</div>
+                      <div className="gk-delta">{dias === 1 ? `${nf(op?.corretoresPlantao ?? 0)} corretores` : `${nf(op?.presencas ?? 0)} check-ins · ${nf(op?.corretoresPlantao ?? 0)} corretores em ${dias} dias`}</div>
                     </div>
                   </div>
                 </div>
@@ -464,7 +487,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                     </div>
 
                     <div className="panel-cury">
-                      <div className="p-hdr-bar"><span>⚖️ Período atual × anterior</span><small>{dias} dias × {dias} dias antes</small></div>
+                      <div className="p-hdr-bar"><span>⚖️ Período atual × anterior</span><small>{rng.label} × {dias} dias antes</small></div>
                       <div className="wk-chart-mini">
                         {(() => {
                           const a = Number(ant?.vendas || 0); const c = vjQtd; const mx = Math.max(1, a, c);
@@ -481,7 +504,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                         <tbody>
                           <tr><td>Anterior</td><td className="r">{nf(ant?.checkins ?? 0)}</td><td className="r">{nf(ant?.visitas ?? 0)}</td><td className="r">{nf(ant?.vendas ?? 0)}</td><td className="r">{moneyFull(ant?.vgv ?? 0)}</td><td className="r">—</td></tr>
                           {(() => { const d = delta(vjQtd, Number(ant?.vendas || 0)); return (
-                            <tr className="selected"><td>Atual ({dias}d)</td><td className="r">{nf(op?.presencas ?? 0)}</td><td className="r">{nf(op?.visitas ?? 0)}</td><td className="r">{nf(vjQtd)}</td><td className="r">{moneyFull(vjVgv)}</td><td className={`r ${d >= 0 ? "up-txt" : "dn-txt"}`}>{d >= 0 ? "▲" : "▼"} {Math.abs(d)}%</td></tr>
+                            <tr className="selected"><td>Atual ({rng.label})</td><td className="r">{nf(op?.presencas ?? 0)}</td><td className="r">{nf(op?.visitas ?? 0)}</td><td className="r">{nf(vjQtd)}</td><td className="r">{moneyFull(vjVgv)}</td><td className={`r ${d >= 0 ? "up-txt" : "dn-txt"}`}>{d >= 0 ? "▲" : "▼"} {Math.abs(d)}%</td></tr>
                           ); })()}
                         </tbody>
                       </table>
