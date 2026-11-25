@@ -1,0 +1,2291 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Comandra — Tropa & Plantão Integrado (Harmonizado V3)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070B14;
+      --surface: #0E1626;
+      --surface-card: #131E33;
+      --surface-subtle: #192640;
+      --border: #233558;
+      --border-subtle: #1A2844;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+      
+      --brand: #0EA5E9;
+      --brand-light: rgba(14, 165, 233, 0.15);
+      --green: #10B981;
+      --green-light: rgba(16, 185, 129, 0.15);
+      --green-border: rgba(16, 185, 129, 0.35);
+      --amber: #F59E0B;
+      --amber-light: rgba(245, 158, 11, 0.15);
+      --amber-border: rgba(245, 158, 11, 0.35);
+      --rose: #F43F5E;
+      --rose-light: rgba(244, 63, 94, 0.15);
+      --rose-border: rgba(244, 63, 94, 0.35);
+      --purple: #A855F7;
+      --purple-light: rgba(168, 85, 247, 0.15);
+      --blue: #38BDF8;
+
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --radius-full: 9999px;
+      
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+      --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+      font-size: 13.5px;
+      line-height: 1.45;
+    }
+
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    .app-layout {
+      display: flex;
+      width: 100vw;
+      min-height: 100vh;
+    }
+
+    /* ── MENU LATERAL PRETO OFICIAL (RAIL V10) ── */
+    .rail-sidebar {
+      width: 250px;
+      min-width: 250px;
+      background: #090E1A;
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 14px;
+      gap: 16px;
+      z-index: 1000;
+    }
+    .rail-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 10px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, #0EA5E9 0%, #2563EB 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      color: #FFF;
+      font-size: 16px;
+      box-shadow: 0 0 12px rgba(14, 165, 233, 0.4);
+    }
+    .brand-title {
+      font-weight: 800;
+      font-size: 16px;
+      letter-spacing: -0.02em;
+      color: #F8FAFC;
+      display: block;
+    }
+    .brand-sub { font-size: 11px; color: var(--text-muted); display: block; }
+
+    .rail-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+    .nav-section-title {
+      font-size: 10.5px;
+      font-weight: 800;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 8px 10px 4px;
+    }
+    .rail-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      color: #94A3B8;
+      font-size: 13.5px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+    .rail-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #F1F5F9;
+    }
+    .rail-item.active {
+      background: rgba(14, 165, 233, 0.12);
+      color: #38BDF8;
+      border-left: 3px solid #38BDF8;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      padding-left: 9px;
+    }
+    .rail-item-left { display: flex; align-items: center; gap: 12px; }
+    .rail-pip {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: var(--radius-full);
+      background: rgba(16, 185, 129, 0.2);
+      color: #10B981;
+    }
+
+    .rail-user {
+      margin-top: auto;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid #1A2742;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .avatar-clean {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: #192640;
+      border: 1.5px solid #38BDF8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 12px;
+      color: #F8FAFC;
+    }
+
+    /* CONTEÚDO PRINCIPAL */
+    .main-content {
+      flex: 1;
+      padding: 0 36px 90px;
+      overflow-y: auto;
+      height: 100vh;
+    }
+
+    /* CABEÇALHO FIXO COM STATUS DE AGORA */
+    .sticky-header-bar {
+      position: sticky;
+      top: 0;
+      background: rgba(7, 11, 20, 0.95);
+      backdrop-filter: blur(14px);
+      z-index: 900;
+      padding: 20px 0 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 20px;
+    }
+    .header-main-info h1 {
+      font-size: 23px;
+      font-weight: 900;
+      color: #FFF;
+      letter-spacing: -0.03em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-main-info p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    /* PULSE BAR AO VIVO */
+    .live-tropa-pulse {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .live-badge-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 4px 11px;
+      border-radius: var(--radius-full);
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .live-badge-item:hover {
+      background: var(--surface-subtle);
+      border-color: #38BDF8;
+    }
+    .dot-live {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot-green { background: #10B981; box-shadow: 0 0 8px #10B981; }
+    .dot-blue { background: #38BDF8; box-shadow: 0 0 8px #38BDF8; }
+    .dot-amber { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+    .dot-purple { background: #C084FC; box-shadow: 0 0 8px #C084FC; animation: pulsePurple 1.5s infinite; }
+    @keyframes pulsePurple {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.15); }
+    }
+
+    /* SELETOR MESTRE DE MODO */
+    .master-mode-switcher {
+      display: flex;
+      background: #090F1C;
+      padding: 5px;
+      border-radius: var(--radius-md);
+      border: 1.5px solid var(--border);
+      gap: 6px;
+      margin-bottom: 22px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    .mode-tab-btn {
+      flex: 1;
+      padding: 12px 18px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 13.5px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .mode-tab-btn:hover {
+      background: rgba(255, 255, 255, 0.04);
+      color: #FFF;
+    }
+    .mode-tab-btn.active.plantao {
+      background: linear-gradient(135deg, #0284C7 0%, #2563EB 100%);
+      color: #FFF;
+      box-shadow: 0 2px 10px rgba(2, 132, 199, 0.45);
+    }
+    .mode-tab-btn.active.gestao {
+      background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+      color: #FFF;
+      box-shadow: 0 2px 10px rgba(16, 185, 129, 0.45);
+    }
+    .mode-tab-btn.active.vagas {
+      background: linear-gradient(135deg, #7C3AED 0%, #9333EA 100%);
+      color: #FFF;
+      box-shadow: 0 2px 10px rgba(168, 85, 247, 0.45);
+    }
+
+    .mode-pip-count {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      background: rgba(255, 255, 255, 0.2);
+      color: #FFF;
+      font-weight: 800;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       CARDS DE RESUMO DO MODO PLANTÃO (MANTIDOS 100%)
+       ══════════════════════════════════════════════════════════════════════ */
+    .kpi-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .kpi-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+      box-shadow: var(--shadow-sm);
+    }
+    .kpi-card-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .kpi-card-val {
+      font-size: 24px;
+      font-weight: 900;
+      color: #FFF;
+      letter-spacing: -0.02em;
+    }
+    .kpi-card-val i {
+      font-size: 13px;
+      font-style: normal;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .kpi-card-sub {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* FILTROS RÁPIDOS EM PÍLULAS */
+    .filter-pills-bar {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .chip-filter {
+      padding: 6px 13px;
+      border-radius: var(--radius-full);
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .chip-filter:hover {
+      border-color: #38BDF8;
+      color: var(--text-main);
+    }
+    .chip-filter.active {
+      background: rgba(14, 165, 233, 0.2);
+      border-color: #38BDF8;
+      color: #38BDF8;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       TABELA COMPLETA DO PLANTÃO DE HOJE (COM CRONÔMETROS E TEMPO COM O LEAD)
+       ══════════════════════════════════════════════════════════════════════ */
+    .tropa-panel {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 30px;
+    }
+    .table-responsive {
+      overflow-x: auto;
+      width: 100%;
+    }
+    .tropa-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    .tropa-table th {
+      background: #0B1220;
+      padding: 13px 14px;
+      font-size: 11.5px;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .tropa-table td {
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 12.5px;
+      vertical-align: middle;
+    }
+    .tropa-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* BADGES DE TEMPO COM O LEAD */
+    .sla-timer-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      width: fit-content;
+    }
+    .sla-timer-badge.gold {
+      background: var(--green-light);
+      color: var(--green);
+      border: 1px solid var(--green-border);
+    }
+    .sla-timer-badge.warn {
+      background: var(--amber-light);
+      color: var(--amber);
+      border: 1px solid var(--amber-border);
+    }
+    .sla-timer-badge.danger {
+      background: var(--rose-light);
+      color: var(--rose);
+      border: 1px solid var(--rose-border);
+      animation: pulseDanger 1.8s infinite;
+    }
+    @keyframes pulseDanger {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.06); }
+    }
+
+    .badge-stand-mini {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      width: fit-content;
+    }
+    .badge-stand-mini.ok {
+      background: rgba(59, 130, 246, 0.15);
+      color: #60A5FA;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    .badge-stand-mini.no {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-dim);
+    }
+
+    /* ROLETA 1 CLIQUE */
+    .roleta-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 11px;
+      border-radius: var(--radius-full);
+      font-size: 11.5px;
+      font-weight: 800;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .roleta-toggle-btn.ativo {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #10B981;
+    }
+    .roleta-toggle-btn.ativo:hover {
+      background: rgba(244, 63, 94, 0.15);
+      border-color: var(--rose);
+      color: var(--rose);
+    }
+    .roleta-toggle-btn.pausado {
+      background: rgba(244, 63, 94, 0.12);
+      border-color: rgba(244, 63, 94, 0.35);
+      color: #FDA4AF;
+    }
+    .roleta-toggle-btn.pausado:hover {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: var(--green);
+      color: #10B981;
+    }
+    .roleta-toggle-btn.pediu {
+      background: rgba(168, 85, 247, 0.2);
+      border-color: #A855F7;
+      color: #E9D5FF;
+      box-shadow: 0 0 10px rgba(168, 85, 247, 0.35);
+    }
+    .roleta-toggle-btn.pediu:hover { background: #10B981; border-color: #10B981; color: #FFF; }
+
+    /* BOTÕES DE AÇÃO */
+    .act-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 9px;
+      border-radius: var(--radius-sm);
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .act-btn.repassar {
+      background: rgba(14, 165, 233, 0.12);
+      color: #38BDF8;
+      border-color: rgba(14, 165, 233, 0.3);
+    }
+    .act-btn.repassar:hover { background: #0EA5E9; color: #FFF; }
+    .act-btn.cobrar {
+      background: rgba(16, 185, 129, 0.12);
+      color: #10B981;
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+    .act-btn.cobrar:hover { background: #10B981; color: #FFF; }
+    .act-btn.ver {
+      background: rgba(148, 163, 184, 0.12);
+      color: var(--text-muted);
+      border-color: var(--border);
+    }
+    .act-btn.ver:hover { background: var(--surface-subtle); color: var(--text-main); }
+    .act-btn.avancar {
+      background: #0284C7;
+      color: #FFF;
+      font-weight: 800;
+      box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       ESTEIRA DE CONTRATAÇÃO (COMO ANDAR COM O CANDIDATO)
+       ══════════════════════════════════════════════════════════════════════ */
+    .timeline-etapa-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .timeline-etapa-badge.inscrito { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+    .timeline-etapa-badge.triagem { background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.3); }
+    .timeline-etapa-badge.entrevista { background: rgba(245, 158, 11, 0.15); color: #FCD34D; border: 1px solid var(--amber); }
+    .timeline-etapa-badge.treinamento { background: rgba(168, 85, 247, 0.15); color: #E9D5FF; border: 1px solid #A855F7; }
+    .timeline-etapa-badge.roleta { background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid #10B981; }
+
+    /* STEPPER DOS 5 MARCOS */
+    .stepper-rampa-5 {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .step-pip {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9.5px;
+      font-weight: 800;
+      background: #192640;
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+    }
+    .step-pip.done { background: #10B981; color: #FFF; border-color: #10B981; }
+    .step-pip.curr { background: #0284C7; color: #FFF; border-color: #38BDF8; box-shadow: 0 0 6px #38BDF8; }
+    .step-line { width: 6px; height: 2px; background: var(--border); }
+    .step-line.done { background: #10B981; }
+
+    /* DRAWER LATERAL: RAIO-X DO CORRETOR (14 DIAS COM SIGLAS) */
+    .raiox-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(6px);
+      z-index: 2200;
+      display: none;
+    }
+    .raiox-drawer {
+      position: fixed;
+      top: 0;
+      right: -520px;
+      width: 500px;
+      height: 100vh;
+      background: #0B1322;
+      border-left: 1px solid var(--border);
+      box-shadow: -10px 0 40px rgba(0, 0, 0, 0.8);
+      z-index: 2300;
+      display: flex;
+      flex-direction: column;
+      transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .raiox-drawer.open { right: 0; }
+    .raiox-header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #080E1C;
+    }
+    .raiox-body {
+      padding: 22px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .raiox-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+    }
+    .raiox-card-title {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #FFF;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .week-days-strip {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+    }
+    .day-cell-card {
+      background: var(--surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 6px 3px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+    }
+    .day-cell-card.weekend {
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      background: rgba(245, 158, 11, 0.05);
+    }
+    .day-cell-card.today {
+      border: 1.5px solid #38BDF8;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+    }
+    .day-name-sigla {
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .day-cell-card.weekend .day-name-sigla { color: #FCD34D; }
+    .day-status-pill {
+      width: 100%;
+      height: 18px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9.5px;
+      font-weight: 800;
+    }
+    .day-status-pill.presente { background: rgba(16, 185, 129, 0.25); color: #10B981; border: 1px solid #10B981; }
+    .day-status-pill.atraso { background: rgba(245, 158, 11, 0.25); color: #FCD34D; border: 1px solid var(--amber); }
+    .day-status-pill.folga { background: rgba(255, 255, 255, 0.05); color: var(--text-dim); }
+    .day-status-pill.falta { background: rgba(244, 63, 94, 0.25); color: #FDA4AF; border: 1px solid var(--rose); }
+
+    /* MODAL */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(6px);
+      z-index: 3000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-window {
+      background: #0D1629;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      width: 560px;
+      max-width: 95vw;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 18px 24px;
+      background: #09101F;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-body {
+      padding: 24px;
+      max-height: 75vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .modal-footer {
+      padding: 16px 24px;
+      background: #09101F;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    /* TOAST */
+    .toast-box {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #0F172A;
+      border: 1px solid #38BDF8;
+      border-radius: var(--radius-md);
+      padding: 12px 20px;
+      color: #FFF;
+      font-weight: 700;
+      font-size: 13px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      display: none;
+      align-items: center;
+      gap: 10px;
+      z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-layout">
+    
+    <!-- ── 1. MENU LATERAL PRETO OFICIAL (RAIL V10) ── -->
+    <aside class="rail-sidebar">
+      <div class="rail-brand">
+        <div class="brand-mark">C</div>
+        <div>
+          <span class="brand-title">COMANDRA</span>
+          <span class="brand-sub">Regional São Paulo · Cury</span>
+        </div>
+      </div>
+
+      <nav class="rail-nav">
+        <div class="nav-section-title">Comando Geral</div>
+        <a class="rail-item" href="mockup_cockpit_geral.html">
+          <div class="rail-item-left"><span>⚡</span> <span>Cockpit Geral</span></div>
+        </a>
+        <a class="rail-item" href="mockup_leads_v4.html">
+          <div class="rail-item-left"><span>🎯</span> <span>Central de Leads</span></div>
+          <span class="rail-pip">12 novos</span>
+        </a>
+        
+        <!-- ITEM UNIFICADO E HARMONIZADO -->
+        <a class="rail-item active" href="mockup_tropa_harmonizado.html">
+          <div class="rail-item-left"><span>👥</span> <span>Tropa & Plantão</span></div>
+          <span class="rail-pip" style="background: rgba(56, 189, 248, 0.2); color: #38BDF8;">8 no stand</span>
+        </a>
+
+        <div class="nav-section-title" style="margin-top: 14px;">Estratégia & BI</div>
+        <a class="rail-item" href="mockup_bi_diretoria.html">
+          <div class="rail-item-left"><span>📊</span> <span>BI & Pacing Mensal</span></div>
+        </a>
+        <a class="rail-item" href="mockup_gerente_cockpit_v3.html">
+          <div class="rail-item-left"><span>🧭</span> <span>Metas dos Stands</span></div>
+        </a>
+      </nav>
+
+      <div class="rail-user">
+        <div class="avatar-clean">GS</div>
+        <div style="flex: 1; overflow: hidden;">
+          <b style="font-size: 13px; color: #FFF; display: block; white-space: nowrap; text-overflow: ellipsis;">Geraldo Silva</b>
+          <span style="font-size: 11px; color: var(--text-muted); display: block;">Superintendente SP</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── 2. CONTEÚDO PRINCIPAL ── -->
+    <main class="main-content">
+      
+      <!-- CABEÇALHO FIXO COM STATUS DE AGORA -->
+      <header class="sticky-header-bar">
+        <div class="header-main-info">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <h1>Tropa & Plantão Integrado</h1>
+            <span style="font-size: 11.5px; font-weight: 800; background: rgba(56, 189, 248, 0.15); color: #38BDF8; padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.3);">
+              Capacidade: 18 / 24 vagas (-6 no sábado)
+            </span>
+          </div>
+          <p>
+            Controle do plantão ao vivo de hoje (check-in, ociosidade, tempo com o lead) e estratégia de contratação da equipe
+          </p>
+
+          <!-- DADOS DE AGORA: PULSE BAR -->
+          <div class="live-tropa-pulse">
+            <span>🔴 <b>Dados de Agora:</b></span>
+            
+            <span class="live-badge-item" onclick="ativarModo('plantao'); filtrarPlantao('plantao', document.getElementById('chip-plt-stand'))">
+              <span class="dot-live dot-blue"></span> <b>8 no Stand</b> (Check-in C2S)
+            </span>
+            
+            <span class="live-badge-item" onclick="ativarModo('plantao'); filtrarPlantao('todos', document.getElementById('chip-plt-todos'))">
+              <span class="dot-live dot-green"></span> <b>14 Logados</b> no CRM
+            </span>
+            
+            <span class="live-badge-item" onclick="ativarModo('plantao'); filtrarPlantao('atendimento', document.getElementById('chip-plt-atend'))">
+              <span class="dot-live dot-amber"></span> <b>6 em Atendimento</b> (WhatsApp)
+            </span>
+
+            <button class="live-badge-item" style="background: rgba(168,85,247,0.18); border-color: #A855F7; color: #F3E8FF;" onclick="ativarModo('plantao'); filtrarPlantao('pedindo', document.getElementById('chip-plt-ped'))">
+              <span class="dot-live dot-purple"></span> 
+              <b>✋ 3 no Stand Pedindo Roleta</b>
+              <span style="background: #A855F7; color: #FFF; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 9999px; margin-left: 4px;">Liberar (1 Clique)</span>
+            </button>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button class="act-btn repassar" style="padding: 9px 15px; font-weight: 800;" onclick="simularChegadaLead()">
+            ⚡ Simular Novo Lead
+          </button>
+          <button class="act-btn cobrar" style="padding: 9px 15px; font-weight: 800;" onclick="ativarModo('vagas'); abrirModalCandidato()">
+            + Cadastrar Candidato
+          </button>
+        </div>
+      </header>
+
+      <!-- ══════════════════════════════════════════════════════════════════════
+           SELETOR MESTRE DE MODO
+           ══════════════════════════════════════════════════════════════════════ -->
+      <div class="master-mode-switcher">
+        <button class="mode-tab-btn active plantao" id="btn-mode-plantao" onclick="ativarModo('plantao')">
+          <span>🔴</span>
+          <span>Modo Plantão de Hoje (Tempo Real)</span>
+          <span class="mode-pip-count">8 no Stand · 15 na Roleta</span>
+        </button>
+
+        <button class="mode-tab-btn" id="btn-mode-vagas" onclick="ativarModo('vagas')">
+          <span>🎯</span>
+          <span>Funil de Contratação & Vagas</span>
+          <span class="mode-pip-count">+6 Vagas · Entrevistas & CRECI</span>
+        </button>
+
+        <button class="mode-tab-btn" id="btn-mode-gestao" onclick="ativarModo('gestao')">
+          <span>📊</span>
+          <span>Modo Gestão & Estratégia (Semana a Semana)</span>
+          <span class="mode-pip-count">WoW · Rampa · Churn</span>
+        </button>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════════
+           SEÇÃO 1: MODO PLANTÃO DE HOJE (A TABELA COMPLETA COM TOP CARDS E FILTROS)
+           ══════════════════════════════════════════════════════════════════════ -->
+      <div id="secao-plantao-hoje">
+        
+        <!-- OS 4 TOP CARDS OPERACIONAIS DE HOJE (EXATAMENTE COMO VOCÊ GOSTOU) -->
+        <div class="kpi-cards-grid">
+          
+          <div class="kpi-card" style="border-left: 3px solid #38BDF8;">
+            <div class="kpi-card-label">
+              <span>Presença no Stand Físico</span>
+              <span style="color: #38BDF8; font-weight: 800;">C2S GPS</span>
+            </div>
+            <div class="kpi-card-val mono" style="color: #38BDF8;">
+              8 <i>/ 18 corretores</i>
+            </div>
+            <div class="kpi-card-sub">
+              <span>Ronda 9h30: <b>6 confirmados</b></span>
+              <span style="color: var(--amber); font-weight: 800;">2 atrasos</span>
+            </div>
+          </div>
+
+          <div class="kpi-card" style="border-left: 3px solid #10B981;">
+            <div class="kpi-card-label">
+              <span>Roleta de Leads Hoje</span>
+              <span style="color: #10B981; font-weight: 800;">Ativa</span>
+            </div>
+            <div class="kpi-card-val mono" style="color: #10B981;">
+              15 <i>recebendo</i>
+            </div>
+            <div class="kpi-card-sub">
+              <span style="color: #C084FC; font-weight: 800;">✋ 3 pedindo roleta</span>
+              <span>3 pausados</span>
+            </div>
+          </div>
+
+          <div class="kpi-card" style="border-left: 3px solid var(--amber);">
+            <div class="kpi-card-label">
+              <span>SLA Médio de Contato (Hoje)</span>
+              <span style="color: var(--amber); font-weight: 800;">Meta: &lt;2min</span>
+            </div>
+            <div class="kpi-card-val mono" style="color: #FFF;">
+              1m35s <i>média</i>
+            </div>
+            <div class="kpi-card-sub">
+              <span>98,9% no prazo</span>
+              <span style="color: #10B981; font-weight: 800;">-35s WoW</span>
+            </div>
+          </div>
+
+          <div class="kpi-card" style="border-left: 3px solid var(--purple);">
+            <div class="kpi-card-label">
+              <span>Em Atendimento WhatsApp</span>
+              <span style="color: #C084FC; font-weight: 800;">Ao Vivo</span>
+            </div>
+            <div class="kpi-card-val mono" style="color: #C084FC;">
+              6 <i>em conversa</i>
+            </div>
+            <div class="kpi-card-sub">
+              <span>12 leads na última hora</span>
+              <span style="color: #10B981; font-weight: 800;">Alta tração</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- PÍLULAS DE FILTROS RÁPIDOS EM 1 CLIQUE -->
+        <div class="filter-pills-bar">
+          <button class="chip-filter active" id="chip-plt-todos" onclick="filtrarPlantao('todos', this)">Todos (18)</button>
+          <button class="chip-filter" id="chip-plt-stand" onclick="filtrarPlantao('plantao', this)">🏢 No Stand Agora (8)</button>
+          <button class="chip-filter" id="chip-plt-ped" onclick="filtrarPlantao('pedindo', this)">✋ Pedindo Roleta (3)</button>
+          <button class="chip-filter" id="chip-plt-atend" onclick="filtrarPlantao('atendimento', this)">💬 Em Atendimento Whats (6)</button>
+          <button class="chip-filter" onclick="filtrarPlantao('livres', this)">🟢 Livres / Respondem na Hora (4)</button>
+          <button class="chip-filter" onclick="filtrarPlantao('alerta', this)">🚨 Sem Check-in / Travados (4)</button>
+          <button class="chip-filter" onclick="filtrarPlantao('pausados', this)">○ Pausados na Roleta (3)</button>
+        </div>
+
+        <!-- ALERTA DE VAZÃO (SUSSURRO) -->
+        <div style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: var(--radius-md); padding: 12px 18px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; gap: 14px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 20px;">🎙️</span>
+            <div>
+              <b style="color: #38BDF8; font-size: 13px;">Alerta de Ociosidade & Gargalo em Tempo Real:</b>
+              <span style="font-size: 12px; color: var(--text-muted); display: block;">
+                <b>Ricardo</b> está segurando o lead <b>Rodrigo</b> há <b>52 min</b> sem contato. Enquanto isso, <b>Diego</b> está no Stand Mooca <span style="color: #10B981; font-weight: 700;">livre há 14m e sempre responde em &lt;1m10s</span>.
+              </span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; flex-shrink: 0;">
+            <button class="act-btn repassar" style="padding: 7px 14px; font-weight: 800;" onclick="showToast('⚡ Lead Rodrigo transferido para Diego (Livre no Stand)!')">
+              ⚡ Transferir p/ Diego (Livre)
+            </button>
+            <button class="act-btn cobrar" style="padding: 7px 14px;" onclick="showToast('Cobrança enviada no WhatsApp!')">
+              💬 Cobrar Ricardo
+            </button>
+          </div>
+        </div>
+
+        <!-- TABELA CONSOLIDADA DO PLANTÃO (COM COLUNA DE TEMPO COM O LEAD / OCIOSIDADE) -->
+        <div class="tropa-panel">
+          <div class="table-responsive">
+            <table class="tropa-table">
+              <thead>
+                <tr>
+                  <th>Corretor & Stand Alocado</th>
+                  <th>Presença Stand (C2S)</th>
+                  <th>Status Digital & Ociosidade</th>
+                  <th>Lead em Andamento & Tempo</th>
+                  <th>SLA Médio Hoje</th>
+                  <th>Roleta (1 Clique)</th>
+                  <th style="text-align: right;">Ações do Turno</th>
+                </tr>
+              </thead>
+              <tbody id="tabela-plantao-body">
+                
+                <!-- 1. DIEGO (LIVRE / RESPONDE NA HORA / NO STAND) -->
+                <tr class="plt-row" data-tag="plantao livres">
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <div class="avatar-clean" style="border-color: #10B981;">DI</div>
+                      <div>
+                        <b style="font-size: 13px; color: #FFF;">Diego</b>
+                        <span style="display: block; font-size: 11px; color: var(--text-muted);">Stand Mooca · Pleno</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge-stand-mini ok">🏢 Mooca (08:30)</span>
+                    <span style="display: block; font-size: 10.5px; color: #10B981; font-weight: 700; margin-top: 2px;">
+                      ✓ 9h30 OK · GPS 12m
+                    </span>
+                  </td>
+                  <td>
+                    <span style="color: #10B981; font-weight: 800;">🟢 Livre há 14 min</span>
+                    <span style="display: block; font-size: 11px; color: var(--text-muted);">
+                      1º da Fila · Sempre responde na hora
+                    </span>
+                  </td>
+                  <td>
+                    <span style="color: #10B981; font-weight: 700;">Aguardando próximo lead</span>
+                    <span style="display: block; font-size: 10.5px; color: var(--text-muted);">4 leads atendidos hoje (100% no prazo)</span>
+                  </td>
+                  <td class="mono">
+                    <b style="color: #10B981; font-size: 13px;">1m10s</b>
+                    <span style="display: block; font-size: 10px; color: #10B981;">Recorde</span>
+                  </td>
+                  <td>
+                    <button class="roleta-toggle-btn ativo" onclick="toggleRoleta(this, 'Diego')">
+                      <span>●</span> <span class="txt-status">Na Roleta</span>
+                    </button>
+                  </td>
+                  <td style="text-align: right;">
+                    <button class="act-btn repassar" onclick="showToast('Diego recebeu +2 leads especiais!')">⚡ +Leads</button>
+                    <button class="act-btn ver" onclick="abrirRaioX('Diego')">🔍 Raio-X</button>
+                  </td>
+                </tr>
+
+                <!-- 2. ALBA (EM ATENDIMENTO WHATS COM LEAD NA MÃO) -->
+                <tr class="plt-row" data-tag="plantao atendimento">
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <div class="avatar-clean" style="border-color: #10B981;">AL</div>
+                      <div>
+                        <b style="font-size: 13px; color: #FFF;">Alba</b>
+                        <span style="display: block; font-size: 11px; color: var(--text-muted);">Stand Brás · Sênior</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge-stand-mini ok">🏢 Brás (08:20)</span>
+                    <span style="display: block; font-size: 10.5px; color: #10B981; font-weight: 700; margin-top: 2px;">
+                      ✓ 9h30 OK · Pontual
+                    </span>
+                  </td>
+                  <td>
+                    <span style="color: #C084FC; font-weight: 800;">🟡 Em Atendimento</span>
+                    <span style="display: block; font-size: 11px; color: var(--text-muted);">WhatsApp aberto há 12m</span>
+                  </td>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <b style="color: #FFF; font-size: 12px;">Lucas Prado</b>
+                      <span class="sla-timer-badge gold mono" data-seconds="184">
+                        🟢 <span class="timer-display">03:04</span> c/ lead
+                      </span>
+                    </div>
+                    <span style="display: block; font-size: 10.5px; color: #10B981;">Agendando visita no stand</span>
+                  </td>
+                  <td class="mono">
+                    <b style="color: #10B981; font-size: 13px;">1m20s</b>
+                  </td>
+                  <td>
+                    <button class="roleta-toggle-btn ativo" onclick="toggleRoleta(this, 'Alba')">
+                      <span>●</span> <span class="txt-status">Na Roleta</span>
+                    </button>
+                  </td>
+                  <td style="text-align: right;">
+                    <button class="act-btn cobrar" onclick="showToast('Acompanhamento aberto!')">💬 Ver Whats</button>
+                    <button class="act-btn ver" onclick="abrirRaioX('Alba')">🔍 Raio-X</button>
+                  </td>
+                </tr>
+
+                <!-- 3. PATRÍCIA (LIVRE NO STAND / PEDINDO ROLETA) -->
+                <tr class="plt-row" data-tag="plantao pedindo livres">
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <div class="avatar-clean" style="border-color: #38BDF8;">PA</div>
+                      <div>
+                        <b style="font-size: 13px; color: #FFF;">Patrícia</b>
+                        <span style="display: block; font-size: 11px; color: var(--text-muted);">Stand Mooca · Novata 35d</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge-stand-mini ok">🏢 Mooca (08:45)</span>
+                    <span style="display: block; font-size: 10.5px; color: #10B981; font-weight: 700; margin-top: 2px;">
+                      ✓ 9h30 OK · Na Mesa
+                    </span>
+                  </td>
+                  <td>
+                    <span style="color: #38BDF8; font-weight: 800;">🟢 Livre há 22 min</span>
+                    <span style="display: block; font-size: 11px; color: var(--text-muted);">
+                      Aguardando liberação da roleta
+                    </span>
+                  </td>
+                  <td>
+                    <span style="color: var(--text-muted);">Sem lead atribuído no momento</span>
+                    <span style="display: block; font-size: 10.5px; color: var(--amber);">Pronta para receber novo lead</span>
+                  </td>
+                  <td class="mono">
+                    <b style="color: #38BDF8; font-size: 13px;">1m45s</b>
+                  </td>
+                  <td>
+                    <button class="roleta-toggle-btn pediu" onclick="liberarRoleta(this, 'Patrícia')">
+                      <span>✋</span> <span class="txt-status">Liberar Roleta</span>
+                    </button>
+                  </td>
+                  <td style="text-align: right;">
+                    <button class="act-btn cobrar" onclick="showToast('Diego alocado como padrinho de Patrícia!')">🤝 Padrinho</button>
+                    <button class="act-btn ver" onclick="abrirRaioX('Patrícia')">🔍 Raio-X</button>
+                  </td>
+                </tr>
+
+                <!-- 4. PEDRO (EM ATENDIMENTO - HOME OFFICE) -->
+                <tr class="plt-row" data-tag="atendimento">
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <div class="avatar-clean" style="border-color: #38BDF8;">PE</div>
+                      <div>
+                        <b style="font-size: 13px; color: #FFF;">Pedro</b>
+                        <span style="display: block; font-size: 11px; color: var(--text-muted);">Digital / Home · Pleno</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge-stand-mini no">🏠 Digital / CRM</span>
+                    <span style="display: block; font-size: 10.5px; color: var(--text-muted); margin-top: 2px;">
+                      Escala Digital Hoje
+                    </span>
+                  </td>
+                  <td>
+                    <span style="color: #C084FC; font-weight: 800;">🟡 Em Atendimento</span>
+                    <span style="display: block; font-size: 11px; color: var(--text-muted);">Conversando no WhatsApp</span>
+                  </td>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <b style="color: #FFF; font-size: 12px;">Carlos Eduardo</b>
+                      <span class="sla-timer-badge gold mono" data-seconds="720">
+                        🟢 <span class="timer-display">12:00</span> c/ lead
+                      </span>
+                    </div>
+                    <span style="display: block; font-size: 10.5px; color: var(--text-muted);">Simulando financiamento Caixa</span>
+                  </td>
+                  <td class="mono">
+                    <b style="color: #10B981; font-size: 13px;">1m40s</b>
+                  </td>
+                  <td>
+                    <button class="roleta-toggle-btn ativo" onclick="toggleRoleta(this, 'Pedro')">
+                      <span>●</span> <span class="txt-status">Na Roleta</span>
+                    </button>
+                  </td>
+                  <td style="text-align: right;">
+                    <button class="act-btn ver" onclick="showToast('Histórico do Pedro aberto')">🔍 Ver</button>
+                  </td>
+                </tr>
+
+                <!-- 5. RICARDO (TRAVANDO A FILA / SEGURANDO LEAD HÁ 52 MIN) -->
+                <tr class="plt-row" data-tag="alerta pausados">
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <div class="avatar-clean" style="border-color: var(--rose);">RI</div>
+                      <div>
+                        <b style="font-size: 13px; color: #FFF;">Ricardo</b>
+                        <span style="display: block; font-size: 11px; color: var(--rose); font-weight: 700;">Stand Brás · Ausente</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge-stand-mini no">❌ Sem Check-in C2S</span>
+                    <span style="display: block; font-size: 10.5px; color: var(--rose); font-weight: 700; margin-top: 2px;">
+                      3 dias sem plantão
+                    </span>
+                  </td>
+                  <td>
+                    <span style="color: var(--rose); font-weight: 800;">🔴 Offline no CRM</span>
+                    <span style="display: block; font-size: 11px; color: var(--rose);">Sem login há 4 horas</span>
+                  </td>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <b style="color: var(--rose); font-size: 12px;">Rodrigo Meirelles</b>
+                      <span class="sla-timer-badge danger mono" data-seconds="3120">
+                        🔴 <span class="timer-display">52:00</span> c/ lead
+                      </span>
+                    </div>
+                    <span style="display: block; font-size: 10.5px; color: var(--rose); font-weight: 800;">
+                      🚨 SLA ESTOURADO: Não fez contato!
+                    </span>
+                  </td>
+                  <td class="mono">
+                    <b style="color: var(--rose); font-size: 13px;">42min</b>
+                  </td>
+                  <td>
+                    <button class="roleta-toggle-btn pausado" onclick="toggleRoleta(this, 'Ricardo')">
+                      <span>○</span> <span class="txt-status">Pausado</span>
+                    </button>
+                  </td>
+                  <td style="text-align: right;">
+                    <button class="act-btn repassar" style="background: #0284C7; color: #FFF; font-weight: 800;" onclick="showToast('⚡ Lead Rodrigo tomado de Ricardo e entregue ao Diego!')">
+                      ⚡ Tomar Lead (Diego)
+                    </button>
+                    <button class="act-btn cobrar" onclick="showToast('Cobrança de plantão enviada!')">💬</button>
+                    <button class="act-btn ver" onclick="abrirRaioX('Ricardo')">🔍</button>
+                  </td>
+                </tr>
+
+                <!-- 6. LISANDRA (ATENÇÃO / NÃO ABRIU O WHATS HÁ 24 MIN) -->
+                <tr class="plt-row" data-tag="alerta">
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <div class="avatar-clean" style="border-color: var(--amber);">LI</div>
+                      <div>
+                        <b style="font-size: 13px; color: #FFF;">Lisandra</b>
+                        <span style="display: block; font-size: 11px; color: var(--text-muted);">Stand Itaquera · Júnior</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="badge-stand-mini ok">🏢 Itaquera (09:40)</span>
+                    <span style="display: block; font-size: 10.5px; color: var(--amber); font-weight: 700; margin-top: 2px;">
+                      ⏰ Atraso ronda 9h30
+                    </span>
+                  </td>
+                  <td>
+                    <span style="color: var(--amber); font-weight: 800;">🟡 Online (Desatenta)</span>
+                    <span style="display: block; font-size: 11px; color: var(--text-muted);">Não clicou no link do WhatsApp</span>
+                  </td>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <b style="color: #FFF; font-size: 12px;">Mariana Silva</b>
+                      <span class="sla-timer-badge warn mono" data-seconds="1460">
+                        🟡 <span class="timer-display">24:20</span> c/ lead
+                      </span>
+                    </div>
+                    <span style="display: block; font-size: 10.5px; color: var(--amber); font-weight: 700;">
+                      ⚠️ Sem 1º contato há 24 minutos!
+                    </span>
+                  </td>
+                  <td class="mono">
+                    <b style="color: var(--amber); font-size: 13px;">14m20s</b>
+                  </td>
+                  <td>
+                    <button class="roleta-toggle-btn ativo" onclick="toggleRoleta(this, 'Lisandra')">
+                      <span>●</span> <span class="txt-status">Na Roleta</span>
+                    </button>
+                  </td>
+                  <td style="text-align: right;">
+                    <button class="act-btn repassar" onclick="showToast('Lead Mariana repassado para Alba!')">⚡ Repassar</button>
+                    <button class="act-btn cobrar" onclick="showToast('Alerta enviado no WhatsApp de Lisandra!')">💬 Cobrar</button>
+                    <button class="act-btn ver" onclick="abrirRaioX('Lisandra')">🔍</button>
+                  </td>
+                </tr>
+
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════════
+           SEÇÃO 2: FUNIL DE CONTRATAÇÃO & VAGAS (COMO ANDAR COM O CANDIDATO)
+           ══════════════════════════════════════════════════════════════════════ -->
+      <div id="secao-vagas-contratacao" style="display: none;">
+        
+        <!-- CABEÇALHO DO FUNIL -->
+        <div style="background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px 22px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+          <div>
+            <h3 style="font-size: 16px; color: #FFF; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+              <span>🎯</span> Funil de Contratação & Esteira da Equipe
+            </h3>
+            <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 3px;">
+              Meta: <b>Contratar +6 corretores</b> para cobrir as mesas vagas de sábado e domingo nos stands Mooca e Brás.
+            </p>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button class="act-btn repassar" onclick="showToast('Link de indicação da equipe copiado!')">
+              🔗 Copiar Link de Indicação
+            </button>
+            <button class="act-btn cobrar" onclick="abrirModalCandidato()">
+              + Cadastrar Candidato
+            </button>
+          </div>
+        </div>
+
+        <!-- OS 5 DEGRAUS DO FUNIL INTERATIVOS -->
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 22px;">
+          
+          <div class="kpi-card" style="border-left: 3px solid #38BDF8; cursor: pointer;" onclick="filtrarCandidatos('todos')">
+            <div class="kpi-card-label"><span>1. Inscritos / Indicação</span></div>
+            <div class="kpi-card-val mono" style="color: #38BDF8;" id="count-inscritos">14</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Aguardando triagem</div>
+          </div>
+
+          <div class="kpi-card" style="border-left: 3px solid var(--amber); cursor: pointer;" onclick="filtrarCandidatos('triagem')">
+            <div class="kpi-card-label"><span>2. Triagem de Perfil</span></div>
+            <div class="kpi-card-val mono" style="color: var(--amber);" id="count-triagem">9</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Checklist 5 itens Cury</div>
+          </div>
+
+          <div class="kpi-card" style="border-left: 3px solid #C084FC; cursor: pointer;" onclick="filtrarCandidatos('entrevista')">
+            <div class="kpi-card-label"><span>3. Entrevista Agendada</span></div>
+            <div class="kpi-card-val mono" style="color: #C084FC;" id="count-entrevista">3</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Hoje: 15h e 17h</div>
+          </div>
+
+          <div class="kpi-card" style="border-left: 3px solid #0284C7; cursor: pointer;" onclick="filtrarCandidatos('treinamento')">
+            <div class="kpi-card-label"><span>4. Treinamento & CRECI</span></div>
+            <div class="kpi-card-val mono" style="color: #0284C7;" id="count-treinamento">2</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Simulador Caixa & CRM</div>
+          </div>
+
+          <div class="kpi-card" style="border-left: 3px solid #10B981; cursor: pointer;" onclick="filtrarCandidatos('roleta')">
+            <div class="kpi-card-label"><span>5. Prontos p/ Roleta</span></div>
+            <div class="kpi-card-val mono" style="color: #10B981;" id="count-roleta">2</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Escalados no sábado</div>
+          </div>
+
+        </div>
+
+        <!-- TABELA DE CANDIDATOS NA ESTEIRA (COMO ANDAR COM ELES) -->
+        <div class="tropa-panel">
+          <div style="padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #0B1220;">
+            <h3 style="font-size: 15px; color: #FFF; font-weight: 800;">📋 Esteira de Decisão: Andamento dos Candidatos</h3>
+            <span style="font-size: 12px; color: var(--text-muted);">Acompanhe da triagem ao agendamento de entrevista, curso e CRECI</span>
+          </div>
+
+          <table class="tropa-table">
+            <thead>
+              <tr>
+                <th>Candidato & Contato</th>
+                <th>Origem & Experiência</th>
+                <th>Etapa Atual & Agendamento</th>
+                <th>Situação do CRECI</th>
+                <th>Score Qualificação</th>
+                <th style="text-align: right;">Avançar no Sistema</th>
+              </tr>
+            </thead>
+            <tbody id="tabela-candidatos-body">
+              
+              <!-- 1. MARIANA COSTA (ENTREVISTA HOJE ÀS 15H) -->
+              <tr class="cand-row" data-etapa="entrevista">
+                <td>
+                  <b style="color: #FFF; font-size: 13.5px;">Mariana Costa</b>
+                  <span style="display: block; font-size: 11px; color: var(--text-muted);">(11) 98111-2233 · Tatuapé</span>
+                </td>
+                <td>Ex-Lopes · 2 anos MCMV (Forte)</td>
+                <td>
+                  <span class="timeline-etapa-badge entrevista">
+                    📅 Entrevista Agendada: <b>Hoje às 15:00</b>
+                  </span>
+                  <span style="display: block; font-size: 10.5px; color: var(--text-muted); margin-top: 2px;">
+                    Local: Stand Mooca (c/ Geraldo)
+                  </span>
+                </td>
+                <td>
+                  <span style="color: #10B981; font-weight: 800;">✓ Definitivo Ativo (241982-F)</span>
+                  <span style="display: block; font-size: 10.5px; color: var(--text-muted);">Pronta p/ atuar na mesa</span>
+                </td>
+                <td>
+                  <span style="color: #10B981; font-weight: 800;">5/5 (A+)</span>
+                  <span style="display: block; font-size: 10.5px; color: var(--text-muted);">Aprovada na triagem</span>
+                </td>
+                <td style="text-align: right;">
+                  <button class="act-btn cobrar" onclick="showToast('WhatsApp de confirmação disparado para Mariana!')">💬 Confirmar 15h</button>
+                  <button class="act-btn avancar" onclick="avancarCandidatoParaTreinamento(this, 'Mariana Costa')">
+                    ➔ Aprovar p/ Treinamento
+                  </button>
+                </td>
+              </tr>
+
+              <!-- 2. BRUNO TOLEDO (TRIAGEM FEITA -> AGENDAR ENTREVISTA) -->
+              <tr class="cand-row" data-etapa="triagem">
+                <td>
+                  <b style="color: #FFF; font-size: 13.5px;">Bruno Toledo</b>
+                  <span style="display: block; font-size: 11px; color: var(--text-muted);">(11) 97222-3344 · Mooca</span>
+                </td>
+                <td>Indicação do Diego · Ex-Casas Bahia</td>
+                <td>
+                  <span class="timeline-etapa-badge triagem">
+                    ✓ Triagem Aprovada (Ontem)
+                  </span>
+                  <span style="display: block; font-size: 10.5px; color: var(--amber); font-weight: 700; margin-top: 2px;">
+                    Aguardando Agendar Entrevista
+                  </span>
+                </td>
+                <td>
+                  <span style="color: var(--amber); font-weight: 800;">Estágio em Emissão</span>
+                  <span style="display: block; font-size: 10.5px; color: var(--text-muted);">Matriculado no TTI</span>
+                </td>
+                <td>
+                  <span style="color: #10B981; font-weight: 800;">4/5 (A)</span>
+                  <span style="display: block; font-size: 10.5px; color: var(--text-muted);">Disponível sábado/domingo</span>
+                </td>
+                <td style="text-align: right;">
+                  <button class="act-btn avancar" style="background: var(--amber); color: #000; font-weight: 800;" onclick="abrirModalAgendamento('Bruno Toledo')">
+                    📅 Agendar Entrevista ➔
+                  </button>
+                </td>
+              </tr>
+
+              <!-- 3. GABRIEL SANTOS (EM TREINAMENTO & PROTOCOLANDO CRECI) -->
+              <tr class="cand-row" data-etapa="treinamento">
+                <td>
+                  <b style="color: #FFF; font-size: 13.5px;">Gabriel Santos</b>
+                  <span style="display: block; font-size: 11px; color: var(--text-muted);">(11) 96555-8899 · Belém</span>
+                </td>
+                <td>Anúncio Instagram Carreiras</td>
+                <td>
+                  <span class="timeline-etapa-badge treinamento">
+                    🎓 Treinamento Comandra (Dia 2 de 3)
+                  </span>
+                  <span style="display: block; font-size: 10.5px; color: var(--text-muted); margin-top: 2px;">
+                    Simulador Caixa: <b>100% Aprovado</b>
+                  </span>
+                </td>
+                <td>
+                  <span style="color: #10B981; font-weight: 800;">✓ Estágio Emitido (CRECI-SP)</span>
+                  <span style="display: block; font-size: 10.5px; color: var(--text-muted);">Carteira provisória OK</span>
+                </td>
+                <td>
+                  <span style="color: #10B981; font-weight: 800;">5/5 (A+)</span>
+                </td>
+                <td style="text-align: right;">
+                  <button class="act-btn avancar" style="background: #10B981; color: #FFF;" onclick="concluirTreinamento(this, 'Gabriel Santos')">
+                    🎓 Concluir & Liberar Roleta
+                  </button>
+                </td>
+              </tr>
+
+              <!-- 4. CAMILA FERREIRA (PRONTA P/ ROLETA & ESCALADA NO SÁBADO) -->
+              <tr class="cand-row" data-etapa="roleta">
+                <td>
+                  <b style="color: #FFF; font-size: 13.5px;">Camila Ferreira</b>
+                  <span style="display: block; font-size: 11px; color: var(--text-muted);">(11) 96333-4455 · Brás</span>
+                </td>
+                <td>Indicação Externa</td>
+                <td>
+                  <span class="timeline-etapa-badge roleta">
+                    🚀 Pronta p/ Roleta
+                  </span>
+                  <span style="display: block; font-size: 10.5px; color: #10B981; font-weight: 700; margin-top: 2px;">
+                    Escalada no Stand Mooca (Sábado)
+                  </span>
+                </td>
+                <td>
+                  <span style="color: #10B981; font-weight: 800;">✓ Definitivo Ativo (198342-F)</span>
+                </td>
+                <td>
+                  <span style="color: #10B981; font-weight: 800;">5/5</span>
+                </td>
+                <td style="text-align: right;">
+                  <button class="act-btn cobrar" style="background: #10B981; color: #FFF; font-weight: 800;" onclick="showToast('Camila já está na escala ativa do sábado!')">
+                    ✓ Na Escala de Sábado
+                  </button>
+                </td>
+              </tr>
+
+              <!-- 5. LUCAS MARTINS (NOVO INSCRITO -> FAZER TRIAGEM) -->
+              <tr class="cand-row" data-etapa="inscrito">
+                <td>
+                  <b style="color: #FFF; font-size: 13.5px;">Lucas Martins</b>
+                  <span style="display: block; font-size: 11px; color: var(--text-muted);">(11) 95111-9988 · Penha</span>
+                </td>
+                <td>Landing Page Comandra</td>
+                <td>
+                  <span class="timeline-etapa-badge inscrito">
+                    1. Inscrito há 3 horas
+                  </span>
+                  <span style="display: block; font-size: 10.5px; color: var(--text-muted); margin-top: 2px;">
+                    Aguardando Triagem
+                  </span>
+                </td>
+                <td>
+                  <span style="color: var(--text-dim);">A Verificar</span>
+                </td>
+                <td>
+                  <span style="color: var(--text-dim);">Pendente</span>
+                </td>
+                <td style="text-align: right;">
+                  <button class="act-btn repassar" onclick="abrirModalQualificacao('Lucas Martins', 'Landing Page', 'A verificar')">
+                    🎯 Fazer Triagem
+                  </button>
+                  <button class="act-btn ver" onclick="showToast('Lucas arquivado')">✕</button>
+                </td>
+              </tr>
+
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════════════
+           SEÇÃO 3: MODO GESTÃO & ESTRATÉGIA (SEMANA A SEMANA + RAMPA + CHURN)
+           ══════════════════════════════════════════════════════════════════════ -->
+      <div id="secao-gestao-estrategia" style="display: none;">
+        
+        <!-- O COPILOTO DE GENTE & LIDERANÇA -->
+        <div style="background: linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(168, 85, 247, 0.05) 100%); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: var(--radius-lg); padding: 20px 24px; margin-bottom: 22px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <b style="font-size: 15px; color: #FFF; display: flex; align-items: center; gap: 8px;">
+              <span>🧠</span> O Sussurro do Copiloto — 3 Missões Humanas para Hoje
+            </b>
+            <span style="font-size: 11.5px; color: var(--text-muted);">Cruzamento de assiduidade física, atividade no WhatsApp e tempo sem venda</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;">
+            <div style="background: rgba(11, 18, 33, 0.85); border: 1px solid var(--border); border-left: 3px solid var(--rose); border-radius: 8px; padding: 12px 14px;">
+              <span style="font-size: 10.5px; font-weight: 800; color: #FDA4AF; text-transform: uppercase;">🚨 Retenção Crítica</span>
+              <b style="color: #FFF; font-size: 13px; display: block; margin: 4px 0 2px;">Resgatar Ricardo (48d sem venda)</b>
+              <p style="font-size: 11.5px; color: var(--text-muted);">Atividade caiu 65%. Faltou no sábado e hoje. Alinhar 1-on-1 presencial urgente.</p>
+              <div style="display: flex; gap: 6px; margin-top: 8px;">
+                <button class="act-btn cobrar" onclick="showToast('Mensagem enviada no WhatsApp!')">💬 Chamar no Zap</button>
+                <button class="act-btn ver" onclick="abrirRaioX('Ricardo')">🔍 Raio-X</button>
+              </div>
+            </div>
+
+            <div style="background: rgba(11, 18, 33, 0.85); border: 1px solid var(--border); border-left: 3px solid #38BDF8; border-radius: 8px; padding: 12px 14px;">
+              <span style="font-size: 10.5px; font-weight: 800; color: #7DD3FC; text-transform: uppercase;">🌱 Rampa do Novato</span>
+              <b style="color: #FFF; font-size: 13px; display: block; margin: 4px 0 2px;">Destravar Patrícia (Novata 35d)</b>
+              <p style="font-size: 11.5px; color: var(--text-muted);">Fez 8 visitas no Stand Mooca, mas 0 pastas. Insegurança na coleta de documentos Caixa.</p>
+              <div style="display: flex; gap: 6px; margin-top: 8px;">
+                <button class="act-btn repassar" onclick="showToast('Diego alocado como padrinho!')">🤝 Alocar Padrinho</button>
+                <button class="act-btn ver" onclick="abrirRaioX('Patrícia')">🔍 Raio-X</button>
+              </div>
+            </div>
+
+            <div style="background: rgba(11, 18, 33, 0.85); border: 1px solid var(--border); border-left: 3px solid #10B981; border-radius: 8px; padding: 12px 14px;">
+              <span style="font-size: 10.5px; font-weight: 800; color: #86EFAC; text-transform: uppercase;">🏆 Blindagem de Campeão</span>
+              <b style="color: #FFF; font-size: 13px; display: block; margin: 4px 0 2px;">Elogiar Alba no Grupo</b>
+              <p style="font-size: 11.5px; color: var(--text-muted);">Bateu 100% da meta semanal com 3 vendas e SLA recorde de 1m40s.</p>
+              <div style="display: flex; gap: 6px; margin-top: 8px;">
+                <button class="act-btn cobrar" style="background: #10B981; color: #FFF;" onclick="showToast('Elogio publicado no grupo!')">📢 Elogiar no Grupo</button>
+                <button class="act-btn ver" onclick="abrirRaioX('Alba')">🔍 Raio-X</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TABELA ESTRATÉGICA 360° -->
+        <div class="tropa-panel">
+          <div style="padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #0B1220;">
+            <h3 style="font-size: 15px; color: #FFF; font-weight: 800;">📈 Raio-X de Pessoas & Rampa Semana a Semana (WoW)</h3>
+            <span style="font-size: 12px; color: var(--text-muted);">Identifique gargalos de técnica antes que virem desligamento</span>
+          </div>
+
+          <table style="width: 100%; border-collapse: collapse; text-align: left;">
+            <thead>
+              <tr style="background: #0B1220; border-bottom: 1px solid var(--border);">
+                <th style="padding: 12px 14px; font-size: 11.5px; color: var(--text-muted); text-transform: uppercase;">Corretor</th>
+                <th style="padding: 12px 14px; font-size: 11.5px; color: var(--text-muted); text-transform: uppercase;">Semana a Semana (WoW)</th>
+                <th style="padding: 12px 14px; font-size: 11.5px; color: var(--text-muted); text-transform: uppercase;">Rampa (5 Marcos)</th>
+                <th style="padding: 12px 14px; font-size: 11.5px; color: var(--text-muted); text-transform: uppercase;">Diagnóstico do Copiloto</th>
+                <th style="padding: 12px 14px; font-size: 11.5px; color: var(--text-muted); text-transform: uppercase;">Risco Churn</th>
+                <th style="padding: 12px 14px; font-size: 11.5px; color: var(--text-muted); text-transform: uppercase; text-align: right;">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--border-subtle);">
+                <td style="padding: 12px 14px;">
+                  <b style="color: #FFF; font-size: 13px;">Diego</b>
+                  <span style="display: block; font-size: 11px; color: #10B981; font-weight: 700;">Leão · Pleno</span>
+                </td>
+                <td style="padding: 12px 14px;" class="mono">
+                  <b style="color: #10B981;">4 Vendas (+1 WoW)</b>
+                  <span style="display: block; font-size: 11px; color: var(--text-muted);">6 pastas · 14 visitas</span>
+                </td>
+                <td style="padding: 12px 14px;">
+                  <div class="stepper-rampa-5" title="5/5 Marcos">
+                    <span class="step-pip done">1</span><span class="step-line done"></span>
+                    <span class="step-pip done">2</span><span class="step-line done"></span>
+                    <span class="step-pip done">3</span><span class="step-line done"></span>
+                    <span class="step-pip done">4</span><span class="step-line done"></span>
+                    <span class="step-pip done">5</span>
+                  </div>
+                </td>
+                <td style="padding: 12px 14px;">
+                  <b style="color: #10B981; font-size: 12px;">Conversão de 42% visita ➔ pasta</b>
+                  <span style="display: block; font-size: 10.5px; color: var(--text-muted);">Referência. Alocar como padrinho de novatos.</span>
+                </td>
+                <td style="padding: 12px 14px;">
+                  <span style="color: #10B981; font-weight: 800;">4% (Estável)</span>
+                </td>
+                <td style="padding: 12px 14px; text-align: right;">
+                  <button class="act-btn ver" onclick="abrirRaioX('Diego')">🔍 Ver Raio-X</button>
+                </td>
+              </tr>
+
+              <tr style="border-bottom: 1px solid var(--border-subtle);">
+                <td style="padding: 12px 14px;">
+                  <b style="color: #FFF; font-size: 13px;">Patrícia</b>
+                  <span style="display: block; font-size: 11px; color: #38BDF8; font-weight: 700;">Novata · Rampa 35d</span>
+                </td>
+                <td style="padding: 12px 14px;" class="mono">
+                  <b style="color: #FFF;">1 Venda (0 WoW)</b>
+                  <span style="display: block; font-size: 11px; color: var(--text-muted);">2 pastas · 8 visitas</span>
+                </td>
+                <td style="padding: 12px 14px;">
+                  <div class="stepper-rampa-5" title="Travada no Marco 4">
+                    <span class="step-pip done">1</span><span class="step-line done"></span>
+                    <span class="step-pip done">2</span><span class="step-line done"></span>
+                    <span class="step-pip done">3</span><span class="step-line done"></span>
+                    <span class="step-pip curr" style="background: var(--amber); border-color: var(--amber);">4</span><span class="step-line"></span>
+                    <span class="step-pip">5</span>
+                  </div>
+                </td>
+                <td style="padding: 12px 14px;">
+                  <b style="color: var(--amber); font-size: 12px;">Travada no Marco 4 (8 visitas ➔ 0 pastas)</b>
+                  <span style="display: block; font-size: 10.5px; color: var(--text-muted);">Insegurança técnica com documentação Caixa.</span>
+                </td>
+                <td style="padding: 12px 14px;">
+                  <span style="color: var(--amber); font-weight: 800;">28% (Atenção)</span>
+                </td>
+                <td style="padding: 12px 14px; text-align: right;">
+                  <button class="act-btn cobrar" onclick="showToast('Diego alocado como padrinho de Patrícia!')">🤝 Padrinho</button>
+                  <button class="act-btn ver" onclick="abrirRaioX('Patrícia')">🔍 Ver Raio-X</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       MODAL 1: AGENDAR ENTREVISTA (ANDAR COM O CANDIDATO)
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-agendamento">
+    <div class="modal-window" style="width: 520px;">
+      <div class="modal-header">
+        <div>
+          <b style="font-size: 15px; color: #FFF; display: block;" id="modal-agenda-nome">Agendar Entrevista</b>
+          <span style="font-size: 11.5px; color: var(--text-muted);">Defina o horário e dispare o convite no WhatsApp</span>
+        </div>
+        <button style="background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer;" onclick="fecharModalAgendamento()">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <label style="font-size: 11.5px; color: var(--text-muted); font-weight: 700;">Data da Entrevista</label>
+          <input type="date" value="2026-11-15" style="background: var(--surface); border: 1px solid var(--border); padding: 9px 12px; border-radius: 6px; color: #FFF;" />
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <label style="font-size: 11.5px; color: var(--text-muted); font-weight: 700;">Horário</label>
+          <select style="background: var(--surface); border: 1px solid var(--border); padding: 9px 12px; border-radius: 6px; color: #FFF;" id="input-agenda-hora">
+            <option>Hoje às 15:00</option>
+            <option>Hoje às 17:00</option>
+            <option>Amanhã às 10:00</option>
+            <option>Amanhã às 14:30</option>
+          </select>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <label style="font-size: 11.5px; color: var(--text-muted); font-weight: 700;">Local / Formato</label>
+          <select style="background: var(--surface); border: 1px solid var(--border); padding: 9px 12px; border-radius: 6px; color: #FFF;">
+            <option>Stand Mooca (Presencial)</option>
+            <option>Stand Brás (Presencial)</option>
+            <option>Vídeo Chamada (Google Meet / WhatsApp)</option>
+          </select>
+        </div>
+
+        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid #10B981; border-radius: 6px; padding: 12px; font-size: 12px; color: #A7F3D0;">
+          💬 O sistema disparará uma mensagem automática no WhatsApp do candidato confirmando o horário e enviando a localização do stand!
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="act-btn ver" onclick="fecharModalAgendamento()">Cancelar</button>
+        <button class="act-btn cobrar" style="background: #10B981; color: #FFF; font-weight: 800;" onclick="salvarAgendamento()">
+          ✓ Confirmar & Disparar Convite WhatsApp
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       MODAL 2: QUALIFICAR CANDIDATO (CHECKLIST CURY)
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="modal-qualificacao">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div>
+          <b style="font-size: 15px; color: #FFF; display: block;" id="modal-cand-nome">Qualificar Candidato</b>
+          <span style="font-size: 11.5px; color: var(--text-muted);" id="modal-cand-sub">Checklist Eliminatório Cury</span>
+        </div>
+        <button style="background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer;" onclick="fecharModalQualificacao()">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <p style="font-size: 12px; color: var(--text-muted);">
+          Marque os critérios atendidos na triagem. Mínimo de <b>4 dos 5 critérios</b> para aprovação:
+        </p>
+
+        <div style="background: var(--surface-card); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <b style="color: #FFF; font-size: 12.5px;">1. CRECI Ativo ou Estágio Regular Emitido</b>
+            <span style="font-size: 11px; color: var(--text-muted); display: block;">Eliminatório por compliance para atuar no stand.</span>
+          </div>
+          <span style="color: #10B981; font-weight: 800;">✓ OK</span>
+        </div>
+
+        <div style="background: var(--surface-card); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <b style="color: #FFF; font-size: 12.5px;">2. Disponibilidade para Sábado e Domingo</b>
+            <span style="font-size: 11px; color: var(--text-muted); display: block;">80% do VGV fecha aos finais de semana no stand.</span>
+          </div>
+          <span style="color: #10B981; font-weight: 800;">✓ OK</span>
+        </div>
+
+        <div style="background: var(--surface-card); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <b style="color: #FFF; font-size: 12.5px;">3. Mobilidade Urbana (Até 45min dos Stands)</b>
+            <span style="font-size: 11px; color: var(--text-muted); display: block;">Acesso fácil aos stands Mooca, Brás ou Itaquera.</span>
+          </div>
+          <span style="color: #10B981; font-weight: 800;">✓ OK</span>
+        </div>
+
+        <div style="background: var(--surface-card); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <b style="color: #FFF; font-size: 12.5px;">4. Perfil Comercial & Resiliência em Vendas</b>
+            <span style="font-size: 11px; color: var(--text-muted); display: block;">Fome de comissão e tolerância a "não".</span>
+          </div>
+          <span style="color: #10B981; font-weight: 800;">✓ OK</span>
+        </div>
+
+        <div style="background: var(--surface-card); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <b style="color: #FFF; font-size: 12.5px;">5. Smartphone com WhatsApp Business</b>
+            <span style="font-size: 11px; color: var(--text-muted); display: block;">Necessário para atender no SLA &lt;2min.</span>
+          </div>
+          <span style="color: #10B981; font-weight: 800;">✓ OK</span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="act-btn ver" onclick="fecharModalQualificacao()">Cancelar</button>
+        <button class="act-btn cobrar" style="background: #10B981; color: #FFF; font-weight: 800;" onclick="concluirTriagemAprovada()">
+          ✓ Aprovar Triagem & Liberar Agendamento
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       DRAWER LATERAL: RAIO-X DO CORRETOR (14 DIAS COM SIGLAS)
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div class="raiox-backdrop" id="raiox-backdrop" onclick="fecharRaioX()"></div>
+  <aside class="raiox-drawer" id="raiox-drawer">
+    <div class="raiox-header">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="avatar-clean" id="drawer-avatar" style="width: 40px; height: 40px; font-size: 14px;">DI</div>
+        <div>
+          <b style="font-size: 16px; color: #FFF; display: block;" id="drawer-nome">Diego</b>
+          <span style="font-size: 12px; color: var(--text-muted);" id="drawer-cargo">Corretor Leão · Stand Mooca</span>
+        </div>
+      </div>
+      <button style="background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer;" onclick="fecharRaioX()">✕</button>
+    </div>
+
+    <div class="raiox-body">
+      <div class="raiox-card">
+        <div class="raiox-card-title"><span>📊</span> Produção do Mês (Novembro)</div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+          <div style="background: var(--surface); padding: 8px; border-radius: 6px; text-align: center;">
+            <span style="font-size: 11px; color: var(--text-dim); display: block;">Vendas</span>
+            <b style="font-size: 18px; color: #10B981;" id="drawer-vendas" class="mono">4 un</b>
+          </div>
+          <div style="background: var(--surface); padding: 8px; border-radius: 6px; text-align: center;">
+            <span style="font-size: 11px; color: var(--text-dim); display: block;">Pastas</span>
+            <b style="font-size: 18px; color: var(--purple);" id="drawer-pastas" class="mono">6</b>
+          </div>
+          <div style="background: var(--surface); padding: 8px; border-radius: 6px; text-align: center;">
+            <span style="font-size: 11px; color: var(--text-dim); display: block;">Visitas</span>
+            <b style="font-size: 18px; color: #38BDF8;" id="drawer-visitas" class="mono">14</b>
+          </div>
+          <div style="background: var(--surface); padding: 8px; border-radius: 6px; text-align: center;">
+            <span style="font-size: 11px; color: var(--text-dim); display: block;">SLA Médio</span>
+            <b style="font-size: 16px; color: #FCD34D;" id="drawer-sla" class="mono">1m10s</b>
+          </div>
+        </div>
+      </div>
+
+      <div class="raiox-card">
+        <div class="raiox-card-title" style="justify-content: space-between;">
+          <span><span>🏢</span> Assiduidade de Plantão (14 Dias)</span>
+          <span style="font-size: 11.5px; color: #10B981; font-weight: 800;" id="drawer-freq-label">14/14 (100%)</span>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+          <div>
+            <span style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; font-weight: 700; margin-bottom: 3px; display: block;">
+              Semana Passada (02/11 a 08/11)
+            </span>
+            <div class="week-days-strip" id="strip-semana-passada"></div>
+          </div>
+          <div>
+            <span style="font-size: 10px; color: var(--text-dim); text-transform: uppercase; font-weight: 700; margin-bottom: 3px; display: block;">
+              Semana Atual (09/11 a 15/11)
+            </span>
+            <div class="week-days-strip" id="strip-semana-atual"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="raiox-card">
+        <div class="raiox-card-title"><span>🧠</span> Diagnóstico do Copiloto</div>
+        <p style="font-size: 12px; color: var(--text-muted); line-height: 1.45;" id="drawer-coach-txt">
+          Corretor referência. Alta conversão de visita para pasta (42%). Usar para apadrinhar novatos.
+        </p>
+      </div>
+
+      <div class="raiox-card">
+        <div class="raiox-card-title"><span>⚡</span> Ações Rápidas</div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <button class="act-btn repassar" style="width: 100%; justify-content: center; padding: 9px;" onclick="showToast('Senha redefinida para mudar@123!')">
+            🔑 Resetar Senha (mudar@123)
+          </button>
+          <button class="act-btn cobrar" style="width: 100%; justify-content: center; padding: 9px;" onclick="showToast('Carteira aberta!')">
+            👁️ Ver Carteira no CRM
+          </button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- TOAST -->
+  <div class="toast-box" id="app-toast">
+    <span id="toast-icon">✓</span>
+    <span id="toast-text">Ação executada com sucesso!</span>
+  </div>
+
+  <script>
+    // DADOS DOS CORRETORES
+    const CORRETORES_DB = {
+      'Diego': {
+        nome: 'Diego',
+        cargo: 'Corretor Leão · Stand Mooca',
+        avatar: 'DI',
+        vendas: '4 un',
+        pastas: '6',
+        visitas: '14',
+        sla: '1m10s',
+        freqLabel: '14/14 (100%)',
+        dias: [
+          { sigla: 'SEG', status: 'presente', hora: '08:30', weekend: false },
+          { sigla: 'TER', status: 'presente', hora: '08:35', weekend: false },
+          { sigla: 'QUA', status: 'presente', hora: '08:25', weekend: false },
+          { sigla: 'QUI', status: 'presente', hora: '08:40', weekend: false },
+          { sigla: 'SEX', status: 'presente', hora: '08:30', weekend: false },
+          { sigla: 'SÁB', status: 'presente', hora: '08:15', weekend: true },
+          { sigla: 'DOM', status: 'presente', hora: '08:45', weekend: true },
+          { sigla: 'SEG', status: 'presente', hora: '08:30', weekend: false },
+          { sigla: 'TER', status: 'presente', hora: '08:40', weekend: false },
+          { sigla: 'QUA', status: 'presente', hora: '08:20', weekend: false },
+          { sigla: 'QUI', status: 'presente', hora: '08:35', weekend: false },
+          { sigla: 'SEX', status: 'presente', hora: '08:30', weekend: false },
+          { sigla: 'SÁB', status: 'presente', hora: '08:10', weekend: true },
+          { sigla: 'HOJE', status: 'presente', hora: '08:30', weekend: true, today: true }
+        ],
+        coach: 'Corretor referência. Sempre responde no primeiro minuto. Alta conversão de visita para pasta (42%). Usar para apadrinhar novatos.'
+      },
+      'Patrícia': {
+        nome: 'Patrícia',
+        cargo: 'Novata em Rampa (35d) · Stand Mooca',
+        avatar: 'PA',
+        vendas: '1 un',
+        pastas: '2',
+        visitas: '8',
+        sla: '1m45s',
+        freqLabel: '12/14 (86%)',
+        dias: [
+          { sigla: 'SEG', status: 'presente', hora: '08:45', weekend: false },
+          { sigla: 'TER', status: 'folga', hora: 'Folga', weekend: false },
+          { sigla: 'QUA', status: 'presente', hora: '08:50', weekend: false },
+          { sigla: 'QUI', status: 'presente', hora: '08:40', weekend: false },
+          { sigla: 'SEX', status: 'presente', hora: '08:45', weekend: false },
+          { sigla: 'SÁB', status: 'presente', hora: '08:30', weekend: true },
+          { sigla: 'DOM', status: 'presente', hora: '08:40', weekend: true },
+          { sigla: 'SEG', status: 'presente', hora: '08:40', weekend: false },
+          { sigla: 'TER', status: 'folga', hora: 'Folga', weekend: false },
+          { sigla: 'QUA', status: 'presente', hora: '08:45', weekend: false },
+          { sigla: 'QUI', status: 'atraso', hora: '09:45', weekend: false },
+          { sigla: 'SEX', status: 'presente', hora: '08:50', weekend: false },
+          { sigla: 'SÁB', status: 'presente', hora: '08:30', weekend: true },
+          { sigla: 'HOJE', status: 'presente', hora: '08:45', weekend: true, today: true }
+        ],
+        coach: 'Travada no Marco 4: Insegurança na coleta de documentos Caixa. Ação: Colocar Diego na mesa junto com ela.'
+      },
+      'Ricardo': {
+        nome: 'Ricardo',
+        cargo: 'Corretor em Risco Crítico · Stand Brás',
+        avatar: 'RI',
+        vendas: '0 un',
+        pastas: '0',
+        visitas: '1',
+        sla: '42min',
+        freqLabel: '6/14 (43%)',
+        dias: [
+          { sigla: 'SEG', status: 'presente', hora: '09:10', weekend: false },
+          { sigla: 'TER', status: 'presente', hora: '08:55', weekend: false },
+          { sigla: 'QUA', status: 'folga', hora: 'Folga', weekend: false },
+          { sigla: 'QUI', status: 'presente', hora: '09:00', weekend: false },
+          { sigla: 'SEX', status: 'atraso', hora: '10:15', weekend: false },
+          { sigla: 'SÁB', status: 'presente', hora: '09:20', weekend: true },
+          { sigla: 'DOM', status: 'folga', hora: 'Folga', weekend: true },
+          { sigla: 'SEG', status: 'presente', hora: '09:30', weekend: false },
+          { sigla: 'TER', status: 'falta', hora: 'Falta', weekend: false },
+          { sigla: 'QUA', status: 'falta', hora: 'Falta', weekend: false },
+          { sigla: 'QUI', status: 'falta', hora: 'Falta', weekend: false },
+          { sigla: 'SEX', status: 'falta', hora: 'Falta', weekend: false },
+          { sigla: 'SÁB', status: 'falta', hora: 'Falta', weekend: true },
+          { sigla: 'HOJE', status: 'falta', hora: 'Falta', weekend: true, today: true }
+        ],
+        coach: 'Risco crítico de saída (84%). Faltou no sábado e hoje. Segura leads sem contato. Repassar urgente.'
+      },
+      'Alba': {
+        nome: 'Alba',
+        cargo: 'Corretora Campeã · Stand Brás',
+        avatar: 'AL',
+        vendas: '3 un',
+        pastas: '5',
+        visitas: '11',
+        sla: '1m20s',
+        freqLabel: '13/14 (93%)',
+        dias: [
+          { sigla: 'SEG', status: 'presente', hora: '08:20', weekend: false },
+          { sigla: 'TER', status: 'presente', hora: '08:15', weekend: false },
+          { sigla: 'QUA', status: 'presente', hora: '08:30', weekend: false },
+          { sigla: 'QUI', status: 'presente', hora: '08:20', weekend: false },
+          { sigla: 'SEX', status: 'presente', hora: '08:25', weekend: false },
+          { sigla: 'SÁB', status: 'presente', hora: '08:10', weekend: true },
+          { sigla: 'DOM', status: 'folga', hora: 'Folga', weekend: true },
+          { sigla: 'SEG', status: 'presente', hora: '08:20', weekend: false },
+          { sigla: 'TER', status: 'presente', hora: '08:15', weekend: false },
+          { sigla: 'QUA', status: 'presente', hora: '08:30', weekend: false },
+          { sigla: 'QUI', status: 'presente', hora: '08:25', weekend: false },
+          { sigla: 'SEX', status: 'presente', hora: '08:20', weekend: false },
+          { sigla: 'SÁB', status: 'presente', hora: '08:10', weekend: true },
+          { sigla: 'HOJE', status: 'presente', hora: '08:20', weekend: true, today: true }
+        ],
+        coach: 'Desempenho exemplar. Bateu meta da semana na quinta com SLA de 1m40s. Recomenda-se reconhecimento público.'
+      },
+      'Lisandra': {
+        nome: 'Lisandra',
+        cargo: 'Corretora Júnior · Stand Itaquera',
+        avatar: 'LI',
+        vendas: '0 un',
+        pastas: '1',
+        visitas: '3',
+        sla: '14m20s',
+        freqLabel: '10/14 (71%)',
+        dias: [
+          { sigla: 'SEG', status: 'presente', hora: '09:30', weekend: false },
+          { sigla: 'TER', status: 'folga', hora: 'Folga', weekend: false },
+          { sigla: 'QUA', status: 'presente', hora: '09:10', weekend: false },
+          { sigla: 'QUI', status: 'presente', hora: '09:20', weekend: false },
+          { sigla: 'SEX', status: 'presente', hora: '09:15', weekend: false },
+          { sigla: 'SÁB', status: 'presente', hora: '09:00', weekend: true },
+          { sigla: 'DOM', status: 'folga', hora: 'Folga', weekend: true },
+          { sigla: 'SEG', status: 'presente', hora: '09:30', weekend: false },
+          { sigla: 'TER', status: 'folga', hora: 'Folga', weekend: false },
+          { sigla: 'QUA', status: 'presente', hora: '09:20', weekend: false },
+          { sigla: 'QUI', status: 'atraso', hora: '09:50', weekend: false },
+          { sigla: 'SEX', status: 'presente', hora: '09:15', weekend: false },
+          { sigla: 'SÁB', status: 'presente', hora: '09:05', weekend: true },
+          { sigla: 'HOJE', status: 'atraso', hora: '09:40', weekend: true, today: true }
+        ],
+        coach: 'Chega atrasada aos plantões e demora a abrir o WhatsApp dos leads. Precisa de alinhamento de disciplina.'
+      }
+    };
+
+    // CONTROLE DE MODO
+    function ativarModo(modo) {
+      document.querySelectorAll('.mode-tab-btn').forEach(b => {
+        b.classList.remove('active', 'plantao', 'gestao', 'vagas');
+      });
+      document.getElementById('secao-plantao-hoje').style.display = 'none';
+      document.getElementById('secao-gestao-estrategia').style.display = 'none';
+      document.getElementById('secao-vagas-contratacao').style.display = 'none';
+
+      if (modo === 'plantao') {
+        const btn = document.getElementById('btn-mode-plantao');
+        btn.classList.add('active', 'plantao');
+        document.getElementById('secao-plantao-hoje').style.display = 'block';
+        showToast('🔴 Modo Plantão de Hoje: Acompanhe o plantão e o tempo com os leads.');
+      } else if (modo === 'vagas') {
+        const btn = document.getElementById('btn-mode-vagas');
+        btn.classList.add('active', 'vagas');
+        document.getElementById('secao-vagas-contratacao').style.display = 'block';
+        showToast('🎯 Funil de Contratação: Gerencie entrevistas, CRECI e treinamento.');
+      } else if (modo === 'gestao') {
+        const btn = document.getElementById('btn-mode-gestao');
+        btn.classList.add('active', 'gestao');
+        document.getElementById('secao-gestao-estrategia').style.display = 'block';
+        showToast('📊 Modo Gestão: Semana a Semana, Rampa e Churn.');
+      }
+    }
+
+    // FILTRO DO MODO PLANTÃO
+    function filtrarPlantao(categoria, btn) {
+      if (btn) {
+        document.querySelectorAll('.chip-filter').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      }
+      const rows = document.querySelectorAll('.plt-row');
+      rows.forEach(r => {
+        const tag = r.getAttribute('data-tag') || '';
+        if (categoria === 'todos' || tag.includes(categoria)) {
+          r.style.display = '';
+        } else {
+          r.style.display = 'none';
+        }
+      });
+    }
+
+    // ROLETA
+    function toggleRoleta(btn, corretor) {
+      if (btn.classList.contains('ativo')) {
+        btn.classList.remove('ativo');
+        btn.classList.add('pausado');
+        btn.innerHTML = '<span>○</span> <span class="txt-status">Pausado</span>';
+        showToast('⏸️ Corretor ' + corretor + ' foi PAUSADO da roleta!');
+      } else {
+        btn.classList.remove('pausado');
+        btn.classList.add('ativo');
+        btn.innerHTML = '<span>●</span> <span class="txt-status">Na Roleta</span>';
+        showToast('🟢 Corretor ' + corretor + ' foi ATIVADO na roleta!');
+      }
+    }
+
+    function liberarRoleta(btn, corretor) {
+      btn.className = 'roleta-toggle-btn ativo';
+      btn.innerHTML = '<span>●</span> <span class="txt-status">Na Roleta</span>';
+      btn.onclick = function() { toggleRoleta(this, corretor); };
+      showToast('🟢 ' + corretor + ' liberado(a) na roleta de novos leads!');
+    }
+
+    // CRONÔMETRO DINÂMICO
+    setInterval(() => {
+      document.querySelectorAll('.sla-timer-badge').forEach(badge => {
+        let sec = parseInt(badge.getAttribute('data-seconds') || '0', 10);
+        sec++;
+        badge.setAttribute('data-seconds', sec);
+        
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        const txt = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+        
+        const disp = badge.querySelector('.timer-display');
+        if (disp) disp.innerText = txt;
+
+        if (sec >= 2700) {
+          badge.className = 'sla-timer-badge danger mono';
+        } else if (sec >= 900) {
+          badge.className = 'sla-timer-badge warn mono';
+        }
+      });
+    }, 1000);
+
+    // SIMULAR CHEGADA DE LEAD
+    function simularChegadaLead() {
+      showToast('⚡ NOVO LEAD! Beatriz Silveira acabou de cair via Meta Ads e foi entregue ao Diego (1º da Fila)!');
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ANDAR COM O CANDIDATO NO SISTEMA (FUNIL INTERATIVO)
+    // ══════════════════════════════════════════════════════════════════════
+    let candidatoEmFoco = '';
+
+    function abrirModalAgendamento(nome) {
+      candidatoEmFoco = nome;
+      document.getElementById('modal-agenda-nome').innerText = 'Agendar Entrevista: ' + nome;
+      document.getElementById('modal-agendamento').style.display = 'flex';
+    }
+
+    function fecharModalAgendamento() {
+      document.getElementById('modal-agendamento').style.display = 'none';
+    }
+
+    function salvarAgendamento() {
+      const hora = document.getElementById('input-agenda-hora').value;
+      fecharModalAgendamento();
+      
+      // Atualizar linha do Bruno
+      const rows = document.querySelectorAll('.cand-row');
+      rows.forEach(r => {
+        if (r.innerHTML.includes(candidatoEmFoco)) {
+          const celEtapa = r.children[2];
+          celEtapa.innerHTML = `
+            <span class="timeline-etapa-badge entrevista">
+              📅 Entrevista Agendada: <b>${hora}</b>
+            </span>
+            <span style="display: block; font-size: 10.5px; color: #10B981; margin-top: 2px;">
+              ✓ WhatsApp de Confirmação Disparado
+            </span>
+          `;
+          const celAcao = r.children[5];
+          celAcao.innerHTML = `
+            <button class="act-btn cobrar" onclick="showToast('Lembrete enviado no WhatsApp!')">💬 Lembrete</button>
+            <button class="act-btn avancar" onclick="avancarCandidatoParaTreinamento(this, '${candidatoEmFoco}')">
+              ➔ Aprovar Treinamento
+            </button>
+          `;
+        }
+      });
+
+      // Atualizar contadores
+      const countT = document.getElementById('count-triagem');
+      const countE = document.getElementById('count-entrevista');
+      countT.innerText = parseInt(countT.innerText) - 1;
+      countE.innerText = parseInt(countE.innerText) + 1;
+
+      showToast(`✓ Entrevista com ${candidatoEmFoco} agendada para ${hora}! WhatsApp enviado.`);
+    }
+
+    function avancarCandidatoParaTreinamento(btn, nome) {
+      const row = btn.closest('tr');
+      row.children[2].innerHTML = `
+        <span class="timeline-etapa-badge treinamento">
+          🎓 Em Treinamento (Dia 1 de 3)
+        </span>
+        <span style="display: block; font-size: 10.5px; color: var(--text-muted); margin-top: 2px;">
+          Tabela Cury & Simulador Caixa
+        </span>
+      `;
+      row.children[5].innerHTML = `
+        <button class="act-btn avancar" style="background: #10B981; color: #FFF;" onclick="concluirTreinamento(this, '${nome}')">
+          🎓 Concluir & Liberar Roleta
+        </button>
+      `;
+
+      const countE = document.getElementById('count-entrevista');
+      const countTr = document.getElementById('count-treinamento');
+      countE.innerText = parseInt(countE.innerText) - 1;
+      countTr.innerText = parseInt(countTr.innerText) + 1;
+
+      showToast(`✓ ${nome} aprovado(a) na entrevista! Enviado para a turma de Treinamento.`);
+    }
+
+    function concluirTreinamento(btn, nome) {
+      const row = btn.closest('tr');
+      row.children[2].innerHTML = `
+        <span class="timeline-etapa-badge roleta">
+          🚀 Pronta p/ Roleta
+        </span>
+        <span style="display: block; font-size: 10.5px; color: #10B981; font-weight: 700; margin-top: 2px;">
+          Escalado no Stand Mooca (Sábado)
+        </span>
+      `;
+      row.children[5].innerHTML = `
+        <button class="act-btn cobrar" style="background: #10B981; color: #FFF; font-weight: 800;" onclick="showToast('${nome} já está na escala ativa!')">
+          ✓ Na Escala de Sábado
+        </button>
+      `;
+
+      const countTr = document.getElementById('count-treinamento');
+      const countR = document.getElementById('count-roleta');
+      countTr.innerText = parseInt(countTr.innerText) - 1;
+      countR.innerText = parseInt(countR.innerText) + 1;
+
+      showToast(`🎉 PARABÉNS! ${nome} concluiu o treinamento com CRECI validado e foi liberado na escala de sábado!`);
+    }
+
+    function abrirModalQualificacao(nome, info, creci) {
+      candidatoEmFoco = nome;
+      document.getElementById('modal-cand-nome').innerText = 'Qualificar Candidato: ' + nome;
+      document.getElementById('modal-cand-sub').innerText = info + ' · ' + creci;
+      document.getElementById('modal-qualificacao').style.display = 'flex';
+    }
+
+    function fecharModalQualificacao() {
+      document.getElementById('modal-qualificacao').style.display = 'none';
+    }
+
+    function concluirTriagemAprovada() {
+      fecharModalQualificacao();
+      const rows = document.querySelectorAll('.cand-row');
+      rows.forEach(r => {
+        if (r.innerHTML.includes(candidatoEmFoco)) {
+          r.children[2].innerHTML = `
+            <span class="timeline-etapa-badge triagem">
+              ✓ Triagem Aprovada (Hoje)
+            </span>
+            <span style="display: block; font-size: 10.5px; color: var(--amber); font-weight: 700; margin-top: 2px;">
+              Aguardando Agendar Entrevista
+            </span>
+          `;
+          r.children[4].innerHTML = `<span style="color: #10B981; font-weight: 800;">5/5 (A+)</span>`;
+          r.children[5].innerHTML = `
+            <button class="act-btn avancar" style="background: var(--amber); color: #000; font-weight: 800;" onclick="abrirModalAgendamento('${candidatoEmFoco}')">
+              📅 Agendar Entrevista ➔
+            </button>
+          `;
+        }
+      });
+      showToast(`✓ Triagem de ${candidatoEmFoco} APROVADA! Pronto para agendar entrevista.`);
+    }
+
+    function filtrarCandidatos(etapa) {
+      const rows = document.querySelectorAll('.cand-row');
+      rows.forEach(r => {
+        if (etapa === 'todos' || r.getAttribute('data-etapa') === etapa) {
+          r.style.display = '';
+        } else {
+          r.style.display = 'none';
+        }
+      });
+      showToast('Filtro do funil: ' + etapa.toUpperCase());
+    }
+
+    function abrirModalCandidato() {
+      showToast('Formulário de indicação aberto para cadastrar novo candidato!');
+    }
+
+    // RAIO-X
+    function abrirRaioX(nome) {
+      const data = CORRETORES_DB[nome] || CORRETORES_DB['Diego'];
+      document.getElementById('drawer-nome').innerText = data.nome;
+      document.getElementById('drawer-cargo').innerText = data.cargo;
+      document.getElementById('drawer-avatar').innerText = data.avatar;
+      document.getElementById('drawer-vendas').innerText = data.vendas;
+      document.getElementById('drawer-pastas').innerText = data.pastas;
+      document.getElementById('drawer-visitas').innerText = data.visitas;
+      document.getElementById('drawer-sla').innerText = data.sla;
+      document.getElementById('drawer-freq-label').innerText = data.freqLabel;
+      document.getElementById('drawer-coach-txt').innerText = data.coach;
+
+      const sem1 = document.getElementById('strip-semana-passada');
+      const sem2 = document.getElementById('strip-semana-atual');
+      sem1.innerHTML = '';
+      sem2.innerHTML = '';
+
+      data.dias.slice(0, 7).forEach(d => sem1.appendChild(criarCardDia(d)));
+      data.dias.slice(7, 14).forEach(d => sem2.appendChild(criarCardDia(d)));
+
+      document.getElementById('raiox-backdrop').style.display = 'block';
+      document.getElementById('raiox-drawer').classList.add('open');
+    }
+
+    function fecharRaioX() {
+      document.getElementById('raiox-backdrop').style.display = 'none';
+      document.getElementById('raiox-drawer').classList.remove('open');
+    }
+
+    function criarCardDia(d) {
+      const card = document.createElement('div');
+      card.className = 'day-cell-card' + (d.weekend ? ' weekend' : '') + (d.today ? ' today' : '');
+      let icon = '✓';
+      if (d.status === 'atraso') icon = '⏰';
+      else if (d.status === 'folga') icon = '💤';
+      else if (d.status === 'falta') icon = '✕';
+
+      card.innerHTML = `
+        <span class="day-name-sigla">${d.sigla}</span>
+        <div class="day-status-pill ${d.status}">${icon}</div>
+        <span style="font-size: 8.5px; color: var(--text-dim); font-family: monospace;">${d.hora}</span>
+      `;
+      return card;
+    }
+
+    function showToast(txt) {
+      const t = document.getElementById('app-toast');
+      document.getElementById('toast-text').innerText = txt;
+      t.style.display = 'flex';
+      setTimeout(() => { t.style.display = 'none'; }, 3200);
+    }
+  </script>
+</body>
+</html>

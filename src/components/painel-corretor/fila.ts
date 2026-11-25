@@ -46,7 +46,11 @@ export function grupoDe(l: LeadPC, tarefas: Map<string, Task>, hoje = diaSP(Date
   if (respondeu(l)) return "resp";
   if (novo(l)) return "novo";
   const t = tarefas.get(l.id);
-  if ((l.next_action_date && diaSP(l.next_action_date) <= hoje) || (t && diaSP(t.dueAt) <= hoje)) return "ret";
+  // Retorno combinado só conta se o corretor AINDA não voltou a falar depois da data marcada.
+  // Se já teve contato (WhatsApp/tentativa/nota) em cima ou depois do retorno, a tarefa está cumprida — não é mais "ret".
+  const retPendente = !!l.next_action_date && diaSP(l.next_action_date) <= hoje
+    && Date.parse(ultimoContato(l)) < Date.parse(l.next_action_date);
+  if (retPendente || (t && diaSP(t.dueAt) <= hoje)) return "ret";
   if (l.status === "VISIT_SCHEDULED" && l.visit_scheduled_at && diaSP(l.visit_scheduled_at) === hoje) return "vis";
   if (l.source === "cold_pool" && ["NEW", "IN_PROGRESS"].includes(l.status) && diaSP(ultimoContato(l)) < hoje
       && Date.parse(l.created_at) > Date.now() - 10 * 24 * H) return "pes";

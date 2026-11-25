@@ -88,6 +88,9 @@ export async function addLeadNote(leadId: string, brokerId: string, content: str
     .from("lead_notes")
     .insert({ lead_id: leadId, broker_id: brokerId, content });
   if (error) throw error;
+  // A nota é trabalho do corretor ("conversamos", "caixa postal"…): marca atividade no lead
+  // para ele não virar "parado"/"sem contato" no painel do gerente só porque foi anotação, não WhatsApp.
+  await supabase.from("leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", leadId);
 }
 
 /** Corretor pode ajustar a temperatura na mão (além do que o sistema calcula). */

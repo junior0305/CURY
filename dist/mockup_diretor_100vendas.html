@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Comandra — Sala de Comando da Diretoria (Plano 100 Vendas)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070B14;
+      --surface: #0E1626;
+      --surface-card: #131E33;
+      --surface-subtle: #192640;
+      --border: #233558;
+      --border-subtle: #1A2844;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+      
+      --brand: #0EA5E9;
+      --brand-light: rgba(14, 165, 233, 0.15);
+      --gold: #F59E0B;
+      --gold-light: rgba(245, 158, 11, 0.15);
+      --gold-border: rgba(245, 158, 11, 0.35);
+      --green: #10B981;
+      --green-light: rgba(16, 185, 129, 0.15);
+      --green-border: rgba(16, 185, 129, 0.35);
+      --rose: #F43F5E;
+      --rose-light: rgba(244, 63, 94, 0.15);
+      --rose-border: rgba(244, 63, 94, 0.35);
+      --purple: #A855F7;
+      --purple-light: rgba(168, 85, 247, 0.15);
+      --blue: #38BDF8;
+
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 22px;
+      --radius-full: 9999px;
+      
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+      --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+      font-size: 13.5px;
+      line-height: 1.45;
+    }
+
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    .app-layout {
+      display: flex;
+      width: 100vw;
+      min-height: 100vh;
+    }
+
+    /* RAIL LATERAL V10 */
+    .app-rail {
+      width: 68px;
+      background: #05080F;
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0;
+      gap: 20px;
+      z-index: 50;
+      flex-shrink: 0;
+    }
+
+    .rail-brand {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 20px;
+      color: #fff;
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.35);
+      cursor: pointer;
+    }
+
+    .rail-menu {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+      align-items: center;
+    }
+
+    .rail-btn {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-dim);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .rail-btn svg { width: 20px; height: 20px; stroke-width: 1.8; stroke: currentColor; fill: none; }
+    .rail-btn span { font-size: 8.5px; font-weight: 700; margin-top: 3px; }
+
+    .rail-btn:hover {
+      color: var(--text-main);
+      background: var(--surface);
+      border-color: var(--border-subtle);
+    }
+
+    .rail-btn.active {
+      color: #F59E0B;
+      background: var(--surface-card);
+      border-color: var(--gold-border);
+      box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
+    }
+
+    .rail-btn.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 10px;
+      bottom: 10px;
+      width: 3px;
+      background: #F59E0B;
+      border-radius: 0 4px 4px 0;
+    }
+
+    /* MAIN CONTAINER */
+    .app-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      max-height: 100vh;
+      background: radial-gradient(circle at 85% 5%, rgba(245, 158, 11, 0.05) 0%, transparent 45%),
+                  radial-gradient(circle at 15% 15%, rgba(14, 165, 233, 0.04) 0%, transparent 40%),
+                  var(--bg);
+    }
+
+    /* TOP HEADER EXECUTIVO */
+    .top-header {
+      padding: 16px 28px;
+      background: rgba(14, 22, 38, 0.7);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .header-title-box h1 {
+      font-size: 19px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .director-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #F59E0B;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 10px;
+      border-radius: var(--radius-full);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .header-meta-info {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 2px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 700;
+      padding: 8px 16px;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.18s ease;
+      border: 1px solid transparent;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .btn-gold {
+      background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+      color: #1A0E03;
+      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+    }
+    .btn-gold:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+    .btn-secondary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+    }
+    .btn-secondary:hover { background: var(--surface-card); border-color: var(--text-muted); }
+
+    .btn-sm { padding: 5px 11px; font-size: 11.5px; border-radius: var(--radius-sm); }
+
+    /* CONTENT PADDING */
+    .dashboard-content {
+      padding: 24px 28px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       CARD HERO: O PLACAR DAS 100 VENDAS (TERMÔMETRO & RITMO DIÁRIO)
+       ══════════════════════════════════════════════════════════════════ */
+    .hero-target-card {
+      background: linear-gradient(145deg, #0E1626 0%, #15223C 100%);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: var(--radius-xl);
+      padding: 26px 28px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-target-card::after {
+      content: '';
+      position: absolute;
+      top: -50px; right: -50px;
+      width: 180px; height: 180px;
+      background: radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+    }
+
+    .hero-headline h2 {
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .target-numbers-strip {
+      display: flex;
+      gap: 28px;
+      align-items: center;
+    }
+
+    .strip-stat {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .strip-stat .lbl {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .strip-stat .val {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      margin-top: 2px;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    /* BARRA DE PROGRESSO COM MARCO DE VELOCIDADE */
+    .pacing-bar-container {
+      margin-top: 10px;
+    }
+
+    .pacing-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12.5px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .pacing-track {
+      height: 14px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .pacing-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10B981 0%, #0EA5E9 55%, #F59E0B 100%);
+      border-radius: var(--radius-full);
+      position: relative;
+    }
+
+    .pacing-target-marker {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 3px;
+      background: #fff;
+      box-shadow: 0 0 8px #fff;
+    }
+
+    .pacing-subtext {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       MÓDULO PRESCRITIVO: INTERVENÇÕES PRIORITÁRIAS DE HOJE
+       ══════════════════════════════════════════════════════════════════ */
+    .interventions-section {
+      background: var(--surface);
+      border: 1px solid rgba(244, 63, 94, 0.3);
+      border-radius: var(--radius-xl);
+      padding: 24px;
+      box-shadow: var(--shadow-md);
+      position: relative;
+    }
+
+    .section-title-wrap {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .section-title-wrap h3 {
+      font-size: 16px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      letter-spacing: -0.01em;
+    }
+
+    .interventions-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .intervention-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 14px;
+      position: relative;
+      transition: all 0.2s;
+    }
+
+    .intervention-card:hover {
+      border-color: var(--rose);
+      transform: translateY(-2px);
+    }
+
+    .card-urgent-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: var(--radius-full);
+      width: fit-content;
+    }
+
+    .pill-red { background: var(--rose-light); color: var(--rose); border: 1px solid var(--rose-border); }
+    .pill-amber { background: var(--gold-light); color: var(--gold); border: 1px solid var(--gold-border); }
+    .pill-blue { background: var(--brand-light); color: var(--blue); border: 1px solid rgba(14, 165, 233, 0.35); }
+
+    .int-target-name {
+      font-size: 15px;
+      font-weight: 800;
+      margin: 6px 0 2px;
+    }
+
+    .int-role-loc {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .int-diagnose {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.45;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 10px 12px;
+      border-radius: var(--radius-md);
+      border-left: 3px solid var(--border);
+    }
+
+    .int-action-box {
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .int-action-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+       AS 6 MATRIZES SISTÊMICAS (TABS EXECUTIVAS)
+       ══════════════════════════════════════════════════════════════════ */
+    .matrices-container {
+      background: var(--surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-xl);
+      padding: 24px;
+    }
+
+    .matrix-nav-tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 12px;
+      margin-bottom: 20px;
+      overflow-x: auto;
+    }
+
+    .m-tab {
+      padding: 9px 16px;
+      border-radius: var(--radius-md);
+      font-size: 12.5px;
+      font-weight: 700;
+      cursor: pointer;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .m-tab:hover {
+      color: var(--text-main);
+      background: var(--surface-card);
+    }
+
+    .m-tab.active {
+      color: #fff;
+      background: var(--surface-card);
+      border-color: var(--border);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    .m-tab .badge {
+      padding: 2px 7px;
+      font-size: 10.5px;
+      border-radius: var(--radius-full);
+      background: rgba(255, 255, 255, 0.08);
+      color: inherit;
+    }
+
+    .m-tab.active .badge {
+      background: var(--brand);
+      color: #fff;
+    }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; animation: fadeIn 0.2s ease; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* TABELA DE GESTORES & CORRETORES */
+    .exec-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 12.5px;
+    }
+
+    .exec-table th {
+      text-align: left;
+      padding: 10px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .exec-table td {
+      padding: 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-main);
+    }
+
+    .exec-table tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+    .tag-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: var(--radius-full);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .st-red { background: var(--rose-light); color: var(--rose); border: 1px solid var(--rose-border); }
+    .st-green { background: var(--green-light); color: var(--green); border: 1px solid var(--green-border); }
+    .st-gold { background: var(--gold-light); color: var(--gold); border: 1px solid var(--gold-border); }
+
+    /* MODAL DE INTERVENÇÃO / SCRIPT */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      z-index: 999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .modal-box {
+      width: 600px;
+      max-width: 95vw;
+      background: #0E1626;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-lg);
+      padding: 28px;
+    }
+
+    .modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .modal-head h3 { font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+
+    .modal-close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 22px;
+    }
+
+    .script-text-box {
+      background: #0B141A;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      font-family: inherit;
+      font-size: 13.5px;
+      line-height: 1.55;
+      color: #E9EDEF;
+      white-space: pre-wrap;
+      margin: 16px 0;
+      position: relative;
+    }
+
+    /* TOAST */
+    .toast-pill {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #10B981;
+      color: #042410;
+      font-weight: 700;
+      padding: 12px 20px;
+      border-radius: var(--radius-full);
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 1000;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .toast-pill.show { transform: translateY(0); opacity: 1; }
+
+  </style>
+</head>
+<body>
+
+<div class="app-layout">
+  <!-- RAIL LATERAL V10 -->
+  <aside class="app-rail">
+    <div class="rail-brand" title="Comandra Diretoria">C</div>
+    <nav class="rail-menu">
+      <button class="rail-btn active" title="Sala de Comando 100 Vendas">
+        <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <span>100 Vendas</span>
+      </button>
+      <button class="rail-btn" title="Central de Leads">
+        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Leads</span>
+      </button>
+      <button class="rail-btn" title="Tropa & Plantão">
+        <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        <span>Tropa</span>
+      </button>
+      <button class="rail-btn" title="Disparos WhatsApp">
+        <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        <span>Disparos</span>
+      </button>
+      <button class="rail-btn" title="Esteira & Contratos">
+        <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <span>Esteira</span>
+      </button>
+    </nav>
+  </aside>
+
+  <!-- CONTEÚDO PRINCIPAL -->
+  <main class="app-main">
+    <!-- TOP HEADER -->
+    <header class="top-header">
+      <div class="header-left">
+        <div class="header-title-box">
+          <h1>
+            <span>👑 Sala de Comando da Diretoria</span>
+            <span class="director-badge">Plano 100 Vendas / Mês</span>
+          </h1>
+          <div class="header-meta-info">
+            <span>Hoje: <b>15 de Novembro de 2026</b></span>
+            <span>•</span>
+            <span>Dia <b>15 de 30</b> (50% do mês decorrido)</span>
+            <span>•</span>
+            <span>Cury Construtora · 4 Superintendências · 18 Gerências · 142 Corretores</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <button class="btn btn-secondary btn-sm" onclick="showToast('Exportando Dossiê Executivo em PDF...')">📊 Dossiê do Mês</button>
+        <button class="btn btn-gold btn-sm" onclick="showToast('Abrindo convocação de alinhamento com os 4 Superintendentes...')">⚡ Convocação da Diretoria</button>
+      </div>
+    </header>
+
+    <div class="dashboard-content">
+      
+      <!-- ══════════════════════════════════════════════════════════════
+           CARD 1: O PLACAR DAS 100 VENDAS (TERMÔMETRO & VELOCIDADE)
+           ══════════════════════════════════════════════════════════════ -->
+      <div class="hero-target-card">
+        <div class="hero-top-row">
+          <div class="hero-headline">
+            <h2>
+              <span>🎯 Velocidade de Cruzeiro para 100 Vendas</span>
+            </h2>
+            <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
+              Projeção algorítmica do Comandra baseada em Junix (vendas confirmadas), C2S (visitas) e conversão histórica.
+            </div>
+          </div>
+
+          <div class="target-numbers-strip">
+            <div class="strip-stat">
+              <span class="lbl">Vendas Confirmadas</span>
+              <span class="val mono" style="color: #10B981;">42 <small style="font-size: 14px; color: var(--text-dim); font-weight: 500;">/ 100</small></span>
+              <span style="font-size: 11.5px; color: var(--text-muted);">R$ 13,8M em VGV</span>
+            </div>
+
+            <div class="strip-stat">
+              <span class="lbl">Contratos em Emissão</span>
+              <span class="val mono" style="color: #38BDF8;">14 <small style="font-size: 13px; color: var(--text-dim); font-weight: 500;">quase venda</small></span>
+              <span style="font-size: 11.5px; color: var(--text-muted);">R$ 4,6M travados</span>
+            </div>
+
+            <div class="strip-stat">
+              <span class="lbl">Projeção de Fechamento</span>
+              <span class="val mono" style="color: #F59E0B;">78 <small style="font-size: 13px; color: #F43F5E; font-weight: 700;">(GAP: -22)</small></span>
+              <span style="font-size: 11.5px; color: #F43F5E; font-weight: 700;">Risco de não bater</span>
+            </div>
+
+            <div class="strip-stat">
+              <span class="lbl">Ritmo Diário Necessário</span>
+              <span class="val mono" style="color: #fff;">3,8 <small style="font-size: 14px; color: var(--text-dim); font-weight: 500;">vendas/dia</small></span>
+              <span style="font-size: 11.5px; color: var(--text-muted);">Ritmo atual: 2,8/dia</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- BARRA DE PROGRESSO COM METAS -->
+        <div class="pacing-bar-container">
+          <div class="pacing-labels">
+            <span>Progresso da Meta: <b>42% Concluído</b> (Meta ideal para dia 15: <b>50%</b>)</span>
+            <span style="color: #F59E0B;">Restam 15 dias e 58 vendas para a meta de 100</span>
+          </div>
+
+          <div class="pacing-track">
+            <div class="pacing-fill" style="width: 42%;"></div>
+            <!-- MARCO DO DIA 15 (50%) -->
+            <div class="pacing-target-marker" style="left: 50%;" title="Onde deveríamos estar hoje (Dia 15 = 50 vendas)"></div>
+          </div>
+
+          <div class="pacing-subtext">
+            <span>0 vendas</span>
+            <span style="color: #38BDF8; font-weight: 700;">Dia 15: 42 vendas (Atraso de 8 vendas)</span>
+            <span>Meta: 100 vendas</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════
+           CARD 2: 🚨 RADAR DE INTERVENÇÕES DO DIRETOR (HOJE ÀS 08H30)
+           ══════════════════════════════════════════════════════════════ -->
+      <div class="interventions-section">
+        <div class="section-title-wrap">
+          <div>
+            <h3>
+              <span style="color: #F43F5E;">🚨 Quem Precisa de Intervenção Hoje (Próxima Ação do Diretor)</span>
+            </h3>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">
+              3 intervenções de alto impacto identificadas pelo Comandra que destravam diretamente a meta de 100 vendas.
+            </p>
+          </div>
+          <span class="card-urgent-pill pill-red">3 Ações Prioritárias</span>
+        </div>
+
+        <div class="interventions-grid">
+          
+          <!-- INTERVENÇÃO 1: GERENTE ZERADO -->
+          <div class="intervention-card" style="border-left: 4px solid #F43F5E;">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="card-urgent-pill pill-red">1. Gerência Estagnada</span>
+                <span class="mono" style="font-size: 11px; color: var(--text-dim);">Stand Mooca 2</span>
+              </div>
+              <div class="int-target-name">Gerente Bruno Castro</div>
+              <div class="int-role-loc">Superintendência Leste (Carlos) · 8 corretores</div>
+              
+              <div class="int-diagnose" style="margin-top: 10px;">
+                <b>Diagnóstico Crítico:</b> Equipe com <b>0 vendas no dia 15</b>. Consumiu <b>R$ 4.200 em leads Meta</b> e está com <b>42 contatos sem primeiro toque há 3 dias</b>.
+              </div>
+            </div>
+
+            <div class="int-action-box">
+              <div class="int-action-label">Ação Recomendada do Diretor:</div>
+              <button class="btn btn-secondary btn-sm" style="border-color: #F43F5E; color: #F43F5E; font-weight: 700;" onclick="abrirModalScript('bruno')">
+                📞 Cobrar Bruno c/ Script Pronto (WhatsApp)
+              </button>
+            </div>
+          </div>
+
+          <!-- INTERVENÇÃO 2: VGV REPRESADO -->
+          <div class="intervention-card" style="border-left: 4px solid #38BDF8;">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="card-urgent-pill pill-blue">2. VGV Represado</span>
+                <span class="mono" style="font-size: 11px; color: var(--text-dim);">Stand Cambuci</span>
+              </div>
+              <div class="int-target-name">Super Liliane Martins</div>
+              <div class="int-role-loc">Superintendência Centro · 5 Contratos Travados</div>
+              
+              <div class="int-diagnose" style="margin-top: 10px;">
+                <b>Diagnóstico de Destrave:</b> <b>5 contratos emitidos no Junix (R$ 1,65M VGV)</b> parados há mais de 4 dias na Emissão por pendência de extrato de FGTS Caixa.
+              </div>
+            </div>
+
+            <div class="int-action-box">
+              <div class="int-action-label">Ação Recomendada do Diretor:</div>
+              <button class="btn btn-secondary btn-sm" style="border-color: #38BDF8; color: #38BDF8; font-weight: 700;" onclick="abrirModalScript('liliane')">
+                ⚡ Destravar Correspondente Caixa
+              </button>
+            </div>
+          </div>
+
+          <!-- INTERVENÇÃO 3: DESACELERAÇÃO -->
+          <div class="intervention-card" style="border-left: 4px solid #F59E0B;">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="card-urgent-pill pill-amber">3. Queda de Ritmo</span>
+                <span class="mono" style="font-size: 11px; color: var(--text-dim);">Stand Ipiranga</span>
+              </div>
+              <div class="int-target-name">Super Marcos Vinicius</div>
+              <div class="int-role-loc">Superintendência Sul · Escala de Plantão</div>
+              
+              <div class="int-diagnose" style="margin-top: 10px;">
+                <b>Diagnóstico de Perda de Ritmo:</b> Visitas presenciais <b>caíram 42% WoW</b> nesta semana. A escala de sábado está com <b>4 faltas confirmadas</b> sem remanejamento.
+              </div>
+            </div>
+
+            <div class="int-action-box">
+              <div class="int-action-label">Ação Recomendada do Diretor:</div>
+              <button class="btn btn-secondary btn-sm" style="border-color: #F59E0B; color: #F59E0B; font-weight: 700;" onclick="abrirModalScript('marcos')">
+                🏢 Exigir Fechamento da Escala de Sábado
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════════
+           CARD 3: AS 6 MATRIZES SISTÊMICAS DA DIRETORIA
+           ══════════════════════════════════════════════════════════════ -->
+      <div class="matrices-container">
+        <!-- NAVEGAÇÃO ENTRE AS 6 PERGUNTAS -->
+        <div class="matrix-nav-tabs">
+          <div class="m-tab active" onclick="switchMatrix('tab-m1')" id="mtab-m1">
+            <span>🔴 Gerentes Zerados</span>
+            <span class="badge" style="background: rgba(244, 63, 94, 0.2); color: #F43F5E;">5 no zero</span>
+          </div>
+          <div class="m-tab" onclick="switchMatrix('tab-m2')" id="mtab-m2">
+            <span>🎯 Corretores à Deriva</span>
+            <span class="badge">38 sem plano</span>
+          </div>
+          <div class="m-tab" onclick="switchMatrix('tab-m3')" id="mtab-m3">
+            <span>🚀 Aceleração de Equipes (WoW)</span>
+            <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #10B981;">+65% top 1</span>
+          </div>
+          <div class="m-tab" onclick="switchMatrix('tab-m4')" id="mtab-m4">
+            <span>🎓 Líderes Formadores (Rampa)</span>
+            <span class="badge">83% dispersão</span>
+          </div>
+          <div class="m-tab" onclick="switchMatrix('tab-m5')" id="mtab-m5">
+            <span>⚡ Oportunidades & VGV Travado</span>
+            <span class="badge" style="color: #38BDF8;">R$ 4,6M em risco</span>
+          </div>
+          <div class="m-tab" onclick="switchMatrix('tab-m6')" id="mtab-m6">
+            <span>🏢 Superintendências (Pacing)</span>
+            <span class="badge">4 Regionais</span>
+          </div>
+        </div>
+
+        <!-- ── TAB PANE 1: QUAIS GERENTES ESTÃO SEM PRODUÇÃO? ── -->
+        <div class="tab-pane active" id="tab-m1">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div>
+              <b style="font-size: 14px; color: #F43F5E;">Semáforo de Produção dos Gerentes (Dia 15 de 30)</b>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                5 dos 18 gerentes estão zerados no mês, consumindo R$ 16.800 de tráfego pago sem nenhuma venda.
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="showToast('Notificando os 5 gerentes zerados...')">Notificar Todos os 5 Gerentes</button>
+          </div>
+
+          <table class="exec-table">
+            <thead>
+              <tr>
+                <th>Gerente</th>
+                <th>Superintendente</th>
+                <th>Corretores</th>
+                <th>Vendas no Mês</th>
+                <th>Leads Consumidos</th>
+                <th>Custo em Tráfego</th>
+                <th>Dias sem Visita</th>
+                <th>Status</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Bruno Castro</b> (Stand Mooca 2)</td>
+                <td>Carlos Silveira</td>
+                <td class="mono">8 corretores</td>
+                <td class="mono" style="color: #F43F5E; font-weight: 800;">0 vendas</td>
+                <td class="mono">142 leads</td>
+                <td class="mono">R$ 4.200</td>
+                <td class="mono" style="color: #F43F5E;">4 dias sem visita</td>
+                <td><span class="tag-status st-red">Crítico (Zero)</span></td>
+                <td><button class="btn btn-secondary btn-sm" onclick="abrirModalScript('bruno')">Cobrar Plano</button></td>
+              </tr>
+              <tr>
+                <td><b>Thiago Ramos</b> (Stand Cambuci 3)</td>
+                <td>Liliane Martins</td>
+                <td class="mono">6 corretores</td>
+                <td class="mono" style="color: #F43F5E; font-weight: 800;">0 vendas</td>
+                <td class="mono">98 leads</td>
+                <td class="mono">R$ 2.940</td>
+                <td class="mono" style="color: #F43F5E;">3 dias sem visita</td>
+                <td><span class="tag-status st-red">Crítico (Zero)</span></td>
+                <td><button class="btn btn-secondary btn-sm" onclick="showToast('Script enviado para Thiago!')">Cobrar Plano</button></td>
+              </tr>
+              <tr>
+                <td><b>Eduardo Faria</b> (Stand Ipiranga 2)</td>
+                <td>Marcos Vinicius</td>
+                <td class="mono">7 corretores</td>
+                <td class="mono" style="color: #F43F5E; font-weight: 800;">0 vendas</td>
+                <td class="mono">115 leads</td>
+                <td class="mono">R$ 3.450</td>
+                <td class="mono">2 dias sem visita</td>
+                <td><span class="tag-status st-red">Crítico (Zero)</span></td>
+                <td><button class="btn btn-secondary btn-sm" onclick="showToast('Script enviado para Eduardo!')">Cobrar Plano</button></td>
+              </tr>
+              <tr>
+                <td><b>Renata Dias</b> (Stand Tatuapé)</td>
+                <td>Carlos Silveira</td>
+                <td class="mono">7 corretores</td>
+                <td class="mono" style="color: #F59E0B; font-weight: 700;">1 venda</td>
+                <td class="mono">130 leads</td>
+                <td class="mono">R$ 3.900</td>
+                <td class="mono">Ontem</td>
+                <td><span class="tag-status st-gold">Abaixo da Meta</span></td>
+                <td><button class="btn btn-secondary btn-sm" onclick="showToast('Alinhamento solicitado para Renata.')">Acelerar</button></td>
+              </tr>
+              <tr>
+                <td><b>Juliana Mendes</b> (Stand Mooca 1)</td>
+                <td>Carlos Silveira</td>
+                <td class="mono">8 corretores</td>
+                <td class="mono" style="color: #10B981; font-weight: 800;">5 vendas</td>
+                <td class="mono">160 leads</td>
+                <td class="mono">R$ 4.800</td>
+                <td class="mono">Hoje</td>
+                <td><span class="tag-status st-green">Meta Batida</span></td>
+                <td><button class="btn btn-secondary btn-sm" onclick="showToast('Parabéns enviado!')">Reconhecer</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ── TAB PANE 2: QUAIS CORRETORES ESTÃO SEM PLANO DE AÇÃO? ── -->
+        <div class="tab-pane" id="tab-m2">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div>
+              <b style="font-size: 14px; color: var(--text-main);">Corretores à Deriva (Sem Visita Agendada ou Proposta Quente)</b>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                38 de 142 corretores (26,7%) estão sem atividade agendada nos próximos 3 dias. Agrupados pela gerência responsável:
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="showToast('Cobrança de alinhamento disparada para os 4 gerentes!')">Exigir Plano das Gerências</button>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;">
+            <div style="background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px;">
+              <div style="display: flex; justify-content: space-between;">
+                <b>Gerente Bruno Castro</b>
+                <span class="tag-status st-red">7 à deriva (77%)</span>
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted); margin: 8px 0;">Equipe: 9 corretores · 0 vendas no mês</div>
+              <div style="font-size: 11.5px; color: #F43F5E; line-height: 1.4;">
+                Corretores parados: Marcelo, Carla, Vinicius, Rodrigo, Amanda, Felipe, Lucas P.
+              </div>
+              <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 10px;" onclick="showToast('Cobrança enviada ao Bruno!')">Cobrar Bruno</button>
+            </div>
+
+            <div style="background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px;">
+              <div style="display: flex; justify-content: space-between;">
+                <b>Gerente Thiago Ramos</b>
+                <span class="tag-status st-red">5 à deriva (83%)</span>
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted); margin: 8px 0;">Equipe: 6 corretores · 0 vendas no mês</div>
+              <div style="font-size: 11.5px; color: #F43F5E; line-height: 1.4;">
+                Corretores parados: Robson, Daiane, Alex, Fabiana, Gabriel.
+              </div>
+              <button class="btn btn-secondary btn-sm" style="width: 100%; margin-top: 10px;" onclick="showToast('Cobrança enviada ao Thiago!')">Cobrar Thiago</button>
+            </div>
+
+            <div style="background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px;">
+              <div style="display: flex; justify-content: space-between;">
+                <b>Gerente Juliana Mendes</b>
+                <span class="tag-status st-green">0 à deriva (0%)</span>
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted); margin: 8px 0;">Equipe: 8 corretores · 5 vendas no mês</div>
+              <div style="font-size: 11.5px; color: #10B981; line-height: 1.4;">
+                100% da tropa com visitas marcadas ou clientes em análise Caixa no Junix.
+              </div>
+              <span class="tag-status st-green" style="margin-top: 10px; display: inline-block;">Modelo de Gestão</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── TAB PANE 3: QUAIS EQUIPES ESTÃO AUMENTANDO PRODUTIVIDADE? (WOW) ── -->
+        <div class="tab-pane" id="tab-m3">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div>
+              <b style="font-size: 14px; color: #10B981;">Radar de Aceleração e Tração (Week over Week)</b>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                Compara os últimos 7 dias com a semana anterior em Visitas no C2S e Pastas Geradas no Junix.
+              </div>
+            </div>
+          </div>
+
+          <table class="exec-table">
+            <thead>
+              <tr>
+                <th>Equipe / Gerente</th>
+                <th>Stand</th>
+                <th>Visitas na Semana</th>
+                <th>Crescimento WoW</th>
+                <th>Pastas Junix</th>
+                <th>Vendas Fechadas</th>
+                <th>Tração</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Equipe Juliana Mendes</b></td>
+                <td>Stand Mooca 1</td>
+                <td class="mono">28 visitas</td>
+                <td class="mono" style="color: #10B981; font-weight: 800;">+65% ↑</td>
+                <td class="mono">8 pastas</td>
+                <td class="mono" style="font-weight: 700;">3 vendas</td>
+                <td><span class="tag-status st-green">🔥 Super Acelerando</span></td>
+              </tr>
+              <tr>
+                <td><b>Equipe Rafael Costa</b></td>
+                <td>Stand Perdizes</td>
+                <td class="mono">22 visitas</td>
+                <td class="mono" style="color: #10B981; font-weight: 800;">+38% ↑</td>
+                <td class="mono">6 pastas</td>
+                <td class="mono" style="font-weight: 700;">2 vendas</td>
+                <td><span class="tag-status st-green">↗ Em Alta</span></td>
+              </tr>
+              <tr>
+                <td><b>Equipe Ricardo Lima</b></td>
+                <td>Stand Ipiranga 1</td>
+                <td class="mono">14 visitas</td>
+                <td class="mono" style="color: #F43F5E; font-weight: 700;">-22% ↓</td>
+                <td class="mono">2 pastas</td>
+                <td class="mono">0 vendas</td>
+                <td><span class="tag-status st-red">Desacelerando</span></td>
+              </tr>
+              <tr>
+                <td><b>Equipe Bruno Castro</b></td>
+                <td>Stand Mooca 2</td>
+                <td class="mono">6 visitas</td>
+                <td class="mono" style="color: #F43F5E; font-weight: 800;">-54% ↓</td>
+                <td class="mono">0 pastas</td>
+                <td class="mono">0 vendas</td>
+                <td><span class="tag-status st-red">Estagnada</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ── TAB PANE 4: QUAIS LÍDERES ESTÃO DESENVOLVENDO PESSOAS? ── -->
+        <div class="tab-pane" id="tab-m4">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div>
+              <b style="font-size: 14px; color: var(--text-main);">Fábrica de Campeões: Dispersão de Vendas & Rampa de Novatos</b>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                Diferencia o "Líder Formador" (que faz toda a equipe vender) do "Gerente-Corretor" (que vende sozinho enquanto o time zera).
+              </div>
+            </div>
+          </div>
+
+          <table class="exec-table">
+            <thead>
+              <tr>
+                <th>Gerente</th>
+                <th>Tamanho Tropa</th>
+                <th>Corretores que Venderam</th>
+                <th>Taxa de Dispersão</th>
+                <th>Novatos em Rampa (<60d)</th>
+                <th>1ª Venda Feita</th>
+                <th>Perfil da Liderança</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Juliana Mendes</b></td>
+                <td class="mono">8 corretores</td>
+                <td class="mono">5 corretores</td>
+                <td class="mono" style="color: #10B981; font-weight: 800;">62,5% (Excelente)</td>
+                <td class="mono">2 novatos</td>
+                <td class="mono" style="color: #10B981;">2 de 2 venderam</td>
+                <td><span class="tag-status st-green">★ Líder Formadora</span></td>
+              </tr>
+              <tr>
+                <td><b>Carlos Silveira</b></td>
+                <td class="mono">7 corretores</td>
+                <td class="mono">4 corretores</td>
+                <td class="mono" style="color: #10B981; font-weight: 800;">57,1% (Bom)</td>
+                <td class="mono">1 novato</td>
+                <td class="mono" style="color: #10B981;">1 de 1 vendeu</td>
+                <td><span class="tag-status st-green">★ Líder Formador</span></td>
+              </tr>
+              <tr>
+                <td><b>Marcio Prado</b></td>
+                <td class="mono">6 corretores</td>
+                <td class="mono">1 corretor (ele mesmo)</td>
+                <td class="mono" style="color: #F43F5E; font-weight: 800;">16,6% (Crítico)</td>
+                <td class="mono">3 novatos</td>
+                <td class="mono" style="color: #F43F5E;">0 venderam</td>
+                <td><span class="tag-status st-red">⚠️ Gerente-Corretor</span></td>
+              </tr>
+              <tr>
+                <td><b>Bruno Castro</b></td>
+                <td class="mono">8 corretores</td>
+                <td class="mono">0 corretores</td>
+                <td class="mono" style="color: #F43F5E; font-weight: 800;">0,0%</td>
+                <td class="mono">2 novatos</td>
+                <td class="mono" style="color: #F43F5E;">0 venderam</td>
+                <td><span class="tag-status st-red">⚠️ Risco de Evasão</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ── TAB PANE 5: ONDE EXISTE OPORTUNIDADE DE RECUPERAÇÃO? ── -->
+        <div class="tab-pane" id="tab-m5">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div>
+              <b style="font-size: 14px; color: #38BDF8;">Bolsões de VGV Represado & Oportunidades Imediatas</b>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                R$ 4,6 Milhões em 14 contratos já emitidos no Junix que precisam apenas de destrave documental para virar venda no placar.
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="showToast('Acionando correspondentes bancários Caixa...')">⚡ Cobrar Destraves Caixa</button>
+          </div>
+
+          <table class="exec-table">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Empreendimento</th>
+                <th>Corretor / Gerente</th>
+                <th>VGV</th>
+                <th>Dias Travado</th>
+                <th>Motivo do Travamento</th>
+                <th>Ação Recomendada</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Marcos Silveira</b></td>
+                <td>Vivaz Cambuci (Torre B)</td>
+                <td>Julio / Super Liliane</td>
+                <td class="mono" style="font-weight: 700;">R$ 340.000</td>
+                <td class="mono" style="color: #F43F5E; font-weight: 800;">6 dias</td>
+                <td>Falta extrato FGTS atualizado Caixa</td>
+                <td><button class="btn btn-secondary btn-sm" onclick="showToast('Notificado correspondente Caixa do Stand!')">Cobrar Caixa</button></td>
+              </tr>
+              <tr>
+                <td><b>Camila Barbosa</b></td>
+                <td>Vivaz Mooca</td>
+                <td>Lucas / Super Carlos</td>
+                <td class="mono" style="font-weight: 700;">R$ 380.000</td>
+                <td class="mono" style="color: #F43F5E; font-weight: 800;">5 dias</td>
+                <td>Comprovante de residência com titularidade diferente</td>
+                <td><button class="btn btn-secondary btn-sm" onclick="showToast('Corretor Lucas acionado!')">Cobrar Corretor</button></td>
+              </tr>
+              <tr>
+                <td><b>Fernando Pires</b></td>
+                <td>Cidade Lapa — Perdizes</td>
+                <td>Aline / Super Renato</td>
+                <td class="mono" style="font-weight: 700;">R$ 490.000</td>
+                <td class="mono" style="color: #F59E0B; font-weight: 700;">3 dias</td>
+                <td>Assinatura digital do cônjuge pendente</td>
+                <td><button class="btn btn-secondary btn-sm" onclick="showToast('Link de assinatura reenviado via WhatsApp!')">Reenviar Link</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ── TAB PANE 6: QUAL SUPERINTENDÊNCIA ESTÁ PERDENDO RITMO? ── -->
+        <div class="tab-pane" id="tab-m6">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+            <div>
+              <b style="font-size: 14px; color: var(--text-main);">Pacing Comparativo das 4 Superintendências (Rumo a 100 Vendas)</b>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                Meta da Diretoria: 25 vendas por regional. Acompanhamento diário da velocidade e taxa de conversão.
+              </div>
+            </div>
+          </div>
+
+          <table class="exec-table">
+            <thead>
+              <tr>
+                <th>Superintendência</th>
+                <th>Líder</th>
+                <th>Gerências</th>
+                <th>Corretores</th>
+                <th>Vendas (Junix)</th>
+                <th>Meta do Mês</th>
+                <th>Ritmo Diário</th>
+                <th>Tendência WoW</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Regional Leste</b></td>
+                <td>Carlos Silveira</td>
+                <td class="mono">5 equipes</td>
+                <td class="mono">42 corretores</td>
+                <td class="mono" style="color: #10B981; font-weight: 800;">14 vendas</td>
+                <td class="mono">25 vendas</td>
+                <td class="mono">0,9 vendas/dia</td>
+                <td><span class="tag-status st-green">↗ Acelerando (+18%)</span></td>
+                <td><button class="btn btn-secondary btn-sm" onclick="showToast('Abrindo drill-down da Regional Leste...')">Ver Detalhes</button></td>
+              </tr>
+              <tr>
+                <td><b>Regional Centro</b></td>
+                <td>Liliane Martins</td>
+                <td class="mono">5 equipes</td>
+                <td class="mono">38 corretores</td>
+                <td class="mono" style="color: #38BDF8; font-weight: 800;">12 vendas</td>
+                <td class="mono">25 vendas</td>
+                <td class="mono">0,8 vendas/dia</td>
+                <td><span class="tag-status st-green">→ Estável</span></td>
+                <td><button class="btn btn-secondary btn-sm" onclick="showToast('Abrindo drill-down da Regional Centro...')">Ver Detalhes</button></td>
+              </tr>
+              <tr>
+                <td><b>Regional Sul</b></td>
+                <td>Marcos Vinicius</td>
+                <td class="mono">4 equipes</td>
+                <td class="mono">32 corretores</td>
+                <td class="mono" style="color: #F43F5E; font-weight: 800;">8 vendas</td>
+                <td class="mono">25 vendas</td>
+                <td class="mono" style="color: #F43F5E;">0,5 vendas/dia</td>
+                <td><span class="tag-status st-red">↘ Perdendo Ritmo (-42%)</span></td>
+                <td><button class="btn btn-secondary btn-sm" style="color: #F43F5E;" onclick="abrirModalScript('marcos')">Intervir</button></td>
+              </tr>
+              <tr>
+                <td><b>Regional Oeste</b></td>
+                <td>Renato Albuquerque</td>
+                <td class="mono">4 equipes</td>
+                <td class="mono">30 corretores</td>
+                <td class="mono" style="color: #F59E0B; font-weight: 800;">8 vendas</td>
+                <td class="mono">25 vendas</td>
+                <td class="mono">0,5 vendas/dia</td>
+                <td><span class="tag-status st-gold">→ Estável (-5%)</span></td>
+                <td><button class="btn btn-secondary btn-sm" onclick="showToast('Abrindo drill-down da Regional Oeste...')">Ver Detalhes</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- MODAL DE SCRIPT PRONTO DE INTERVENÇÃO (DIRETOR NO WHATSAPP) -->
+<div class="modal-overlay" id="modal-script">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>
+        <span>⚡ Intervenção Direta da Diretoria via WhatsApp</span>
+      </h3>
+      <button class="modal-close-btn" onclick="fecharModalScript()">&times;</button>
+    </div>
+
+    <div style="font-size: 13px; color: var(--text-muted);">
+      O Comandra já redigiu a mensagem oficial com base nos números exatos do C2S e do Junix. Você pode editar ou enviar imediatamente:
+    </div>
+
+    <div class="script-text-box" id="script-content-box">
+      <!-- Preenchido via JavaScript -->
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+      <button class="btn btn-secondary" onclick="fecharModalScript()">Cancelar</button>
+      <button class="btn btn-gold" onclick="enviarScriptWhatsApp()">
+        📲 Enviar Mensagem no WhatsApp do Líder
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-pill" id="toast">
+  <span>✓</span>
+  <span id="toast-text">Ação executada com sucesso!</span>
+</div>
+
+<script>
+  // Navegação entre as matrizes
+  function switchMatrix(tabId) {
+    document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.m-tab').forEach(el => el.classList.remove('active'));
+    
+    document.getElementById(tabId).classList.add('active');
+    
+    if (tabId === 'tab-m1') document.getElementById('mtab-m1').classList.add('active');
+    if (tabId === 'tab-m2') document.getElementById('mtab-m2').classList.add('active');
+    if (tabId === 'tab-m3') document.getElementById('mtab-m3').classList.add('active');
+    if (tabId === 'tab-m4') document.getElementById('mtab-m4').classList.add('active');
+    if (tabId === 'tab-m5') document.getElementById('mtab-m5').classList.add('active');
+    if (tabId === 'tab-m6') document.getElementById('mtab-m6').classList.add('active');
+  }
+
+  // Toast
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    document.getElementById('toast-text').innerText = msg;
+    t.classList.add('show');
+    setTimeout(() => { t.classList.remove('show'); }, 3400);
+  }
+
+  // Scripts de intervenção prontos
+  const scripts = {
+    bruno: `Fala Bruno, bom dia.
+
+Estou analisando o painel da diretoria neste dia 15:
+- Sua equipe está com 8 corretores e ZERO vendas no mês.
+- Vocês já consumiram R$ 4.200 em tráfego pago da Cury.
+- Tem 42 leads parados sem primeiro toque há mais de 3 dias no C2S.
+
+Nesse ritmo, a Mooca não bate a meta e puxa a empresa para baixo. 
+Quero que você faça uma ronda agora às 09h30 no stand, ative o disparo de reativação da base e me mande até as 12h a lista de pelo menos 6 visitas confirmadas para este sábado. 
+
+Conto com a sua virada.`,
+
+    liliane: `Oi Liliane, bom dia.
+
+Puxei o relatório de emissão do Junix agora de manhã:
+- O Stand Cambuci está com 5 contratos emitidos travados (R$ 1,65M em VGV).
+- Todos com mais de 4 dias parados na mesa por pendência de FGTS e documentos Caixa.
+
+Esses 5 contratos nos colocam no ritmo dos 100 este mês. 
+Coloque o correspondente Caixa do stand para rodar esses extratos hoje sem falta. Me avise assim que o primeiro virar Venda Confirmada.`,
+
+    marcos: `Marcos, bom dia.
+
+O painel apontou uma desaceleração séria na Regional Sul:
+- Suas visitas presenciais caíram 42% esta semana.
+- A escala do Ipiranga para sábado está com 4 faltas de corretores em aberto.
+
+Sem corretor no stand no sábado não tem venda. Remaneje corretores de apoio imediatamente e feche 100% da escala até as 14h de hoje. Me envie o espelho da escala fechado.`
+  };
+
+  function abrirModalScript(alvo) {
+    const box = document.getElementById('script-content-box');
+    box.innerText = scripts[alvo] || '';
+    document.getElementById('modal-script').classList.add('open');
+  }
+
+  function fecharModalScript() {
+    document.getElementById('modal-script').classList.remove('open');
+  }
+
+  function enviarScriptWhatsApp() {
+    fecharModalScript();
+    showToast('📲 Mensagem de cobrança enviada no WhatsApp do líder com sucesso!');
+  }
+</script>
+
+</body>
+</html>
