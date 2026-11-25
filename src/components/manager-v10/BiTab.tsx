@@ -15,7 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PlantaoEmpresa from "./PlantaoEmpresa";
 import AnunciosGerentes from "./AnunciosGerentes";
-import FechamentoAcelerador from "@/components/fechamento/FechamentoAcelerador";
+import BiPastas from "./BiPastas";
 import BiPessoas from "./BiPessoas";
 import { empresa } from "@/lib/empresa";
 import AvisoJunix from "@/components/manager-v10/AvisoJunix";
@@ -147,7 +147,6 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
   const [nivel, setNivel] = useState<Nivel>("gerente");
   const [busca, setBusca] = useState("");
   const [selMgr, setSelMgr] = useState("ALL");
-  const [fechOff, setFechOff] = useState(false); // banco sem o motor de Fechamento (planoego) → Tela 3 some
 
   // B.I. da DIRETORIA (empresa inteira): informação COMPARTILHADA — todo gerente/super
   // vê o mesmo consolidado, não filtrado por equipe. p_manager sempre null → toda a diretoria.
@@ -325,7 +324,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
         <div className="ttb-left">
           <button className={`ttb-btn${screen === 1 ? " active" : ""}`} onClick={() => setScreen(1)}>TELA 1: Vendas × Visitas × Docs</button>
           <button className={`ttb-btn${screen === 2 ? " active" : ""}`} onClick={() => setScreen(2)}>📣 TELA 2: Anúncios por gerente</button>
-          <button className={`ttb-btn${screen === 3 ? " active" : ""}`} onClick={() => setScreen(3)}>🏦 TELA 3: Fechamento & Análise Bancária</button>
+          <button className={`ttb-btn${screen === 3 ? " active" : ""}`} onClick={() => setScreen(3)}>🏦 TELA 3: Pastas & Análise Bancária</button>
           <button className={`ttb-btn${screen === 4 ? " active" : ""}`} onClick={() => setScreen(4)}>👥 TELA 4: Pessoas, Contratação & Retenção</button>
           <button className={`ttb-btn${screen === 5 ? " active" : ""}`} onClick={() => setScreen(5)}>TELA 5: Plantão — Empresa toda</button>
         </div>
@@ -337,10 +336,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
       ) : screen === 2 ? (
         <AnunciosGerentes diasInicial={dias} />
       ) : screen === 3 ? (
-        <div className="bi-embed">
-          {fechOff && <div className="bi-soon"><b>Sem dados de fechamento aqui.</b><div style={{ marginTop: 8 }}>O motor de Aceleração de Fechamento (diff do Pesquisa/Cury) roda só na Econ. Suba o arquivo em Pastas para ligar.</div></div>}
-          <FechamentoAcelerador podeSubir={false} onIndisponivel={() => setFechOff(true)} />
-        </div>
+        <BiPastas managerId={managerId} />
       ) : screen === 4 ? (
         <BiPessoas dias={dias} setDias={setDias} managerId={managerId} />
       ) : (
