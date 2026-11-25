@@ -338,7 +338,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
       ) : screen === 3 ? (
         <BiPastas managerId={managerId} />
       ) : screen === 4 ? (
-        <BiPessoas dias={dias} setDias={setDias} managerId={managerId} />
+        <BiPessoas managerId={managerId} />
       ) : (
         <>
           {/* FAIXA NAVY DO TOPO */}

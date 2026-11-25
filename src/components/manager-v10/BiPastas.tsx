@@ -11,11 +11,14 @@ import { supabase } from "@/integrations/supabase/client";
 const nf = (n: number) => (n ?? 0).toLocaleString("pt-BR");
 const pct = (n: number) => `${Math.round(n)}%`;
 const titulo = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : "—");
+const isoHoje = () => new Date(Date.now() - 3 * 36e5).toISOString().slice(0, 10);
+const isoAgo = (d: number) => new Date(Date.now() - 3 * 36e5 - d * 864e5).toISOString().slice(0, 10);
+const diasEntre = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 // status vem com entidades HTML (&#193;=Á …) — decodifica e tira acento pra comparar
 const limpa = (s: string) => (s || "").replace(/&#(\d+);/g, (_, d) => String.fromCharCode(+d))
   .normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
 
-type Pasta = { etapa_ordem: number; etapa: string; status_texto: string; dias: number; superintendente: string | null; gerente: string | null; corretor: string | null };
+type Pasta = { etapa_ordem: number; etapa: string; status_texto: string; dias: number; cadastrada_em: string | null; superintendente: string | null; gerente: string | null; corretor: string | null };
 
 // buckets do funil por etapa_ordem
 const FUNIL: { k: string; rot: string; ords: number[] }[] = [
@@ -46,6 +49,9 @@ const CSS = `
 .biv1 .bq-seg{display:inline-flex;background:var(--bi-navy2);border:1px solid var(--bi-navy3);border-radius:8px;padding:3px;gap:3px}
 .biv1 .bq-seg button{border:0;background:transparent;color:var(--bi-onnavy);padding:6px 11px;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:var(--sans)}
 .biv1 .bq-seg button.on{background:#fff;color:var(--bi-navy);font-weight:800}
+.biv1 .bq-dt{display:flex;gap:4px;align-items:center;background:var(--bi-navy2);border:1px solid var(--bi-navy3);border-radius:8px;padding:4px 8px}
+.biv1 .bq-dt input{background:var(--bi-navy);color:#fff;border:1px solid var(--bi-navy3);border-radius:5px;padding:3px 5px;font-size:11px;font-family:var(--sans);color-scheme:dark}
+.biv1 .bq-dt span{font-size:10px;color:var(--bi-onnavy);font-weight:700}
 .biv1 .bq-grid2{display:grid;grid-template-columns:1.3fr 1fr;gap:12px}
 @media(max-width:1100px){.biv1 .bq-grid2{grid-template-columns:1fr}}
 .biv1 .bq-funil{display:flex;gap:8px;align-items:flex-end;padding:14px 8px 6px}
@@ -66,16 +72,21 @@ const CSS = `
 export default function BiPastas({ managerId }: { managerId?: string }) {
   const [nivel, setNivel] = useState<"super" | "gerente" | "corretor">("super");
   const [selSuper, setSelSuper] = useState("ALL");
+  const [de, setDe] = useState(isoAgo(89));
+  const [ate, setAte] = useState(isoHoje());
+  const preset = (d: number) => { setDe(isoAgo(d - 1)); setAte(isoHoje()); };
+  const dias = Math.max(1, diasEntre(de, ate) + 1);
 
   const { data: pastas = [], isLoading } = useQuery({
     queryKey: ["biPastas"],
     queryFn: async () => {
       const { data, error } = await supabase.from("junix_pastas" as any)
-        .select("etapa_ordem, etapa, status_texto, dias, superintendente, gerente, corretor");
+        .select("etapa_ordem, etapa, status_texto, dias, cadastrada_em, superintendente, gerente, corretor");
       if (error) throw error;
       return (data || []) as Pasta[];
     },
   });
+  const noPeriodo = (p: Pasta) => { const d = (p.cadastrada_em || "").slice(0, 10); return !!d && d >= de && d <= ate; };
 
   // nomes "principais" (sem "/") pra desfazer a venda dividida ("THAIS/ADAJES" → ADAJES)
   const prim = useMemo(() => {
@@ -92,18 +103,19 @@ export default function BiPastas({ managerId }: { managerId?: string }) {
     return parts.find((x) => set.has(x.toUpperCase())) || parts[0];
   };
   const rows = useMemo(() => pastas.map((p) => ({ ...p, ...classifica(p), funil: ordFunil(p.etapa_ordem), superN: norm(p.superintendente, prim.su), gerN: norm(p.gerente, prim.ge) })), [pastas, prim]);
-  const base = useMemo(() => rows.filter((p) => selSuper === "ALL" || p.superN === selSuper), [rows, selSuper]);
+  const rowsP = useMemo(() => rows.filter(noPeriodo), [rows, de, ate]);
+  const base = useMemo(() => rowsP.filter((p) => selSuper === "ALL" || p.superN === selSuper), [rowsP, selSuper]);
 
-  // KPIs gerais
+  // KPIs gerais (dentro do período)
   const k = useMemo(() => {
-    const ativas = rows.filter((p) => p.etapa_ordem >= 0 && p.etapa_ordem < 10).length;
-    const subiu = rows.filter((p) => p.subiu).length;
-    const aprov = rows.filter((p) => p.aprovada).length;
-    const reprov = rows.filter((p) => p.reprovada).length;
-    const venda = rows.filter((p) => p.venda).length;
-    const emAna = rows.filter((p) => p.emAnalise).length;
+    const ativas = rowsP.filter((p) => p.etapa_ordem >= 0 && p.etapa_ordem < 10).length;
+    const subiu = rowsP.filter((p) => p.subiu).length;
+    const aprov = rowsP.filter((p) => p.aprovada).length;
+    const reprov = rowsP.filter((p) => p.reprovada).length;
+    const venda = rowsP.filter((p) => p.venda).length;
+    const emAna = rowsP.filter((p) => p.emAnalise).length;
     return { ativas, subiu, aprov, reprov, venda, emAna, taxaAprov: aprov + reprov ? Math.round((aprov / (aprov + reprov)) * 100) : 0, taxaVenda: subiu ? Math.round((venda / subiu) * 100) : 0 };
-  }, [rows]);
+  }, [rowsP]);
 
   // agrega por super ou gerente
   const grupos = useMemo(() => {
@@ -145,10 +157,16 @@ export default function BiPastas({ managerId }: { managerId?: string }) {
       <div className="bq-hero">
         <div>
           <h1>Pastas &amp; Análise Bancária</h1>
-          <div className="sub">quantas sobem · em cada etapa · quantas viram venda · diretoria (sem dado de cliente)</div>
+          <div className="sub">cadastradas de {de.split("-").reverse().slice(0, 2).join("/")} a {ate.split("-").reverse().slice(0, 2).join("/")} ({dias}d) · diretoria (sem dado de cliente)</div>
         </div>
-        <div className="bq-seg">
-          {(["super", "gerente", "corretor"] as const).map((n) => <button key={n} className={nivel === n ? "on" : ""} onClick={() => setNivel(n)}>{n === "super" ? "Supers" : n === "gerente" ? "Gerentes" : "Corretores"}</button>)}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div className="bq-seg">
+            {[[7, "7d"], [30, "30d"], [90, "90d"], [365, "12m"]].map(([v, t]) => <button key={v} className={dias === v ? "on" : ""} onClick={() => preset(v as number)}>{t}</button>)}
+          </div>
+          <div className="bq-dt"><span>De</span><input type="date" value={de} max={ate} onChange={(e) => e.target.value && setDe(e.target.value)} /><span>Até</span><input type="date" value={ate} min={de} max={isoHoje()} onChange={(e) => e.target.value && setAte(e.target.value)} /></div>
+          <div className="bq-seg">
+            {(["super", "gerente", "corretor"] as const).map((n) => <button key={n} className={nivel === n ? "on" : ""} onClick={() => setNivel(n)}>{n === "super" ? "Supers" : n === "gerente" ? "Gerentes" : "Corretores"}</button>)}
+          </div>
         </div>
       </div>
 
