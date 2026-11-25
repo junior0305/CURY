@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import PlantaoEmpresa from "./PlantaoEmpresa";
 import AnunciosGerentes from "./AnunciosGerentes";
 import FechamentoAcelerador from "@/components/fechamento/FechamentoAcelerador";
-import RecrutamentoPainel from "@/components/recrutamento/RecrutamentoPainel";
+import BiPessoas from "./BiPessoas";
 import { empresa } from "@/lib/empresa";
 import AvisoJunix from "@/components/manager-v10/AvisoJunix";
 
@@ -326,7 +326,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
           <button className={`ttb-btn${screen === 1 ? " active" : ""}`} onClick={() => setScreen(1)}>TELA 1: Vendas × Visitas × Docs</button>
           <button className={`ttb-btn${screen === 2 ? " active" : ""}`} onClick={() => setScreen(2)}>📣 TELA 2: Anúncios por gerente</button>
           <button className={`ttb-btn${screen === 3 ? " active" : ""}`} onClick={() => setScreen(3)}>🏦 TELA 3: Fechamento & Análise Bancária</button>
-          <button className={`ttb-btn${screen === 4 ? " active" : ""}`} onClick={() => setScreen(4)}>TELA 4: Turnover, Contratações & Retenção</button>
+          <button className={`ttb-btn${screen === 4 ? " active" : ""}`} onClick={() => setScreen(4)}>👥 TELA 4: Pessoas, Contratação & Retenção</button>
           <button className={`ttb-btn${screen === 5 ? " active" : ""}`} onClick={() => setScreen(5)}>TELA 5: Plantão — Empresa toda</button>
         </div>
         <div className="ttb-right">Dados reais · Junix + C2S + Comandra</div>
@@ -342,7 +342,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
           <FechamentoAcelerador podeSubir={false} onIndisponivel={() => setFechOff(true)} />
         </div>
       ) : screen === 4 ? (
-        <div className="bi-embed"><RecrutamentoPainel como={managerId ?? null} /></div>
+        <BiPessoas dias={dias} setDias={setDias} managerId={managerId} />
       ) : (
         <>
           {/* FAIXA NAVY DO TOPO */}
