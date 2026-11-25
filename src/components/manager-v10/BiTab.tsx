@@ -15,6 +15,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PlantaoEmpresa from "./PlantaoEmpresa";
 import AnunciosGerentes from "./AnunciosGerentes";
+import FechamentoAcelerador from "@/components/fechamento/FechamentoAcelerador";
+import RecrutamentoPainel from "@/components/recrutamento/RecrutamentoPainel";
 import { empresa } from "@/lib/empresa";
 import AvisoJunix from "@/components/manager-v10/AvisoJunix";
 
@@ -121,6 +123,8 @@ html[data-theme="dark"] .biv1{--bi-bg:#0B1220;--bi-card:#121C2C;--bi-sunk:#18243
 .biv1 .dn-txt{color:var(--bi-red);font-weight:800}
 .biv1 .bi-soon{padding:60px 20px;text-align:center;color:var(--bi-mut)}
 .biv1 .bi-soon b{color:var(--bi-ink);font-size:16px}
+.biv1 .bi-embed{padding:16px 20px 22px;max-width:1640px;margin:0 auto}
+.biv1 .bi-embed .fech,.biv1 .bi-embed .rp{--cv-surface:var(--bi-card);--cv-border:var(--bi-line);--cv-text-main:var(--bi-ink);--cv-text-muted:var(--bi-mut)}
 `;
 
 const nf = (n: number) => (n ?? 0).toLocaleString("pt-BR");
@@ -143,6 +147,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
   const [nivel, setNivel] = useState<Nivel>("gerente");
   const [busca, setBusca] = useState("");
   const [selMgr, setSelMgr] = useState("ALL");
+  const [fechOff, setFechOff] = useState(false); // banco sem o motor de Fechamento (planoego) → Tela 3 some
 
   // B.I. da DIRETORIA (empresa inteira): informação COMPARTILHADA — todo gerente/super
   // vê o mesmo consolidado, não filtrado por equipe. p_manager sempre null → toda a diretoria.
@@ -320,7 +325,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
         <div className="ttb-left">
           <button className={`ttb-btn${screen === 1 ? " active" : ""}`} onClick={() => setScreen(1)}>TELA 1: Vendas × Visitas × Docs</button>
           <button className={`ttb-btn${screen === 2 ? " active" : ""}`} onClick={() => setScreen(2)}>📣 TELA 2: Anúncios por gerente</button>
-          <button className={`ttb-btn${screen === 3 ? " active" : ""}`} onClick={() => setScreen(3)}>🏦 TELA 3: Análises Bancárias & Repasses</button>
+          <button className={`ttb-btn${screen === 3 ? " active" : ""}`} onClick={() => setScreen(3)}>🏦 TELA 3: Fechamento & Análise Bancária</button>
           <button className={`ttb-btn${screen === 4 ? " active" : ""}`} onClick={() => setScreen(4)}>TELA 4: Turnover, Contratações & Retenção</button>
           <button className={`ttb-btn${screen === 5 ? " active" : ""}`} onClick={() => setScreen(5)}>TELA 5: Plantão — Empresa toda</button>
         </div>
@@ -331,8 +336,13 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
         <PlantaoEmpresa />
       ) : screen === 2 ? (
         <AnunciosGerentes diasInicial={dias} />
-      ) : screen !== 1 ? (
-        <div className="bi-soon"><b>Em breve.</b><div style={{ marginTop: 8 }}>Esta tela precisa de dados de anúncios / bancário / RH que ainda não estão no sistema.</div></div>
+      ) : screen === 3 ? (
+        <div className="bi-embed">
+          {fechOff && <div className="bi-soon"><b>Sem dados de fechamento aqui.</b><div style={{ marginTop: 8 }}>O motor de Aceleração de Fechamento (diff do Pesquisa/Cury) roda só na Econ. Suba o arquivo em Pastas para ligar.</div></div>}
+          <FechamentoAcelerador podeSubir={false} onIndisponivel={() => setFechOff(true)} />
+        </div>
+      ) : screen === 4 ? (
+        <div className="bi-embed"><RecrutamentoPainel como={managerId ?? null} /></div>
       ) : (
         <>
           {/* FAIXA NAVY DO TOPO */}
@@ -399,9 +409,9 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                   <div className="gk-card blue">
                     <div className="gk-icon"></div>
                     <div className="gk-body">
-                      <div className="gk-lbl">Check-ins no plantão (C2S)</div>
+                      <div className="gk-lbl">Check-in no plantão (Comandra)</div>
                       <div className="gk-val">{dias === 1 ? `${nf(op?.presentesHoje ?? 0)} hoje` : `${nf1(op?.mediaDia ?? 0)} por dia`}</div>
-                      <div className="gk-delta">{dias === 1 ? `${nf(op?.presencas ?? 0)} check-ins` : `hoje ${nf(op?.presentesHoje ?? 0)} · ${nf(op?.corretoresPlantao ?? 0)} diferentes em ${dias} dias`}</div>
+                      <div className="gk-delta">{dias === 1 ? `${nf(op?.presencas ?? 0)} check-ins` : `hoje ${nf(op?.presentesHoje ?? 0)} · ${nf(op?.corretoresPlantao ?? 0)} corretores bateram em ${dias} dias`}</div>
                     </div>
                   </div>
                 </div>
@@ -608,7 +618,7 @@ export default function BiTab({ scope, managerId }: { scope: "gerente" | "super"
                 </div>
 
                 <div style={{ fontSize: 11, color: "var(--bi-mut)", marginTop: 10, padding: "0 4px" }}>
-                  Fontes: vendas, VGV e pastas = Junix · check-ins e visitas no estande = C2S ({empresa().diretoria_c2s || "diretoria configurada"}). Período anterior = mesmo número de dias, logo antes.
+                  Fontes: vendas, VGV e pastas = Junix · visitas no estande = C2S ({empresa().diretoria_c2s || "diretoria configurada"}) · check-in de plantão = Comandra (geolocalização; o C2S parou de enviar o ponto em 27/10, então reflete a adoção do check-in). Período anterior = mesmo número de dias, logo antes.
                 </div>
               </>
             )}
