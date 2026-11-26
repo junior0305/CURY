@@ -1,7 +1,7 @@
-// Desligar corretor: o gerente tira da equipe quem saiu, e o Comandra separa a
-// carteira em grupos com destino sugerido. O gerente confirma — nada é automático
-// (redistribuição automática foi proibida em 05/2026). O usuário não é apagado:
-// histórico, vendas e comissão continuam no nome dele; o login é bloqueado.
+// Desligar corretor: o gerente tira da equipe quem saiu e escolhe UM destino pra toda a carteira.
+// Destinos: Roleta · Corretores específicos · Pescaria · Ligação (discador) · Disparo (WhatsApp).
+// Ligação e Disparo só habilitam se a função estiver configurada (tem_ligacao / tem_disparo).
+// Nada é automático; o login é bloqueado mas histórico/vendas/comissão continuam no nome dele.
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -9,7 +9,9 @@ import { supabase } from "@/integrations/supabase/client";
 
 type Colega = { id: string; nome: string; carteira: number; plantao_hoje: boolean; recebe: boolean };
 type Previa = { corretor: string; gerente: string | null; quente: number; roleta: number; frio: number;
-  vendidos: number; pastas_junix: number; colegas: Colega[] };
+  vendidos: number; pastas_junix: number; tem_ligacao: boolean; tem_disparo: boolean; colegas: Colega[] };
+
+type Destino = "roleta" | "especificos" | "pescaria" | "ligacao" | "disparo";
 
 export default function DesligarCorretor({ brokerId, onFechar, onPronto }: {
   brokerId: string; onFechar: () => void; onPronto: () => void;
@@ -22,67 +24,53 @@ export default function DesligarCorretor({ brokerId, onFechar, onPronto }: {
       return data as Previa;
     },
   });
-  const [quentesPara, setQuentesPara] = useState<Set<string>>(new Set());
-  const [roletaPara, setRoletaPara] = useState<Set<string>>(new Set());
-  const [friosPool, setFriosPool] = useState(true);
+  const [destino, setDestino] = useState<Destino>("roleta");
+  const [corretores, setCorretores] = useState<Set<string>>(new Set());
   const [indo, setIndo] = useState(false);
 
-  // sugestão: quentes para os 2 primeiros da lista (na roleta, no plantão, carteira leve);
-  // o resto para todos que estão recebendo lead
+  const total = (pv?.quente ?? 0) + (pv?.roleta ?? 0) + (pv?.frio ?? 0);
   const naRoleta = useMemo(() => (pv?.colegas ?? []).filter((c) => c.recebe), [pv]);
-  useEffect(() => {
-    if (!pv) return;
-    setQuentesPara(new Set(naRoleta.slice(0, 2).map((c) => c.id)));
-    setRoletaPara(new Set(naRoleta.map((c) => c.id)));
-  }, [pv, naRoleta]);
+
+  useEffect(() => { // sugere o time que está recebendo quando escolhe específicos/ligação
+    if ((destino === "especificos" || destino === "ligacao") && !corretores.size)
+      setCorretores(new Set(naRoleta.map((c) => c.id)));
+  }, [destino, naRoleta]); // eslint-disable-line
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onFechar(); };
-    addEventListener("keydown", esc);
-    return () => removeEventListener("keydown", esc);
+    addEventListener("keydown", esc); return () => removeEventListener("keydown", esc);
   }, [onFechar]);
 
-  const alterna = (set: Set<string>, setter: (s: Set<string>) => void, id: string) => {
-    const n = new Set(set); n.has(id) ? n.delete(id) : n.add(id); setter(n);
-  };
+  const alterna = (id: string) => { const n = new Set(corretores); n.has(id) ? n.delete(id) : n.add(id); setCorretores(n); };
+  const precisaCorretor = destino === "especificos" || destino === "ligacao";
 
   async function desligar() {
     if (!pv) return;
-    if (pv.quente && !quentesPara.size) { toast.error("Escolha quem recebe os leads quentes."); return; }
+    if (total > 0 && precisaCorretor && !corretores.size) { toast.error("Escolha pelo menos um corretor."); return; }
     setIndo(true);
     try {
       const { data: r, error } = await supabase.rpc("desligar_corretor" as any, {
-        p_broker: brokerId, p_quentes_para: [...quentesPara], p_roleta_para: [...roletaPara], p_frios_pool: friosPool });
+        p_broker: brokerId, p_destino: destino, p_corretores: precisaCorretor ? [...corretores] : null });
       if (error) throw error;
-      // bloqueia o login (camada de auth — só a edge alcança)
       const { data: b } = await supabase.functions.invoke("create-user", { body: { action: "block", userId: brokerId } });
       const res = r as any;
-      toast.success(`${pv.corretor} desligado. ${res.quentes} quentes e ${res.roleta} redistribuídos, ${res.pool} foram para o Pescar`
+      const rot: Record<string, string> = { roleta: "foram para a roleta", especificos: "foram para os corretores escolhidos", ligacao: "foram para o discador dos escolhidos", pescaria: "voltaram para o Pescar (pool)", disparo: "entraram num disparo (rascunho)" };
+      toast.success(`${pv.corretor} desligado. ${res.leads} lead(s) ${rot[destino]}`
         + (res.ficaram ? ` · ${res.ficaram} ficaram sem destino` : "")
-        + ((b as any)?.error ? " · o login não foi bloqueado, peça ao admin" : ""));
+        + (destino === "disparo" ? " — finalize em Disparar." : "")
+        + ((b as any)?.error ? " · login não bloqueado, peça ao admin" : ""));
       onPronto();
     } catch (e: any) { toast.error(e?.message ?? "Não consegui desligar."); }
     finally { setIndo(false); }
   }
 
-  const chips = (sel: Set<string>, setter: (s: Set<string>) => void, lista: Colega[]) => (
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-      {lista.map((c) => (
-        <button key={c.id} type="button" onClick={() => alterna(sel, setter, c.id)}
-          className={`mini${sel.has(c.id) ? " solid" : " key"}`} style={{ padding: "6px 10px" }}>
-          {c.nome}<span style={{ opacity: .7, fontWeight: 500 }}>{c.plantao_hoje ? " · plantão" : ""} · {c.carteira}</span>
-        </button>
-      ))}
-      {!lista.length ? <i style={{ fontSize: 12.5, color: "var(--ink-3)" }}>ninguém da equipe está recebendo lead</i> : null}
-    </div>
-  );
-  const bloco = (icone: string, n: number, titulo: string, sub: string, corpo: React.ReactNode) => n ? (
-    <div style={{ borderTop: "1px solid var(--hair)", padding: "12px 0" }}>
-      <div style={{ fontWeight: 700, fontSize: 14.5 }}>{icone} {n} {titulo}</div>
-      <div style={{ fontSize: 12.5, color: "var(--ink-3)", marginTop: 2 }}>{sub}</div>
-      {corpo}
-    </div>
-  ) : null;
+  const OPCOES: { k: Destino; ic: string; t: string; sub: string; off?: boolean; offMsg?: string }[] = [
+    { k: "roleta", ic: "🔄", t: "Roleta da equipe", sub: "divide entre todos que estão recebendo lead (plantão)" },
+    { k: "especificos", ic: "👤", t: "Corretores específicos", sub: "você escolhe quem recebe" },
+    { k: "pescaria", ic: "🎣", t: "Pescaria (pool)", sub: "voltam pro pool pra quem pescar" },
+    { k: "ligacao", ic: "📞", t: "Ligação (discador)", sub: "os escolhidos ligam pelo discador", off: !pv?.tem_ligacao, offMsg: "configure o discador primeiro" },
+    { k: "disparo", ic: "📢", t: "Disparo (WhatsApp)", sub: "cria um disparo com esses leads", off: !pv?.tem_disparo, offMsg: "configure um número de WhatsApp primeiro" },
+  ];
 
   return (
     <>
@@ -93,21 +81,53 @@ export default function DesligarCorretor({ brokerId, onFechar, onPronto }: {
             <div className="tm-modala"><button className="mini" onClick={onFechar}>Fechar</button></div></>
         ) : (
           <>
-            <h3 id="dc-t">Desligar {pv.corretor} — {pv.quente + pv.roleta + pv.frio} leads na carteira</h3>
+            <h3 id="dc-t">Desligar {pv.corretor} — {total} lead{total !== 1 ? "s" : ""} na carteira</h3>
             <p>O login é bloqueado, ele sai da roleta e das filas. Vendas e histórico continuam no nome dele.</p>
 
-            {bloco("", pv.quente, "quentes", "responderam nos últimos 7 dias, negociação, visita ou documentos — passe para quem vai atender hoje",
-              chips(quentesPara, setQuentesPara, pv.colegas.filter((c) => c.recebe || quentesPara.has(c.id))))}
-            {bloco("🆕", pv.roleta, "para a roleta", "novos e mornos — vão em rodízio para quem está recebendo lead",
-              chips(roletaPara, setRoletaPara, pv.colegas.filter((c) => c.recebe || roletaPara.has(c.id))))}
-            {bloco("🧊", pv.frio, "frios", "parados há mais de 15 dias",
-              <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, fontSize: 13.5 }}>
-                <input type="checkbox" checked={friosPool} onChange={(e) => setFriosPool(e.target.checked)} />
-                mandar para o Pescar (pool) {friosPool ? "" : "— desmarcado: vão para a roleta junto"}</label>)}
+            {total > 0 ? (
+              <>
+                <div style={{ fontWeight: 700, fontSize: 14, margin: "10px 0 6px" }}>Para onde vão os {total} leads?</div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {OPCOES.map((o) => (
+                    <button key={o.k} type="button" disabled={o.off} onClick={() => !o.off && setDestino(o.k)}
+                      className={`dc-opt${destino === o.k ? " on" : ""}`}
+                      style={{ display: "flex", gap: 10, alignItems: "center", textAlign: "left", padding: "10px 12px", borderRadius: 10,
+                        border: `1px solid ${destino === o.k && !o.off ? "var(--brand,#2563EB)" : "var(--hair,#e2e8f0)"}`,
+                        background: destino === o.k && !o.off ? "var(--brand-soft,#eff4ff)" : "var(--card,#fff)",
+                        opacity: o.off ? .5 : 1, cursor: o.off ? "not-allowed" : "pointer" }}>
+                      <span style={{ fontSize: 18 }}>{o.ic}</span>
+                      <span style={{ flex: 1 }}>
+                        <b style={{ fontSize: 13.5 }}>{o.t}</b>
+                        <span style={{ display: "block", fontSize: 12, color: "var(--ink-3,#64748b)" }}>{o.off ? `🔒 ${o.offMsg}` : o.sub}</span>
+                      </span>
+                      <span style={{ width: 16, height: 16, borderRadius: "50%", border: `2px solid ${destino === o.k && !o.off ? "var(--brand,#2563EB)" : "var(--hair,#cbd5e1)"}`, background: destino === o.k && !o.off ? "var(--brand,#2563EB)" : "transparent" }} />
+                    </button>
+                  ))}
+                </div>
+
+                {precisaCorretor && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 12.5, color: "var(--ink-3)", marginBottom: 4 }}>Quem recebe:</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {(pv.colegas.filter((c) => c.recebe || corretores.has(c.id))).map((c) => (
+                        <button key={c.id} type="button" onClick={() => alterna(c.id)}
+                          className={`mini${corretores.has(c.id) ? " solid" : " key"}`} style={{ padding: "6px 10px" }}>
+                          {c.nome}<span style={{ opacity: .7, fontWeight: 500 }}>{c.plantao_hoje ? " · plantão" : ""} · {c.carteira}</span>
+                        </button>
+                      ))}
+                      {!pv.colegas.filter((c) => c.recebe || corretores.has(c.id)).length ? <i style={{ fontSize: 12.5, color: "var(--ink-3)" }}>ninguém da equipe está recebendo lead</i> : null}
+                    </div>
+                  </div>
+                )}
+
+                {pv.quente > 0 && (destino === "pescaria" || destino === "disparo") ? (
+                  <p className="tm-aviso" style={{ marginTop: 10 }}>⚠️ {pv.quente} lead{pv.quente > 1 ? "s" : ""} quente{pv.quente > 1 ? "s" : ""} (negociação/visita/respondeu) também {destino === "pescaria" ? "vão pro pool" : "entram no disparo"} — tem certeza? Normalmente esses vão pra um corretor.</p>
+                ) : null}
+              </>
+            ) : <p>A carteira está vazia — é só desligar.</p>}
+
             {pv.vendidos ? <p style={{ fontSize: 13, margin: "10px 0 0" }}>{pv.vendidos} vendido{pv.vendidos > 1 ? "s" : ""} ficam com {pv.corretor} no histórico (comissão e relatório).</p> : null}
             {pv.pastas_junix ? <p className="tm-aviso">{pv.pastas_junix} pasta{pv.pastas_junix > 1 ? "s" : ""} no Junix em nome de {pv.corretor} — transfira no Junix; o Comandra não mexe lá.</p> : null}
-            {!pv.quente && !pv.roleta && !pv.frio ? <p>A carteira está vazia — é só desligar.</p> : null}
-            {pv.roleta && !roletaPara.size ? <p className="tm-aviso">Sem ninguém marcado para a roleta, esses {pv.roleta} leads ficam com {pv.corretor} até você redistribuir na aba Leads.</p> : null}
 
             <div className="tm-modala">
               <button className="mini" onClick={onFechar}>Cancelar</button>
