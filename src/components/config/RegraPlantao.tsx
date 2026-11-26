@@ -23,6 +23,7 @@ export default function RegraPlantao({ como }: { como: string | null }) {
   const [abre, setAbre] = useState("09:00");
   const [modo, setModo] = useState<"login" | "sorteio">("login");
   const [represa, setRepresa] = useState(false);
+  const [represaInicio, setRepresaInicio] = useState("21:00");
   const [exige, setExige] = useState(false);
   const [libRoletas, setLibRoletas] = useState<"ambas" | "manha" | "tarde">("ambas");
   const [liberacao, setLiberacao] = useState<"auto" | "manual">("auto");
@@ -36,6 +37,7 @@ export default function RegraPlantao({ como }: { como: string | null }) {
     setAbre(data.roleta_abre || "09:00");
     setModo(data.roleta_modo === "sorteio" ? "sorteio" : "login");
     setRepresa(!!data.represa_on);
+    setRepresaInicio(data.represa_inicio || "21:00");
     setExige(!!data.exige_liberacao);
     setLibRoletas(data.liberacao_roletas === "manha" ? "manha" : data.liberacao_roletas === "tarde" ? "tarde" : "ambas");
     setLiberacao(data.liberacao === "manual" ? "manual" : "auto");
@@ -49,7 +51,7 @@ export default function RegraPlantao({ como }: { como: string | null }) {
 
   async function salvar() {
     setSaving(true);
-    const { error } = await sb.rpc("plantao_config_salvar", { p_exige: exige, p_como: como, p_abre: abre || "09:00", p_modo: modo, p_represa: represa, p_liberacao: liberacao, p_lib_roletas: libRoletas, p_r2: temR2, p_r2abre: r2abre || "14:00", p_r2modo: r2modo });
+    const { error } = await sb.rpc("plantao_config_salvar", { p_exige: exige, p_como: como, p_abre: abre || "09:00", p_modo: modo, p_represa: represa, p_represa_inicio: represaInicio || "21:00", p_liberacao: liberacao, p_lib_roletas: libRoletas, p_r2: temR2, p_r2abre: r2abre || "14:00", p_r2modo: r2modo });
     setSaving(false);
     if (error) {
       const m = String(error.message || "");
@@ -93,7 +95,18 @@ export default function RegraPlantao({ como }: { como: string | null }) {
           <div className="rp-ct" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}><div className="rp-ci"><Pause size={18} /></div><div><b>Segurar leads (represa)</b><span style={{ display: "block", fontSize: "12.5px", color: "var(--mut)", marginTop: 2, lineHeight: 1.5 }}>A noite — e sempre que <b>ninguém da equipe estiver logado</b> — os leads esperam em vez de cair pra quem não está. Logado = fez check-in hoje e está online.</span></div></div>
           <div className={"rp-tg" + (represa ? " on" : "")} onClick={() => setRepresa(!represa)} />
         </div>
-        {represa && <div className="rp-sub">{liberacao === "manual" ? <><b>Todos</b> os leads ficam represados até <b>você soltar</b> no botão — não solta por horário nem por login.</> : <>Segurando das <b>21:00</b> até <b>{abre}</b>, e sempre que <b>ninguém da equipe estiver logado</b>. Solta sozinho pros presentes conforme cada um entra.</>} Fila de formulário/página do gerente continua entregando na hora.</div>}
+        {represa && <div className="rp-sub">{liberacao === "manual" ? <><b>Todos</b> os leads ficam represados até <b>você soltar</b> no botão — não solta por horário nem por login.</> : <>Segurando das <b>{represaInicio}</b> até <b>{abre}</b>, e sempre que <b>ninguém da equipe estiver logado</b>. Solta sozinho pros presentes conforme cada um entra.</>} Fila de formulário/página do gerente continua entregando na hora.</div>}
+        {represa && liberacao !== "manual" && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed var(--line)" }}>
+            <b style={{ fontSize: "13px", display: "block", marginBottom: 6 }}>Desligar a distribuição às</b>
+            <span style={{ display: "block", fontSize: "12px", color: "var(--mut)", marginBottom: 8 }}>A partir dessa hora os leads passam a ser segurados (represa da noite). Padrão 21:00.</span>
+            <div className="rp-chips">
+              {["19:00", "20:00", "21:00"].map((h) => <button key={h} className={"rp-chip" + (represaInicio === h ? " on" : "")} onClick={() => setRepresaInicio(h)}>{h}</button>)}
+              <button className={"rp-chip" + (!["19:00", "20:00", "21:00"].includes(represaInicio) ? " on" : "")} onClick={() => setRepresaInicio(["19:00", "20:00", "21:00"].includes(represaInicio) ? "21:30" : represaInicio)}><Clock4 size={13} /> Escolher</button>
+              {!["19:00", "20:00", "21:00"].includes(represaInicio) ? <input type="time" value={represaInicio} onChange={(e) => setRepresaInicio(e.target.value || "21:00")} style={{ marginLeft: 6 }} /> : null}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* liberação (só quando represa ligada) */}
