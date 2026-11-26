@@ -896,7 +896,7 @@ export default function LeadsCentral() {
         const card = box.current?.querySelector<HTMLElement>(`[data-form="${formId}"]`);
         let brokers: string[] = []; try { brokers = JSON.parse(card?.dataset.brokers || "[]"); } catch { /* */ }
         brokers = brokers.filter((b) => b !== brokerId);
-        if (!brokers.length) { const { error } = await sb.rpc("ligar_formulario", { p_form: formId, p_modo: "todas", p_destino: null, p_como: manParam || null, p_corretores: null }); if (error) throw error; toast.success("Sem corretor dedicado — o formulário ficou na roleta do plantão."); }
+        if (!brokers.length) { const { error } = await sb.rpc("tirar_fila_formulario", { p_form_id: formId }); if (error) throw error; toast.success("Sem corretor dedicado — o formulário ficou na roleta do plantão."); }
         else { const { error } = await sb.rpc("salvar_fila_formulario", { p_form_id: formId, p_page_id: card?.dataset.page || null, p_nome: card?.dataset.nome || "", p_broker_ids: brokers }); if (error) throw error; toast.success("Corretor removido da fila."); }
         filas();
       } catch (e: any) { toast.error(e?.message || "Não consegui atualizar a fila."); }
@@ -916,7 +916,7 @@ export default function LeadsCentral() {
     // "Só roleta" por card: tira todos os corretores e deixa na roleta do plantão
     (window as any).__filaRoleta = async (formId: string) => {
       try {
-        const { error } = await sb.rpc("ligar_formulario", { p_form: formId, p_modo: "todas", p_destino: null, p_como: manParam || null, p_corretores: null });
+        const { error } = await sb.rpc("tirar_fila_formulario", { p_form_id: formId });
         if (error) throw error; toast.success("Formulário na roleta do plantão (sem corretor dedicado)."); filas();
       } catch (e: any) { toast.error(e?.message || "Não consegui."); }
     };
