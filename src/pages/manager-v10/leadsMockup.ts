@@ -1548,7 +1548,8 @@ export const HTML = `<main class="main-content">
 
           <select class="filter-select" id="select-origem">
             <option value="todas">Todas as origens</option>
-              <option value="meta">Anúncio (Meta Ads)</option>
+              <option value="meta">📣 Anúncio (Meta)</option>
+              <option value="manual">✍️ Cadastro manual</option>
               <option value="disparo">Disparo WhatsApp</option>
               <option value="discador">Discador (ligações)</option>
               <option value="pescaria">Pescaria (repesca)</option>
@@ -1556,6 +1557,8 @@ export const HTML = `<main class="main-content">
               <option value="indicacao">Indicação</option>
           </select>
         </div>
+
+        <div id="origem-breakdown" style="font-size:12.5px;color:var(--text-dim,#64748b);padding:2px 2px 8px;display:none"></div>
 
         <!-- TABELA LIMPA COM AS AÇÕES LADO A LADO -->
         <div class="leads-table-wrap">

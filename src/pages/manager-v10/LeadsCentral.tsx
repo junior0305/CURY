@@ -67,7 +67,8 @@ const origemTxt = (l: any) => l._origem || l.campanha_nome || ({ facebook_make: 
 function origemMatch(l: any, og: string): boolean {
   const s = (l.source || "").toLowerCase();
   switch (og) {
-    case "meta": return s === "facebook_make" || s === "instagram";
+    case "meta": return s === "facebook_make" || s === "instagram" || s === "fb_leadgen" || s === "meta" || s === "facebook";
+    case "manual": return s === "broker_manual" || s === "manual";
     case "disparo": return s === "whatsapp" || s === "disparo";
     case "discador": return s === "discador";
     case "pescaria": return s === "lista";
@@ -264,6 +265,15 @@ export default function LeadsCentral() {
     leadsRef.current = ls as Lead[]; nmTabRef.current = nm;
 
     const total = ls.length;
+    // Quebra por origem: separa o que CHEGOU de anúncio do que o corretor cadastrou na mão (não confunde o fluxo real)
+    const bk = root.querySelector<HTMLElement>("#origem-breakdown");
+    if (bk) {
+      const grp: [string, string][] = [["meta", "📣"], ["manual", "✍️"], ["pescaria", "🎣"], ["disparo", "📢"], ["discador", "📞"], ["plantao", "🏪"], ["indicacao", "🤝"]];
+      const rot: Record<string, string> = { meta: "anúncio", manual: "manual", pescaria: "pescaria", disparo: "disparo", discador: "ligação", plantao: "plantão", indicacao: "indicação" };
+      const partes = grp.map(([k, ic]) => ({ k, ic, n: ls.filter((l) => origemMatch(l, k)).length })).filter((x) => x.n > 0);
+      bk.style.display = total ? "block" : "none";
+      bk.innerHTML = total ? `De <b>${total}</b>: ` + partes.map((p) => `<span style="cursor:pointer;text-decoration:underline dotted" onclick="window.__filtraOrigem&&window.__filtraOrigem('${p.k}')">${p.ic} ${p.n} ${rot[p.k]}</span>`).join(" · ") : "";
+    }
     // DERIVADAS do mesmo segMatch que filtra a tabela → a pílula sempre bate com as linhas
     const resposta = ls.filter((l) => segMatch(l, "avanco")).length;
     const vacuo = ls.filter((l) => segMatch(l, "vacuo")).length;        // com dono, sem falar +2h
@@ -765,6 +775,12 @@ export default function LeadsCentral() {
     if (scSel) scSel.addEventListener("change", () => { filtroRef.current.cor = scSel.value; filtroRef.current.page = 1; renderRef.current(); });
     const soSel = box.current?.querySelector<HTMLSelectElement>("#select-origem");
     if (soSel) soSel.addEventListener("change", () => { filtroRef.current.og = soSel.value; filtroRef.current.page = 1; renderRef.current(); });
+    // clicar numa origem da quebra ("✍️ 15 manual") filtra a tabela por ela
+    (window as any).__filtraOrigem = (og: string) => {
+      filtroRef.current.og = og; filtroRef.current.page = 1;
+      const s = box.current?.querySelector<HTMLSelectElement>("#select-origem"); if (s) s.value = og;
+      renderRef.current();
+    };
     return () => { const e = document.getElementById("mlr-script"); if (e) e.remove(); };
   }, [carregar, resultados]);
 
