@@ -302,7 +302,8 @@ export default function LeadsCentral() {
     // opções reais do seletor de corretor
     const selCor = root.querySelector<HTMLSelectElement>("#select-corretor");
     if (selCor) {
-      const nomes = [...new Set(ls.filter((l) => l.broker_id).map((l) => (nm[l.broker_id!] || "").split(" ")[0]).filter(Boolean))].sort();
+      // filtro = TIME TODO do gerente (não só quem tem lead no período), senão some quase todo mundo
+      const nomes = [...new Set(Object.values(nm0 || {}).map((n: any) => String(n || "").split(" ")[0]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
       selCor.innerHTML = `<option value="">Todos os Corretores</option>` + nomes.map((n) => `<option value="${esc(n.toLowerCase())}">${esc(n)}</option>`).join("");
     }
 
