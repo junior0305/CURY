@@ -46,9 +46,15 @@ function origemLabel(l: any, formNome: Record<string, string>): string {
   if (s === "plantao" || s === "checkin") return "🏪 Plantão";
   if (s === "indicacao") return "🤝 Indicação";
   if (s === "instagram") return "📸 Instagram";
+  // anúncio (Meta): mostra o FORMULÁRIO (que já traz a região, ex.: "THEO - ZONA LESTE"),
+  // não um "Meta Ads" genérico. O nome do formulário sempre existe para lead do Facebook.
   const nome = (l.fb_form_id && formNome[l.fb_form_id]) || l.campanha_nome || "";
-  const prod = nome.replace(/^\s*\[[^\]]*\]\s*/, "").trim();
-  return prod || nome || "Meta Ads";
+  const forma = nome.replace(/^\s*\[[^\]]*\]\s*/, "").trim();   // tira o "[VENDEDOR]" da frente
+  const base = forma || "Meta Ads";
+  // regiao_interesse às vezes vem com tipo de trabalho (CLT/Autônomo) — só anexo se parecer região de verdade
+  const reg = (l.regiao_interesse || "").trim();
+  const ehTrabalho = /^(clt|aut[oô]nomo|funcion[aá]rio|p[uú]blico|assalariado|carteira)/i.test(reg);
+  return reg && !ehTrabalho && !base.toLowerCase().includes(reg.toLowerCase()) ? `${base} · ${reg}` : base;
 }
 const origemTxt = (l: any) => l._origem || l.campanha_nome || ({ facebook_make: "Meta Ads", lista: "🎣 Pescaria", resgate: "♻️ Resgate", indicacao: "🤝 Indicação", instagram: "📸 Instagram", whatsapp: "📢 Disparo", disparo: "📢 Disparo" } as any)[l.source || ""] || l.source || "—";
 // casa o lead com o filtro "Origem" da tabela (valores do seletor: meta/disparo/discador/pescaria/plantao/indicacao)
@@ -230,7 +236,7 @@ export default function LeadsCentral() {
     const root = box.current; if (!root) return;
     const [de, ate] = faixa(nome);
     let q = sb.from("leads")
-      .select("id,name,phone,campanha_nome,source,fb_form_id,broker_id,last_broker_whatsapp_at,visit_scheduled_at,status,created_at")
+      .select("id,name,phone,campanha_nome,source,fb_form_id,regiao_interesse,broker_id,last_broker_whatsapp_at,visit_scheduled_at,status,created_at")
       .gte("created_at", de).lt("created_at", ate)
       .not("status", "in", "(EXCLUDED,ABANDONED)")
       .order("created_at", { ascending: false }).limit(5000);
