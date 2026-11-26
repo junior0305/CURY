@@ -46,15 +46,21 @@ function origemLabel(l: any, formNome: Record<string, string>): string {
   if (s === "plantao" || s === "checkin") return "🏪 Plantão";
   if (s === "indicacao") return "🤝 Indicação";
   if (s === "instagram") return "📸 Instagram";
+  if (s === "broker_manual" || s === "manual") return "✍️ Cadastro manual";
+  if (s === "cold_pool" || s === "pool" || s === "pescado") return "🎣 Pescaria";
   // anúncio (Meta): mostra o FORMULÁRIO (que já traz a região, ex.: "THEO - ZONA LESTE"),
-  // não um "Meta Ads" genérico. O nome do formulário sempre existe para lead do Facebook.
+  // não um "Meta Ads" genérico. O nome do formulário quase sempre existe para lead do Facebook.
   const nome = (l.fb_form_id && formNome[l.fb_form_id]) || l.campanha_nome || "";
   const forma = nome.replace(/^\s*\[[^\]]*\]\s*/, "").trim();   // tira o "[VENDEDOR]" da frente
-  const base = forma || "Meta Ads";
-  // regiao_interesse às vezes vem com tipo de trabalho (CLT/Autônomo) — só anexo se parecer região de verdade
-  const reg = (l.regiao_interesse || "").trim();
-  const ehTrabalho = /^(clt|aut[oô]nomo|funcion[aá]rio|p[uú]blico|assalariado|carteira)/i.test(reg);
-  return reg && !ehTrabalho && !base.toLowerCase().includes(reg.toLowerCase()) ? `${base} · ${reg}` : base;
+  if (forma) {
+    // regiao_interesse às vezes vem com tipo de trabalho (CLT/Autônomo) — só anexo se parecer região de verdade
+    const reg = (l.regiao_interesse || "").trim();
+    const ehTrabalho = /^(clt|aut[oô]nomo|funcion[aá]rio|p[uú]blico|assalariado|carteira)/i.test(reg);
+    return reg && !ehTrabalho && !forma.toLowerCase().includes(reg.toLowerCase()) ? `${forma} · ${reg}` : forma;
+  }
+  // sem formulário resolvido: só é "Meta Ads" se de fato for anúncio; senão mostra a fonte crua
+  if (s === "facebook_make" || s === "fb_leadgen" || s === "meta" || s === "facebook" || l.fb_form_id || l.fb_page_id) return "Meta Ads";
+  return l.source || "—";
 }
 const origemTxt = (l: any) => l._origem || l.campanha_nome || ({ facebook_make: "Meta Ads", lista: "🎣 Pescaria", resgate: "♻️ Resgate", indicacao: "🤝 Indicação", instagram: "📸 Instagram", whatsapp: "📢 Disparo", disparo: "📢 Disparo" } as any)[l.source || ""] || l.source || "—";
 // casa o lead com o filtro "Origem" da tabela (valores do seletor: meta/disparo/discador/pescaria/plantao/indicacao)
