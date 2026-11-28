@@ -614,7 +614,7 @@ export default function LeadsCentral() {
     const mostrar = Array.from(idsForm).map((fid) => {
       const f = catByForm[fid] || {};
       return { form_id: fid, page_id: f.page_id || "", nome: f.nome || "", nome_fonte: f.nome_fonte || "", leads_7d: f.leads_7d ?? 0, anuncio: !!f.anuncio_ativo };
-    }).sort((a, b) => (Number(b.anuncio) - Number(a.anuncio)) || ((qByForm[b.form_id] ? 1 : 0) - (qByForm[a.form_id] ? 1 : 0)) || (b.leads_7d - a.leads_7d));
+    }).filter((f) => f.anuncio || qByForm[f.form_id]).sort((a, b) => (Number(b.anuncio) - Number(a.anuncio)) || ((qByForm[b.form_id] ? 1 : 0) - (qByForm[a.form_id] ? 1 : 0)) || (b.leads_7d - a.leads_7d));
     const optsBrokers = Object.entries(nm).sort((a, b) => a[1].localeCompare(b[1])).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join("");
     if (sel) sel.innerHTML = mostrar.length
       ? mostrar.map((f) => `<option value="${esc(f.form_id)}">Formulário — ${esc(f.nome || f.nome_fonte || f.form_id)}</option>`).join("")
