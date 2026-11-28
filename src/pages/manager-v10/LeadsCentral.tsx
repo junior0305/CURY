@@ -580,6 +580,19 @@ export default function LeadsCentral() {
       const { data } = await sb.rpc("ids_da_arvore", { p: scopeManager });
       arvore = (data ?? []).map((r: any) => (typeof r === "string" ? r : r.ids_da_arvore));
     }
+    // Formulário "[GERENTE] …" ativo em página de um chefe (super) aparece pro gerente mesmo sem fila.
+    let chefesSet: Set<string> | null = null;
+    let leaderNames: string[] = [];
+    if (scopeManager) {
+      const [{ data: ac }, { data: lid }] = await Promise.all([
+        sb.rpc("ids_acima", { p: scopeManager }),
+        sb.from("profiles").select("first_name,role").in("id", arvore ?? []),
+      ]);
+      chefesSet = new Set((ac ?? []).map((r: any) => (typeof r === "string" ? r : r.ids_acima)));
+      const norm = (s: string) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+      leaderNames = (lid ?? []).filter((p: any) => ["MANAGER", "SUPERINTENDENT", "DIRECTOR"].includes(p.role)).map((p: any) => norm(p.first_name || "")).filter((n: string) => n.length > 2);
+    }
+    const nomeDoDono = (nome: string) => { const n = (nome || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); return leaderNames.some((ln) => n.includes(ln)); };
     const [de] = faixa("Hoje");
     // "leads hoje" por formulário = contagem REAL do formulário (ele é desta estrutura), sem filtrar por manager_id —
     // leads do form da Antonia que foram pra ela como corretora ficam com manager_id do super e sumiam da conta.
@@ -608,7 +621,11 @@ export default function LeadsCentral() {
     // forms visíveis: TODOS os formulários da conta de anúncio desta estrutura (owner na árvore) + os que têm fila da estrutura.
     // Assim a gestora vê a conta dela inteira (ativos e pausados), não só os com anúncio rodando.
     const idsForm = new Set<string>(Object.keys(qByForm));
-    (cat ?? []).forEach((f: any) => { if (inArv(f.owner_id)) idsForm.add(f.form_id); });
+    (cat ?? []).forEach((f: any) => {
+      if (inArv(f.owner_id)) { idsForm.add(f.form_id); return; }
+      // ativo e com nome do gerente, em página de um chefe (super) → aparece pro gerente
+      if (f.anuncio_ativo && (!f.owner_id || (chefesSet && chefesSet.has(f.owner_id))) && nomeDoDono(f.nome || "")) idsForm.add(f.form_id);
+    });
     const nm: Record<string, string> = {};
     (pf ?? []).forEach((p: any) => { nm[p.id] = p.first_name || "corretor"; });
     const mostrar = Array.from(idsForm).map((fid) => {
