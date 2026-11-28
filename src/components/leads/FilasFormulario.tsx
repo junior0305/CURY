@@ -23,6 +23,12 @@ type Pessoa = { id: string; first_name: string | null; last_name: string | null;
 type Fila = { id: string; match_value: string; broker_ids: string[]; criado_por: string | null; last_assigned_index: number | null };
 
 const nomeDe = (p?: Pessoa) => (p ? [p.first_name, p.last_name].filter(Boolean).join(" ") || "—" : "—");
+// O gerente reconhece o lead pelo ANÚNCIO/campanha que criou, não pelo nome do formulário. Mostra o anúncio no card.
+const anuncioDe = (f: Form) => {
+  const a = (f.anuncios ?? "").split("·").map((s) => s.trim()).filter(Boolean);
+  if (!a.length) return f.nome || `Formulário ${f.form_id}`;
+  return a.length === 1 ? a[0] : `${a[0]}  (+${a.length - 1})`;
+};
 const ERROS: Record<string, string> = {
   corretor_fora_da_sua_equipe: "Algum corretor escolhido não é da sua equipe.",
   fila_de_outro_lider: "Esta fila foi criada por outro líder. Peça para ele ou para quem está acima.",
@@ -118,8 +124,9 @@ export default function FilasFormulario({ como, abrir, semCartao = false, onFech
   const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   // 07/11 (Junior: "quero que o formulário apareça"): todos aparecem, os em uso primeiro; os parados vêm logo abaixo.
   const lista = [...ativos, ...pausados]
-    .filter((f) => !buscaForm.trim() || semAcento(f.nome ?? "").includes(semAcento(buscaForm.trim())));
+    .filter((f) => !buscaForm.trim() || semAcento((f.nome ?? "") + " " + (f.anuncios ?? "")).includes(semAcento(buscaForm.trim())));
   const comFila = ativos.filter((f) => filaDe.has(f.form_id)).length;
+  const semFilaAtivos = ativos.length - comFila; // campanhas no ar sem fila própria (vão pela roleta do plantão)
   // Agrupado por conta de anúncio (22/10): o super vê "Dudu — formulários dele", "Alba — os dela"...
   // Sem conta conhecida (formulário só da página) agrupa pelo dono.
   const porConta = useMemo(() => {
@@ -230,16 +237,18 @@ export default function FilasFormulario({ como, abrir, semCartao = false, onFech
   return (
     <>
       <style>{CSS}</style>
-      {semCartao ? null : <section className="ff-card">
+      {semCartao ? null : <section className="ff-card" style={semFilaAtivos > 0 ? { borderColor: "#F59E0B", background: "rgba(245,158,11,0.06)" } : undefined}>
         <div className="ff-card-txt">
-          <b>Fila de leads por formulário</b>
-          <span>
-            {ativos.length
-              ? `${ativos.length} formulário${ativos.length === 1 ? "" : "s"} ativo${ativos.length === 1 ? "" : "s"} · ${comFila} com fila · ${ativos.length - comFila} seguem o plantão`
-              : `${pausados.length} formulário${pausados.length === 1 ? "" : "s"} das suas páginas · ${comFila} com fila`}
-          </span>
+          <b>Campanhas no ar e filas</b>
+          {semFilaAtivos > 0
+            ? <span style={{ color: "#B45309", fontWeight: 600 }}>⚠️ {semFilaAtivos} campanha{semFilaAtivos === 1 ? "" : "s"} no ar sem fila própria — os leads vão pela roleta do plantão. Toque pra direcionar.</span>
+            : <span>
+                {ativos.length
+                  ? `${ativos.length} campanha${ativos.length === 1 ? "" : "s"} no ar · todas com fila`
+                  : `${pausados.length} formulário${pausados.length === 1 ? "" : "s"} das suas páginas · ${comFila} com fila`}
+              </span>}
         </div>
-        <button type="button" className="ff-btn" onClick={() => setAberto(true)}>Gerenciar filas</button>
+        <button type="button" className="ff-btn" onClick={() => setAberto(true)}>Ver e configurar</button>
       </section>}
 
       {aberto && (
@@ -282,8 +291,8 @@ export default function FilasFormulario({ como, abrir, semCartao = false, onFech
                 <div key={f.form_id} id={`ff-${f.form_id}`} className={`ff-form${on ? " on" : ""}`}>
                   <button type="button" className="ff-linha" onClick={() => abrirForm(f)} aria-expanded={on}>
                     <span className="ff-nome">
-                      <b>{f.nome || `Formulário ${f.form_id}`}</b>
-                      <small>{meta}</small>
+                      <b>{anuncioDe(f)}</b>
+                      <small>{f.nome ? `Formulário: ${f.nome} · ` : ""}{meta}</small>
                     </span>
                     {rec ? (
                       <span className="ff-badge rec">Recrutamento · {rec.map((id) => nomeDe(porId.get(id)).split(" ")[0]).join(", ")}</span>
