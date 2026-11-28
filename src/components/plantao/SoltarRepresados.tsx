@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import "@/styles/soltar-represados.css";
 
 type Div = { nome: string; qtd: number };
-type Dados = { represa_on: boolean; total: number; modo?: string; abre?: string; liberacao?: string; divisao: Div[] };
+type Dados = { represa_on: boolean; total: number; pendentes?: number; modo?: string; abre?: string; liberacao?: string; divisao: Div[] };
 
 export default function SoltarRepresados({ como: comoProp }: { como?: string | null }) {
   const sb = supabase as any;
@@ -33,7 +33,9 @@ export default function SoltarRepresados({ como: comoProp }: { como?: string | n
 
   if (!d || !d.represa_on) return null;
   const manual = d.liberacao === "manual";
-  const vazio = !d.total;
+  const held = d.pendentes ?? d.total ?? 0;   // represados de verdade (segurados), mesmo sem ninguém no plantão
+  const vazio = !held;                        // nada segurando
+  const semPlantao = held > 0 && !d.total;    // tem segurado, mas ninguém da equipe no plantão p/ receber agora
 
   async function soltar() {
     setSoltando(true);
@@ -60,14 +62,16 @@ export default function SoltarRepresados({ como: comoProp }: { como?: string | n
             </>
           ) : (
             <>
-              <b>{d.total} lead{d.total > 1 ? "s" : ""} represado{d.total > 1 ? "s" : ""}</b>
-              <span>{manual ? "você solta quando quiser" : `solta sozinho às ${d.abre}`} · divisão por {d.modo === "sorteio" ? "sorteio" : "ordem de chegada"}</span>
+              <b>{held} lead{held > 1 ? "s" : ""} represado{held > 1 ? "s" : ""}</b>
+              <span>{semPlantao
+                ? "segurados · ninguém da equipe no plantão agora — quando alguém fizer check-in, você solta"
+                : `${manual ? "você solta quando quiser" : `solta sozinho às ${d.abre}`} · divisão por ${d.modo === "sorteio" ? "sorteio" : "ordem de chegada"}`}</span>
             </>
           )}
         </div>
-        {!vazio && <button className="srep-b" onClick={() => setAberto((a) => !a)}>{aberto ? "Fechar" : manual ? "Soltar leads" : "Soltar agora"}</button>}
+        {!vazio && !semPlantao && <button className="srep-b" onClick={() => setAberto((a) => !a)}>{aberto ? "Fechar" : manual ? "Soltar leads" : "Soltar agora"}</button>}
       </div>
-      {!vazio && aberto && (
+      {!vazio && !semPlantao && aberto && (
         <div className="srep-prev">
           <div className="srep-ph">Se soltar agora, fica assim:</div>
           <div className="srep-grid">

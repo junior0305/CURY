@@ -348,7 +348,7 @@ export default function LeadsCentral() {
     // Represados = TODOS os leads segurados (qualquer dia), da MESMA fonte do botão "Soltar" (represados_acao),
     // pra o número bater com o botão. Antes contava só os que chegaram hoje → mostrava 0 com leads de ontem presos.
     let represados = ls.filter((l) => l.represa_at && !l.broker_id).length;
-    try { const { data: rr } = await sb.rpc("represados_acao", { p_como: scopeManager || null, p_executar: false }); if (rr && typeof (rr as any).total === "number") represados = (rr as any).total; } catch { /* mantém o fallback do dia */ }
+    try { const { data: rr } = await sb.rpc("represados_acao", { p_como: scopeManager || null, p_executar: false }); const rx = rr as any; if (rx && typeof rx.pendentes === "number") represados = rx.pendentes; else if (rx && typeof rx.total === "number") represados = rx.total; } catch { /* mantém o fallback do dia */ }
     const semDono = ls.filter((l) => !l.broker_id && !l.represa_at).length;
     const vacuo = ls.filter((l) => l.broker_id && !l.last_broker_whatsapp_at).length;
     const pz = root.querySelectorAll<HTMLElement>(".pulso .pz b");
