@@ -23,9 +23,10 @@ type Pessoa = { id: string; first_name: string | null; last_name: string | null;
 type Fila = { id: string; match_value: string; broker_ids: string[]; criado_por: string | null; last_assigned_index: number | null };
 
 const nomeDe = (p?: Pessoa) => (p ? [p.first_name, p.last_name].filter(Boolean).join(" ") || "—" : "—");
-// O gerente reconhece o lead pelo ANÚNCIO/campanha que criou, não pelo nome do formulário. Mostra o anúncio no card.
+// O gerente reconhece o lead pelo ANÚNCIO que criou, não pelo nome do formulário.
+const anunciosDe = (f: Form) => (f.anuncios ?? "").split("·").map((s) => s.trim()).filter(Boolean);
 const anuncioDe = (f: Form) => {
-  const a = (f.anuncios ?? "").split("·").map((s) => s.trim()).filter(Boolean);
+  const a = anunciosDe(f);
   if (!a.length) return f.nome || `Formulário ${f.form_id}`;
   return a.length === 1 ? a[0] : `${a[0]}  (+${a.length - 1})`;
 };
@@ -292,6 +293,7 @@ export default function FilasFormulario({ como, abrir, semCartao = false, onFech
                   <button type="button" className="ff-linha" onClick={() => abrirForm(f)} aria-expanded={on}>
                     <span className="ff-nome">
                       <b>{anuncioDe(f)}</b>
+                      {anunciosDe(f).length > 1 ? <small style={{ opacity: 0.85 }}>{anunciosDe(f).length} anúncios: {anunciosDe(f).join(" · ")}</small> : null}
                       <small>{f.nome ? `Formulário: ${f.nome} · ` : ""}{meta}</small>
                     </span>
                     {rec ? (
